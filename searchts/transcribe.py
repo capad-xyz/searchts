@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
-"""Whisper audio transcription with Groq → OpenAI fallback.
+"""Whisper audio transcription: hosted (Groq → OpenAI) or keyless local.
 
-Downloads audio (yt-dlp), compresses + chunks (ffmpeg), and posts to a
-Whisper-compatible API. Defaults to Groq's free `whisper-large-v3` and falls
-back to OpenAI's `whisper-1` on HTTP error.
+Downloads audio (yt-dlp), compresses + chunks (ffmpeg), then turns each chunk
+into text. With a hosted key it posts to a Whisper-compatible API (Groq's free
+`whisper-large-v3`, falling back to OpenAI's `whisper-1`). With no key at all it
+can run `faster-whisper` locally on the CPU — an optional dependency installed
+via ``pip install "searchts[local-transcribe]"``.
 
 Public entry point:
     transcribe(source, *, provider="auto", out_dir=None, config=None) -> str
@@ -13,6 +15,7 @@ Designed to be importable from channels (e.g. YouTubeChannel.transcribe).
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -26,6 +29,15 @@ from searchts.config import Config
 # Whisper API limit is 25MB; leave headroom for multipart overhead.
 SIZE_LIMIT_BYTES = 24 * 1024 * 1024
 CHUNK_SECONDS = 600  # 10 min — small enough that boundary cuts rarely lose meaning
+
+#: The keyless, local backend (faster-whisper). Not in PROVIDERS because it has
+#: no endpoint/key — it is selected explicitly and handled on its own path.
+LOCAL_PROVIDER = "local"
+
+#: Default faster-whisper model. "base" is a good CPU/quality balance and runs
+#: comfortably on a 16GB machine. Override via config `whisper_model` or env
+#: `SEARCHTS_WHISPER_MODEL`.
+DEFAULT_LOCAL_MODEL = "base"
 
 PROVIDERS = {
     "groq": {
@@ -51,6 +63,68 @@ class MissingDependency(TranscribeError):
 
 class NoProviderConfigured(TranscribeError):
     """Raised when no provider has an API key configured."""
+
+
+#: Cached faster-whisper model, keyed by model size, so repeated chunks (and
+#: repeated transcribe() calls in one process) do not reload the weights.
+_LOCAL_MODEL_CACHE: dict = {}
+
+
+def _local_model_size(config: Optional[Config]) -> str:
+    """Resolve the faster-whisper model size from config/env, default `base`."""
+    cfg = config or Config()
+    return cfg.get("whisper_model") or os.environ.get(
+        "SEARCHTS_WHISPER_MODEL"
+    ) or DEFAULT_LOCAL_MODEL
+
+
+def _import_faster_whisper():
+    """Import faster-whisper, raising an actionable error when it is absent."""
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError as e:
+        raise MissingDependency(
+            "local transcription needs faster-whisper. Install it with:\n"
+            '  pip install "searchts[local-transcribe]"'
+        ) from e
+    return WhisperModel
+
+
+def local_available() -> bool:
+    """Return whether the keyless local backend (faster-whisper) is importable."""
+    try:
+        _import_faster_whisper()
+    except MissingDependency:
+        return False
+    return True
+
+
+def _load_local_model(model_size: str):
+    """Load (and cache) a CPU faster-whisper model. int8 keeps RAM/CPU modest."""
+    if model_size not in _LOCAL_MODEL_CACHE:
+        WhisperModel = _import_faster_whisper()
+        _LOCAL_MODEL_CACHE[model_size] = WhisperModel(
+            model_size, device="cpu", compute_type="int8"
+        )
+    return _LOCAL_MODEL_CACHE[model_size]
+
+
+def transcribe_chunk_local(
+    chunk: Path,
+    *,
+    config: Optional[Config] = None,
+) -> str:
+    """Transcribe one chunk locally with faster-whisper. No API key needed.
+
+    Raises MissingDependency (a TranscribeError) if faster-whisper is absent.
+    """
+    model_size = _local_model_size(config)
+    model = _load_local_model(model_size)
+    try:
+        segments, _info = model.transcribe(str(chunk))
+        return "".join(seg.text for seg in segments)
+    except Exception as e:  # surface model/runtime failures as TranscribeError
+        raise TranscribeError(f"local: faster-whisper failed: {e}") from e
 
 
 def _require(binary: str) -> None:
@@ -160,6 +234,33 @@ def _provider_key(provider: str, config: Config) -> Optional[str]:
     return val or None
 
 
+def transcription_readiness(config: Optional[Config]) -> str:
+    """Build the doctor/check() suffix describing how audio can be transcribed.
+
+    Reports configured hosted providers (groq/openai) and, separately, whether
+    the keyless local backend is available. Returns "" when nothing is usable
+    so callers can append it unconditionally.
+    """
+    if config is None:
+        return ""
+    providers = []
+    if config.is_configured("groq_whisper"):
+        providers.append("groq")
+    if config.is_configured("openai_whisper"):
+        providers.append("openai")
+
+    parts = []
+    if providers:
+        if not shutil.which("ffmpeg"):
+            return " (audio transcription requires ffmpeg)"
+        parts.append(f"can transcribe audio ({'->'.join(providers)})")
+    if local_available():
+        parts.append("local Whisper available (no key needed)")
+    if not parts:
+        return ""
+    return ", " + ", ".join(parts)
+
+
 def transcribe_chunk(
     chunk: Path,
     provider: str,
@@ -168,6 +269,8 @@ def transcribe_chunk(
     timeout: int = 120,
 ) -> str:
     """Transcribe one chunk via the named provider. Raises TranscribeError on failure."""
+    if provider == LOCAL_PROVIDER:
+        return transcribe_chunk_local(chunk, config=config)
     if provider not in PROVIDERS:
         raise TranscribeError(f"unknown provider: {provider}")
     cfg = config or Config()
@@ -196,12 +299,27 @@ def transcribe_chunk(
     return resp.text
 
 
-def _provider_order(provider: str) -> List[str]:
+def _provider_order(provider: str, config: Optional[Config] = None) -> List[str]:
+    """Resolve `provider` into an ordered list of backends to try.
+
+    `auto` prefers a hosted provider when its key is configured (groq, then
+    openai — both faster than local CPU inference) and otherwise falls back to
+    the keyless local backend when faster-whisper is importable.
+    """
     if provider == "auto":
+        cfg = config or Config()
+        order = [p for p in ("groq", "openai") if _provider_key(p, cfg)]
+        if order:
+            return order
+        if local_available():
+            return [LOCAL_PROVIDER]
+        # Nothing usable — return hosted order so validation raises a helpful error.
         return ["groq", "openai"]
+    if provider == LOCAL_PROVIDER:
+        return [LOCAL_PROVIDER]
     if provider in PROVIDERS:
         return [provider]
-    raise TranscribeError(f"unknown provider: {provider} (use groq|openai|auto)")
+    raise TranscribeError(f"unknown provider: {provider} (use auto|groq|openai|local)")
 
 
 def transcribe(
@@ -213,7 +331,10 @@ def transcribe(
 ) -> str:
     """Transcribe a URL or local file path. Returns the joined transcript text.
 
-    `provider` is one of `auto` (groq -> openai), `groq`, or `openai`.
+    `provider` is one of `auto`, `groq`, `openai`, or `local`. `auto` prefers a
+    configured hosted key (groq -> openai) and otherwise uses the keyless
+    `local` backend (faster-whisper) when it is installed. `local` forces local
+    transcription and needs no API key.
 
     Intermediate audio (the download, the compressed copy, and any chunks) is
     written to a private temporary directory that is deleted automatically when
@@ -222,12 +343,21 @@ def transcribe(
     in that case the directory is yours to manage.
     """
     cfg = config or Config()
-    order = _provider_order(provider)
+    order = _provider_order(provider, cfg)
 
-    # Validate at least one provider is configured before doing expensive work.
-    if not any(_provider_key(p, cfg) for p in order):
-        names = ", ".join(PROVIDERS[p]["key_field"] for p in order)
-        raise NoProviderConfigured(f"no provider key configured (need one of: {names})")
+    # Validate a usable backend exists before doing expensive download/encode
+    # work. Local needs no key, just an importable faster-whisper.
+    usable = any(
+        (p == LOCAL_PROVIDER and local_available()) or _provider_key(p, cfg)
+        for p in order
+    )
+    if not usable:
+        hosted = ", ".join(PROVIDERS[p]["key_field"] for p in order if p in PROVIDERS)
+        raise NoProviderConfigured(
+            f"no transcription backend available: configure a hosted key "
+            f"(one of: {hosted}), or `pip install \"searchts[local-transcribe]\"` "
+            "for keyless local transcription"
+        )
 
     if out_dir is not None:
         # Caller-owned directory: use it as-is and leave the files in place.
@@ -271,8 +401,9 @@ def _transcribe_with_fallback(chunk: Path, order: List[str], config: Config) -> 
     """Try each provider in order; return first success or raise the last error."""
     last_err: Optional[Exception] = None
     for p in order:
-        if not _provider_key(p, config):
-            # Skip silently — caller already validated at least one is configured.
+        # Local needs no key; hosted providers without a configured key are
+        # skipped silently — caller already validated at least one is usable.
+        if p != LOCAL_PROVIDER and not _provider_key(p, config):
             continue
         try:
             return transcribe_chunk(chunk, p, config=config)

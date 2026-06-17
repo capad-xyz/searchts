@@ -12,8 +12,6 @@ Registered ahead of the text RedditChannel so video URLs route here first; the
 text channel still handles ordinary reddit.com posts/comments and search.
 """
 
-import shutil
-
 from searchts.probe import probe_command
 
 from .base import Channel
@@ -55,18 +53,10 @@ class RedditVideoChannel(Channel):
         # The yt-dlp binary is alive; the transcription readiness below only affects ok/warn, not backend attribution.
         self.active_backend = "yt-dlp"
         # Surface transcription readiness so `doctor` reports it.
+        from searchts.transcribe import transcription_readiness
+
         msg = "Can download Reddit video audio for transcription (v.redd.it needs no login)"
-        if config is not None:
-            providers = []
-            if config.is_configured("groq_whisper"):
-                providers.append("groq")
-            if config.is_configured("openai_whisper"):
-                providers.append("openai")
-            if providers:
-                if not shutil.which("ffmpeg"):
-                    msg += " (audio transcription requires ffmpeg)"
-                else:
-                    msg += f", can transcribe audio ({'->'.join(providers)})"
+        msg += transcription_readiness(config)
         return "ok", msg
 
     def transcribe(self, url: str, *, provider: str = "auto", config=None) -> str:

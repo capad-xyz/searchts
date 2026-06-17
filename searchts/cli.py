@@ -147,10 +147,11 @@ def main():
 
     # ── check-update ──
     # ── transcribe ──
-    p_tr = sub.add_parser("transcribe", help="Transcribe a URL or local audio file (Whisper via Groq/OpenAI)")
+    p_tr = sub.add_parser("transcribe", help="Transcribe a URL or local audio file (Whisper via Groq/OpenAI, or keyless local faster-whisper)")
     p_tr.add_argument("source", help="Audio/video URL or local file path")
-    p_tr.add_argument("--provider", choices=["auto", "groq", "openai"], default="auto",
-                      help="Transcription provider (default: auto = groq → openai fallback)")
+    p_tr.add_argument("--provider", choices=["auto", "groq", "openai", "local"], default="auto",
+                      help="Transcription provider (default: auto = hosted key if set, "
+                           "else keyless local faster-whisper; `local` forces local, no API key)")
     p_tr.add_argument("-o", "--output", default=None,
                       help="Write transcript to a file instead of stdout")
 

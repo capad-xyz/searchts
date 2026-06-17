@@ -216,13 +216,158 @@ class TestOrchestrator:
         )
         assert text == "part one\npart two"
 
-    def test_no_provider_configured_fails_fast(self, fake_config, chunk_file):
+    def test_no_provider_configured_fails_fast(self, monkeypatch, fake_config, chunk_file):
+        # No hosted key AND no local backend -> fail fast before any work.
+        monkeypatch.setattr(tr, "local_available", lambda: False)
         with pytest.raises(tr.NoProviderConfigured):
             tr.transcribe(str(chunk_file), config=fake_config)
 
     def test_invalid_provider_string(self, fake_config, chunk_file):
         with pytest.raises(tr.TranscribeError, match="unknown provider"):
             tr.transcribe(str(chunk_file), provider="azure", config=fake_config)
+
+
+# --- local backend (faster-whisper) ----------------------------------- #
+
+
+class _FakeSegment:
+    def __init__(self, text):
+        self.text = text
+
+
+class _FakeWhisperModel:
+    """Stand-in for faster_whisper.WhisperModel — records init + transcribe."""
+
+    def __init__(self, model_size, device=None, compute_type=None, segments=None):
+        self.model_size = model_size
+        self.device = device
+        self.compute_type = compute_type
+        self._segments = segments or [_FakeSegment("local "), _FakeSegment("transcript")]
+        self.transcribe_calls = []
+
+    def transcribe(self, path):
+        self.transcribe_calls.append(path)
+        return iter(self._segments), {"language": "en"}
+
+
+@pytest.fixture(autouse=True)
+def _clear_local_model_cache():
+    """Keep the module-level model cache from leaking between tests."""
+    tr._LOCAL_MODEL_CACHE.clear()
+    yield
+    tr._LOCAL_MODEL_CACHE.clear()
+
+
+def _patch_local(monkeypatch, model=None):
+    """Make the local backend importable and return canned segments."""
+    fake = model or _FakeWhisperModel("base")
+    monkeypatch.setattr(tr, "local_available", lambda: True)
+    monkeypatch.setattr(tr, "_load_local_model", lambda size: fake)
+    return fake
+
+
+class TestLocalBackend:
+    def test_transcribe_chunk_local_joins_segments(self, monkeypatch, fake_config, chunk_file):
+        fake = _patch_local(monkeypatch)
+        text = tr.transcribe_chunk_local(chunk_file, config=fake_config)
+        assert text == "local transcript"
+        assert fake.transcribe_calls == [str(chunk_file)]
+
+    def test_transcribe_chunk_routes_local(self, monkeypatch, fake_config, chunk_file):
+        _patch_local(monkeypatch)
+        # provider="local" must not require any API key.
+        text = tr.transcribe_chunk(chunk_file, "local", config=fake_config)
+        assert text == "local transcript"
+
+    def test_provider_local_end_to_end(self, monkeypatch, fake_config, tmp_path, chunk_file):
+        # No hosted key at all; provider="local" should still produce text.
+        _patch_local(monkeypatch)
+        compressed = tmp_path / "compressed.m4a"
+        compressed.write_bytes(b"x" * 1024)
+        monkeypatch.setattr(tr, "compress_audio", lambda src, out_dir: compressed)
+
+        def boom_post(*a, **k):
+            raise AssertionError("local must not make HTTP calls")
+
+        monkeypatch.setattr(tr.requests, "post", boom_post)
+        text = tr.transcribe(
+            str(chunk_file), provider="local", out_dir=tmp_path / "work", config=fake_config
+        )
+        assert text == "local transcript"
+
+    def test_auto_falls_back_to_local_when_no_key(self, monkeypatch, fake_config):
+        # No hosted key configured, faster-whisper present -> auto picks local.
+        _patch_local(monkeypatch)
+        assert tr._provider_order("auto", fake_config) == ["local"]
+
+    def test_auto_prefers_hosted_when_key_set(self, monkeypatch, fake_config):
+        # A groq key is set -> auto stays hosted even though local is available.
+        fake_config.set("groq_api_key", "gsk_test")
+        _patch_local(monkeypatch)
+        assert tr._provider_order("auto", fake_config) == ["groq"]
+
+    def test_auto_end_to_end_uses_local(self, monkeypatch, fake_config, tmp_path, chunk_file):
+        _patch_local(monkeypatch)
+        compressed = tmp_path / "compressed.m4a"
+        compressed.write_bytes(b"x" * 1024)
+        monkeypatch.setattr(tr, "compress_audio", lambda src, out_dir: compressed)
+        monkeypatch.setattr(
+            tr.requests, "post",
+            lambda *a, **k: (_ for _ in ()).throw(AssertionError("no HTTP for local")),
+        )
+        text = tr.transcribe(
+            str(chunk_file), provider="auto", out_dir=tmp_path / "work", config=fake_config
+        )
+        assert text == "local transcript"
+
+    def test_missing_faster_whisper_actionable_error(self, monkeypatch, fake_config, chunk_file):
+        # Simulate faster-whisper not installed.
+        monkeypatch.setattr(tr, "local_available", lambda: False)
+
+        def no_import():
+            raise tr.MissingDependency(
+                'local transcription needs faster-whisper. Install it with:\n'
+                '  pip install "searchts[local-transcribe]"'
+            )
+
+        monkeypatch.setattr(tr, "_import_faster_whisper", no_import)
+        with pytest.raises(tr.MissingDependency, match="searchts\\[local-transcribe\\]"):
+            tr.transcribe_chunk_local(chunk_file, config=fake_config)
+
+    def test_no_backend_at_all_actionable_error(self, monkeypatch, fake_config, chunk_file):
+        # Neither a hosted key nor faster-whisper -> NoProviderConfigured mentioning both.
+        monkeypatch.setattr(tr, "local_available", lambda: False)
+        with pytest.raises(tr.NoProviderConfigured, match="local-transcribe"):
+            tr.transcribe(str(chunk_file), provider="auto", config=fake_config)
+
+    def test_model_size_from_config(self, monkeypatch, fake_config):
+        fake_config.set("whisper_model", "small")
+        assert tr._local_model_size(fake_config) == "small"
+
+    def test_model_size_from_env(self, monkeypatch, fake_config):
+        monkeypatch.setenv("SEARCHTS_WHISPER_MODEL", "medium")
+        assert tr._local_model_size(fake_config) == "medium"
+
+    def test_model_size_default(self, fake_config):
+        assert tr._local_model_size(fake_config) == tr.DEFAULT_LOCAL_MODEL
+
+    def test_model_cached_across_chunks(self, monkeypatch, fake_config, chunk_file):
+        # _load_local_model must reuse the same instance for repeated chunks.
+        loads = []
+
+        class _Counter(_FakeWhisperModel):
+            pass
+
+        def fake_import():
+            return lambda size, device=None, compute_type=None: (
+                loads.append(size) or _Counter(size)
+            )
+
+        monkeypatch.setattr(tr, "_import_faster_whisper", fake_import)
+        m1 = tr._load_local_model("base")
+        m2 = tr._load_local_model("base")
+        assert m1 is m2
+        assert loads == ["base"]  # loaded exactly once
 
 
 # --- YouTubeChannel integration --------------------------------------- #

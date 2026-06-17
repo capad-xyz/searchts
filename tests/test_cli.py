@@ -49,6 +49,24 @@ class TestCLI:
         assert out_file.read_text(encoding="utf-8").strip() == "saved text"
         assert "Transcript written" in capsys.readouterr().out
 
+    def test_transcribe_command_accepts_provider_local(self, capsys):
+        seen = {}
+
+        def fake_transcribe(source, *, provider="auto"):
+            seen["provider"] = provider
+            return "local out"
+
+        with patch("searchts.transcribe.transcribe", side_effect=fake_transcribe):
+            with patch("sys.argv", ["searchts", "transcribe", "audio.mp3", "--provider", "local"]):
+                main()
+        assert seen["provider"] == "local"
+        assert "local out" in capsys.readouterr().out
+
+    def test_transcribe_command_rejects_unknown_provider(self):
+        with patch("sys.argv", ["searchts", "transcribe", "audio.mp3", "--provider", "azure"]):
+            with pytest.raises(SystemExit):
+                main()
+
     def test_read_command_prints_text_to_stdout(self, capsys):
         from searchts.unlocker import FetchResult
         with patch("searchts.unlocker.fetch",

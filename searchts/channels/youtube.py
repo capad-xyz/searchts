@@ -64,18 +64,10 @@ class YouTubeChannel(Channel):
                     f"yt-dlp is installed but the JS runtime is not configured. Run:\n  {render_ytdlp_fix_command()}"
                 )
         # Surface transcription readiness so `doctor` reports it.
+        from searchts.transcribe import transcription_readiness
+
         msg = "Can extract video info and subtitles"
-        if config is not None:
-            providers = []
-            if config.is_configured("groq_whisper"):
-                providers.append("groq")
-            if config.is_configured("openai_whisper"):
-                providers.append("openai")
-            if providers:
-                if not shutil.which("ffmpeg"):
-                    msg += " (audio transcription requires ffmpeg)"
-                else:
-                    msg += f", can transcribe audio ({'->'.join(providers)})"
+        msg += transcription_readiness(config)
         return "ok", msg
 
     def transcribe(self, url: str, *, provider: str = "auto", config=None) -> str:
