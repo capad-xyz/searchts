@@ -1,0 +1,30 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC for PyPI Trusted Publishing (no stored token)
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify tag matches package version
+        run: |
+          python -c "import tomllib,os;t=os.environ['GITHUB_REF_NAME'];v=tomllib.load(open('pyproject.toml','rb'))['project']['version'];assert t==f'v{v}',f'tag {t} != pyproject v{v}';print('version OK',t)"
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
