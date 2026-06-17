@@ -42,6 +42,7 @@ dependencies = [
 [project.optional-dependencies]
 browser = ["patchright>=1.50"]  # tier-2 stealth-browser backend (undetected Playwright)
 cookies = ["browser-cookie3>=0.19"]
+mcp = ["mcp[cli]>=1.0"]  # stdio MCP server (searchts mcp serve)
 all = ["patchright>=1.50", "mcp[cli]>=1.0", "browser-cookie3>=0.19"]
 dev = [
     "pytest>=8.0",

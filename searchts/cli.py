@@ -123,13 +123,27 @@ def main():
     p_uninstall.add_argument("--keep-config", action="store_true",
                              help="Remove skill files only, keep ~/.searchts/ config and tokens")
 
+    # ── mcp ──
+    p_mcp = sub.add_parser("mcp", help="Run or wire up the searchts MCP server")
+    mcp_sub = p_mcp.add_subparsers(dest="mcp_command", help="MCP subcommands")
+    mcp_sub.add_parser("serve", help="Run the stdio MCP server (read_url + web_search tools)")
+    p_mcp_install = mcp_sub.add_parser(
+        "install", help="Print the exact wiring for an AI agent client (no network)")
+    p_mcp_install.add_argument("--client", choices=["claude", "cursor", "json"], default=None,
+                               help="Which client to print wiring for (default: all)")
+
     # ── skill ──
     p_skill = sub.add_parser("skill", help="Manage agent skill registration")
-    p_skill_group = p_skill.add_mutually_exclusive_group(required=True)
-    p_skill_group.add_argument("--install", action="store_true",
-                               help="Install SKILL.md to agent skill directories")
-    p_skill_group.add_argument("--uninstall", action="store_true",
-                               help="Remove SKILL.md from agent skill directories")
+    # Legacy flags (kept for backward compatibility): `searchts skill --install`.
+    p_skill.add_argument("--install", dest="legacy_install", action="store_true",
+                         help="Install the SKILL.md bundle to agent skill directories")
+    p_skill.add_argument("--uninstall", dest="legacy_uninstall", action="store_true",
+                         help="Remove the SKILL.md bundle from agent skill directories")
+    skill_sub = p_skill.add_subparsers(dest="skill_command", help="Skill subcommands")
+    p_skill_install = skill_sub.add_parser(
+        "install", help="Write a Claude Code slash-command (searchts.md) into the commands dir")
+    p_skill_install.add_argument("--dir", dest="dir", default=None,
+                                 help="Target commands directory (default: ~/.claude/commands)")
 
     # ── check-update ──
     # ── transcribe ──
@@ -179,6 +193,8 @@ def main():
         _cmd_configure(args)
     elif args.command == "uninstall":
         _cmd_uninstall(args)
+    elif args.command == "mcp":
+        _cmd_mcp(args)
     elif args.command == "skill":
         _cmd_skill(args)
     elif args.command == "transcribe":
@@ -493,11 +509,142 @@ def _uninstall_skill():
 
 
 def _cmd_skill(args):
-    """Manage agent skill registration."""
-    if args.install:
+    """Manage agent skill registration.
+
+    Two shapes:
+      * `searchts skill install [--dir DIR]` — write the Claude Code slash-command
+        file (searchts.md) into a commands directory.
+      * `searchts skill --install / --uninstall` — legacy: (de)register the full
+        SKILL.md bundle in agent skill directories.
+    """
+    if getattr(args, "skill_command", None) == "install":
+        _cmd_skill_install(args)
+        return
+
+    if getattr(args, "legacy_install", False):
         _install_skill()
-    elif args.uninstall:
+    elif getattr(args, "legacy_uninstall", False):
         _uninstall_skill()
+    else:
+        print("Usage: searchts skill install [--dir DIR]")
+        print("   or: searchts skill --install | --uninstall")
+        sys.exit(2)
+
+
+#: Body of the Claude Code custom slash-command (searchts.md). Instructs the
+#: agent to route the slash-command argument to `searchts read|search|transcribe`.
+_SLASH_COMMAND_BODY = """\
+---
+description: Read a URL, search the web, or transcribe a video with searchts (open-source escalating unlocker)
+argument-hint: <url | video url | search query>
+---
+
+Use the `searchts` CLI to satisfy this request. The argument is: $ARGUMENTS
+
+Decide which subcommand to run based on what `$ARGUMENTS` looks like:
+
+- **A web page / article URL** (http(s):// link that is not a video):
+  run `searchts read "$ARGUMENTS"`. This fetches the page through an escalating
+  open-source unlocker (browser-fingerprinted fetch -> JS-render relay ->
+  stealth browser) and prints clean markdown.
+- **A video / audio URL** (YouTube, podcast, or any media link) when a
+  transcript is wanted: run `searchts transcribe "$ARGUMENTS"` to get a
+  Whisper transcript. (`searchts read` is fine for the page text itself.)
+- **Anything else (a search query, a question, a topic)**:
+  run `searchts search "$ARGUMENTS"` for fusion-merged multi-source web results.
+
+Rules:
+
+- Prefer `searchts read` over the built-in fetch/WebFetch tool for pages that
+  are blocked, return a bot-wall/CAPTCHA, or come back empty - the searchts
+  unlocker is built to get past those.
+- Pass `--json` when you need structured output to parse.
+- If a command fails, read its stderr (it prints the per-backend breakdown) and
+  report what was tried rather than silently giving up.
+"""
+
+
+def _slash_command_target_dir(dir_arg):
+    """Resolve the commands directory for `skill install` (default ~/.claude/commands)."""
+    if dir_arg:
+        return os.path.abspath(os.path.expanduser(dir_arg))
+    return os.path.expanduser(os.path.join("~", ".claude", "commands"))
+
+
+def write_slash_command(target_dir):
+    """Write searchts.md into `target_dir` (created if missing); return the path."""
+    os.makedirs(target_dir, exist_ok=True)
+    path = os.path.join(target_dir, "searchts.md")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(_SLASH_COMMAND_BODY)
+    return path
+
+
+def _cmd_skill_install(args):
+    """Write the Claude Code custom slash-command file (searchts.md)."""
+    target_dir = _slash_command_target_dir(getattr(args, "dir", None))
+    path = write_slash_command(target_dir)
+    print(f"Wrote Claude Code slash-command: {path}")
+    print("Use it in Claude Code with: /searchts <url | video url | query>")
+
+
+# ── mcp command ─────────────────────────────────────
+
+
+def mcp_install_text(client=None):
+    """Return the wiring instructions for one client, or all when client is None.
+
+    Pure string builder (no network, no side effects) so it is directly testable.
+    """
+    claude_cmd = "claude mcp add searchts -- searchts mcp serve"
+    json_snippet = json.dumps(
+        {"mcpServers": {"searchts": {"command": "searchts", "args": ["mcp", "serve"]}}},
+        indent=2,
+    )
+    path_note = (
+        "Note: `searchts` must be on your PATH (e.g. installed with pipx). "
+        "If it isn't, replace `searchts` with the full path to the executable."
+    )
+
+    claude_block = "\n".join([
+        "Claude Code - run this one-liner:",
+        f"  {claude_cmd}",
+    ])
+    cursor_block = "\n".join([
+        "Cursor / JSON config - add this to your mcp.json:",
+        json_snippet,
+    ])
+
+    if client == "claude":
+        return f"{claude_block}\n\n{path_note}"
+    if client in ("cursor", "json"):
+        return f"{cursor_block}\n\n{path_note}"
+
+    return f"{claude_block}\n\n{cursor_block}\n\n{path_note}"
+
+
+def _cmd_mcp(args):
+    """Dispatch `searchts mcp serve|install`."""
+    mcp_command = getattr(args, "mcp_command", None)
+    if mcp_command == "serve":
+        _cmd_mcp_serve()
+    elif mcp_command == "install":
+        print(mcp_install_text(getattr(args, "client", None)))
+    else:
+        print("Usage: searchts mcp serve")
+        print("   or: searchts mcp install [--client claude|cursor|json]")
+        sys.exit(2)
+
+
+def _cmd_mcp_serve():
+    """Run the stdio MCP server, exiting cleanly if the optional `mcp` pkg is absent."""
+    from searchts.integrations import mcp_server
+
+    try:
+        mcp_server.serve()
+    except mcp_server.MCPNotInstalledError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
 
 
 def _install_system_deps():

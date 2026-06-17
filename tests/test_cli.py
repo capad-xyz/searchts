@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for searchts CLI."""
 
+import os
 import shutil
 import subprocess
 from unittest.mock import patch
@@ -344,3 +345,97 @@ class TestWatchVersionCompare:
         out = capsys.readouterr().out
         assert "New version available" not in out
         assert "All systems normal" in out
+
+
+class TestMcpInstall:
+    def test_mcp_install_text_all_clients(self):
+        text = cli.mcp_install_text()
+        # Claude Code one-liner.
+        assert "claude mcp add searchts" in text
+        # JSON snippet keys/args.
+        assert '"searchts"' in text
+        assert '"mcp"' in text
+        assert '"serve"' in text
+        # PATH note present.
+        assert "PATH" in text
+
+    def test_mcp_install_text_claude_only(self):
+        text = cli.mcp_install_text("claude")
+        assert "claude mcp add searchts -- searchts mcp serve" in text
+        assert "PATH" in text
+        # No JSON snippet when claude-only.
+        assert '"mcpServers"' not in text
+
+    def test_mcp_install_text_cursor_json(self):
+        for client in ("cursor", "json"):
+            text = cli.mcp_install_text(client)
+            assert '"mcpServers"' in text
+            assert '"searchts"' in text
+            assert '"mcp"' in text
+            assert '"serve"' in text
+
+    def test_mcp_install_command_prints(self, capsys):
+        with patch("sys.argv", ["searchts", "mcp", "install"]):
+            main()
+        out = capsys.readouterr().out
+        assert "claude mcp add searchts" in out
+        assert '"searchts"' in out
+        assert '"serve"' in out
+
+    def test_mcp_serve_missing_mcp_exits_with_actionable_message(self, capsys, monkeypatch):
+        """`mcp serve` without the mcp pkg must exit nonzero with a pip hint, not hang."""
+        from searchts.integrations import mcp_server
+
+        # Simulate the optional dependency being absent.
+        monkeypatch.setattr(mcp_server, "HAS_MCP", False)
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["searchts", "mcp", "serve"]):
+                main()
+        assert exc_info.value.code != 0
+        err = capsys.readouterr().err
+        assert 'pip install "searchts[mcp]"' in err
+
+    def test_mcp_serve_invokes_serve_when_available(self, monkeypatch):
+        """When mcp is importable, `mcp serve` calls serve() (no hang in tests)."""
+        from searchts.integrations import mcp_server
+
+        called = {}
+        monkeypatch.setattr(mcp_server, "HAS_MCP", True)
+        monkeypatch.setattr(mcp_server, "serve", lambda: called.setdefault("ran", True))
+
+        with patch("sys.argv", ["searchts", "mcp", "serve"]):
+            main()
+        assert called.get("ran") is True
+
+
+class TestSkillInstallSlashCommand:
+    def test_skill_install_writes_searchts_md(self, capsys, tmp_path):
+        target = tmp_path / "commands"
+        with patch("sys.argv", ["searchts", "skill", "install", "--dir", str(target)]):
+            main()
+        out_file = target / "searchts.md"
+        assert out_file.exists()
+        body = out_file.read_text(encoding="utf-8")
+        assert "searchts read" in body
+        assert "searchts search" in body
+        assert "searchts transcribe" in body
+        # Prefer searchts over built-in fetch for blocked pages.
+        assert "WebFetch" in body or "built-in fetch" in body
+        assert str(out_file) in capsys.readouterr().out
+
+    def test_skill_install_creates_missing_dir(self, tmp_path):
+        target = tmp_path / "nested" / "claude" / "commands"
+        assert not target.exists()
+        path = cli.write_slash_command(str(target))
+        assert os.path.exists(path)
+        assert os.path.basename(path) == "searchts.md"
+
+    def test_skill_install_default_dir_not_touched_in_tests(self, tmp_path):
+        """Sanity: the resolver points at ~/.claude/commands by default, but tests
+        always pass an explicit --dir so the real home dir is never written."""
+        default_dir = cli._slash_command_target_dir(None)
+        assert default_dir.endswith(os.path.join(".claude", "commands"))
+        # With an explicit dir we stay inside tmp_path.
+        resolved = cli._slash_command_target_dir(str(tmp_path / "x"))
+        assert str(tmp_path) in resolved

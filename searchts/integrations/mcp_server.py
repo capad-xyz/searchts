@@ -23,11 +23,20 @@ try:
 except ImportError:
     HAS_MCP = False
 
+#: Shown whenever the optional `mcp` package is missing — actionable, copy-pasteable.
+MCP_MISSING_MESSAGE = (
+    'The MCP server needs the optional "mcp" dependency. Install it with:\n'
+    '  pip install "searchts[mcp]"'
+)
+
+
+class MCPNotInstalledError(RuntimeError):
+    """Raised when an MCP entrypoint runs without the optional `mcp` package."""
+
 
 def create_server():
     if not HAS_MCP:
-        print("MCP not installed. Install: pip install searchts[mcp]", file=sys.stderr)
-        sys.exit(1)
+        raise MCPNotInstalledError(MCP_MISSING_MESSAGE)
 
     server = Server("searchts")
     config = Config()
@@ -144,11 +153,28 @@ def web_search(query: str, max_results: int = 5) -> str:
     return "\n\n".join(blocks)
 
 
-async def main():
+async def _run_stdio():
+    """Wire the server up to the stdio transport and block until the client exits."""
     server = create_server()
     async with stdio_server() as (read_stream, write_stream):
         await server.run(read_stream, write_stream, server.create_initialization_options())
 
 
+def serve():
+    """Clean entrypoint: run the stdio MCP server (the CLI's `mcp serve` calls this).
+
+    Raises MCPNotInstalledError (with an actionable pip hint) when the optional
+    `mcp` package is absent, so the caller can surface it without hanging on a
+    transport that never came up.
+    """
+    if not HAS_MCP:
+        raise MCPNotInstalledError(MCP_MISSING_MESSAGE)
+    asyncio.run(_run_stdio())
+
+
+async def main():
+    await _run_stdio()
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    serve()

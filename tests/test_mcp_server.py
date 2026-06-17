@@ -7,6 +7,8 @@ optional `mcp` dependency or a running stdio server.
 
 from unittest.mock import patch
 
+import pytest
+
 from searchts.integrations.mcp_server import read_url, web_search
 from searchts.search import SearchError, SearchResult
 from searchts.unlocker import FetchResult, UnlockerError
@@ -82,3 +84,23 @@ def test_web_search_requires_query():
     out = web_search("")
     assert out.startswith("Error:")
     assert "query" in out
+
+
+# ── serve() entrypoint ──────────────────────────────────────────────────────
+
+def test_serve_raises_actionable_error_without_mcp(monkeypatch):
+    """serve() must raise (not hang) with a pip-install hint when mcp is absent."""
+    from searchts.integrations import mcp_server
+
+    monkeypatch.setattr(mcp_server, "HAS_MCP", False)
+    with pytest.raises(mcp_server.MCPNotInstalledError) as exc_info:
+        mcp_server.serve()
+    assert 'pip install "searchts[mcp]"' in str(exc_info.value)
+
+
+def test_create_server_raises_without_mcp(monkeypatch):
+    from searchts.integrations import mcp_server
+
+    monkeypatch.setattr(mcp_server, "HAS_MCP", False)
+    with pytest.raises(mcp_server.MCPNotInstalledError):
+        mcp_server.create_server()
