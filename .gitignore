@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.env
+.searchts/
+*.log
+
+# Claude Code personal permission settings — local only, never commit
+.claude/settings.local.json
+uv.lock
+
+# Local dev (this project) - never committed
+.venv/
+scratch/
+DEVLOG.md

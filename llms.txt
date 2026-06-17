@@ -1,0 +1,31 @@
+# searchts
+
+> Give your AI agent eyes to see the entire internet. A unified CLI tool that lets AI agents read and search across 8 platforms — Web (Jina Reader), Search (Exa), GitHub, YouTube, Reddit, Twitter/X, LinkedIn, and RSS. One install, zero API fees.
+
+## Quick Start
+
+- [Installation Guide](https://github.com/capad-xyz/searchts/blob/main/docs/install.md): Step-by-step setup instructions for AI agents
+- [README](https://github.com/capad-xyz/searchts/blob/main/README.md): Full documentation
+
+## Core Commands
+
+- [CLI Usage](https://github.com/capad-xyz/searchts/blob/main/docs/install.md): `searchts read <url>` reads any URL, `searchts search-twitter "query"` searches Twitter, etc.
+
+## Key Features
+
+- Read any URL: tweets, Reddit posts, YouTube videos (transcripts), GitHub repos, articles, RSS feeds
+- Search across platforms: Twitter/X, Reddit, GitHub, YouTube, LinkedIn, Web (via Exa)
+- Self-diagnosis: `searchts doctor` checks what works and what needs setup
+- Auto-installs dependencies: `searchts install --env=auto`
+- Cookie-based auth for platforms that require login (Twitter)
+- Proxy support for platforms that block server IPs (Reddit)
+- Zero API fees: all backends are free and open-source (bird CLI, yt-dlp, Jina Reader, etc.)
+
+## Troubleshooting
+
+- [Troubleshooting Guide](https://github.com/capad-xyz/searchts/blob/main/docs/troubleshooting.md): Common issues and solutions
+
+## Optional
+
+- [SKILL.md](https://github.com/capad-xyz/searchts/blob/main/searchts/skill/SKILL.md): Integration guide for AI agent frameworks (OpenClaw, Claude Code, etc.)
+- [PyPI Package](https://pypi.org/project/searchts/): `pip install searchts`
