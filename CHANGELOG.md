@@ -1,33 +1,31 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to searchts are documented here. This project follows semantic versioning.
 
----
+## [0.2.1] - 2026-06-18
 
-## [1.1.0] - 2025-02-25
+### Added
+- Tag-triggered PyPI auto-publish via GitHub Actions Trusted Publishing (OIDC, no stored token): push a `vX.Y.Z` tag and the release is built and published automatically.
 
-### New Channels
+### Docs
+- README quickstart for `pipx install` and one-command agent wiring; clarified that search is keyless by default.
 
-#### LinkedIn
-- Read person profiles, company pages, and job details via [linkedin-scraper-mcp](https://github.com/stickerdaniel/linkedin-mcp-server)
-- Search people and jobs via MCP, with Exa fallback
-- Fallback to Jina Reader when MCP is not configured
+## [0.2.0] - 2026-06-18
 
-### Improvements
+### Added
+- Multi-provider web search (`searchts search`) with reciprocal rank fusion and URL de-duplication: DuckDuckGo (keyless default), plus SearXNG, Exa, Brave, and Tavily when configured.
+- Prompt-injection scrubbing of fetched and searched content: strips invisible/bidi characters, flags injection indicators, and optional redaction (`read --scrub`).
+- Video transcription for TikTok, Instagram, and Reddit videos (mirroring YouTube): yt-dlp audio plus Whisper.
+- One-command agent wiring: `searchts mcp serve|install` (MCP server exposing `read_url` and `web_search`) and `searchts skill install` (a Claude Code `/searchts` slash command).
 
-- `searchts doctor` now detects the LinkedIn channel
-- CLI: added `search-linkedin` subcommand
-- Updated install guide with setup instructions for the new channel
+### Fixed
+- Wheel packaging gate in CI no longer requires a removed directory.
 
----
+## [0.1.0] - 2026-06-17
 
-## [1.0.0] - 2025-02-24
-
-### Initial Release
-
-- 8 channels: Web (Jina Reader), Search (Exa), GitHub, YouTube, Reddit, Twitter/X, LinkedIn, RSS
-- CLI with `read`, `search`, `doctor`, `install` commands
-- Unified channel interface — each platform is a single pluggable Python file
-- Auto-detection of local vs server environments
-- Built-in diagnostics via `searchts doctor`
-- Skill registration for Claude Code / OpenClaw / Cursor
+### Added
+- Initial release of searchts: an escalating open-source web unlocker (curl_cffi browser-fingerprinted fetch, then Jina Reader, then a patchright stealth browser) with `trafilatura` content extraction and phrase-based block detection.
+- `searchts read <url>` CLI, an MCP `read_url` tool, and a Python library API.
+- Per-domain backend memory and a human-in-the-loop CAPTCHA handoff.
+- Read, search, and transcribe across web, search, GitHub, YouTube, Reddit, Twitter, LinkedIn, and RSS.
+- Built on and extending [Agent-Reach](https://github.com/Panniantong/Agent-Reach) (MIT); see Credits in the README.
