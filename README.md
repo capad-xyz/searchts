@@ -4,6 +4,8 @@
 
 License: MIT. Python 3.10+.
 
+> *Fun fact: "searchts" doesn't officially abbreviate anything. Off the record, it stands for "search this shit". 🥀*
+
 ## Why
 
 AI agents constantly need to read web pages, but the naive way they fetch is trivially blocked by modern anti-bot systems (Cloudflare, PerimeterX, DataDome). Paid unlocker services solve this, but the thing they really charge for is a large pool of clean residential IP addresses. `searchts` runs on your own machine, from your own connection, at personal volume, so it sidesteps that cost and gets through most of those walls for free.
