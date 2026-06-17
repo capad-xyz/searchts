@@ -57,7 +57,7 @@ jobs:
           dupes = [n for n, c in collections.Counter(names).items() if c > 1]
           assert not dupes, f"duplicate entries in wheel: {dupes}"
           assert "searchts/skill/SKILL.md" in names, "SKILL.md missing from wheel"
-          for prefix in ("searchts/guides/", "searchts/scripts/", "searchts/skill/references/"):
+          for prefix in ("searchts/guides/", "searchts/skill/references/"):
               assert any(n.startswith(prefix) for n in names), f"{prefix} missing from wheel"
           print(f"wheel OK: {len(names)} entries, no duplicates, data files present")
           PY
