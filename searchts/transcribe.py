@@ -236,8 +236,13 @@ def transcribe(
         return _run_transcription(source, work_dir, order, cfg)
 
     # Default: an ephemeral workspace removed on exit (even on exception), so a
-    # downloaded video/audio never lingers on disk.
-    with tempfile.TemporaryDirectory(prefix="searchts-transcribe-") as tmp:
+    # downloaded video/audio never lingers on disk. ignore_cleanup_errors guards
+    # the classic Windows case where an antivirus scan or a slow-to-release
+    # handle briefly locks a file: worst case a stray temp file waits for the OS
+    # to reap it, instead of a lock turning a finished transcription into a crash.
+    with tempfile.TemporaryDirectory(
+        prefix="searchts-transcribe-", ignore_cleanup_errors=True
+    ) as tmp:
         return _run_transcription(source, Path(tmp), order, cfg)
 
 
