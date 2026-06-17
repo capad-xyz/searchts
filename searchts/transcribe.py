@@ -213,8 +213,13 @@ def transcribe(
 ) -> str:
     """Transcribe a URL or local file path. Returns the joined transcript text.
 
-    `provider` is one of `auto` (groq → openai), `groq`, or `openai`.
-    `out_dir` defaults to a fresh temp directory; intermediate files stay there.
+    `provider` is one of `auto` (groq -> openai), `groq`, or `openai`.
+
+    Intermediate audio (the download, the compressed copy, and any chunks) is
+    written to a private temporary directory that is deleted automatically when
+    transcription finishes, whether it succeeds or fails, so nothing is left on
+    the user's disk. Pass `out_dir` only if you want to keep the intermediates;
+    in that case the directory is yours to manage.
     """
     cfg = config or Config()
     order = _provider_order(provider)
@@ -224,12 +229,23 @@ def transcribe(
         names = ", ".join(PROVIDERS[p]["key_field"] for p in order)
         raise NoProviderConfigured(f"no provider key configured (need one of: {names})")
 
-    work_dir = Path(out_dir) if out_dir else Path(tempfile.mkdtemp(prefix="transcribe-"))
-    work_dir.mkdir(parents=True, exist_ok=True)
+    if out_dir is not None:
+        # Caller-owned directory: use it as-is and leave the files in place.
+        work_dir = Path(out_dir)
+        work_dir.mkdir(parents=True, exist_ok=True)
+        return _run_transcription(source, work_dir, order, cfg)
 
+    # Default: an ephemeral workspace removed on exit (even on exception), so a
+    # downloaded video/audio never lingers on disk.
+    with tempfile.TemporaryDirectory(prefix="searchts-transcribe-") as tmp:
+        return _run_transcription(source, Path(tmp), order, cfg)
+
+
+def _run_transcription(source: str, work_dir: Path, order: List[str], cfg: Config) -> str:
+    """Locate/download audio, compress, chunk, and transcribe within work_dir."""
     src_path = Path(source)
     if src_path.is_file():
-        audio = src_path
+        audio = src_path  # a local file the caller owns; never deleted by us
     else:
         audio = download_audio(source, work_dir)
 
