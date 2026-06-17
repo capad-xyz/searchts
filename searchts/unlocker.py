@@ -66,6 +66,10 @@ class FetchResult:
     backend: str
     text: str
     status: Optional[int]
+    #: Prompt-injection findings detected in the fetched content (empty if none).
+    #: Defaulted so existing positional construction FetchResult(backend, text,
+    #: status) keeps working unchanged.
+    warnings: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -341,9 +345,25 @@ def _challenge_seen(attempts: List[Tuple[str, str]]) -> bool:
 
 # ── the ladder ───────────────────────────────────────────────────────────────
 
+def _finalize(result: FetchResult, scrub: bool) -> FetchResult:
+    """Sanitize a winning FetchResult before returning it.
+
+    ALWAYS strips invisible/control chars and scans for prompt-injection
+    indicators, attaching any findings to ``result.warnings``. When ``scrub`` is
+    True the matched injection spans in the text are redacted too. Untrusted web
+    content must never reach a model with hidden instructions intact.
+    """
+    from searchts import sanitize
+
+    out = sanitize.scrub(result.text, redact=scrub)
+    result.text = out.text
+    result.warnings = out.findings
+    return result
+
+
 def fetch(url: str, backends: Optional[List[str]] = None,
           min_chars: int = _MIN_CHARS, use_memory: bool = True,
-          allow_human: bool = False) -> FetchResult:
+          allow_human: bool = False, scrub: bool = False) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -357,6 +377,12 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         When True and the automated ladder fails on an interactive challenge /
         CAPTCHA, fall back to a HEADFUL browser the user solves by hand
         (Feature D). Default False so normal/agent use is never interrupted.
+    scrub:
+        Prompt-injection handling for the returned content. Invisible/control
+        characters are ALWAYS stripped and the text is ALWAYS scanned, with any
+        findings attached to ``result.warnings``. When True, matched injection
+        spans are additionally redacted from the text. Default False (report,
+        don't alter visible content).
     """
     url = normalize(url)
     order = list(backends or DEFAULT_BACKENDS)
@@ -404,7 +430,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             if len(text) >= min_chars:
                 if memory_on and domain:
                     remember(domain, backend)  # record the winner for next time
-                return FetchResult(backend, text, status)  # clean win, stop here
+                # clean win, stop here — sanitize untrusted content before return
+                return _finalize(FetchResult(backend, text, status), scrub)
             # Real but thin (e.g. JS-rendered or genuinely short): keep as a
             # fallback and escalate in case a richer backend renders more.
             attempts.append((backend, f"thin-{len(text)}b"))
@@ -415,7 +442,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             continue
 
     if best is not None:
-        return best  # best-effort real content beats reporting a false block
+        # best-effort real content beats reporting a false block
+        return _finalize(best, scrub)
 
     err = UnlockerError(url, attempts)
 
@@ -429,7 +457,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         if looks_blocked(status, html) is None:
             text = html_to_text(html, url)
             if text:
-                return FetchResult(backend="human-browser", text=text, status=status)
+                return _finalize(
+                    FetchResult(backend="human-browser", text=text, status=status), scrub
+                )
         raise err  # stayed blocked / timed out -> original failure
 
     raise err

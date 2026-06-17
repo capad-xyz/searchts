@@ -55,6 +55,10 @@ class SearchResult:
     url: str
     snippet: str
     source: str
+    #: Prompt-injection findings detected in this result's title/snippet (empty
+    #: if none). Defaulted so existing positional construction
+    #: SearchResult(title, url, snippet, source) keeps working unchanged.
+    warnings: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -399,4 +403,23 @@ def search(
     if not per_provider:
         raise SearchError(query, attempts)
 
-    return _fuse(per_provider, max_results)
+    return [_sanitize_result(r) for r in _fuse(per_provider, max_results)]
+
+
+def _sanitize_result(result: SearchResult) -> SearchResult:
+    """Strip invisibles from a result's title/snippet and attach injection findings.
+
+    Search-result titles and snippets are untrusted web content. We always strip
+    invisible/control characters and scan for prompt-injection indicators,
+    attaching any findings to ``result.warnings`` (non-destructive — visible
+    text is preserved, only invisibles are removed).
+    """
+    from searchts import sanitize
+
+    title = sanitize.strip_invisibles(result.title)
+    snippet = sanitize.strip_invisibles(result.snippet)
+    findings = sanitize.scan(title) + sanitize.scan(snippet)
+    result.title = title
+    result.snippet = snippet
+    result.warnings = findings
+    return result

@@ -96,6 +96,9 @@ def main():
                         help="Print {url,backend,status,chars,text} as JSON instead of raw text")
     p_read.add_argument("--human", action="store_true",
                         help="On a CAPTCHA/challenge, open a headful browser to solve by hand")
+    p_read.add_argument("--scrub", action="store_true",
+                        help="Redact prompt-injection spans from the content (invisible-char "
+                             "stripping + indicator scanning always run regardless)")
 
     # ── search ──
     p_search = sub.add_parser("search", help="Multi-source web search (fusion-merged across providers)")
@@ -1154,12 +1157,18 @@ def _cmd_read(args):
     try:
         result = unlocker.fetch(
             args.url, backends=backends, allow_human=args.human,
+            scrub=getattr(args, "scrub", False),
         )
     except unlocker.UnlockerError as e:
         print(f"Failed to read {e.url}", file=sys.stderr)
         for backend, why in e.attempts:
             print(f"  {backend}: {why}", file=sys.stderr)
         sys.exit(1)
+
+    # Surface prompt-injection findings to stderr so stdout stays clean content.
+    if result.warnings:
+        print(f"[!] {len(result.warnings)} possible prompt-injection indicator(s) detected",
+              file=sys.stderr)
 
     if args.json:
         payload = {
