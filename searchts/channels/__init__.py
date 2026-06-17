@@ -11,6 +11,9 @@ from .web import WebChannel
 from .github import GitHubChannel
 from .twitter import TwitterChannel
 from .youtube import YouTubeChannel
+from .tiktok import TikTokChannel
+from .instagram import InstagramChannel
+from .redditvideo import RedditVideoChannel
 from .reddit import RedditChannel
 from .rss import RSSChannel
 from .exa_search import ExaSearchChannel
@@ -21,6 +24,11 @@ ALL_CHANNELS: List[Channel] = [
     GitHubChannel(),
     TwitterChannel(),
     YouTubeChannel(),
+    TikTokChannel(),
+    InstagramChannel(),
+    # RedditVideoChannel is listed before RedditChannel so v.redd.it / video post
+    # permalinks route to the no-login transcription path first.
+    RedditVideoChannel(),
     RedditChannel(),
     LinkedInChannel(),
     RSSChannel(),
