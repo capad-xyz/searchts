@@ -13,8 +13,10 @@ Channels use probe_command() inside check() so doctor reports real health,
 not just file existence.
 """
 
+import importlib.util
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from typing import Optional, Sequence
 
@@ -50,6 +52,7 @@ def probe_command(
     timeout: int = 10,
     retries: int = 0,
     package: Optional[str] = None,
+    module: Optional[str] = None,
 ) -> ProbeResult:
     """Actually execute `cmd *args` and classify the result.
 
@@ -59,14 +62,31 @@ def probe_command(
 
     package: pip/pipx package name used in the broken-install hint
              (defaults to cmd).
+    module: when set, probe the tool as a Python module instead of a PATH
+            binary. Presence is checked via importlib.util.find_spec(module)
+            and the probe runs `[sys.executable, "-m", module, *args]`. This is
+            how console-script tools that ship as Python dependencies (e.g.
+            yt-dlp) are detected in a venv/pipx install, where the module is
+            always importable even though the console script is not on PATH.
+            If the module is importable, that is used; otherwise it falls back
+            to a PATH binary named `cmd` if present, else reports "missing".
     """
-    path = shutil.which(cmd)
-    if not path:
-        return ProbeResult("missing")
+    if module is not None:
+        if importlib.util.find_spec(module) is not None:
+            invocation = [sys.executable, "-m", module]
+        elif shutil.which(cmd):
+            invocation = [shutil.which(cmd)]
+        else:
+            return ProbeResult("missing")
+    else:
+        path = shutil.which(cmd)
+        if not path:
+            return ProbeResult("missing")
+        invocation = [path]
 
     last: Optional[ProbeResult] = None
     for _ in range(retries + 1):
-        last = _run_once(path, args, timeout, package or cmd)
+        last = _run_once(invocation, args, timeout, package or cmd)
         if last.ok:
             return last
         # missing/broken won't heal between retries — only transient
@@ -76,10 +96,12 @@ def probe_command(
     return last
 
 
-def _run_once(path: str, args: Sequence[str], timeout: int, package: str) -> ProbeResult:
+def _run_once(
+    invocation: Sequence[str], args: Sequence[str], timeout: int, package: str
+) -> ProbeResult:
     try:
         r = subprocess.run(
-            [path, *args],
+            [*invocation, *args],
             capture_output=True,
             encoding="utf-8",
             errors="replace",

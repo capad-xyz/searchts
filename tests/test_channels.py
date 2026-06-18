@@ -160,6 +160,18 @@ class TestRedditChannel:
 class TestYouTubeChannel:
     def test_reports_error_with_reinstall_hint_when_broken(self, monkeypatch):
         """yt-dlp which hits but exec raises FileNotFoundError -> error + reinstall prescription."""
+        # yt-dlp ships with searchts so its module is importable in the test venv;
+        # hide it to force the probe down the (broken) PATH-binary path.
+        import importlib.util
+
+        from searchts import probe as probe_mod
+
+        real_find_spec = importlib.util.find_spec
+
+        def fake_find_spec(name, *a, **k):
+            return None if name == "yt_dlp" else real_find_spec(name, *a, **k)
+
+        monkeypatch.setattr(probe_mod.importlib.util, "find_spec", fake_find_spec)
         monkeypatch.setattr(shutil, "which", lambda _: "/usr/local/bin/yt-dlp")
 
         def fake_run(cmd, **kwargs):

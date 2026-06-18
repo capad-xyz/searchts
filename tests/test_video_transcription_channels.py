@@ -6,11 +6,13 @@ shutil.which / subprocess.run, and transcribe() delegation is checked without
 any real download or network call.
 """
 
+import importlib.util
 import shutil
 import subprocess
 
 import pytest
 
+from searchts import probe as probe_mod
 from searchts import transcribe as tr
 from searchts.channels import get_all_channels, get_channel
 from searchts.channels.instagram import InstagramChannel
@@ -43,6 +45,23 @@ def _which_factory(present):
         return f"/usr/bin/{cmd}" if cmd in present else None
 
     return fake_which
+
+
+def _hide_ytdlp_module(monkeypatch):
+    """Make `find_spec("yt_dlp")` return None so module-based detection misses.
+
+    yt-dlp ships with searchts, so its module is genuinely importable in the
+    test venv. Channel `check()` now detects it that way, so the "yt-dlp truly
+    absent" path requires hiding the module AND keeping it off PATH.
+    """
+    real_find_spec = importlib.util.find_spec
+
+    def fake_find_spec(name, *a, **k):
+        if name == "yt_dlp":
+            return None
+        return real_find_spec(name, *a, **k)
+
+    monkeypatch.setattr(probe_mod.importlib.util, "find_spec", fake_find_spec)
 
 
 # --- can_handle: URL patterns ------------------------------------------ #
@@ -104,6 +123,8 @@ _VIDEO_CHANNELS = [TikTokChannel, InstagramChannel, RedditVideoChannel]
 @pytest.mark.parametrize("channel_cls", _VIDEO_CHANNELS)
 class TestCheckStatuses:
     def test_off_when_ytdlp_missing(self, channel_cls, monkeypatch):
+        # Truly absent: not on PATH AND the yt_dlp module is not importable.
+        _hide_ytdlp_module(monkeypatch)
         monkeypatch.setattr(shutil, "which", lambda _: None)
         ch = channel_cls()
         status, msg = ch.check()
@@ -111,7 +132,22 @@ class TestCheckStatuses:
         assert "yt-dlp is not installed" in msg
         assert ch.active_backend is None
 
+    def test_ok_when_ytdlp_module_importable_not_on_path(
+        self, channel_cls, monkeypatch, fake_config
+    ):
+        # The bug scenario: yt_dlp module importable (find_spec truthy) but the
+        # console script is NOT on PATH (venv/pipx). check() must still detect it.
+        monkeypatch.setattr(shutil, "which", _which_factory({"ffmpeg"}))
+        monkeypatch.setattr(subprocess, "run", _fake_run_version)
+        ch = channel_cls()
+        status, msg = ch.check(fake_config)
+        assert status == "ok"
+        assert ch.active_backend == "yt-dlp"
+
     def test_error_when_ytdlp_broken(self, channel_cls, monkeypatch):
+        # Hide the module so the probe falls back to the (broken) PATH binary,
+        # exercising the broken-install classification.
+        _hide_ytdlp_module(monkeypatch)
         monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/yt-dlp")
 
         def fake_run(cmd, **kwargs):

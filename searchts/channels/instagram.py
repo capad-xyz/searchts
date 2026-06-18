@@ -35,7 +35,12 @@ class InstagramChannel(Channel):
 
     def check(self, config=None):
         # Actually run yt-dlp --version to probe liveness, distinguishing not-installed / broken venv / won't-run.
-        probe = probe_command("yt-dlp", ["--version"], timeout=10, package="yt-dlp")
+        # yt-dlp ships as a Python dependency, so probe it as the `yt_dlp` module:
+        # in a venv/pipx install the module is importable even when the console
+        # script is not on PATH (probe_command falls back to a PATH binary if not).
+        probe = probe_command(
+            "yt-dlp", ["--version"], timeout=10, package="yt-dlp", module="yt_dlp"
+        )
         if probe.status == "missing":
             self.active_backend = None
             return "off", "yt-dlp is not installed. Install: pip install yt-dlp"

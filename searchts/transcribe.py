@@ -19,10 +19,12 @@ Designed to be importable from channels (e.g. YouTubeChannel.transcribe).
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import List, Optional
@@ -137,6 +139,40 @@ def _require(binary: str) -> None:
         raise MissingDependency(f"{binary} not found in PATH")
 
 
+def _ytdlp_module_available() -> bool:
+    """Return whether the `yt_dlp` Python module is importable."""
+    return importlib.util.find_spec("yt_dlp") is not None
+
+
+def ytdlp_available() -> bool:
+    """Return whether yt-dlp is usable at all.
+
+    yt-dlp ships as a Python dependency of searchts, so its `yt_dlp` MODULE is
+    always importable in our venv/pipx install even though its console script is
+    NOT on the system PATH there. Prefer the module; accept a PATH binary too.
+    """
+    return _ytdlp_module_available() or bool(shutil.which("yt-dlp"))
+
+
+def _ytdlp_cmd() -> List[str]:
+    """Return the command prefix used to invoke yt-dlp.
+
+    Prefer `[sys.executable, "-m", "yt_dlp"]` whenever the `yt_dlp` module is
+    importable — that always works from a venv/pipx `searchts.exe` invoked by
+    full path, where the bare `yt-dlp` console script is NOT on PATH. Only fall
+    back to a PATH `yt-dlp` binary when the module is absent; raise an
+    actionable MissingDependency when neither is available.
+    """
+    if _ytdlp_module_available():
+        return [sys.executable, "-m", "yt_dlp"]
+    if shutil.which("yt-dlp"):
+        return ["yt-dlp"]
+    raise MissingDependency(
+        "yt-dlp not found. It ships with searchts; reinstall searchts, or "
+        'install it directly with `pip install yt-dlp`.'
+    )
+
+
 def _run(cmd: List[str], timeout: int = 600) -> None:
     """Run a subprocess, raising TranscribeError on nonzero exit or timeout.
 
@@ -155,11 +191,10 @@ def _run(cmd: List[str], timeout: int = 600) -> None:
 
 def download_audio(url: str, out_dir: Path) -> Path:
     """Download audio with yt-dlp into out_dir; return the resulting file path."""
-    _require("yt-dlp")
     template = out_dir / "source.%(ext)s"
     _run(
         [
-            "yt-dlp",
+            *_ytdlp_cmd(),
             "-x",
             "--audio-format",
             "m4a",
@@ -200,14 +235,14 @@ def fetch_subtitles(
     treated as "no subtitles" and returns None rather than raising, so the
     caller can fall back to the audio pipeline.
     """
-    if not shutil.which("yt-dlp"):
+    if not ytdlp_available():
         return None
 
     template = work_dir / "%(id)s"
     try:
         _run(
             [
-                "yt-dlp",
+                *_ytdlp_cmd(),
                 "--write-sub",
                 "--write-auto-sub",
                 "--sub-lang",

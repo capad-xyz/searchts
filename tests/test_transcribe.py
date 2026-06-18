@@ -1,12 +1,29 @@
 # -*- coding: utf-8 -*-
 """Tests for searchts.transcribe — provider routing, fallback, and errors."""
 
+import sys
 from typing import List
 
 import pytest
 
 from searchts import transcribe as tr
 from searchts.config import Config
+
+
+def _hide_ytdlp_module(monkeypatch):
+    """Make `find_spec("yt_dlp")` return None (module genuinely absent).
+
+    yt-dlp ships with searchts, so its module is importable in the test venv;
+    these tests must explicitly hide it to exercise the PATH-binary fallback.
+    """
+    import importlib.util
+
+    real_find_spec = tr.importlib.util.find_spec
+
+    def fake_find_spec(name, *a, **k):
+        return None if name == "yt_dlp" else real_find_spec(name, *a, **k)
+
+    monkeypatch.setattr(tr.importlib.util, "find_spec", fake_find_spec)
 
 # --- Fixtures ----------------------------------------------------------- #
 
@@ -36,6 +53,48 @@ class FakeResponse:
     @property
     def ok(self) -> bool:
         return 200 <= self.status_code < 300
+
+
+# --- yt-dlp invocation: module vs PATH binary -------------------------- #
+
+
+class TestYtdlpCmd:
+    def test_cmd_uses_module_when_importable_even_without_path(self, monkeypatch):
+        # The headline fix: module importable, console script NOT on PATH
+        # (the venv/pipx reality) -> invoke via `python -m yt_dlp`.
+        monkeypatch.setattr(tr.shutil, "which", lambda name: None)
+        assert tr._ytdlp_cmd() == [sys.executable, "-m", "yt_dlp"]
+
+    def test_available_true_when_module_importable_without_path(self, monkeypatch):
+        monkeypatch.setattr(tr.shutil, "which", lambda name: None)
+        assert tr.ytdlp_available() is True
+
+    def test_cmd_falls_back_to_path_binary_when_module_absent(self, monkeypatch):
+        _hide_ytdlp_module(monkeypatch)
+        monkeypatch.setattr(tr.shutil, "which", lambda name: "/usr/bin/yt-dlp")
+        assert tr._ytdlp_cmd() == ["yt-dlp"]
+        assert tr.ytdlp_available() is True
+
+    def test_cmd_raises_when_neither_available(self, monkeypatch):
+        _hide_ytdlp_module(monkeypatch)
+        monkeypatch.setattr(tr.shutil, "which", lambda name: None)
+        assert tr.ytdlp_available() is False
+        with pytest.raises(tr.MissingDependency, match="yt-dlp not found"):
+            tr._ytdlp_cmd()
+
+    def test_download_audio_builds_module_command(self, monkeypatch, tmp_path):
+        # download_audio must prefix the command with `python -m yt_dlp`.
+        monkeypatch.setattr(tr.shutil, "which", lambda name: None)
+        captured = {}
+
+        def fake_run(cmd, timeout=600):
+            captured["cmd"] = cmd
+            (tmp_path / "source.m4a").write_bytes(b"x")
+
+        monkeypatch.setattr(tr, "_run", fake_run)
+        out = tr.download_audio("https://youtu.be/x", tmp_path)
+        assert captured["cmd"][:3] == [sys.executable, "-m", "yt_dlp"]
+        assert out.name == "source.m4a"
 
 
 # --- transcribe_chunk: provider routing -------------------------------- #
@@ -459,12 +518,26 @@ class TestVttToText:
 
 class TestFetchSubtitles:
     def test_returns_none_when_yt_dlp_missing(self, monkeypatch, tmp_path):
+        # Truly absent: not on PATH AND the yt_dlp module is not importable.
+        _hide_ytdlp_module(monkeypatch)
         monkeypatch.setattr(tr.shutil, "which", lambda name: None)
         assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) is None
 
-    def test_returns_none_on_yt_dlp_failure(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(tr.shutil, "which", lambda name: "/usr/bin/yt-dlp")
+    def test_uses_module_form_when_importable_not_on_path(self, monkeypatch, tmp_path):
+        # The bug scenario: module importable, no PATH binary. fetch_subtitles
+        # must still run and build the command via `python -m yt_dlp`.
+        monkeypatch.setattr(tr.shutil, "which", lambda name: None)
+        captured = {}
 
+        def fake_run(cmd, timeout=600):
+            captured["cmd"] = cmd
+
+        monkeypatch.setattr(tr, "_run", fake_run)
+        # No *.vtt is produced -> returns None, but the point is the command ran.
+        assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) is None
+        assert captured["cmd"][:3] == [sys.executable, "-m", "yt_dlp"]
+
+    def test_returns_none_on_yt_dlp_failure(self, monkeypatch, tmp_path):
         def boom(cmd, timeout=600):
             raise tr.TranscribeError("yt-dlp failed (exit 1): no subtitles")
 
@@ -472,14 +545,11 @@ class TestFetchSubtitles:
         assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) is None
 
     def test_returns_none_when_no_vtt_produced(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(tr.shutil, "which", lambda name: "/usr/bin/yt-dlp")
         monkeypatch.setattr(tr, "_run", lambda cmd, timeout=600: None)
         # No *.vtt files written to tmp_path.
         assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) is None
 
     def test_reads_and_cleans_vtt(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(tr.shutil, "which", lambda name: "/usr/bin/yt-dlp")
-
         def fake_run(cmd, timeout=600):
             (tmp_path / "vid.en.vtt").write_text(
                 "WEBVTT\n\n"
@@ -493,8 +563,6 @@ class TestFetchSubtitles:
         assert out == "hello world"
 
     def test_prefers_manual_over_auto_track(self, monkeypatch, tmp_path):
-        monkeypatch.setattr(tr.shutil, "which", lambda name: "/usr/bin/yt-dlp")
-
         def fake_run(cmd, timeout=600):
             (tmp_path / "vid.en-auto.vtt").write_text(
                 "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nauto track\n",
