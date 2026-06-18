@@ -1,6 +1,6 @@
 [project]
 name = "searchts"
-version = "0.3.0"
+version = "0.3.1"
 description = "First-party web superpowers for AI agents: an open-source escalating web unlocker (browser-fingerprinted fetch -> JS-render relay -> stealth browser) for `read`, keyless multi-provider `search` with rank fusion, and subtitles-first video `transcribe`. CLI + MCP server + Claude Code skill. Keyless by default; optional platform helpers."
 readme = "README.md"
 license = {text = "MIT"}
