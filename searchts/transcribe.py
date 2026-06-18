@@ -389,15 +389,23 @@ def transcription_readiness(config: Optional[Config]) -> str:
     if config.is_configured("openai_whisper"):
         providers.append("openai")
 
+    local = local_available()
+    if not providers and not local:
+        return ""
+
+    has_ffmpeg = bool(shutil.which("ffmpeg"))
+
+    # Subtitles-first needs no ffmpeg; audio transcription (hosted OR local)
+    # does. If a backend is configured but ffmpeg is missing, captions still
+    # work — say so without claiming audio transcription is ready.
+    if not has_ffmpeg:
+        return " (captions work; audio transcription requires ffmpeg)"
+
     parts = []
     if providers:
-        if not shutil.which("ffmpeg"):
-            return " (audio transcription requires ffmpeg)"
         parts.append(f"can transcribe audio ({'->'.join(providers)})")
-    if local_available():
+    if local:
         parts.append("local Whisper available (no key needed)")
-    if not parts:
-        return ""
     return ", " + ", ".join(parts)
 
 

@@ -189,6 +189,39 @@ class TestCheckStatuses:
         status, msg = ch.check(fake_config)
         assert status == "ok"
         assert "requires ffmpeg" in msg
+        # Captions still work without ffmpeg — the message must say so.
+        assert "captions work" in msg
+
+
+class TestTranscriptionReadiness:
+    """Direct tests for transcribe.transcription_readiness messaging (B3)."""
+
+    def test_local_whisper_without_ffmpeg_flags_audio_needs_ffmpeg(
+        self, monkeypatch, fake_config
+    ):
+        """Local Whisper available but ffmpeg missing: audio transcription still
+        needs ffmpeg; captions do not. Must not claim audio is ready."""
+        monkeypatch.setattr(tr, "local_available", lambda: True)
+        # No ffmpeg present, no hosted key configured.
+        monkeypatch.setattr(tr.shutil, "which", lambda cmd: None)
+        msg = tr.transcription_readiness(fake_config)
+        assert "captions work" in msg
+        assert "requires ffmpeg" in msg
+        # Must not falsely advertise a ready audio backend.
+        assert "local Whisper available" not in msg
+        assert "can transcribe audio" not in msg
+
+    def test_local_whisper_with_ffmpeg_is_advertised(self, monkeypatch, fake_config):
+        """Local Whisper + ffmpeg present: advertise local availability."""
+        monkeypatch.setattr(tr, "local_available", lambda: True)
+        monkeypatch.setattr(tr.shutil, "which", lambda cmd: "/usr/bin/ffmpeg")
+        msg = tr.transcription_readiness(fake_config)
+        assert "local Whisper available (no key needed)" in msg
+
+    def test_nothing_available_is_empty(self, monkeypatch, fake_config):
+        monkeypatch.setattr(tr, "local_available", lambda: False)
+        monkeypatch.setattr(tr.shutil, "which", lambda cmd: None)
+        assert tr.transcription_readiness(fake_config) == ""
 
 
 class TestInstagramCookiesNote:

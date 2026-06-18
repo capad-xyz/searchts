@@ -660,6 +660,8 @@ def _install_system_deps():
     import platform
     import tempfile
 
+    from searchts.utils.paths import get_ytdlp_config_dir, get_ytdlp_config_path
+
     print("Checking system dependencies...")
 
     # ── gh CLI ──
@@ -758,18 +760,18 @@ def _install_system_deps():
 
     # ── yt-dlp JS runtime config (YouTube requires external JS runtime) ──
     if shutil.which("node"):
-        ytdlp_config_dir = os.path.expanduser("~/.config/yt-dlp")
-        ytdlp_config = os.path.join(ytdlp_config_dir, "config")
+        ytdlp_config_dir = get_ytdlp_config_dir()
+        ytdlp_config = get_ytdlp_config_path()
         needs_config = True
         if os.path.exists(ytdlp_config):
-            with open(ytdlp_config, "r") as f:
+            with open(ytdlp_config, "r", encoding="utf-8") as f:
                 if "--js-runtimes" in f.read():
                     needs_config = False
                     print("  ✅ yt-dlp JS runtime already configured")
         if needs_config:
             try:
                 os.makedirs(ytdlp_config_dir, exist_ok=True)
-                with open(ytdlp_config, "a") as f:
+                with open(ytdlp_config, "a", encoding="utf-8") as f:
                     f.write("--js-runtimes node\n")
                 print("  ✅ yt-dlp configured to use Node.js as JS runtime (YouTube)")
             except Exception:

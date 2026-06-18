@@ -114,7 +114,8 @@ def _run_once(
     except OSError:
         return ProbeResult("broken", hint=reinstall_hint(package))
     except subprocess.TimeoutExpired:
-        return ProbeResult("timeout", hint=f"`{path}` response timed out (>{timeout}s)")
+        cmd_repr = " ".join(invocation)
+        return ProbeResult("timeout", hint=f"`{cmd_repr}` response timed out (>{timeout}s)")
 
     if r.returncode in _BROKEN_EXIT_CODES:
         return ProbeResult("broken", hint=reinstall_hint(package))

@@ -88,3 +88,44 @@ def test_reinstall_hint_mentions_both_installers():
     hint = reinstall_hint("some-pkg")
     assert "uv tool install --force some-pkg" in hint
     assert "pipx reinstall some-pkg" in hint
+
+
+def test_timeout_returns_timeout_result_without_raising(monkeypatch):
+    """subprocess.run raising TimeoutExpired must yield status='timeout', not NameError.
+
+    Regression for the bug where the timeout branch referenced an undefined
+    `path` (the parameter is `invocation`), raising NameError on every timeout.
+    """
+    import subprocess
+
+    # Probe a real, importable module so probe_command reaches _run_once.
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd="probe", timeout=10)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    r = probe_command("python-module-probe", module="sys", timeout=10)
+    assert r.status == "timeout"
+    assert not r.ok
+    # Hint should name the actual command (the [python, -m, sys] invocation).
+    assert "timed out" in r.hint
+    assert "-m sys" in r.hint
+
+
+def test_timeout_hint_names_path_binary(tmp_path, monkeypatch):
+    """For a PATH-binary probe, the timeout hint should name that binary."""
+    import subprocess
+
+    import searchts.probe as probe_mod
+
+    monkeypatch.setattr(probe_mod.shutil, "which", lambda cmd: "/usr/bin/some-tool")
+
+    def fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd="some-tool", timeout=5)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    r = probe_command("some-tool", timeout=5)
+    assert r.status == "timeout"
+    assert "/usr/bin/some-tool" in r.hint
+    assert "(>5s)" in r.hint

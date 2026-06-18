@@ -477,3 +477,58 @@ class TestSkillInstallSlashCommand:
         # With an explicit dir we stay inside tmp_path.
         resolved = cli._slash_command_target_dir(str(tmp_path / "x"))
         assert str(tmp_path) in resolved
+
+
+class TestYtdlpConfigInstall:
+    """The yt-dlp JS-runtime installer must write to the OS-correct config path (B2)."""
+
+    def _stub_system_commands(self, monkeypatch):
+        """Make gh/node/npm look already-present so _install_system_deps reaches
+        the yt-dlp config block without running any real installer."""
+        monkeypatch.setattr(
+            shutil, "which", lambda cmd: f"/usr/bin/{cmd}" if cmd in {"gh", "node", "npm"} else None
+        )
+
+        def fake_run(cmd, **kwargs):
+            # `npm root -g` returns a path with no undici, so the undici branch
+            # tries `npm install -g undici` — also stubbed here. stdout is empty
+            # so the undici path check fails harmlessly.
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+
+    def test_install_writes_to_appdata_path_on_win32(self, tmp_path, monkeypatch, capsys):
+        import searchts.utils.paths as paths
+
+        appdata = tmp_path / "AppData" / "Roaming"
+        appdata.mkdir(parents=True)
+        monkeypatch.setattr(paths.sys, "platform", "win32")
+        monkeypatch.setenv("APPDATA", str(appdata))
+        self._stub_system_commands(monkeypatch)
+
+        cli._install_system_deps()
+
+        expected = appdata / "yt-dlp" / "config"
+        assert expected.exists(), "config must be written under %APPDATA%\\yt-dlp"
+        assert "--js-runtimes node" in expected.read_text(encoding="utf-8")
+        # The legacy ~/.config path must NOT be used on Windows.
+        legacy = os.path.expanduser("~/.config/yt-dlp/config")
+        assert not os.path.exists(legacy) or os.path.realpath(legacy) != os.path.realpath(expected)
+
+    def test_install_uses_paths_helper_not_hardcoded(self, tmp_path, monkeypatch):
+        """Regardless of OS, the installer routes through get_ytdlp_config_path."""
+        import searchts.utils.paths as paths
+
+        target = tmp_path / "custom-ytdlp" / "config"
+        monkeypatch.setattr(
+            "searchts.utils.paths.get_ytdlp_config_path", lambda: target
+        )
+        monkeypatch.setattr(
+            "searchts.utils.paths.get_ytdlp_config_dir", lambda: target.parent
+        )
+        self._stub_system_commands(monkeypatch)
+
+        cli._install_system_deps()
+
+        assert target.exists()
+        assert "--js-runtimes node" in target.read_text(encoding="utf-8")
