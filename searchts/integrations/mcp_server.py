@@ -1,11 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-searchts MCP Server — expose doctor/status as MCP tool.
+searchts MCP Server — expose searchts's first-party web tools over MCP.
 
 Run: python -m searchts.integrations.mcp_server
 
-searchts is an installer + doctor tool. For actual reading/searching,
-agents should call upstream tools directly (twitter-cli, yt-dlp, mcporter, etc.).
+Exposes three tools to an agent:
+- read_url: fetch any URL through the escalating open-source unlocker
+  (curl_cffi -> Jina Reader -> stealth browser) and return clean markdown;
+  gets through most bot-walls and falls back gracefully.
+- web_search: keyless multi-provider web search, fusion-merged across providers
+  (DuckDuckGo by default; SearXNG/Exa/Brave/Tavily when configured).
+- get_status: report which channels/backends are installed and active (doctor).
+
+read_url and web_search are backed by searchts.unlocker and searchts.search.
 """
 
 import asyncio

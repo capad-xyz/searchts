@@ -1,45 +1,8 @@
-# Video / podcasts
+# Video transcription
 
-Subtitles and transcripts for YouTube.
+Subtitles-first transcripts for YouTube, TikTok, Instagram, and Reddit videos.
 
-## YouTube (yt-dlp)
-
-### Get video metadata
-
-```bash
-yt-dlp --dump-json "URL"
-```
-
-### Download subtitles
-
-```bash
-# Download subtitles (without downloading the video)
-yt-dlp --write-sub --write-auto-sub --sub-lang "zh-Hans,zh,en" --skip-download -o "/tmp/%(id)s" "URL"
-
-# Then read the .vtt file
-cat /tmp/VIDEO_ID.*.vtt
-```
-
-### Get comments
-
-```bash
-# Extract comments (best-effort, completeness not guaranteed)
-yt-dlp --write-comments --skip-download --write-info-json \
-  --extractor-args "youtube:max_comments=20" \
-  -o "/tmp/%(id)s" "URL"
-# Comments are in the comments field of the .info.json
-```
-
-### Search videos
-
-```bash
-yt-dlp --dump-json "ytsearch5:query"
-```
-
-> **Subtitle note**: manually uploaded subtitles extract reliably; auto-generated subtitles may have line-to-line duplication and need post-processing.
-> **Comment note**: `--write-comments` is based on web scraping (not the YouTube Data API), so some comments may be missing.
-
-### Transcripts: subtitles first, Whisper fallback
+## Transcribe a video (`searchts transcribe`)
 
 ```bash
 # Subtitles-first: returns the video's existing captions when present
@@ -51,17 +14,25 @@ searchts transcribe ./local_audio.mp3 -o /tmp/transcript.txt
 searchts transcribe "https://www.youtube.com/watch?v=VIDEO_ID" --no-subtitles
 ```
 
-> A captioned URL (most YouTube videos, many TikToks) transcribes with NO key
-> and NO local model — `searchts transcribe` grabs the existing captions first.
+**Use case**: the primary way to get a transcript. `searchts transcribe` tries
+existing captions first (pulled via yt-dlp), so a captioned URL (most YouTube
+videos, many TikToks) transcribes with NO key and NO local model. Works for
+YouTube, TikTok, Instagram, and Reddit videos.
+
 > Only a video without usable subtitles (or `--no-subtitles`) needs a Whisper
 > backend: configure a key first with `searchts configure groq-key gsk_xxx`
 > (free, console.groq.com) or `searchts configure openai-key sk-xxx` (auto mode
 > falls back from groq to openai), or `pip install "searchts[local-transcribe]"`
 > for keyless local transcription.
 
+## Reading the page instead
+
+To read a video's description, title, or comments as text (rather than a
+transcript), use `searchts read <url>` on the public URL.
+
 ## Choosing a tool
 
 | Use case | Recommended tool |
 |-----|---------|
-| YouTube subtitles | yt-dlp |
-| Audio/video without subtitles | searchts transcribe |
+| Video transcript / captions | `searchts transcribe <url>` |
+| Video page text (title, description) | `searchts read <url>` |

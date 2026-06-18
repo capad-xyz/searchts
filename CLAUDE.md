@@ -1,8 +1,20 @@
 # CLAUDE.md
 
 ## Project
-searchts — Python CLI + library that gives AI agents read/search access to 8 platforms.
-Positioning: installer + doctor + config tool. NOT a wrapper — after install, agents call upstream tools directly.
+searchts — Python CLI + library + MCP server + Claude Code skill that gives an AI
+agent first-party web superpowers via three commands:
+- `searchts read <url>` — escalating open-source unlocker (curl_cffi browser-fingerprint
+  fetch -> Jina Reader -> patchright stealth browser) that returns clean markdown and
+  gets through most bot-walls, keyless, on your own IP.
+- `searchts search "<query>"` — keyless multi-provider web search with reciprocal-rank
+  fusion (DuckDuckGo default; optional SearXNG/Exa/Brave/Tavily).
+- `searchts transcribe <url>` — subtitles-first video transcription (existing captions
+  via yt-dlp need no key; falls back to hosted or keyless-local Whisper) for
+  YouTube/TikTok/Instagram/Reddit.
+Surfaces: CLI, MCP server (tools: read_url, web_search), and a /searchts Claude Code skill.
+Keyless and free by default. OPTIONAL: separately-installed platform CLIs (gh, twitter-cli,
+opencli, mcporter) let it also reach GitHub/Twitter/Reddit/LinkedIn, and `searchts doctor`
+reports them — but those are optional add-ons, not the core.
 Repo: github.com/capad-xyz/searchts | License: MIT | Version: 0.3.0
 
 ## Commands
@@ -28,15 +40,19 @@ Repo: github.com/capad-xyz/searchts | License: MIT | Version: 0.3.0
 
 ## Conventions
 - Python 3.10+ with type hints
-- Each channel is a single file in `channels/`, inherits from `BaseChannel`
-- Channel contract: must implement `can_handle(url)`, `read(url)`, `search(query)`, `check()` methods
+- The web reading/search/transcription logic lives in `unlocker.py`, `search.py`,
+  and `transcribe.py`; the CLI verbs in `cli.py` call them directly.
+- `channels/` today mainly powers `searchts doctor` health checks: only the web
+  channel implements `read()`, only the 4 video channels (youtube, tiktok,
+  instagram, redditvideo) implement `transcribe()`, and `can_handle()` is NOT used
+  for routing. Do not assume a channel-routing contract — there isn't one.
+- Each channel is a single file in `channels/`, inherits from `BaseChannel`.
 - Use `loguru` for logging, `rich` for CLI output
 - Commit format: `type(scope): message` (one commit = one thing)
-- All upstream tool calls go through public API/CLI, never hack internals
+- Optional platform integrations go through their public CLI/API, never hack internals
 
 ## Rules
 - NEVER modify upstream open source projects' source code
-- searchts is a "glue layer" — only route and call, don't reimagine
 - Version in THREE places must match: `pyproject.toml`, `__init__.py`, `tests/test_cli.py`
 - Always new branch for changes, PR to main, never push to main directly
 - Run `pytest tests/ -v` before committing — all tests must pass

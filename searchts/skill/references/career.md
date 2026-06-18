@@ -2,28 +2,29 @@
 
 LinkedIn.
 
-## LinkedIn
+## Primary: read the public URL
+
+For a LinkedIn profile, company page, or job posting, read the public URL
+directly:
 
 ```bash
-# Get a personal profile
+searchts read "https://www.linkedin.com/in/username"
+searchts read "https://www.linkedin.com/jobs/view/123456"
+```
+
+`searchts read` runs the escalating unlocker, so it gets through most bot-walls
+keylessly. To find people, companies, or jobs, use `searchts search` and read
+the URLs it returns.
+
+## Optional: LinkedIn scraper (MCP)
+
+If you have a LinkedIn scraper MCP configured (and a logged-in session), it can
+return structured profiles/jobs. This is an optional enhancement, not required.
+
+```bash
 mcporter call 'linkedin-scraper.get_person_profile(linkedin_url: "https://linkedin.com/in/username")'
-
-# Search people
-mcporter call 'linkedin-scraper.search_people(keyword: "AI engineer", limit: 10)'
-
-# Get a company profile
-mcporter call 'linkedin-scraper.get_company_profile(linkedin_url: "https://linkedin.com/company/xxx")'
-
-# Search jobs
 mcporter call 'linkedin-scraper.search_jobs(keyword: "software engineer", limit: 10)'
 ```
 
-> **Login required**: the LinkedIn scraper needs a valid logged-in session.
-
-### Fallback
-
-If the MCP is unavailable, use Jina Reader:
-
-```bash
-curl -s "https://r.jina.ai/https://linkedin.com/in/username"
-```
+> Needs a valid logged-in session. If it is unavailable, just
+> `searchts read` the public URL.

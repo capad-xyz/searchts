@@ -1,62 +1,41 @@
 # Developer tools
 
-GitHub CLI
+GitHub.
 
-## GitHub (gh CLI)
+## Primary: read the public URL
 
-GitHub's official command-line tool, for repos, issues, PRs, Actions, releases, and API access.
+For a repo, file, issue, or PR, read the public URL directly:
 
 ```bash
-# Auth
-gh auth login
-gh auth status
+searchts read "https://github.com/owner/repo"
+searchts read "https://github.com/owner/repo/issues/123"
+```
 
+To find repos or code, use `searchts search "<query>"` and read the URLs it
+returns. `searchts read` runs the escalating unlocker and returns clean
+markdown.
+
+## Optional: GitHub CLI (gh)
+
+If `gh` is installed and authenticated, it is a convenient enhancement for
+structured GitHub work (it is not required — `searchts read` covers reading).
+Run `searchts doctor` to see whether it is present.
+
+```bash
 # Search
 gh search repos "query" --sort stars --limit 10
 gh search code "query" --language python
 
-# Repos
+# Repos / issues / PRs
 gh repo view owner/repo
-gh repo clone owner/repo
-gh repo create my-repo --private
-gh repo fork owner/repo
-gh repo fork owner/repo --clone
-gh repo sync owner/repo
-
-# Issues
 gh issue list -R owner/repo --state open
-gh issue view 123 -R owner/repo
-gh issue create -R owner/repo --title "Title" --body "Body"
-
-# Pull Requests
-gh pr list -R owner/repo --state open
 gh pr view 123 -R owner/repo
-gh pr create -R owner/repo --title "Title" --body "Body"
-gh pr checks 123 --repo owner/repo
 
 # Actions / CI
 gh run list --repo owner/repo --limit 10
-gh run view <run-id> --repo owner/repo
 gh run view <run-id> --repo owner/repo --log-failed
-gh workflow list --repo owner/repo
 
-# Releases
-gh release list -R owner/repo
-gh release create v1.0.0
-
-# API
-gh api /user
+# API / JSON
 gh api repos/owner/repo
-
-# JSON output
 gh issue list --repo owner/repo --json number,title --jq '.[] | "\(.number): \(.title)"'
 ```
-
-
-## Choosing a tool
-
-| Tool | Source | Purpose |
-|-----|------|------|
-| gh CLI | searchts | Git operations |
-| zread | my-mcp-tools | Read repo contents |
-| context7 | my-mcp-tools | Look up technical docs |

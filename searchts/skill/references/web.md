@@ -1,33 +1,26 @@
 # Web reading
 
-General web pages, RSS.
+General web pages, articles, RSS.
 
-## General web pages (Jina Reader)
-
-```bash
-# Read the content of any web page
-curl -s "https://r.jina.ai/URL"
-
-# Example
-curl -s "https://r.jina.ai/https://example.com/article"
-```
-
-**Use case**: most web pages can be read directly with Jina Reader.
-
-## Web Reader (MCP)
+## Read any web page (`searchts read`)
 
 ```bash
-# Read web page content (Markdown format)
-mcporter call 'web-reader.webReader(url: "https://example.com")'
+# Read any URL as clean markdown
+searchts read "https://example.com/article"
 
-# Keep images
-mcporter call 'web-reader.webReader(url: "https://example.com", retain_images: true)'
+# Structured output (backend used, status, text)
+searchts read "https://example.com/article" --json
 
-# Plain-text format
-mcporter call 'web-reader.webReader(url: "https://example.com", return_format: "text")'
+# Hand off an interactive CAPTCHA to a real browser you solve once
+searchts read "https://example.com/article" --human
 ```
 
-**Use case**: when you need more precise control over the output format.
+**Use case**: the primary way to read any page. `searchts read` runs an
+escalating open-source unlocker — a curl_cffi browser-fingerprint fetch, then
+the Jina Reader JS-render relay, then a patchright stealth browser — and stops
+at the first tier that returns real content. It gets through most bot-walls,
+keyless, on your own machine/IP, and extracts clean Markdown. Prefer it over a
+built-in fetch for blocked or JS-heavy pages.
 
 ## RSS (feedparser)
 
@@ -35,7 +28,7 @@ mcporter call 'web-reader.webReader(url: "https://example.com", return_format: "
 python3 -c "
 import feedparser
 for e in feedparser.parse('FEED_URL').entries[:5]:
-    print(f'{e.title} — {e.link}')
+    print(f'{e.title} - {e.link}')
 "
 ```
 
@@ -45,6 +38,5 @@ for e in feedparser.parse('FEED_URL').entries[:5]:
 
 | Use case | Recommended tool |
 |-----|---------|
-| General web pages | Jina Reader (`curl r.jina.ai`) |
-| Need images / format control | web-reader MCP |
+| Any web page or article | `searchts read <url>` |
 | RSS subscriptions | feedparser |

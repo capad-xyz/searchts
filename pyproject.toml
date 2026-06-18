@@ -1,18 +1,18 @@
 [project]
 name = "searchts"
 version = "0.3.0"
-description = "Give your AI agent eyes on the open web: an escalating open-source unlocker (browser-fingerprinted fetch -> JS-render relay -> stealth browser) plus read/search across web, search, GitHub, YouTube, Reddit, Twitter, LinkedIn, and RSS."
+description = "First-party web superpowers for AI agents: an open-source escalating web unlocker (browser-fingerprinted fetch -> JS-render relay -> stealth browser) for `read`, keyless multi-provider `search` with rank fusion, and subtitles-first video `transcribe`. CLI + MCP server + Claude Code skill. Keyless by default; optional platform helpers."
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [{name = "capad-xyz"}]
 keywords = [
     "ai-agent", "llm-tools", "agent-infrastructure", "mcp",
-    "web-reader", "web-scraper", "search", "unlocker",
-    "twitter-scraper", "reddit-scraper", "youtube-transcript",
-    "ai-search", "cli", "automation",
-    "claude-code", "cursor", "openai",
-    "free-api", "no-api-key",
+    "web-reader", "web-unlocker", "unlocker", "anti-bot",
+    "web-search", "ai-search", "rank-fusion",
+    "video-transcription", "whisper",
+    "cli", "claude-code",
+    "free", "no-api-key", "keyless",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

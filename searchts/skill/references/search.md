@@ -1,33 +1,32 @@
-# Search tools
+# Search
 
-Exa AI search engine.
+Keyless multi-provider web search.
 
-## Exa AI search
-
-A high-quality AI search engine, strong at technical and code search.
+## Web search (`searchts search`)
 
 ```bash
-mcporter call 'exa.web_search_exa(query: "query", numResults: 5)'
-mcporter call 'exa.get_code_context_exa(query: "code question", tokensNum: 3000)'
+# Keyless multi-provider web search; prints ranked title + url + snippet
+searchts search "open source vector db" -n 10
+
+# Structured output
+searchts search "open source vector db" --json
+
+# Force a single provider
+searchts search "query" --provider duckduckgo
 ```
 
-### Use cases
+**Use case**: the primary way to search the web. `searchts search` queries
+multiple providers and merges them with reciprocal-rank fusion, de-duplicating
+results. DuckDuckGo is the keyless default; SearXNG, Exa, Brave, and Tavily
+merge in automatically when configured. Once you have URLs, read them with
+`searchts read <url>`.
 
-| Use case | Parameters |
-|-----|------|
-| Web search | `web_search_exa(query: "...", numResults: 5)` |
-| Code search | `get_code_context_exa(query: "...", tokensNum: 3000)` |
+## Optional providers
 
-### Strengths
+More and better results come from configuring extra providers (all optional):
 
-- Strong at English content and technical documentation
-- Supports code context search
-- High result quality
+- A self-hosted `SEARXNG_URL`.
+- Exa, Brave, or Tavily API keys.
 
-## Comparison with other search tools
-
-| Tool | Source | Use case |
-|-----|------|---------|
-| Exa | searchts | English / technical / code search |
-| Zhipu search | my-mcp-tools | Chinese-language search |
-| GitHub search | searchts (dev.md) | repo / code search |
+Set them with `searchts configure` or a `.env`, then run `searchts doctor` to
+confirm which providers are active. No keys are required to search.

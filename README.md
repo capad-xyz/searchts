@@ -96,6 +96,14 @@ Search works with no keys (DuckDuckGo). Everything else is optional, via `search
 
 Run `searchts doctor` to check what is configured and working.
 
+## Optional integrations
+
+The core is `read` / `search` / `transcribe`, and for most reads you can just
+`searchts read <the-url>` on the public page. As an optional extra, if you have
+separately-installed platform CLIs (`gh`, `twitter-cli`, `opencli`, `mcporter`),
+searchts can also reach GitHub, Twitter/X, Reddit, and LinkedIn through them, and
+`searchts doctor` will report which are present. These are add-ons, not the core.
+
 ## Credits
 
 `searchts` builds on and extends [Agent-Reach](https://github.com/Panniantong/Agent-Reach) (MIT), reusing its channel, installer, and diagnostics architecture. The escalating open-source unlocker, multi-provider search with rank fusion, prompt-injection scrubbing, per-domain backend memory, the human-in-the-loop CAPTCHA flow, the video transcript channels, the `read_url` / `web_search` MCP tools, and the `read` / `search` CLI commands are additions in `searchts`. Thanks to the original authors.
