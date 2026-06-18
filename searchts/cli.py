@@ -147,11 +147,16 @@ def main():
 
     # ── check-update ──
     # ── transcribe ──
-    p_tr = sub.add_parser("transcribe", help="Transcribe a URL or local audio file (Whisper via Groq/OpenAI, or keyless local faster-whisper)")
+    p_tr = sub.add_parser("transcribe", help="Transcribe a URL or local audio file (existing subtitles first, then Whisper via Groq/OpenAI or keyless local faster-whisper)")
     p_tr.add_argument("source", help="Audio/video URL or local file path")
     p_tr.add_argument("--provider", choices=["auto", "groq", "openai", "local"], default="auto",
-                      help="Transcription provider (default: auto = hosted key if set, "
-                           "else keyless local faster-whisper; `local` forces local, no API key)")
+                      help="Audio transcription provider used when there are no subtitles "
+                           "(default: auto = hosted key if set, else keyless local "
+                           "faster-whisper; `local` forces local, no API key)")
+    p_tr.add_argument("--no-subtitles", dest="prefer_subtitles", action="store_false",
+                      default=True,
+                      help="Skip the video's existing captions and force audio transcription "
+                           "(captions otherwise come first and need no API key)")
     p_tr.add_argument("-o", "--output", default=None,
                       help="Write transcript to a file instead of stdout")
 
@@ -1152,13 +1157,23 @@ def _cmd_configure(args):
 
 
 def _cmd_transcribe(args):
-    """Transcribe a URL or local audio file via Whisper (Groq → OpenAI fallback)."""
+    """Transcribe a URL or local audio file.
+
+    Subtitles-first: a captioned URL is returned straight from its existing
+    captions (no API key needed). Falls back to Whisper audio transcription
+    (Groq -> OpenAI, or keyless local) only when there are no usable subtitles,
+    or when --no-subtitles forces the audio path.
+    """
     from pathlib import Path
 
     from searchts.transcribe import TranscribeError, transcribe
 
     try:
-        text = transcribe(args.source, provider=args.provider)
+        text = transcribe(
+            args.source,
+            provider=args.provider,
+            prefer_subtitles=args.prefer_subtitles,
+        )
     except TranscribeError as e:
         print(f"❌ {e}")
         sys.exit(1)

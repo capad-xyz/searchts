@@ -405,3 +405,229 @@ class TestConfigOpenAIWhisper:
         assert not fake_config.is_configured("openai_whisper")
         fake_config.set("openai_api_key", "sk-test")
         assert fake_config.is_configured("openai_whisper")
+
+
+# --- _vtt_to_text ------------------------------------------------------- #
+
+
+class TestVttToText:
+    def test_strips_headers_timestamps_tags(self):
+        vtt = (
+            "WEBVTT\n"
+            "Kind: captions\n"
+            "Language: en\n"
+            "\n"
+            "NOTE this is a note\n"
+            "\n"
+            "1\n"
+            "00:00:00.000 --> 00:00:02.000\n"
+            "<c>Hello</c> <00:00:01.000>there\n"
+            "\n"
+            "2\n"
+            "00:00:02.000 --> 00:00:04.000\n"
+            "general <v Roger>Kenobi</v>\n"
+        )
+        out = tr._vtt_to_text(vtt)
+        assert "WEBVTT" not in out
+        assert "Kind:" not in out
+        assert "Language:" not in out
+        assert "NOTE" not in out
+        assert "-->" not in out
+        assert "<" not in out and ">" not in out
+        assert out == "Hello there\ngeneral Kenobi"
+
+    def test_collapses_consecutive_duplicate_lines(self):
+        # Auto-captions repeat the rolling text from cue to cue.
+        vtt = (
+            "WEBVTT\n\n"
+            "00:00:00.000 --> 00:00:01.000\n"
+            "the quick brown\n\n"
+            "00:00:01.000 --> 00:00:02.000\n"
+            "the quick brown\n\n"
+            "00:00:02.000 --> 00:00:03.000\n"
+            "fox jumps\n"
+        )
+        out = tr._vtt_to_text(vtt)
+        assert out == "the quick brown\nfox jumps"
+
+    def test_empty_vtt_returns_empty_string(self):
+        assert tr._vtt_to_text("WEBVTT\n\n") == ""
+
+
+# --- fetch_subtitles ---------------------------------------------------- #
+
+
+class TestFetchSubtitles:
+    def test_returns_none_when_yt_dlp_missing(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(tr.shutil, "which", lambda name: None)
+        assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) is None
+
+    def test_returns_none_on_yt_dlp_failure(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(tr.shutil, "which", lambda name: "/usr/bin/yt-dlp")
+
+        def boom(cmd, timeout=600):
+            raise tr.TranscribeError("yt-dlp failed (exit 1): no subtitles")
+
+        monkeypatch.setattr(tr, "_run", boom)
+        assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) is None
+
+    def test_returns_none_when_no_vtt_produced(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(tr.shutil, "which", lambda name: "/usr/bin/yt-dlp")
+        monkeypatch.setattr(tr, "_run", lambda cmd, timeout=600: None)
+        # No *.vtt files written to tmp_path.
+        assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) is None
+
+    def test_reads_and_cleans_vtt(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(tr.shutil, "which", lambda name: "/usr/bin/yt-dlp")
+
+        def fake_run(cmd, timeout=600):
+            (tmp_path / "vid.en.vtt").write_text(
+                "WEBVTT\n\n"
+                "00:00:00.000 --> 00:00:02.000\n"
+                "hello world\n",
+                encoding="utf-8",
+            )
+
+        monkeypatch.setattr(tr, "_run", fake_run)
+        out = tr.fetch_subtitles("https://youtu.be/x", tmp_path)
+        assert out == "hello world"
+
+    def test_prefers_manual_over_auto_track(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(tr.shutil, "which", lambda name: "/usr/bin/yt-dlp")
+
+        def fake_run(cmd, timeout=600):
+            (tmp_path / "vid.en-auto.vtt").write_text(
+                "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nauto track\n",
+                encoding="utf-8",
+            )
+            (tmp_path / "vid.en.vtt").write_text(
+                "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nmanual track\n",
+                encoding="utf-8",
+            )
+
+        monkeypatch.setattr(tr, "_run", fake_run)
+        out = tr.fetch_subtitles("https://youtu.be/x", tmp_path)
+        assert out == "manual track"
+
+
+# --- transcribe: subtitles-first --------------------------------------- #
+
+
+class TestSubtitlesFirst:
+    def test_captioned_url_needs_no_provider(self, monkeypatch, fake_config, tmp_path):
+        """The headline behavior: a captioned URL transcribes with NO key and NO
+        local model — subtitles short-circuit before any provider validation."""
+        # No hosted key configured; faster-whisper simulated absent.
+        monkeypatch.setattr(tr, "local_available", lambda: False)
+        monkeypatch.setattr(
+            tr, "fetch_subtitles",
+            lambda url, work_dir, *, config=None: "these are the existing captions of the video",
+        )
+
+        def boom_download(*a, **k):
+            raise AssertionError("must not download audio when subtitles exist")
+
+        monkeypatch.setattr(tr, "download_audio", boom_download)
+        monkeypatch.setattr(
+            tr.requests, "post",
+            lambda *a, **k: (_ for _ in ()).throw(AssertionError("no HTTP for captions")),
+        )
+
+        text = tr.transcribe(
+            "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config
+        )
+        assert text == "these are the existing captions of the video"
+
+    def test_short_subtitles_fall_back_to_audio(self, monkeypatch, fake_config, tmp_path):
+        # A near-empty caption track (< MIN_SUBTITLE_CHARS) should not pre-empt Whisper.
+        fake_config.set("groq_api_key", "gsk_test")
+        monkeypatch.setattr(
+            tr, "fetch_subtitles", lambda url, work_dir, *, config=None: "hi"
+        )
+        compressed = tmp_path / "compressed.m4a"
+        compressed.write_bytes(b"x" * 1024)
+        monkeypatch.setattr(tr, "download_audio", lambda url, out_dir: tmp_path / "src.m4a")
+        monkeypatch.setattr(tr, "compress_audio", lambda src, out_dir: compressed)
+        monkeypatch.setattr(
+            tr.requests, "post", lambda *a, **k: FakeResponse(200, "audio transcript")
+        )
+
+        text = tr.transcribe(
+            "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config
+        )
+        assert text == "audio transcript"
+
+    def test_no_subtitles_no_backend_raises(self, monkeypatch, fake_config, tmp_path):
+        # No subtitles AND no backend -> NoProviderConfigured, as before.
+        monkeypatch.setattr(tr, "fetch_subtitles", lambda url, work_dir, *, config=None: None)
+        monkeypatch.setattr(tr, "local_available", lambda: False)
+
+        def boom_download(*a, **k):
+            raise AssertionError("should fail validation before downloading")
+
+        monkeypatch.setattr(tr, "download_audio", boom_download)
+        with pytest.raises(tr.NoProviderConfigured):
+            tr.transcribe(
+                "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config
+            )
+
+    def test_no_subtitles_with_backend_transcribes(self, monkeypatch, fake_config, tmp_path):
+        # No subtitles but a (mocked) backend present -> returns transcribed text.
+        fake_config.set("groq_api_key", "gsk_test")
+        monkeypatch.setattr(tr, "fetch_subtitles", lambda url, work_dir, *, config=None: None)
+        compressed = tmp_path / "compressed.m4a"
+        compressed.write_bytes(b"x" * 1024)
+        monkeypatch.setattr(tr, "download_audio", lambda url, out_dir: tmp_path / "src.m4a")
+        monkeypatch.setattr(tr, "compress_audio", lambda src, out_dir: compressed)
+        monkeypatch.setattr(
+            tr.requests, "post", lambda *a, **k: FakeResponse(200, "from whisper")
+        )
+
+        text = tr.transcribe(
+            "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config
+        )
+        assert text == "from whisper"
+
+    def test_no_subtitles_flag_bypasses_captions(self, monkeypatch, fake_config, tmp_path):
+        # prefer_subtitles=False must skip fetch_subtitles entirely and go to audio.
+        fake_config.set("groq_api_key", "gsk_test")
+
+        def boom_subs(*a, **k):
+            raise AssertionError("fetch_subtitles must not be consulted with prefer_subtitles=False")
+
+        monkeypatch.setattr(tr, "fetch_subtitles", boom_subs)
+        compressed = tmp_path / "compressed.m4a"
+        compressed.write_bytes(b"x" * 1024)
+        monkeypatch.setattr(tr, "download_audio", lambda url, out_dir: tmp_path / "src.m4a")
+        monkeypatch.setattr(tr, "compress_audio", lambda src, out_dir: compressed)
+        monkeypatch.setattr(
+            tr.requests, "post", lambda *a, **k: FakeResponse(200, "forced audio")
+        )
+
+        text = tr.transcribe(
+            "https://youtu.be/abc",
+            out_dir=tmp_path / "work",
+            config=fake_config,
+            prefer_subtitles=False,
+        )
+        assert text == "forced audio"
+
+    def test_local_file_skips_subtitle_attempt(self, monkeypatch, fake_config, tmp_path, chunk_file):
+        # A local file must never trigger a subtitle fetch.
+        fake_config.set("groq_api_key", "gsk_test")
+
+        def boom_subs(*a, **k):
+            raise AssertionError("fetch_subtitles must not run for local files")
+
+        monkeypatch.setattr(tr, "fetch_subtitles", boom_subs)
+        compressed = tmp_path / "compressed.m4a"
+        compressed.write_bytes(b"x" * 1024)
+        monkeypatch.setattr(tr, "compress_audio", lambda src, out_dir: compressed)
+        monkeypatch.setattr(
+            tr.requests, "post", lambda *a, **k: FakeResponse(200, "local file audio")
+        )
+
+        text = tr.transcribe(
+            str(chunk_file), out_dir=tmp_path / "work", config=fake_config
+        )
+        assert text == "local file audio"

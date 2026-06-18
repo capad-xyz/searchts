@@ -1,14 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Whisper audio transcription: hosted (Groq → OpenAI) or keyless local.
+"""Transcription: subtitles-first, with a Whisper audio fallback.
 
-Downloads audio (yt-dlp), compresses + chunks (ffmpeg), then turns each chunk
-into text. With a hosted key it posts to a Whisper-compatible API (Groq's free
-`whisper-large-v3`, falling back to OpenAI's `whisper-1`). With no key at all it
-can run `faster-whisper` locally on the CPU — an optional dependency installed
-via ``pip install "searchts[local-transcribe]"``.
+For a URL we first try the video's EXISTING captions via yt-dlp (no API key,
+no audio download, no model) — most YouTube videos and many TikToks ship with
+them. Only when there are no usable subtitles do we fall back to the audio ->
+Whisper pipeline: download audio (yt-dlp), compress + chunk (ffmpeg), then turn
+each chunk into text. With a hosted key that posts to a Whisper-compatible API
+(Groq's free `whisper-large-v3`, falling back to OpenAI's `whisper-1`). With no
+key at all it can run `faster-whisper` locally on the CPU — an optional
+dependency installed via ``pip install "searchts[local-transcribe]"``.
 
 Public entry point:
-    transcribe(source, *, provider="auto", out_dir=None, config=None) -> str
+    transcribe(source, *, provider="auto", out_dir=None, config=None,
+               prefer_subtitles=True) -> str
 
 Designed to be importable from channels (e.g. YouTubeChannel.transcribe).
 """
@@ -16,6 +20,7 @@ Designed to be importable from channels (e.g. YouTubeChannel.transcribe).
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -170,6 +175,106 @@ def download_audio(url: str, out_dir: Path) -> Path:
     if not files:
         raise TranscribeError("yt-dlp produced no output file")
     return files[0]
+
+
+#: Minimum length (non-space chars) for a subtitle track to be worth returning
+#: instead of falling back to audio transcription. A handful of stray chars from
+#: a near-empty caption file should not pre-empt Whisper.
+MIN_SUBTITLE_CHARS = 20
+
+#: Inline cue tags such as <c>, <00:00:01.000>, </c> emitted in auto-captions.
+_VTT_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def fetch_subtitles(
+    url: str,
+    work_dir: Path,
+    *,
+    config: Optional[Config] = None,
+) -> Optional[str]:
+    """Return a video's existing captions as plain text, or None if absent.
+
+    Uses yt-dlp to grab any English subtitle track (manual or auto-generated)
+    without downloading the video — no API key, no audio, no Whisper model. A
+    nonzero yt-dlp exit (no subtitles, private video, network error, ...) is
+    treated as "no subtitles" and returns None rather than raising, so the
+    caller can fall back to the audio pipeline.
+    """
+    if not shutil.which("yt-dlp"):
+        return None
+
+    template = work_dir / "%(id)s"
+    try:
+        _run(
+            [
+                "yt-dlp",
+                "--write-sub",
+                "--write-auto-sub",
+                "--sub-lang",
+                "en.*,en",
+                "--sub-format",
+                "vtt",
+                "--skip-download",
+                "--no-playlist",
+                "-o",
+                str(template),
+                url,
+            ],
+            timeout=120,
+        )
+    except TranscribeError:
+        # No subtitles / private / network hiccup — not fatal, fall back.
+        return None
+
+    vtts = sorted(work_dir.glob("*.vtt"))
+    if not vtts:
+        return None
+
+    # Prefer a manually-authored track over an auto-generated one. yt-dlp names
+    # auto-captions with markers like ".en-auto." / ".a.en." / ".auto.", so a
+    # track lacking those is treated as manual and wins.
+    def _is_auto(path: Path) -> bool:
+        n = path.name.lower()
+        return "auto" in n or ".a." in n
+
+    manual = [p for p in vtts if not _is_auto(p)]
+    chosen = manual[0] if manual else vtts[0]
+
+    try:
+        raw = chosen.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    text = _vtt_to_text(raw)
+    return text or None
+
+
+def _vtt_to_text(vtt: str) -> str:
+    """Convert WebVTT cue data to clean prose.
+
+    Drops the WEBVTT header, NOTE / Kind: / Language: metadata, timestamp cue
+    lines, bare numeric cue indices, and inline tags; collapses consecutive
+    duplicate lines (auto-captions repeat the rolling text from cue to cue).
+    """
+    out: List[str] = []
+    prev: Optional[str] = None
+    for raw_line in vtt.splitlines():
+        line = _VTT_TAG_RE.sub("", raw_line).strip()
+        if not line:
+            continue
+        if line.startswith("WEBVTT"):
+            continue
+        if line.startswith(("NOTE", "Kind:", "Language:")):
+            continue
+        if "-->" in line:  # timestamp cue line
+            continue
+        if line.isdigit():  # bare numeric cue index
+            continue
+        if line == prev:  # collapse rolling-text duplicates
+            continue
+        out.append(line)
+        prev = line
+    return "\n".join(out).strip()
 
 
 def compress_audio(src: Path, out_dir: Path) -> Path:
@@ -328,25 +433,56 @@ def transcribe(
     provider: str = "auto",
     out_dir: Optional[Path] = None,
     config: Optional[Config] = None,
+    prefer_subtitles: bool = True,
 ) -> str:
     """Transcribe a URL or local file path. Returns the joined transcript text.
+
+    Subtitles-first: for a URL (not a local file) and when `prefer_subtitles`
+    is set, the video's EXISTING captions are fetched via yt-dlp and returned
+    directly — no API key, no audio download, no Whisper model. Only when there
+    are no usable subtitles does it fall back to the audio -> Whisper pipeline,
+    and ONLY then is a transcription backend required.
 
     `provider` is one of `auto`, `groq`, `openai`, or `local`. `auto` prefers a
     configured hosted key (groq -> openai) and otherwise uses the keyless
     `local` backend (faster-whisper) when it is installed. `local` forces local
-    transcription and needs no API key.
+    transcription and needs no API key. Pass `prefer_subtitles=False` to skip
+    captions and force audio transcription.
 
-    Intermediate audio (the download, the compressed copy, and any chunks) is
-    written to a private temporary directory that is deleted automatically when
-    transcription finishes, whether it succeeds or fails, so nothing is left on
-    the user's disk. Pass `out_dir` only if you want to keep the intermediates;
-    in that case the directory is yours to manage.
+    Intermediate audio (the download, the compressed copy, and any chunks) plus
+    any fetched .vtt subtitle files are written to a private temporary directory
+    that is deleted automatically when transcription finishes, whether it
+    succeeds or fails, so nothing is left on the user's disk. Pass `out_dir`
+    only if you want to keep the intermediates; in that case the directory is
+    yours to manage.
     """
     cfg = config or Config()
-    order = _provider_order(provider, cfg)
 
-    # Validate a usable backend exists before doing expensive download/encode
-    # work. Local needs no key, just an importable faster-whisper.
+    if out_dir is not None:
+        # Caller-owned directory: use it as-is and leave the files in place.
+        work_dir = Path(out_dir)
+        work_dir.mkdir(parents=True, exist_ok=True)
+        return _run_transcription(source, work_dir, provider, cfg, prefer_subtitles)
+
+    # Default: an ephemeral workspace removed on exit (even on exception), so a
+    # downloaded video/audio (and any fetched .vtt) never lingers on disk.
+    # ignore_cleanup_errors guards the classic Windows case where an antivirus
+    # scan or a slow-to-release handle briefly locks a file: worst case a stray
+    # temp file waits for the OS to reap it, instead of a lock turning a finished
+    # transcription into a crash.
+    with tempfile.TemporaryDirectory(
+        prefix="searchts-transcribe-", ignore_cleanup_errors=True
+    ) as tmp:
+        return _run_transcription(source, Path(tmp), provider, cfg, prefer_subtitles)
+
+
+def _validate_backend(order: List[str], cfg: Config) -> None:
+    """Raise NoProviderConfigured if no backend in `order` can transcribe audio.
+
+    Local needs no key, just an importable faster-whisper; hosted providers
+    need their configured key. Only called on the audio fallback path, never
+    when subtitles already satisfied the request.
+    """
     usable = any(
         (p == LOCAL_PROVIDER and local_available()) or _provider_key(p, cfg)
         for p in order
@@ -359,27 +495,34 @@ def transcribe(
             "for keyless local transcription"
         )
 
-    if out_dir is not None:
-        # Caller-owned directory: use it as-is and leave the files in place.
-        work_dir = Path(out_dir)
-        work_dir.mkdir(parents=True, exist_ok=True)
-        return _run_transcription(source, work_dir, order, cfg)
 
-    # Default: an ephemeral workspace removed on exit (even on exception), so a
-    # downloaded video/audio never lingers on disk. ignore_cleanup_errors guards
-    # the classic Windows case where an antivirus scan or a slow-to-release
-    # handle briefly locks a file: worst case a stray temp file waits for the OS
-    # to reap it, instead of a lock turning a finished transcription into a crash.
-    with tempfile.TemporaryDirectory(
-        prefix="searchts-transcribe-", ignore_cleanup_errors=True
-    ) as tmp:
-        return _run_transcription(source, Path(tmp), order, cfg)
+def _run_transcription(
+    source: str,
+    work_dir: Path,
+    provider: str,
+    cfg: Config,
+    prefer_subtitles: bool,
+) -> str:
+    """Try subtitles first (URL only), else download audio and transcribe.
 
-
-def _run_transcription(source: str, work_dir: Path, order: List[str], cfg: Config) -> str:
-    """Locate/download audio, compress, chunk, and transcribe within work_dir."""
+    A captioned URL returns here with NO provider validation, NO audio download,
+    and NO key required. Provider validation and the audio -> Whisper pipeline
+    run only on the fallback path.
+    """
     src_path = Path(source)
-    if src_path.is_file():
+    is_local_file = src_path.is_file()
+
+    if not is_local_file and prefer_subtitles:
+        subs = fetch_subtitles(source, work_dir, config=cfg)
+        if subs and len(subs.replace(" ", "")) >= MIN_SUBTITLE_CHARS:
+            return subs
+
+    # Fallback: audio -> Whisper. Resolve provider order and require a usable
+    # backend now — a captioned URL never reaches this point.
+    order = _provider_order(provider, cfg)
+    _validate_backend(order, cfg)
+
+    if is_local_file:
         audio = src_path  # a local file the caller owns; never deleted by us
     else:
         audio = download_audio(source, work_dir)

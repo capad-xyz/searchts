@@ -52,15 +52,35 @@ class TestCLI:
     def test_transcribe_command_accepts_provider_local(self, capsys):
         seen = {}
 
-        def fake_transcribe(source, *, provider="auto"):
+        def fake_transcribe(source, *, provider="auto", prefer_subtitles=True):
             seen["provider"] = provider
+            seen["prefer_subtitles"] = prefer_subtitles
             return "local out"
 
         with patch("searchts.transcribe.transcribe", side_effect=fake_transcribe):
             with patch("sys.argv", ["searchts", "transcribe", "audio.mp3", "--provider", "local"]):
                 main()
         assert seen["provider"] == "local"
+        # Subtitles-first is the default; the flag was not passed.
+        assert seen["prefer_subtitles"] is True
         assert "local out" in capsys.readouterr().out
+
+    def test_transcribe_command_no_subtitles_flag(self, capsys):
+        seen = {}
+
+        def fake_transcribe(source, *, provider="auto", prefer_subtitles=True):
+            seen["prefer_subtitles"] = prefer_subtitles
+            return "audio out"
+
+        with patch("searchts.transcribe.transcribe", side_effect=fake_transcribe):
+            with patch(
+                "sys.argv",
+                ["searchts", "transcribe", "https://youtu.be/x", "--no-subtitles"],
+            ):
+                main()
+        # --no-subtitles forces the audio path.
+        assert seen["prefer_subtitles"] is False
+        assert "audio out" in capsys.readouterr().out
 
     def test_transcribe_command_rejects_unknown_provider(self):
         with patch("sys.argv", ["searchts", "transcribe", "audio.mp3", "--provider", "azure"]):
