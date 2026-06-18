@@ -3,7 +3,7 @@
 ## Project
 searchts — Python CLI + library that gives AI agents read/search access to 8 platforms.
 Positioning: installer + doctor + config tool. NOT a wrapper — after install, agents call upstream tools directly.
-Repo: github.com/capad-xyz/searchts | License: MIT | Version: 0.2.1
+Repo: github.com/capad-xyz/searchts | License: MIT | Version: 0.3.0
 
 ## Commands
 - `pip install -e .` — Dev install

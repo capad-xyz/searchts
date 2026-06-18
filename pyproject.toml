@@ -1,6 +1,6 @@
 [project]
 name = "searchts"
-version = "0.2.1"
+version = "0.3.0"
 description = "Give your AI agent eyes on the open web: an escalating open-source unlocker (browser-fingerprinted fetch -> JS-render relay -> stealth browser) plus read/search across web, search, GitHub, YouTube, Reddit, Twitter, LinkedIn, and RSS."
 readme = "README.md"
 license = {text = "MIT"}
