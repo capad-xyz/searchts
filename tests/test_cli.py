@@ -32,7 +32,10 @@ class TestCLI:
             main()
         captured = capsys.readouterr()
         assert "searchts" in captured.out
-        assert "✅" in captured.out
+        assert "[ok]" in captured.out
+        # CLI output is plain ASCII — no decorative emoji glyphs.
+        assert "✅" not in captured.out
+        assert "❌" not in captured.out
 
     def test_transcribe_command_prints_text(self, capsys):
         with patch("searchts.transcribe.transcribe", return_value="hello transcript"):
@@ -244,7 +247,7 @@ class TestCLI:
 
         out = capsys.readouterr().out
         assert commands == [["pipx", "install", cli._RDT_GIT_SOURCE]]
-        assert "✅ rdt-cli installed" in out
+        assert "[ok] rdt-cli installed" in out
 
     def test_install_reddit_deps_routes_by_environment(self, monkeypatch):
         """Desktop -> OpenCLI; server -> rdt-cli (pinned git source)."""
@@ -261,6 +264,89 @@ class TestCLI:
         monkeypatch.setattr(cli, "_detect_environment", lambda: "server")
         cli._install_reddit_deps()
         assert calls == ["rdt"]
+
+
+class TestInstallNonInvasive:
+    """`searchts install` must NOT mutate the system unless --system-deps is given."""
+
+    def _stub_install(self, monkeypatch):
+        """Stub everything _cmd_install touches except the system-deps/mcporter
+        branch, and record which variant (real vs safe) gets called."""
+        calls = []
+        monkeypatch.setattr(cli, "_install_system_deps", lambda: calls.append("system_real"))
+        monkeypatch.setattr(cli, "_install_system_deps_safe", lambda: calls.append("system_safe"))
+        monkeypatch.setattr(cli, "_install_system_deps_dryrun", lambda: calls.append("system_dry"))
+        monkeypatch.setattr(cli, "_install_mcporter", lambda: calls.append("mcporter_real"))
+        monkeypatch.setattr(cli, "_install_mcporter_safe", lambda: calls.append("mcporter_safe"))
+        monkeypatch.setattr(cli, "_install_skill", lambda: None)
+        monkeypatch.setattr(cli, "_detect_environment", lambda: "local")
+        monkeypatch.setattr(
+            "searchts.doctor.check_all",
+            lambda config: {"web": {"status": "ok", "name": "Any web page", "message": "ok",
+                            "tier": 0, "backends": ["Jina Reader"], "active_backend": "Jina Reader"}},
+        )
+        return calls
+
+    def test_default_is_non_invasive(self, capsys, monkeypatch):
+        calls = self._stub_install(monkeypatch)
+        with patch("sys.argv", ["searchts", "install"]):
+            main()
+        # No real (mutating) system installers ran; only the print-only variants.
+        assert "system_real" not in calls
+        assert "mcporter_real" not in calls
+        assert "system_safe" in calls
+        assert "mcporter_safe" in calls
+        out = capsys.readouterr().out
+        assert "Non-invasive install" in out
+        assert "--system-deps" in out
+
+    def test_system_deps_flag_opts_in(self, capsys, monkeypatch):
+        calls = self._stub_install(monkeypatch)
+        with patch("sys.argv", ["searchts", "install", "--system-deps"]):
+            main()
+        assert "system_real" in calls
+        assert "mcporter_real" in calls
+        assert "system_safe" not in calls
+
+    def test_apply_alias_opts_in(self, capsys, monkeypatch):
+        calls = self._stub_install(monkeypatch)
+        with patch("sys.argv", ["searchts", "install", "--apply"]):
+            main()
+        assert "system_real" in calls
+        assert "mcporter_real" in calls
+
+    def test_safe_flag_is_noop_still_non_invasive(self, capsys, monkeypatch):
+        """--safe is now the default behavior, so it must remain non-invasive."""
+        calls = self._stub_install(monkeypatch)
+        with patch("sys.argv", ["searchts", "install", "--safe"]):
+            main()
+        assert "system_real" not in calls
+        assert "mcporter_real" not in calls
+
+    def test_dry_run_makes_no_changes(self, capsys, monkeypatch):
+        calls = self._stub_install(monkeypatch)
+        with patch("sys.argv", ["searchts", "install", "--dry-run"]):
+            main()
+        assert "system_real" not in calls
+        assert "mcporter_real" not in calls
+        assert "system_dry" in calls
+
+
+class TestSetupRecommendsFirstPartySearch:
+    """`searchts setup` recommends the keyless first-party search, not mcporter/Exa."""
+
+    def test_setup_recommends_searchts_search(self, capsys, monkeypatch):
+        # No mcporter present -> the optional Exa block is skipped entirely.
+        monkeypatch.setattr(shutil, "which", lambda _name: None)
+        # Skip the interactive token/key prompts.
+        monkeypatch.setattr("builtins.input", lambda *_a, **_k: "")
+        with patch("sys.argv", ["searchts", "setup"]):
+            main()
+        out = capsys.readouterr().out
+        assert "[Recommended]" in out
+        assert "searchts search" in out
+        # mcporter is not presented as the recommended path.
+        assert "[Recommended] Web-wide search -- Exa (via mcporter)" not in out
 
 
 class TestCheckUpdateRetry:

@@ -68,8 +68,13 @@ def main():
     p_install.add_argument("--proxy", default="",
                            help="Network proxy saved for agents to export as HTTP(S)_PROXY "
                                 "in restricted networks (http://user:pass@ip:port)")
+    p_install.add_argument("--system-deps", "--apply", dest="system_deps", action="store_true",
+                           help="Opt in to mutating the system: install gh/Node.js, npm -g packages, "
+                                "apt sources, and yt-dlp config. Off by default (the keyless core "
+                                "needs none of this) — without it, install only prints the manual commands.")
     p_install.add_argument("--safe", action="store_true",
-                           help="Safe mode: skip automatic system changes, show what's needed instead")
+                           help="Deprecated no-op: safe (non-mutating) is now the default. "
+                                "Use --system-deps to opt in to system changes.")
     p_install.add_argument("--dry-run", action="store_true",
                            help="Show what would be done without making any changes")
     p_install.add_argument("--channels", default="",
@@ -216,8 +221,12 @@ def _cmd_install(args):
     from searchts.config import Config
     from searchts.doctor import check_all, format_report
 
-    safe_mode = args.safe
     dry_run = args.dry_run
+    # Non-invasive by default: the keyless core (read/search/transcribe) needs no
+    # system mutation. Only --system-deps/--apply opts in to apt/npm/NodeSource/
+    # yt-dlp-config changes. --safe is now a no-op kept for backward compatibility.
+    apply_system = args.system_deps
+    safe_mode = not apply_system
 
     config = Config()
     print()
@@ -231,8 +240,13 @@ def _cmd_install(args):
     if dry_run:
         print("DRY RUN — showing what would be done (no changes)")
         print()
-    if safe_mode:
-        print("SAFE MODE — skipping automatic system changes")
+    elif apply_system:
+        print("SYSTEM-DEPS MODE — will install optional system packages (gh, Node.js, npm globals)")
+        print()
+    else:
+        print("Non-invasive install (default) — no system changes will be made.")
+        print("The keyless core (searchts read/search/transcribe) needs none of these.")
+        print("Re-run with --system-deps to actually install the optional system packages below.")
         print()
 
     # ── Parse --channels ──
@@ -268,7 +282,7 @@ def _cmd_install(args):
             print(f"[dry-run] Would save network proxy")
         else:
             config.set("proxy", args.proxy)
-            print(f"✅ Proxy saved (used when the agent accesses a restricted network)")
+            print(f"[ok] Proxy saved (used when the agent accesses a restricted network)")
 
     # ── Install core system dependencies (lightweight, always) ──
     print()
@@ -304,6 +318,12 @@ def _cmd_install(args):
     if requested_channels and dry_run:
         print()
         print(f"[dry-run] Would install optional channels: {', '.join(sorted(requested_channels))}")
+    elif requested_channels and safe_mode:
+        print()
+        print(f"Optional channels requested ({', '.join(sorted(requested_channels))}) but not installed: "
+              "installing them mutates the system (pipx/npm).")
+        print("   Re-run with --system-deps to install them: "
+              f"searchts install --system-deps --channels={','.join(sorted(requested_channels))}")
 
     # ── Auto-import cookies (only if cookie-needing channels are requested) ──
     needs_cookies = bool(requested_channels & COOKIE_CHANNELS)
@@ -318,13 +338,13 @@ def _cmd_install(args):
             found = False
             for platform, success, message in results:
                 if success:
-                    print(f"  ✅ {platform}: {message}")
+                    print(f"  [ok] {platform}: {message}")
                     found = True
             if not found:
                 results = configure_from_browser("firefox", config)
                 for platform, success, message in results:
                     if success:
-                        print(f"  ✅ {platform}: {message}")
+                        print(f"  [ok] {platform}: {message}")
                         found = True
             if not found:
                 print("  -- No cookies found (normal if you haven't logged into these sites)")
@@ -358,7 +378,7 @@ def _cmd_install(args):
         # ── Install agent skill ──
         _install_skill()
 
-        print(f"✅ Installation complete! {ok}/{total} channels active.")
+        print(f"[ok] Installation complete! {ok}/{total} channels active.")
 
         if not requested_channels:
             # First install — hint about optional channels
@@ -666,7 +686,7 @@ def _install_system_deps():
 
     # ── gh CLI ──
     if shutil.which("gh"):
-        print("  ✅ gh CLI already installed")
+        print("  [ok] gh CLI already installed")
     else:
         print("  Installing gh CLI...")
         os_type = platform.system().lower()
@@ -692,7 +712,7 @@ def _install_system_deps():
                 subprocess.run(["apt-get", "update", "-qq"], capture_output=True, timeout=60)
                 subprocess.run(["apt-get", "install", "-y", "-qq", "gh"], capture_output=True, timeout=60)
                 if shutil.which("gh"):
-                    print("  ✅ gh CLI installed")
+                    print("  [ok] gh CLI installed")
                 else:
                     print("  [!]  gh CLI install failed. You can try: snap install gh, or download from https://github.com/cli/cli/releases")
             except Exception:
@@ -702,7 +722,7 @@ def _install_system_deps():
                 try:
                     subprocess.run(["brew", "install", "gh"], capture_output=True, timeout=120)
                     if shutil.which("gh"):
-                        print("  ✅ gh CLI installed")
+                        print("  [ok] gh CLI installed")
                     else:
                         print("  [!]  gh CLI install failed. Try: brew install gh")
                 except Exception:
@@ -714,7 +734,7 @@ def _install_system_deps():
 
     # ── Node.js (needed for mcporter) ──
     if shutil.which("node") and shutil.which("npm"):
-        print("  ✅ Node.js already installed")
+        print("  [ok] Node.js already installed")
     else:
         print("  Installing Node.js...")
         try:
@@ -738,7 +758,7 @@ def _install_system_deps():
                 capture_output=True, timeout=120,
             )
             if shutil.which("node"):
-                print("  ✅ Node.js installed")
+                print("  [ok] Node.js installed")
             else:
                 print("  [!]  Node.js install failed. Try: apt install nodejs npm, or nvm install 22, or download from https://nodejs.org")
         except Exception:
@@ -750,11 +770,11 @@ def _install_system_deps():
         npm_root = subprocess.run([npm_cmd, "root", "-g"], capture_output=True, encoding="utf-8", errors="replace", timeout=5).stdout.strip()
         undici_path = os.path.join(npm_root, "undici", "index.js") if npm_root else ""
         if os.path.exists(undici_path):
-            print("  ✅ undici already installed (Node.js proxy support)")
+            print("  [ok] undici already installed (Node.js proxy support)")
         else:
             try:
                 subprocess.run([npm_cmd, "install", "-g", "undici"], capture_output=True, encoding="utf-8", errors="replace", timeout=60)
-                print("  ✅ undici installed (Node.js proxy support)")
+                print("  [ok] undici installed (Node.js proxy support)")
             except Exception:
                 print("  -- undici install failed (optional — may not work behind proxies)")
 
@@ -767,13 +787,13 @@ def _install_system_deps():
             with open(ytdlp_config, "r", encoding="utf-8") as f:
                 if "--js-runtimes" in f.read():
                     needs_config = False
-                    print("  ✅ yt-dlp JS runtime already configured")
+                    print("  [ok] yt-dlp JS runtime already configured")
         if needs_config:
             try:
                 os.makedirs(ytdlp_config_dir, exist_ok=True)
                 with open(ytdlp_config, "a", encoding="utf-8") as f:
                     f.write("--js-runtimes node\n")
-                print("  ✅ yt-dlp configured to use Node.js as JS runtime (YouTube)")
+                print("  [ok] yt-dlp configured to use Node.js as JS runtime (YouTube)")
             except Exception:
                 print("  -- Could not configure yt-dlp JS runtime (YouTube may not work)")
 
@@ -789,7 +809,7 @@ def _install_twitter_deps():
 
     print("Setting up Twitter (twitter-cli)...")
     if shutil.which("twitter"):
-        print("  ✅ twitter-cli already installed")
+        print("  [ok] twitter-cli already installed")
         return
     for tool, cmd in [("pipx", ["pipx", "install", "twitter-cli"]),
                       ("uv", ["uv", "tool", "install", "twitter-cli"])]:
@@ -798,7 +818,7 @@ def _install_twitter_deps():
                 subprocess.run(cmd, capture_output=True, encoding="utf-8",
                                errors="replace", timeout=120)
                 if shutil.which("twitter"):
-                    print("  ✅ twitter-cli installed")
+                    print("  [ok] twitter-cli installed")
                     return
             except Exception:
                 pass
@@ -825,7 +845,7 @@ def _install_opencli_deps():
     print("Setting up OpenCLI (browser-session backend, desktop only)...")
     st = opencli_status()
     if st.installed and not st.broken:
-        print(f"  ✅ {opencli_summary(st)}")
+        print(f"  [ok] {opencli_summary(st)}")
         if not st.ready:
             print(f"  {st.hint}")
         return
@@ -845,7 +865,7 @@ def _install_opencli_deps():
 
     st = opencli_status()
     if st.installed and not st.broken:
-        print("  ✅ OpenCLI installed")
+        print("  [ok] OpenCLI installed")
         print("  Final step (must be done manually, due to Chrome security restrictions): install the browser extension")
         print(f"    1. Open {OPENCLI_EXTENSION_URL}")
         print("    2. Click \"Add to Chrome\"")
@@ -865,7 +885,7 @@ def _install_reddit_deps():
         print("  Reddit uses OpenCLI (works once you have logged into reddit.com in the browser)")
         import shutil
         if shutil.which("rdt"):
-            print("  ✅ Detected an existing rdt-cli; it will remain available as a fallback backend")
+            print("  [ok] Detected an existing rdt-cli; it will remain available as a fallback backend")
         return
 
     _install_rdt_cli()
@@ -878,7 +898,7 @@ def _install_rdt_cli():
 
     print("Setting up Reddit (rdt-cli)...")
     if shutil.which("rdt"):
-        print("  ✅ rdt-cli already installed")
+        print("  [ok] rdt-cli already installed")
         return
     for tool, cmd in [
         ("pipx", ["pipx", "install", _RDT_GIT_SOURCE]),
@@ -889,7 +909,7 @@ def _install_rdt_cli():
                 subprocess.run(cmd, capture_output=True, encoding="utf-8",
                                errors="replace", timeout=120)
                 if shutil.which("rdt"):
-                    print("  ✅ rdt-cli installed")
+                    print("  [ok] rdt-cli installed")
                     return
             except Exception:
                 pass
@@ -911,7 +931,7 @@ def _install_system_deps_safe():
     for name, binaries, label, install_hint in deps:
         found = any(shutil.which(b) for b in binaries)
         if found:
-            print(f"  ✅ {label} already installed")
+            print(f"  [ok] {label} already installed")
         else:
             print(f"  -- {label} not found")
             missing.append((label, install_hint))
@@ -939,7 +959,7 @@ def _install_system_deps_dryrun():
     for label, binaries, method in checks:
         found = any(shutil.which(b) for b in binaries)
         if found:
-            print(f"  ✅ {label}: already installed, skip")
+            print(f"  [ok] {label}: already installed, skip")
         else:
             print(f"  {label}: would install via: {method}")
 
@@ -950,10 +970,11 @@ def _install_mcporter():
     import shutil
     import subprocess
 
-    print("Setting up mcporter (search backend)...")
+    print("Setting up mcporter (optional extra search provider; the recommended "
+          "search is the keyless built-in 'searchts search')...")
 
     if shutil.which("mcporter"):
-        print("  ✅ mcporter already installed")
+        print("  [ok] mcporter already installed")
     else:
         # Check for npm/npx
         if not shutil.which("npm") and not shutil.which("npx"):
@@ -966,7 +987,7 @@ def _install_mcporter():
                 capture_output=True, encoding="utf-8", errors="replace", timeout=120,
             )
             if shutil.which("mcporter"):
-                print("  ✅ mcporter installed")
+                print("  [ok] mcporter installed")
             else:
                 print("  [X] mcporter install failed. Retry: npm install -g mcporter (check network/timeout), or try: npx mcporter@latest list")
                 return
@@ -984,26 +1005,32 @@ def _install_mcporter():
                 ["mcporter", "config", "add", "exa", "https://mcp.exa.ai/mcp"],
                 capture_output=True, encoding="utf-8", errors="replace", timeout=10,
             )
-            print("  ✅ Exa search configured (free, no API key needed)")
+            print("  [ok] Exa search configured (free, no API key needed)")
         else:
-            print("  ✅ Exa search already configured")
+            print("  [ok] Exa search already configured")
     except Exception:
         print("  [!]  Could not configure Exa. Run manually: mcporter config add exa https://mcp.exa.ai/mcp")
 
 
 def _install_mcporter_safe():
-    """Safe mode: check mcporter status, print instructions."""
+    """Safe mode: check mcporter status, print instructions.
+
+    mcporter/Exa is an OPTIONAL extra search provider, not the recommended path.
+    The recommended search is the keyless built-in `searchts search`.
+    """
     import shutil
 
-    print("Checking mcporter (safe mode)...")
+    print("Search: the recommended path is the keyless built-in 'searchts search'")
+    print("  (DuckDuckGo + RRF fusion, no Node/npm needed). Just run: searchts search \"query\"")
+    print("Checking mcporter (optional extra Exa provider)...")
 
     if shutil.which("mcporter"):
-        print("  ✅ mcporter already installed")
-        print("  To configure Exa search: mcporter config add exa https://mcp.exa.ai/mcp")
+        print("  [ok] mcporter already installed")
+        print("  Optional — to add Exa as an extra provider: mcporter config add exa https://mcp.exa.ai/mcp")
     else:
-        print("  -- mcporter not installed")
-        print("  To install: npm install -g mcporter")
-        print("  Then configure Exa: mcporter config add exa https://mcp.exa.ai/mcp")
+        print("  -- mcporter not installed (optional; not required for search)")
+        print("  Optional — to install: npm install -g mcporter")
+        print("  Then add Exa: mcporter config add exa https://mcp.exa.ai/mcp")
 
 
 def _detect_environment():
@@ -1068,14 +1095,14 @@ def _cmd_configure(args):
         found_any = False
         for platform, success, message in results:
             if success:
-                print(f"  ✅ {platform}: {message}")
+                print(f"  [ok] {platform}: {message}")
                 found_any = True
             else:
                 print(f"  -- {platform}: {message}")
 
         print()
         if found_any:
-            print("✅ Cookies configured! Run `searchts doctor` to see updated status.")
+            print("[ok] Cookies configured! Run `searchts doctor` to see updated status.")
         else:
             print(f"No cookies found. Make sure you're logged into the platforms in {browser}.")
         return
@@ -1096,7 +1123,7 @@ def _cmd_configure(args):
         # this key at runtime — agents read it back and export HTTP(S)_PROXY
         # before invoking upstream tools (see docs/install.md).
         config.set("proxy", value)
-        print("✅ Proxy saved (for the agent to set HTTP_PROXY/HTTPS_PROXY when accessing networks that need a proxy, such as Reddit/Twitter)")
+        print("[ok] Proxy saved (for the agent to set HTTP_PROXY/HTTPS_PROXY when accessing networks that need a proxy, such as Reddit/Twitter)")
 
     elif args.key == "twitter-cookies":
         # Accept two formats:
@@ -1109,7 +1136,7 @@ def _cmd_configure(args):
             config.set("twitter_ct0", ct0)
 
             # Sync credentials to twitter-cli env
-            print("✅ Twitter cookies configured!")
+            print("[ok] Twitter cookies configured!")
 
             print("Testing Twitter access...", end=" ")
             try:
@@ -1129,7 +1156,7 @@ def _cmd_configure(args):
                     )
                     output = (result.stdout or "") + (result.stderr or "")
                     if "ok: true" in output:
-                        print("✅ Twitter access works!")
+                        print("[ok] Twitter access works!")
                     else:
                         print("[!] Auth check failed (cookies might be wrong)")
             except Exception as e:
@@ -1142,20 +1169,20 @@ def _cmd_configure(args):
 
     elif args.key == "youtube-cookies":
         config.set("youtube_cookies_from", value)
-        print(f"✅ YouTube cookie source configured: {value}")
+        print(f"[ok] YouTube cookie source configured: {value}")
         print("   yt-dlp will use cookies from this browser for age-restricted/member videos.")
 
     elif args.key == "github-token":
         config.set("github_token", value)
-        print(f"✅ GitHub token configured!")
+        print(f"[ok] GitHub token configured!")
 
     elif args.key == "groq-key":
         config.set("groq_api_key", value)
-        print(f"✅ Groq key configured!")
+        print(f"[ok] Groq key configured!")
 
     elif args.key == "openai-key":
         config.set("openai_api_key", value)
-        print(f"✅ OpenAI key configured!")
+        print(f"[ok] OpenAI key configured!")
 
 
 def _cmd_transcribe(args):
@@ -1177,12 +1204,12 @@ def _cmd_transcribe(args):
             prefer_subtitles=args.prefer_subtitles,
         )
     except TranscribeError as e:
-        print(f"❌ {e}")
+        print(f"[x] {e}")
         sys.exit(1)
 
     if args.output:
         Path(args.output).write_text(text + "\n", encoding="utf-8")
-        print(f"✅ Transcript written to {args.output}")
+        print(f"[ok] Transcript written to {args.output}")
     else:
         print(text)
 
@@ -1436,35 +1463,35 @@ def _cmd_setup():
     print("=" * 40)
     print()
 
-    # Step 1: Exa (via mcporter, no API key required)
+    # Step 1: Web search — first-party keyless `searchts search` is recommended.
     import shutil
     import subprocess
 
-    print("[Recommended] Web-wide search -- Exa (via mcporter)")
-    print("  Free, no API key required")
+    print("[Recommended] Web-wide search -- searchts search")
+    print("  Built in, keyless (DuckDuckGo + RRF fusion). No Node/npm or extra setup.")
+    print("  Try it: searchts search \"your query\"")
+    print()
 
-    if not shutil.which("mcporter"):
-        print("  Current status: -- mcporter is not installed")
-        print("  Install: npm install -g mcporter")
-        print("  Then: mcporter config add exa https://mcp.exa.ai/mcp")
-        print()
-    else:
+    # Optional: Exa via mcporter is still supported as an extra provider, but no
+    # longer the recommended path (it needs Node/npm). Only surfaced if present.
+    if shutil.which("mcporter"):
+        print("[Optional] Exa (via mcporter) -- extra search provider")
         try:
             r = subprocess.run(
                 ["mcporter", "config", "list"], capture_output=True, encoding="utf-8", errors="replace", timeout=10
             )
             if "exa" in r.stdout.lower():
-                print("  Current status: ✅ configured")
+                print("  Current status: [ok] configured")
             else:
                 print("  Current status: -- not configured")
-                setup_now = input("  Configure Exa automatically now? [Y/n]: ").strip().lower()
-                if setup_now in ("", "y", "yes"):
+                setup_now = input("  Configure Exa automatically now? [y/N]: ").strip().lower()
+                if setup_now in ("y", "yes"):
                     add_r = subprocess.run(
                         ["mcporter", "config", "add", "exa", "https://mcp.exa.ai/mcp"],
                         capture_output=True, encoding="utf-8", errors="replace", timeout=10,
                     )
                     if add_r.returncode == 0:
-                        print("  ✅ Exa configured")
+                        print("  [ok] Exa configured")
                     else:
                         print("  [!] Automatic configuration failed, please run manually:")
                         print("     mcporter config add exa https://mcp.exa.ai/mcp")
@@ -1479,12 +1506,12 @@ def _cmd_setup():
     print("  Get one: https://github.com/settings/tokens (no permissions required)")
     current = config.get("github_token")
     if current:
-        print(f"  Current status: ✅ configured")
+        print(f"  Current status: [ok] configured")
     else:
         key = input("  GITHUB_TOKEN (press Enter to skip): ").strip()
         if key:
             config.set("github_token", key)
-            print("  ✅ GitHub API raised to 5000/hour!")
+            print("  [ok] GitHub API raised to 5000/hour!")
         else:
             print("  Skipped. The public API works too")
     print()
@@ -1500,19 +1527,19 @@ def _cmd_setup():
     print("  Free tier, sign up: https://console.groq.com")
     current = config.get("groq_api_key")
     if current:
-        print(f"  Current status: ✅ configured")
+        print(f"  Current status: [ok] configured")
     else:
         key = input("  GROQ_API_KEY (press Enter to skip): ").strip()
         if key:
             config.set("groq_api_key", key)
-            print("  ✅ Speech-to-text enabled!")
+            print("  [ok] Speech-to-text enabled!")
         else:
             print("  Skipped")
     print()
 
     # Summary
     print("=" * 40)
-    print(f"✅ Configuration saved to {config.config_path}")
+    print(f"[ok] Configuration saved to {config.config_path}")
     print("Run searchts doctor to see the full status")
     print()
 
@@ -1667,7 +1694,7 @@ def _cmd_check_update():
             print()
             print(_UPDATE_INSTRUCTIONS)
             return "update_available"
-        print(f"✅ Already up to date")
+        print(f"[ok] Already up to date")
         return "up_to_date"
 
     release_err = _classify_github_response_error(resp)

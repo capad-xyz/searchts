@@ -54,19 +54,19 @@ def format_report(results: Dict[str, dict]) -> str:
     lines = []
     lines.append("[bold cyan]searchts status[/bold cyan]")
     lines.append("[cyan]" + "=" * 40 + "[/cyan]")
-    lines.append("Legend: [green]✅[/green] available  [yellow][!][/yellow] installed but needs config/login  [red][X][/red] not installed")
+    lines.append(r"Legend: [green]\[ok][/green] available  [yellow][!][/yellow] installed but needs config/login  [red][X][/red] not installed")
 
     ok_count = sum(1 for r in results.values() if r["status"] == "ok")
     total = len(results)
 
     # Tier 0 — zero config
     lines.append("")
-    lines.append("[bold]✅ Ready to use out of the box:[/bold]")
+    lines.append(r"[bold]\[ok] Ready to use out of the box:[/bold]")
     for key, r in results.items():
         if r["tier"] == 0:
             name_msg = _name_msg(r, escape)
             if r["status"] == "ok":
-                lines.append(f"  [green]✅[/green] {name_msg}")
+                lines.append(rf"  [green]\[ok][/green] {name_msg}")
             elif r["status"] == "warn":
                 lines.append(f"  [yellow][!][/yellow]  {name_msg}")
             elif r["status"] in ("off", "error"):
@@ -80,7 +80,7 @@ def format_report(results: Dict[str, dict]) -> str:
         lines.append("")
         lines.append("[bold]Optional channels (installed):[/bold]")
         for key, r in tier1_active.items():
-            lines.append(f"  [green]✅[/green] {_name_msg(r, escape)}")
+            lines.append(rf"  [green]\[ok][/green] {_name_msg(r, escape)}")
 
     # Tier 2 — optional complex setup
     tier2 = {k: r for k, r in results.items() if r["tier"] == 2}
@@ -91,7 +91,7 @@ def format_report(results: Dict[str, dict]) -> str:
             lines.append("")
             lines.append("[bold]Optional channels (installed):[/bold]")
         for key, r in tier2_active.items():
-            lines.append(f"  [green]✅[/green] {_name_msg(r, escape)}")
+            lines.append(rf"  [green]\[ok][/green] {_name_msg(r, escape)}")
 
     lines.append("")
     status_color = "green" if ok_count == total else ("yellow" if ok_count > 0 else "red")

@@ -9,7 +9,8 @@ not a bot-wall challenge page:
   2. ``Jina Reader``    free JS-rendering relay (r.jina.ai); good when a page
                         only renders content after JavaScript.
   3. ``stealth-browser`` lazy headless browser for live JS challenges (tier-2,
-                        not yet implemented — reserved slot in the ladder).
+                        undetected Chromium via patchright; launched only when
+                        the lighter rungs fail).
 
 This runs from the user's own IP at personal volume, which sidesteps the
 residential-proxy pools that commercial unlockers (Bright Data, Browserbase)
