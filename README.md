@@ -38,18 +38,21 @@ pip install "searchts[mcp]"                                       # MCP server f
 searchts read https://example.com          # fetch any page as clean Markdown
 searchts search "open source vector db"    # multi-provider web search (keyless by default)
 searchts transcribe https://youtu.be/...   # transcript of a YouTube/TikTok/Instagram/Reddit video
+searchts grab https://example.com          # download a page's assets + extract palette/fonts
+searchts get https://example.com/logo.png  # download one asset (image/PDF/font/file)
 searchts doctor                            # see what is configured and working
 ```
 
 `read` flags: `--json`, `--backend <tier>`, `--human` (CAPTCHA handoff), `--scrub` (redact injection).
 `search` flags: `-n <count>`, `--json`, `--provider <name>`. Content goes to stdout (pipeable); status to stderr.
+`grab` flags: `--out <dir>`, `--kinds <images,icons,css,fonts,svg>`, `--read` (also save page.md), `--max <n>`, `--json`.
 
 ## Use it from your AI agent
 
 Two ways, both one command:
 
 ```bash
-# 1) MCP: gives the agent always-on read_url + web_search tools
+# 1) MCP: gives the agent always-on read_url + web_search + fetch_asset + grab_site tools
 pip install "searchts[mcp]"
 searchts mcp install          # prints the wiring, e.g. for Claude Code:
                               #   claude mcp add searchts -- searchts mcp serve
@@ -63,9 +66,10 @@ searchts skill install        # writes ~/.claude/commands/searchts.md
 - **Escalating open-source unlocker**: curl_cffi, then Jina Reader, then a stealth browser.
 - **Multi-provider search with rank fusion**: DuckDuckGo (keyless default), plus SearXNG, Exa, Brave, and Tavily when configured; results merged with reciprocal rank fusion and de-duplicated.
 - **Video transcription**: yt-dlp audio plus Whisper for YouTube, TikTok, Instagram, and Reddit videos.
+- **Asset + design grabber**: `searchts grab <url>` downloads a page's images/icons/css/fonts and extracts a color palette plus the fonts in use; `searchts get <url>` pulls a single asset. Both go through the same escalating unlock ladder, so they work on fingerprint-gated CDNs, not just open ones.
 - **Prompt-injection scrubbing**: strips invisible/bidi characters, flags injection indicators, optional redaction, so untrusted page content is safer to feed a model.
 - **Per-domain backend memory**: remembers which tier worked per domain and tries it first (`SEARCHTS_NO_MEMORY=1` to disable).
-- **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`), and a Python library.
+- **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`, `fetch_asset`, `grab_site`), and a Python library.
 
 ## Use as a library
 

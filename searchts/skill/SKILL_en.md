@@ -9,11 +9,18 @@ description: >
   (Twitter/X, Reddit, YouTube, TikTok, Instagram, GitHub, LinkedIn, RSS, or any
   web page): read it with `searchts read <url>`.
 
-  Three first-party commands: `searchts read <url>` (escalating open-source
+  Also MUST USE when the user wants a website's design/assets/images/fonts/
+  colors, "design inspiration", or to download a file from a page: grab it with
+  `searchts grab <url>` (or `searchts get <url>` for one asset).
+
+  Core first-party commands: `searchts read <url>` (escalating open-source
   unlocker that returns clean markdown and gets through most bot-walls),
-  `searchts search "<query>"` (keyless multi-provider web search), and
-  `searchts transcribe <url>` (subtitles-first video transcription). Keyless
-  and free by default. Run `searchts doctor` to see what is configured.
+  `searchts search "<query>"` (keyless multi-provider web search),
+  `searchts transcribe <url>` (subtitles-first video transcription), and
+  `searchts grab <url>` / `searchts get <url>` (download a page's assets and
+  extract its color palette + fonts for design inspiration, or pull one asset
+  file, through the same unlock ladder). Keyless and free by default. Run
+  `searchts doctor` to see what is configured.
 
   NOT for: writing reports/analysis/translation (this skill only FETCHES
   internet content); posting/commenting/liking (write operations); platforms
@@ -25,7 +32,7 @@ metadata:
 
 # searchts — first-party web superpowers for an agent
 
-searchts gives you three first-party commands. Use them directly — they are the
+searchts gives you these first-party commands. Use them directly — they are the
 preferred path. Do not reach for raw `curl`, `r.jina.ai`, or other tools when
 one of these covers the need.
 
@@ -34,8 +41,10 @@ one of these covers the need.
 | Read any web page / article / link | `searchts read <url>` |
 | Search the web | `searchts search "<query>"` |
 | Transcribe a video | `searchts transcribe <url>` |
+| Grab a site's assets + design (palette/fonts) | `searchts grab <url>` |
+| Download one asset (image/PDF/font/file) | `searchts get <url>` |
 
-## The three commands
+## The core commands
 
 ```bash
 # Read any URL as clean markdown. Goes through an escalating open-source
@@ -53,6 +62,15 @@ searchts search "open source vector db" -n 10
 # Existing captions (via yt-dlp) need no key; falls back to hosted or
 # keyless-local Whisper only when there are no usable subtitles.
 searchts transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
+
+# Grab a page's assets + design tokens (design inspiration): downloads its
+# images/icons/css/fonts into a folder, extracts a color palette + the fonts
+# in use, and writes a manifest.json. Goes through the same unlock ladder.
+searchts grab https://example.com --out ./inspo
+searchts grab https://example.com --read    # also save the page text as page.md
+
+# Download a single asset (image, PDF, font, any file) through the unlocker.
+searchts get https://example.com/logo.svg -o logo.svg
 ```
 
 ## Standing rules (apply for the whole session)
@@ -76,6 +94,7 @@ searchts transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
 |---------|------|---------|
 | Web search | search | [references/search.md](references/search.md) |
 | Web pages / articles / RSS | web | [references/web.md](references/web.md) |
+| Design inspiration / assets / palette / fonts | design | [references/design.md](references/design.md) |
 | Video transcripts (YouTube/TikTok/Instagram/Reddit) | video | [references/video.md](references/video.md) |
 | Twitter / Reddit discussions | social | [references/social.md](references/social.md) |
 | Jobs / LinkedIn | career | [references/career.md](references/career.md) |
@@ -109,6 +128,7 @@ the common cases; references hold per-platform notes and optional fallbacks):
 
 - [Search](references/search.md) — `searchts search`, optional providers
 - [Web](references/web.md) — `searchts read`, RSS
+- [Design](references/design.md) — `searchts grab` / `searchts get`, palette + fonts + assets
 - [Video](references/video.md) — `searchts transcribe`, subtitles-first
 - [Social](references/social.md) — Twitter, Reddit (read the URL; optional CLIs)
 - [Career](references/career.md) — LinkedIn (read the URL; optional MCP)

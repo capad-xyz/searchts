@@ -165,6 +165,24 @@ def main():
     p_tr.add_argument("-o", "--output", default=None,
                       help="Write transcript to a file instead of stdout")
 
+    # ── get / grab (assets + design inspiration) ──
+    p_get = sub.add_parser("get", help="Download a single asset (image/PDF/font/file) through the unlocker")
+    p_get.add_argument("url", help="The asset URL to download")
+    p_get.add_argument("-o", "--output", default=None,
+                       help="Output file or directory (default: filename from the URL, in the cwd)")
+
+    p_grab = sub.add_parser("grab", help="Grab a page's assets + color palette + fonts (design inspiration)")
+    p_grab.add_argument("url", help="The page URL to grab")
+    p_grab.add_argument("--out", default=None,
+                        help="Output directory (default: ./searchts-grab-<host>)")
+    p_grab.add_argument("--kinds", default="images,icons,css,fonts,svg",
+                        help="Comma list of asset kinds to download (images,icons,css,fonts,svg,scripts)")
+    p_grab.add_argument("--scripts", action="store_true", help="Also download <script src> files")
+    p_grab.add_argument("--read", action="store_true", help="Also save the page text as page.md")
+    p_grab.add_argument("--max", dest="max_assets", type=int, default=60,
+                        help="Maximum assets to download (default 60)")
+    p_grab.add_argument("--json", action="store_true", help="Print the manifest JSON to stdout")
+
     sub.add_parser("check-update", help="Check for new versions and changes")
 
     # ── watch ──
@@ -210,6 +228,10 @@ def main():
         _cmd_skill(args)
     elif args.command == "transcribe":
         _cmd_transcribe(args)
+    elif args.command == "get":
+        _cmd_get(args)
+    elif args.command == "grab":
+        _cmd_grab(args)
 
 
 # ── Command handlers ────────────────────────────────
@@ -1376,6 +1398,55 @@ def _cmd_read(args):
         print(f"[{result.backend}] status={result.status} chars={len(result.text)}",
               file=sys.stderr)
         print(result.text)
+
+
+def _cmd_get(args):
+    """Download one asset through the unlock ladder; print the saved path."""
+    from searchts import assets
+
+    try:
+        path = assets.get_asset(args.url, args.output)
+    except assets.AssetError as e:
+        print(f"Failed to get asset: {e}", file=sys.stderr)
+        sys.exit(1)
+    size = path.stat().st_size if path.exists() else 0
+    print(f"saved {path} ({size} bytes)", file=sys.stderr)
+    print(str(path))
+
+
+def _cmd_grab(args):
+    """Grab a page's assets + color palette + fonts (design inspiration)."""
+    from urllib.parse import urlparse
+
+    from searchts import assets
+
+    out = args.out
+    if not out:
+        host = urlparse(assets.normalize(args.url)).netloc.replace(":", "_") or "site"
+        out = f"searchts-grab-{host}"
+    kinds = tuple(k.strip() for k in (args.kinds or "").split(",") if k.strip())
+    try:
+        manifest = assets.grab(
+            args.url, out, kinds=kinds, include_scripts=args.scripts,
+            read=args.read, max_assets=args.max_assets,
+        )
+    except assets.AssetError as e:
+        print(f"Failed to grab {args.url}: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.json:
+        print(json.dumps(manifest, ensure_ascii=False))
+        return
+    title = manifest.get("title") or "(no title)"
+    palette = " ".join(c["hex"] for c in manifest.get("palette", [])[:8])
+    fonts = ", ".join(manifest.get("fonts", [])[:6])
+    print(f"[grab] {title}", file=sys.stderr)
+    print(f"  downloaded {manifest.get('downloaded', 0)} assets -> {out}/", file=sys.stderr)
+    if palette:
+        print(f"  palette: {palette}", file=sys.stderr)
+    if fonts:
+        print(f"  fonts:   {fonts}", file=sys.stderr)
+    print(os.path.join(out, "manifest.json"))
 
 
 def _parse_provider_flags(provider_args):

@@ -4,15 +4,17 @@ searchts MCP Server — expose searchts's first-party web tools over MCP.
 
 Run: python -m searchts.integrations.mcp_server
 
-Exposes three tools to an agent:
+Exposes these tools to an agent:
 - read_url: fetch any URL through the escalating open-source unlocker
   (curl_cffi -> Jina Reader -> stealth browser) and return clean markdown;
   gets through most bot-walls and falls back gracefully.
 - web_search: keyless multi-provider web search, fusion-merged across providers
   (DuckDuckGo by default; SearXNG/Exa/Brave/Tavily when configured).
+- fetch_asset: download one asset (image/PDF/font/file) through the unlock ladder.
+- grab_site: grab a page's assets + color palette + fonts (design inspiration).
 - get_status: report which channels/backends are installed and active (doctor).
 
-read_url and web_search are backed by searchts.unlocker and searchts.search.
+Backed by searchts.unlocker, searchts.search, and searchts.assets.
 """
 
 import asyncio
@@ -79,6 +81,34 @@ def create_server():
                      },
                      "required": ["query"],
                  }),
+            Tool(name="fetch_asset",
+                 description="Download one asset (image, PDF, font, CSS, any file) from a URL "
+                             "through the unlock ladder and save it to disk. Returns "
+                             "{path, content_type, bytes}.",
+                 inputSchema={
+                     "type": "object",
+                     "properties": {
+                         "url": {"type": "string", "description": "The asset URL to download"},
+                         "out_dir": {"type": "string",
+                                     "description": "Directory to save into (optional)"},
+                     },
+                     "required": ["url"],
+                 }),
+            Tool(name="grab_site",
+                 description="Grab a page's design inspiration: download its assets "
+                             "(images/icons/css/fonts/svg), extract a color palette and the "
+                             "fonts in use, and return a manifest with local paths.",
+                 inputSchema={
+                     "type": "object",
+                     "properties": {
+                         "url": {"type": "string", "description": "The page URL to grab"},
+                         "out_dir": {"type": "string",
+                                     "description": "Directory to save into (optional)"},
+                         "read": {"type": "boolean",
+                                  "description": "Also save the page text as page.md"},
+                     },
+                     "required": ["url"],
+                 }),
         ]
 
     @server.call_tool()
@@ -93,6 +123,11 @@ def create_server():
                     arguments.get("query", ""),
                     int(arguments.get("max_results", 5) or 5),
                 )
+            elif name == "fetch_asset":
+                result = fetch_asset(arguments.get("url", ""), arguments.get("out_dir", ""))
+            elif name == "grab_site":
+                result = grab_site(arguments.get("url", ""), arguments.get("out_dir", ""),
+                                   bool(arguments.get("read", False)))
             else:
                 result = f"Unknown tool: {name}"
 
@@ -158,6 +193,53 @@ def web_search(query: str, max_results: int = 5) -> str:
             lines.append(f"   {r.snippet}")
         blocks.append("\n".join(lines))
     return "\n\n".join(blocks)
+
+
+def fetch_asset(url: str, out_dir: str = "") -> str:
+    """Download one asset through the unlock ladder and save it.
+
+    Returns a JSON string {path, content_type, bytes}, or an error string.
+    Module-level (like read_url) so it is testable without the optional `mcp`
+    package.
+    """
+    import mimetypes
+
+    from searchts import assets
+
+    if not url:
+        return "Error: fetch_asset requires a 'url' argument."
+    try:
+        path = assets.get_asset(url, out_dir or None)
+    except assets.AssetError as e:
+        return f"Error: {e}"
+    try:
+        size = path.stat().st_size
+    except OSError:
+        size = 0
+    ct = mimetypes.guess_type(str(path))[0] or ""
+    return json.dumps({"path": str(path), "content_type": ct, "bytes": size}, ensure_ascii=False)
+
+
+def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
+    """Grab a page's assets + color palette + fonts; return the manifest JSON.
+
+    Downloads images/icons/css/fonts/svg and writes a manifest with local paths;
+    returns it as a JSON string an agent can use for design inspiration. Error
+    string on failure.
+    """
+    from urllib.parse import urlparse
+
+    from searchts import assets
+
+    if not url:
+        return "Error: grab_site requires a 'url' argument."
+    host = urlparse(assets.normalize(url)).netloc.replace(":", "_") or "site"
+    out = out_dir or f"searchts-grab-{host}"
+    try:
+        manifest = assets.grab(url, out, read=read)
+    except assets.AssetError as e:
+        return f"Error: {e}"
+    return json.dumps(manifest, ensure_ascii=False, indent=2)
 
 
 async def _run_stdio():

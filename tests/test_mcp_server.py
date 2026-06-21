@@ -104,3 +104,47 @@ def test_create_server_raises_without_mcp(monkeypatch):
     monkeypatch.setattr(mcp_server, "HAS_MCP", False)
     with pytest.raises(mcp_server.MCPNotInstalledError):
         mcp_server.create_server()
+
+
+# ── fetch_asset / grab_site ─────────────────────────────────────────────────
+
+import json  # noqa: E402
+
+from searchts.integrations.mcp_server import fetch_asset, grab_site  # noqa: E402
+
+
+def test_fetch_asset_returns_json(monkeypatch, tmp_path):
+    saved = tmp_path / "logo.png"
+    saved.write_bytes(b"PNGDATA")
+    monkeypatch.setattr("searchts.assets.get_asset", lambda url, out=None: saved)
+    data = json.loads(fetch_asset("https://x.test/logo.png"))
+    assert data["path"] == str(saved)
+    assert data["bytes"] == 7
+    assert data["content_type"] == "image/png"
+
+
+def test_fetch_asset_error_string(monkeypatch):
+    from searchts import assets
+
+    def boom(url, out=None):
+        raise assets.AssetError(url, [("curl_cffi", "http-403")])
+
+    monkeypatch.setattr("searchts.assets.get_asset", boom)
+    out = fetch_asset("https://x.test/x")
+    assert out.startswith("Error:") and "curl_cffi" in out
+
+
+def test_fetch_asset_requires_url():
+    assert fetch_asset("").startswith("Error:")
+
+
+def test_grab_site_returns_manifest_json(monkeypatch):
+    manifest = {"url": "https://x.test/", "palette": [{"hex": "#fff", "count": 3}],
+                "fonts": ["Inter"], "downloaded": 2, "assets": []}
+    monkeypatch.setattr("searchts.assets.grab", lambda url, out, read=False: manifest)
+    data = json.loads(grab_site("https://x.test/"))
+    assert data["fonts"] == ["Inter"] and data["downloaded"] == 2
+
+
+def test_grab_site_requires_url():
+    assert grab_site("").startswith("Error:")
