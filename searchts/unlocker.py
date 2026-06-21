@@ -57,6 +57,8 @@ _BLOCK_PHRASES = (
     "request unsuccessful. incapsula incident",
     "captcha-delivery.com",
     "target url returned error",  # Jina relay's HTTP-200 wrapper around an upstream block
+    "awswafcookiedomainlist",     # AWS WAF JS challenge (e.g. Dribbble): window.awsWafCookieDomainList
+    "gokuprops",                  # AWS WAF challenge token blob (window.gokuProps)
 )
 
 _MIN_CHARS = 500

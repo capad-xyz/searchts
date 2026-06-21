@@ -236,3 +236,49 @@ def test_cli_grab_json_outputs_manifest(monkeypatch, capsys):
         cli.main()
     data = json.loads(capsys.readouterr().out)
     assert data["title"] == "Demo"
+
+
+# ── bot-wall detection (AWS WAF), empty-body + jina-html rung ─────────────────
+
+from searchts.unlocker import looks_blocked  # noqa: E402
+
+
+def test_looks_blocked_detects_aws_waf():
+    # Dribbble-style AWS WAF JS challenge: 202 + goku/awsWaf token blob.
+    body = "<html><script>window.awsWafCookieDomainList=[];window.gokuProps={};</script></html>"
+    assert looks_blocked(202, body) == "challenge"
+
+
+def test_curl_rejects_empty_body(monkeypatch):
+    import curl_cffi.requests as cr
+
+    class R:
+        status_code = 200
+        headers = {"content-type": "image/png"}
+        content = b""
+        url = "https://x.test/a.png"
+
+    monkeypatch.setattr(cr, "get", lambda *a, **k: R())
+    with pytest.raises(assets.AssetError):
+        assets._fetch_bytes_curl("https://x.test/a.png", 10)
+
+
+def test_fetch_bytes_jina_html_returns_html(monkeypatch):
+    class R:
+        status_code = 200
+        text = "<html>" + ("x" * 600) + "<img src='/a.png'></html>"
+
+    monkeypatch.setattr("requests.get", lambda *a, **k: R())
+    res = assets.fetch_bytes("https://x.test/", backends=["jina-html"])
+    assert res.backend == "jina-html" and b"<img" in res.content
+
+
+def test_fetch_bytes_jina_html_detects_relayed_waf(monkeypatch):
+    # Jina sometimes relays the WAF shell itself; we must treat that as blocked.
+    class R:
+        status_code = 200
+        text = "<html>" + ("a" * 600) + "window.gokuProps={}</html>"
+
+    monkeypatch.setattr("requests.get", lambda *a, **k: R())
+    with pytest.raises(assets.AssetError):
+        assets.fetch_bytes("https://x.test/", backends=["jina-html"])

@@ -65,6 +65,8 @@ def _fetch_bytes_curl(url: str, timeout: int) -> AssetResult:
         reason = looks_blocked(r.status_code, content.decode("utf-8", "replace"))
         if reason:
             raise AssetError(url, [("curl_cffi", reason)])
+    if not content:
+        raise AssetError(url, [("curl_cffi", "empty-body")])
     return AssetResult(content, ct, str(r.url), "curl_cffi")
 
 
@@ -91,27 +93,53 @@ def _fetch_bytes_stealth(url: str, timeout: int) -> AssetResult:
             if resp.ok:
                 body = resp.body()
                 ct = (resp.headers or {}).get("content-type", "") or ""
-                blocked = any(t in ct.lower() for t in _TEXTUAL_CT) and looks_blocked(
-                    resp.status, body.decode("utf-8", "replace"))
-                if not blocked:
+                # An empty content-type can still be a challenge; an empty body is
+                # never real content (a flagged WAF answers 2xx with no body).
+                textual = any(t in ct.lower() for t in _TEXTUAL_CT) or not ct
+                blocked = textual and looks_blocked(resp.status, body.decode("utf-8", "replace"))
+                if body and not blocked:
                     return AssetResult(body, ct, resp.url, "stealth-browser")
             # HTML page still walled: navigate so a JS challenge can clear.
             page = ctx.new_page()
             page.goto(url, wait_until="domcontentloaded", timeout=ms)
             waited = 0
             html = page.content()
-            while waited < 15000 and looks_blocked(200, html) == "challenge":
+            # Wait until the challenge clears AND real content has rendered. A
+            # too-thin page is an unresolved interstitial / CAPTCHA (e.g. AWS WAF
+            # rate-limiting rapid hits), NOT content -- never accept it as success.
+            while waited < 25000 and (looks_blocked(200, html) == "challenge" or len(html) < 8000):
                 page.wait_for_timeout(1500)
                 waited += 1500
                 try:
                     html = page.content()
                 except Exception:  # noqa: BLE001
                     break
-            if looks_blocked(200, html) is None:
+            if looks_blocked(200, html) is None and len(html) >= 8000:
                 return AssetResult(html.encode("utf-8"), "text/html", page.url, "stealth-browser")
-            raise AssetError(url, [("stealth-browser", "still blocked")])
+            raise AssetError(url, [("stealth-browser", "challenge unsolved or thin content")])
         finally:
             browser.close()
+
+
+def _fetch_bytes_jina_html(url: str, timeout: int) -> AssetResult:
+    """Fetch a page's rendered HTML through the keyless Jina Reader relay.
+
+    Jina runs the page (incl. JS challenges like AWS WAF / Cloudflare) and can
+    return raw HTML via ``X-Return-Format: html`` -- which keeps the asset tags
+    we need to enumerate. Page-only: not meaningful for a binary asset.
+    """
+    import requests
+
+    r = requests.get("https://r.jina.ai/" + url, timeout=timeout,
+                     headers={"User-Agent": _UA_REAL, "X-Return-Format": "html",
+                              "Accept-Language": "en-US,en;q=0.9"})
+    if r.status_code >= 400:
+        raise AssetError(url, [("jina-html", f"http-{r.status_code}")])
+    html = r.text or ""
+    reason = looks_blocked(r.status_code, html)
+    if reason or len(html) < 500:
+        raise AssetError(url, [("jina-html", reason or "thin")])
+    return AssetResult(html.encode("utf-8"), "text/html", url, "jina-html")
 
 
 def fetch_bytes(url: str, *, backends: Optional[List[str]] = None,
@@ -124,6 +152,8 @@ def fetch_bytes(url: str, *, backends: Optional[List[str]] = None,
         try:
             if backend == "curl_cffi":
                 return _fetch_bytes_curl(url, timeout)
+            if backend == "jina-html":
+                return _fetch_bytes_jina_html(url, timeout)
             if backend == "stealth-browser":
                 return _fetch_bytes_stealth(url, timeout)
             attempts.append((backend, "unknown-backend"))
@@ -354,14 +384,18 @@ def grab(page_url: str, out_dir: str, *,
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    page = fetch_bytes(page_url, timeout=timeout)
+    # The page itself gets the full ladder (curl -> Jina HTML relay -> stealth
+    # browser): one justified solve for a walled site. Assets below stay
+    # curl-only so a page with dozens of assets never spawns dozens of browsers.
+    page = fetch_bytes(page_url, backends=["curl_cffi", "jina-html", "stealth-browser"],
+                       timeout=max(timeout, 45))
     html = page.content.decode("utf-8", "replace")
     assets = extract_assets(html, page.final_url)
 
     css_texts: List[str] = []
     for cu in assets.get("css", [])[:20]:
         try:
-            cb = fetch_bytes(cu, timeout=timeout)
+            cb = fetch_bytes(cu, backends=["curl_cffi"], timeout=timeout)
             css = cb.content.decode("utf-8", "replace")
             css_texts.append(css)
             # Capture every url() in each @font-face block (woff2/woff/ttf, not just
@@ -391,7 +425,7 @@ def grab(page_url: str, out_dir: str, *,
             if count >= max_assets:
                 break
             try:
-                ar = fetch_bytes(u, timeout=timeout)
+                ar = fetch_bytes(u, backends=["curl_cffi"], timeout=timeout)
                 if total + len(ar.content) > max_total_mb * 1024 * 1024:
                     records.append({"source_url": u, "kind": kind, "ok": False, "error": "size-cap"})
                     continue
@@ -421,6 +455,7 @@ def grab(page_url: str, out_dir: str, *,
     manifest = {
         "url": page.final_url,
         "title": _title(html),
+        "page_backend": page.backend,
         "theme_color": design["theme_color"],
         "palette": design["palette"],
         "fonts": design["fonts"],

@@ -1441,7 +1441,8 @@ def _cmd_grab(args):
     palette = " ".join(c["hex"] for c in manifest.get("palette", [])[:8])
     fonts = ", ".join(manifest.get("fonts", [])[:6])
     print(f"[grab] {title}", file=sys.stderr)
-    print(f"  downloaded {manifest.get('downloaded', 0)} assets -> {out}/", file=sys.stderr)
+    print(f"  page via {manifest.get('page_backend', '?')}; downloaded "
+          f"{manifest.get('downloaded', 0)} assets -> {out}/", file=sys.stderr)
     if palette:
         print(f"  palette: {palette}", file=sys.stderr)
     if fonts:
