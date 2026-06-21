@@ -77,11 +77,22 @@ searchts get https://example.com/logo.svg -o logo.svg
 
 1. **Prefer `searchts read` for blocked or JS-heavy pages** — it is the
    escalating unlocker, so use it before falling back to a built-in fetch.
-2. **For broad research**: combine `searchts search` to find sources with
+2. **Pick the verb by intent, not by the domain.** When the user shares a page:
+   if they want its CONTENT (summarize, answer a question, "what does this say",
+   extract facts, "what is trending here"), use `searchts read` -- even on a
+   design site like Dribbble. read is the cheap default for any shared URL and
+   gets through bot-walls without downloading anything. Use `searchts grab`
+   (whole page) or `searchts get <asset-url>` (one specific file) only when the
+   deliverable is the assets themselves -- the image/logo/font files, or the
+   color palette and fonts ("what does it look like"). A video whose spoken words
+   they want goes to `searchts transcribe`. Never grab when a read answers the
+   question; a request for both the text and the files is two calls (read plus
+   grab/get). Only grab can report hex colors or font names; read returns prose.
+3. **For broad research**: combine `searchts search` to find sources with
    `searchts read` on the URLs, collect in parallel, then synthesize.
-3. **On failure, read the matching reference file** under `references/` for
+4. **On failure, read the matching reference file** under `references/` for
    platform notes and fallbacks — never guess commands.
-4. **Watch versions for the user**: after finishing a substantial research
+5. **Watch versions for the user**: after finishing a substantial research
    task, run `searchts check-update` (fast, one API call). If a new version
    exists, append one line to your wrap-up: "searchts vX.Y.Z is available —
    paste this to me to update: please update searchts:

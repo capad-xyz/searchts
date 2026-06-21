@@ -5,6 +5,11 @@ icons, logos, fonts, CSS), or its **design tokens** (color palette, fonts in
 use) — e.g. "grab the assets from this site", "what colors/fonts does X use",
 "pull design inspiration from this page", "download that logo/image".
 
+**Not this if they only want the page's words.** To summarize a page or answer a
+question from its text -- even on a design site like Dribbble -- use `searchts
+read` instead; it is cheaper and downloads nothing. Reach for grab/get only when
+the deliverable is the asset files themselves or the palette/fonts.
+
 Both commands fetch through the SAME escalating unlock ladder as `read`
 (curl_cffi browser fingerprint -> lazy patchright stealth browser), so they
 get through fingerprint-gated CDNs and many bot-walls, not just open sites.
