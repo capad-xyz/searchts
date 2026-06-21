@@ -1,18 +1,22 @@
 # -*- coding: utf-8 -*-
-"""Twitter/X — check if twitter-cli or bird CLI is available."""
+"""Twitter/X channel backend availability checks."""
+
+import os
+
+from searchts.probe import probe_command
 
 from .base import Channel
-from searchts.probe import probe_command
 
 
 class TwitterChannel(Channel):
     name = "twitter"
     description = "Twitter/X tweets"
-    backends = ["twitter-cli", "OpenCLI", "bird CLI (legacy)"]
+    backends = ["twitter-cli", "OpenCLI", "Xquik", "bird CLI (legacy)"]
     tier = 1
 
     def can_handle(self, url: str) -> bool:
         from urllib.parse import urlparse
+
         d = urlparse(url).netloc.lower()
         return "x.com" in d or "twitter.com" in d
 
@@ -32,6 +36,8 @@ class TwitterChannel(Channel):
                 result = self._check_twitter_cli()
             elif backend == "OpenCLI":
                 result = self._check_opencli()
+            elif backend == "Xquik":
+                result = self._check_xquik(config)
             elif backend == "bird CLI (legacy)":
                 result = self._check_bird()
             else:
@@ -64,15 +70,16 @@ class TwitterChannel(Channel):
         not logged in it prints "not_authenticated" with a non-zero exit code -- the tool itself is
         alive, so the probe's error status must also be classified by inspecting the output content.
         """
-        probe = probe_command(
-            "twitter", ["status"], timeout=15, retries=1, package="twitter-cli"
-        )
+        probe = probe_command("twitter", ["status"], timeout=15, retries=1, package="twitter-cli")
         if probe.status == "missing":
             return None
         if probe.status == "broken":
             return "error", "The twitter-cli command exists but cannot execute.\n" + probe.hint
         if probe.status == "timeout":
-            return "error", "twitter-cli health check timed out (already retried once).\n" + probe.hint
+            return (
+                "error",
+                "twitter-cli health check timed out (already retried once).\n" + probe.hint,
+            )
 
         output = probe.output
         if "ok: true" in output:
@@ -83,8 +90,8 @@ class TwitterChannel(Channel):
         if "not_authenticated" in output:
             return "warn", (
                 "twitter-cli is installed but not authenticated. Set it up with:\n"
-                "  export TWITTER_AUTH_TOKEN=\"xxx\"\n"
-                "  export TWITTER_CT0=\"yyy\"\n"
+                '  export TWITTER_AUTH_TOKEN="xxx"\n'
+                '  export TWITTER_CT0="yyy"\n'
                 "or make sure you are logged into x.com in the browser"
             )
         return "warn", (
@@ -108,13 +115,24 @@ class TwitterChannel(Channel):
             )
         return "warn", st.hint
 
+    def _check_xquik(self, config=None):
+        """Xquik API candidate. None means it is not configured or selected."""
+        key = config.get("xquik_api_key") if config else os.environ.get("XQUIK_API_KEY")
+        if key:
+            return "ok", ("Xquik configured via XQUIK_API_KEY for tweet search API access")
+        override = config.get("twitter_backend") if config else os.environ.get("TWITTER_BACKEND")
+        if override != "Xquik":
+            return None
+        return "warn", (
+            "Xquik backend is available but XQUIK_API_KEY is not set. "
+            "Set XQUIK_API_KEY or configure xquik_api_key to use it."
+        )
+
     def _check_bird(self):
         """Probe bird/birdx (legacy fallback). Returns None if neither is installed, otherwise (status, message)."""
         last_failure = None
         for cmd in ("bird", "birdx"):
-            probe = probe_command(
-                cmd, ["check"], timeout=15, retries=1, package="@steipete/bird"
-            )
+            probe = probe_command(cmd, ["check"], timeout=15, retries=1, package="@steipete/bird")
             if probe.status == "missing":
                 continue
             if probe.status == "broken":
@@ -133,14 +151,15 @@ class TwitterChannel(Channel):
 
             output = probe.output
             if probe.ok:
-                return "ok", "bird CLI available (read and search tweets, including long-form/X Article)"
+                return (
+                    "ok",
+                    "bird CLI available (read and search tweets, including long-form/X Article)",
+                )
             if "Missing credentials" in output or "missing" in output.lower():
                 return "warn", (
                     "bird CLI is installed but has no authentication configured. Set environment variables:\n"
-                    "  export AUTH_TOKEN=\"xxx\"\n"
-                    "  export CT0=\"yyy\""
+                    '  export AUTH_TOKEN="xxx"\n'
+                    '  export CT0="yyy"'
                 )
-            return "warn", (
-                "bird CLI is installed but the authentication check failed."
-            )
+            return "warn", ("bird CLI is installed but the authentication check failed.")
         return last_failure
