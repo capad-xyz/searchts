@@ -59,6 +59,23 @@ _BLOCK_PHRASES = (
     "target url returned error",  # Jina relay's HTTP-200 wrapper around an upstream block
     "awswafcookiedomainlist",     # AWS WAF JS challenge (e.g. Dribbble): window.awsWafCookieDomainList
     "gokuprops",                  # AWS WAF challenge token blob (window.gokuProps)
+    # --- other WAF / bot-manager block pages. INTERSTITIAL-ONLY copy (not vendor
+    # sensor-JS names), so we never flag a real page that merely embeds a sensor.
+    # Most also serve a 4xx/5xx (already escalated); these catch the on-200/202/302
+    # variants (Imperva, Akamai, DataDome, Queue-it, Radware, Vercel, ...).
+    "pardon our interruption",                   # F5/Shape (Distil) + some Imperva block pages
+    "powered by incapsula",                      # Imperva/Incapsula block page (can serve on HTTP 200)
+    "please enable js and disable any ad blocker",  # DataDome challenge (<p id="cmsg">)
+    "px-captcha",                                # PerimeterX/HUMAN challenge mount element
+    "oops! it appears something made us think you are a bot",  # PerimeterX block copy
+    "sucuri website firewall",                   # Sucuri WAF block page
+    "vercel security checkpoint",                # Vercel bot-protection checkpoint
+    "needs to review the security of your connection before proceeding",  # Cloudflare managed challenge
+    "press and hold to verify that you are human",  # Arkose Labs / FunCaptcha enforcement
+    "queue-it.net",                              # Queue-it virtual waiting room (302 -> waiting page)
+    "perfdrive.com",                             # Radware Bot Manager challenge host (validate/captcha.perfdrive.com)
+    "window.kpsdk",                              # Kasada challenge bootstrap (usually HTTP 429)
+    "reference #18.",                            # Akamai Bot Manager deny-page reference id
 )
 
 _MIN_CHARS = 500

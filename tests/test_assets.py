@@ -249,6 +249,23 @@ def test_looks_blocked_detects_aws_waf():
     assert looks_blocked(202, body) == "challenge"
 
 
+def test_looks_blocked_detects_more_waf_vendors():
+    # Each is an interstitial that can be served on HTTP 200 (status alone would
+    # not flag it) -- the phrase match is what catches the on-200/202/302 blocks.
+    bodies = [
+        "<html><h1>Pardon Our Interruption</h1></html>",                # F5 / Shape (Distil)
+        "<html><body>Powered by Incapsula</body></html>",               # Imperva on-200
+        '<p id="cmsg">Please enable JS and disable any ad blocker</p>',  # DataDome
+        '<div id="px-captcha"></div>',                                  # PerimeterX / HUMAN
+        "<title>Vercel Security Checkpoint</title>",                    # Vercel
+        "Access Denied - Sucuri Website Firewall",                      # Sucuri
+        "<script>window.KPSDK={};</script>",                            # Kasada
+        "<html>You are now in line at https://x.queue-it.net</html>",   # Queue-it
+    ]
+    for body in bodies:
+        assert looks_blocked(200, body) == "challenge", body[:48]
+
+
 def test_curl_rejects_empty_body(monkeypatch):
     import curl_cffi.requests as cr
 
