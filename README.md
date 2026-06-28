@@ -4,13 +4,18 @@
 
 License: MIT. Python 3.10+.
 
-##Why searchts?
+## Why searchts?
 
 ✅ Reads pages behind common bot walls
+
 ✅ Works with Claude/Codex/MCP
+
 ✅ Extracts clean Markdown
+
 ✅ Searches without API keys
+
 ✅ Downloads assets
+
 ✅ Transcribes videos
 
 > *Fun fact: "searchts" doesn't officially abbreviate anything. Off the record, it stands for "search this shit". 🥀*
