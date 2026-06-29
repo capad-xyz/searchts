@@ -1,8 +1,16 @@
 # -*- coding: utf-8 -*-
 
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 
 from searchts.channels.twitter import TwitterChannel
+
+
+class DummyConfig:
+    def __init__(self, values=None):
+        self.values = values or {}
+
+    def get(self, key, default=None):
+        return self.values.get(key, default)
 
 
 def _cp(stdout="", stderr="", returncode=0):
@@ -15,12 +23,19 @@ def _cp(stdout="", stderr="", returncode=0):
 
 # --- twitter-cli tests ---
 
+
 def test_check_twitter_cli_found_and_auth_ok():
     """twitter-cli found + twitter status ok → ok."""
     channel = TwitterChannel()
-    with patch("shutil.which", side_effect=lambda name: "/usr/local/bin/twitter" if name == "twitter" else None), patch(
-        "subprocess.run",
-        return_value=_cp(stdout="ok: true\nusername: testuser\n", returncode=0),
+    with (
+        patch(
+            "shutil.which",
+            side_effect=lambda name: "/usr/local/bin/twitter" if name == "twitter" else None,
+        ),
+        patch(
+            "subprocess.run",
+            return_value=_cp(stdout="ok: true\nusername: testuser\n", returncode=0),
+        ),
     ):
         status, message = channel.check()
     assert status == "ok"
@@ -32,11 +47,17 @@ def test_check_twitter_cli_found_and_auth_ok():
 def test_check_twitter_cli_found_auth_missing():
     """twitter-cli found + not_authenticated → warn about auth."""
     channel = TwitterChannel()
-    with patch("shutil.which", side_effect=lambda name: "/usr/local/bin/twitter" if name == "twitter" else None), patch(
-        "subprocess.run",
-        return_value=_cp(
-            stderr="ok: false\nerror:\n  code: not_authenticated\n",
-            returncode=1,
+    with (
+        patch(
+            "shutil.which",
+            side_effect=lambda name: "/usr/local/bin/twitter" if name == "twitter" else None,
+        ),
+        patch(
+            "subprocess.run",
+            return_value=_cp(
+                stderr="ok: false\nerror:\n  code: not_authenticated\n",
+                returncode=1,
+            ),
         ),
     ):
         status, message = channel.check()
@@ -48,16 +69,22 @@ def test_check_twitter_cli_found_auth_missing():
 
 # --- bird CLI fallback tests ---
 
+
 def test_check_bird_fallback_auth_ok():
     """No twitter-cli, but bird found + bird check ok → ok."""
     channel = TwitterChannel()
+
     def which_side_effect(name):
         if name == "bird":
             return "/usr/local/bin/bird"
         return None
-    with patch("shutil.which", side_effect=which_side_effect), patch(
-        "subprocess.run",
-        return_value=_cp(stdout="Authenticated as @user\n", returncode=0),
+
+    with (
+        patch("shutil.which", side_effect=which_side_effect),
+        patch(
+            "subprocess.run",
+            return_value=_cp(stdout="Authenticated as @user\n", returncode=0),
+        ),
     ):
         status, message = channel.check()
     assert status == "ok"
@@ -68,13 +95,18 @@ def test_check_bird_fallback_auth_ok():
 def test_check_bird_fallback_auth_missing():
     """No twitter-cli, bird found but Missing credentials → warn."""
     channel = TwitterChannel()
+
     def which_side_effect(name):
         if name == "bird":
             return "/usr/local/bin/bird"
         return None
-    with patch("shutil.which", side_effect=which_side_effect), patch(
-        "subprocess.run",
-        return_value=_cp(stderr="Missing credentials\n", returncode=1),
+
+    with (
+        patch("shutil.which", side_effect=which_side_effect),
+        patch(
+            "subprocess.run",
+            return_value=_cp(stderr="Missing credentials\n", returncode=1),
+        ),
     ):
         status, message = channel.check()
     assert status == "warn"
@@ -82,6 +114,7 @@ def test_check_bird_fallback_auth_missing():
 
 
 # --- neither installed ---
+
 
 def test_check_nothing_installed():
     """Neither twitter-cli nor bird → warn with install hint."""
@@ -95,18 +128,24 @@ def test_check_nothing_installed():
 
 # --- twitter-cli preferred over bird ---
 
+
 def test_twitter_cli_preferred_over_bird():
     """When both are installed, twitter-cli is used."""
     channel = TwitterChannel()
+
     def which_side_effect(name):
         if name == "twitter":
             return "/usr/local/bin/twitter"
         if name == "bird":
             return "/usr/local/bin/bird"
         return None
-    with patch("shutil.which", side_effect=which_side_effect), patch(
-        "subprocess.run",
-        return_value=_cp(stdout="ok: true\n", returncode=0),
+
+    with (
+        patch("shutil.which", side_effect=which_side_effect),
+        patch(
+            "subprocess.run",
+            return_value=_cp(stdout="ok: true\n", returncode=0),
+        ),
     ):
         status, message = channel.check()
     assert status == "ok"
@@ -116,13 +155,17 @@ def test_twitter_cli_preferred_over_bird():
 
 # --- broken install (stale venv shim) ---
 
+
 def test_check_twitter_cli_broken_reports_error_with_reinstall_hint():
     """which hits but exec raises FileNotFoundError (broken venv) -> error + reinstall prescription."""
     channel = TwitterChannel()
-    with patch(
-        "shutil.which",
-        side_effect=lambda name: "/usr/local/bin/twitter" if name == "twitter" else None,
-    ), patch("subprocess.run", side_effect=FileNotFoundError("/usr/local/bin/twitter")):
+    with (
+        patch(
+            "shutil.which",
+            side_effect=lambda name: "/usr/local/bin/twitter" if name == "twitter" else None,
+        ),
+        patch("subprocess.run", side_effect=FileNotFoundError("/usr/local/bin/twitter")),
+    ):
         status, message = channel.check()
     assert status == "error"
     assert "cannot execute" in message
@@ -145,8 +188,9 @@ def test_check_twitter_cli_broken_falls_back_to_bird():
             raise FileNotFoundError(cmd[0])
         return _cp(stdout="Authenticated as @user\n", returncode=0)
 
-    with patch("shutil.which", side_effect=which_side_effect), patch(
-        "subprocess.run", side_effect=run_side_effect
+    with (
+        patch("shutil.which", side_effect=which_side_effect),
+        patch("subprocess.run", side_effect=run_side_effect),
     ):
         status, message = channel.check()
     assert status == "ok"
@@ -157,27 +201,73 @@ def test_check_twitter_cli_broken_falls_back_to_bird():
 def test_unauthenticated_twitter_cli_does_not_block_working_opencli():
     """A warn candidate must not block an ok candidate that comes after it (found in Codex review)."""
     channel = TwitterChannel()
-    with patch.object(
-        TwitterChannel, "_check_twitter_cli",
-        return_value=("warn", "twitter-cli is installed but not authenticated"),
-    ), patch.object(
-        TwitterChannel, "_check_opencli",
-        return_value=("ok", "OpenCLI available (reuses the browser's login session)"),
-    ), patch.object(TwitterChannel, "_check_bird", return_value=None):
+    with (
+        patch.object(
+            TwitterChannel,
+            "_check_twitter_cli",
+            return_value=("warn", "twitter-cli is installed but not authenticated"),
+        ),
+        patch.object(
+            TwitterChannel,
+            "_check_opencli",
+            return_value=("ok", "OpenCLI available (reuses the browser's login session)"),
+        ),
+        patch.object(TwitterChannel, "_check_bird", return_value=None),
+    ):
         status, msg = channel.check()
     assert status == "ok"
     assert channel.active_backend == "OpenCLI"
 
 
+def test_xquik_backend_can_be_forced_with_api_key(monkeypatch):
+    """Xquik can serve the Twitter channel when configured and selected."""
+    channel = TwitterChannel()
+    monkeypatch.delenv("XQUIK_API_KEY", raising=False)
+    config = DummyConfig({"twitter_backend": "Xquik", "xquik_api_key": "test-key"})
+    with (
+        patch.object(TwitterChannel, "_check_twitter_cli", return_value=None),
+        patch.object(TwitterChannel, "_check_opencli", return_value=None),
+        patch.object(TwitterChannel, "_check_bird", return_value=None),
+    ):
+        status, message = channel.check(config)
+
+    assert status == "ok"
+    assert "Xquik" in message
+    assert channel.active_backend == "Xquik"
+
+
+def test_xquik_backend_reports_missing_configuration(monkeypatch):
+    """Xquik reports a config warning when selected without XQUIK_API_KEY."""
+    channel = TwitterChannel()
+    monkeypatch.delenv("XQUIK_API_KEY", raising=False)
+    config = DummyConfig({"twitter_backend": "Xquik"})
+    with (
+        patch.object(TwitterChannel, "_check_twitter_cli", return_value=None),
+        patch.object(TwitterChannel, "_check_opencli", return_value=None),
+        patch.object(TwitterChannel, "_check_bird", return_value=None),
+    ):
+        status, message = channel.check(config)
+
+    assert status == "warn"
+    assert "XQUIK_API_KEY" in message
+    assert channel.active_backend == "Xquik"
+
+
 def test_all_warn_falls_back_to_first_warn():
     channel = TwitterChannel()
-    with patch.object(
-        TwitterChannel, "_check_twitter_cli",
-        return_value=("warn", "twitter-cli not authenticated"),
-    ), patch.object(
-        TwitterChannel, "_check_opencli",
-        return_value=("warn", "extension not connected"),
-    ), patch.object(TwitterChannel, "_check_bird", return_value=None):
+    with (
+        patch.object(
+            TwitterChannel,
+            "_check_twitter_cli",
+            return_value=("warn", "twitter-cli not authenticated"),
+        ),
+        patch.object(
+            TwitterChannel,
+            "_check_opencli",
+            return_value=("warn", "extension not connected"),
+        ),
+        patch.object(TwitterChannel, "_check_bird", return_value=None),
+    ):
         status, msg = channel.check()
     assert status == "warn"
     assert channel.active_backend == "twitter-cli"

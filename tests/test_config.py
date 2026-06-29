@@ -1,12 +1,7 @@
 # -*- coding: utf-8 -*-
 """Tests for searchts config module."""
 
-import os
-import tempfile
-from pathlib import Path
-
 import pytest
-import yaml
 
 from searchts.config import Config
 
@@ -21,7 +16,7 @@ def tmp_config(tmp_path):
 class TestConfig:
     def test_init_creates_dir(self, tmp_path):
         config_file = tmp_path / "subdir" / "config.yaml"
-        config = Config(config_path=config_file)
+        Config(config_path=config_file)
         assert config_file.parent.exists()
 
     def test_set_and_get(self, tmp_config):
@@ -65,6 +60,7 @@ class TestConfig:
         features = tmp_config.get_configured_features()
         assert isinstance(features, dict)
         assert "exa_search" in features
+        assert "twitter_xquik" in features
         assert all(v is False for v in features.values())
 
     def test_to_dict_masks_sensitive(self, tmp_config):
@@ -77,6 +73,7 @@ class TestConfig:
     def test_save_creates_file_with_restricted_permissions(self, tmp_path):
         import stat
         import sys
+
         config_file = tmp_path / "secure_config.yaml"
         config = Config(config_path=config_file)
         config.set("secret_key", "my-secret")
