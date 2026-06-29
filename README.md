@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 <p align="center">
-  <img src="demo/demo.gif" alt="searchts reading a page as clean Markdown and running a keyless web search" width="820">
+  <img src="demo/demo1.gif" alt="searchts reading a Cloudflare-walled Stack Overflow page as clean Markdown and running a keyless web search" width="820">
 </p>
 
 ## Why searchts?
@@ -63,6 +63,12 @@ searchts doctor                            # see what is configured and working
 `grab` flags: `--out <dir>`, `--kinds <images,icons,css,fonts,svg>`, `--read` (also save page.md), `--max <n>`, `--json`.
 
 ## Use it from your AI agent
+
+A normal agent fetch gets blocked by the bot-wall; searchts gets through, then installs in one line.
+
+<p align="center">
+  <img src="demo/demo2.gif" alt="A normal agent request is blocked with HTTP 403; searchts reads the same page, then installs as an MCP server or a Claude Code skill" width="820">
+</p>
 
 Two ways, both one command:
 
