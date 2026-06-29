@@ -8,7 +8,9 @@
 [![Downloads](https://img.shields.io/pypi/dm/searchts.svg)](https://pypi.org/project/searchts/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-<!-- TODO(demo): drop a short terminal GIF here showing `searchts read` clearing a bot-wall and returning clean Markdown. Record it with `vhs` (https://github.com/charmbracelet/vhs) for a crisp, scripted capture. A hero demo is the single highest-impact addition to this README. -->
+<p align="center">
+  <img src="demo/demo.gif" alt="searchts reading a page as clean Markdown and running a keyless web search" width="820">
+</p>
 
 ## Why searchts?
 
