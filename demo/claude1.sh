@@ -14,22 +14,25 @@ printf "%b\n" "${GRY}│${R} ${WHT}${line}${R} ${GRY}│${R}"
 printf "%b\n" "${GRY}╰${bar}╯${R}"
 echo
 sleep 1.3
-printf "%b\n" "${CORAL}●${R} I'll pull the canonical Stack Overflow answer."
+printf "%b\n" "${CORAL}⏺${R} I'll pull the canonical Stack Overflow answer."
 echo
 sleep 1.2
-printf "%b\n" "${CORAL}●${R} ${WHT}Fetch${R}${GRY}(stackoverflow.com/questions/11227809)${R}"
+printf "%b\n" "${CORAL}⏺${R} ${WHT}Fetch${R}${GRY}(${url})${R}"
 sleep 1.5
-printf "%b\n" "  ${GRY}└${R} ${RED}Error: HTTP 403${R} ${GRY}- blocked by Cloudflare bot protection${R}"
+printf "  %b⎿%b  %bError: HTTP 403%b %b- blocked by Cloudflare bot protection%b\n" "$GRY" "$R" "$RED" "$R" "$GRY" "$R"
 echo
 sleep 1.6
-printf "%b\n" "${CORAL}●${R} That page is bot-walled. Routing through ${WHT}searchts${R} instead."
+printf "%b\n" "${CORAL}⏺${R} That page is bot-walled. Routing through ${WHT}searchts${R} instead."
 echo
 sleep 1.1
-printf "%b\n" "${CORAL}●${R} ${WHT}searchts read${R} ${GRY}https://stackoverflow.com/questions/11227809${R}"
-{ timeout 15 searchts read "$url" 2>&1 | head -7; printf '%s\n' "... +118 lines"; } | sed "s/^/  ${GRY}│${R} /"
+printf "%b\n" "${CORAL}⏺${R} ${WHT}searchts read${R} ${GRY}${url}${R}"
+out=$(timeout 15 searchts read "$url" 2>&1 | head -7)
+printf "  %b⎿%b  %s\n" "$GRY" "$R" "$(printf '%s\n' "$out" | head -1)"
+printf '%s\n' "$out" | tail -n +2 | sed 's/^/     /'
+printf "     %b... +118 lines%b\n" "$GRY" "$R"
 echo
 sleep 1.9
-printf "%b\n" "${CORAL}●${R} Here's the answer:"
+printf "%b\n" "${CORAL}⏺${R} Here's the answer:"
 echo
 printf "%b\n" "  It's ${GRN}branch prediction${R}. The hot loop branches on whether each value"
 printf "%b\n" "  is >= 128. On a ${WHT}sorted${R} array those branches come in long predictable"

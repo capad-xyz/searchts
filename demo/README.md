@@ -7,7 +7,7 @@ The README GIFs are recorded with [vhs](https://github.com/charmbracelet/vhs).
 - `demo2.tape` - the install, also a staged Claude Code session: the agent adds searchts as an MCP server (`searchts mcp install`) and a Claude Code skill (`searchts skill install`), then verifies it with a real read. Drives `claude2.sh`.
 - `claude2.sh` - the staged agent narration for `demo2.tape`; the install commands and the page read it runs are real.
 - `bg.png` - the gradient backdrop used as `MarginFill`.
-- `Dockerfile` - layers Python + searchts onto the official vhs image, since vhs (ttyd) does not run natively on Windows and searchts needs Python in the recording shell.
+- `Dockerfile` - layers Python + searchts (and JetBrainsMono Nerd Font, for the Claude Code `⏺`/`⎿` glyphs) onto the official vhs image, since vhs (ttyd) does not run natively on Windows and searchts needs Python in the recording shell.
 
 The commands in the tapes run for real, so the output is genuine.
 

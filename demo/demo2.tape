@@ -4,7 +4,7 @@ Output demo2.mp4
 Require searchts
 
 Set Shell "bash"
-Set FontFamily "JetBrains Mono"
+Set FontFamily "JetBrainsMono Nerd Font Mono"
 Set FontSize 20
 Set Width 1480
 Set Height 880
