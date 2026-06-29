@@ -25,7 +25,7 @@ sleep 1.6
 printf "%b\n" "${CORAL}●${R} That page is bot-walled. Routing through ${WHT}searchts${R} instead."
 echo
 sleep 1.1
-printf "%b\n" "${CORAL}●${R} ${WHT}searchts read${R} ${GRY}\$url${R}"
+printf "%b\n" "${CORAL}●${R} ${WHT}searchts read${R} ${GRY}https://stackoverflow.com/questions/11227809${R}"
 { timeout 15 searchts read "$url" 2>&1 | head -7; printf '%s\n' "... +118 lines"; } | sed "s/^/  ${GRY}│${R} /"
 echo
 sleep 1.9

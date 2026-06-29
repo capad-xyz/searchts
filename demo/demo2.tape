@@ -1,4 +1,4 @@
-# video 2 - add searchts to any agent: MCP server or Claude Code skill
+# video 2 - a Claude session that installs searchts (MCP + skill) and verifies it on a real link
 Output demo2.mp4
 
 Require searchts
@@ -6,7 +6,7 @@ Require searchts
 Set Shell "bash"
 Set FontFamily "JetBrains Mono"
 Set FontSize 20
-Set Width 1400
+Set Width 1480
 Set Height 880
 Set Padding 30
 Set Margin 60
@@ -14,10 +14,12 @@ Set MarginFill "/vhs/bg.png"
 Set BorderRadius 16
 Set WindowBar Colorful
 Set Theme "Catppuccin Mocha"
-Set TypingSpeed 55ms
+Set TypingSpeed 45ms
 
 Hide
 Type "export PS1='~ $ '"
+Enter
+Type "cp /vhs/claude2.sh /usr/local/bin/claude && chmod +x /usr/local/bin/claude"
 Enter
 Type "mkdir -p ~/.claude/commands"
 Enter
@@ -26,20 +28,9 @@ Enter
 Show
 
 Sleep 700ms
-Type "# 1. add searchts to any agent as an MCP server"
-Sleep 200ms
+Type `claude "add searchts so you can read pages that block normal fetches"`
+Sleep 500ms
 Enter
-Type "searchts mcp install"
-Sleep 400ms
-Enter
-Sleep 4.5s
-
-Type "# 2. or as a Claude Code slash command"
-Sleep 200ms
-Enter
-Type "searchts skill install"
-Sleep 400ms
-Enter
-Sleep 3.5s
+Sleep 17s
 
 Sleep 1.5s
