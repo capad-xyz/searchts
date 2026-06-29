@@ -1,4 +1,4 @@
-# video 2 - an agent hits a bot wall, installs searchts on demand, retries, succeeds
+# video 2 - add searchts to any agent: MCP server or Claude Code skill
 Output demo2.mp4
 
 Require searchts
@@ -7,19 +7,17 @@ Set Shell "bash"
 Set FontFamily "JetBrains Mono"
 Set FontSize 20
 Set Width 1400
-Set Height 840
+Set Height 880
 Set Padding 30
 Set Margin 60
 Set MarginFill "/vhs/bg.png"
 Set BorderRadius 16
 Set WindowBar Colorful
 Set Theme "Catppuccin Mocha"
-Set TypingSpeed 50ms
+Set TypingSpeed 55ms
 
 Hide
 Type "export PS1='~ $ '"
-Enter
-Type "cp /vhs/claude.sh /usr/local/bin/claude && chmod +x /usr/local/bin/claude"
 Enter
 Type "mkdir -p ~/.claude/commands"
 Enter
@@ -28,9 +26,20 @@ Enter
 Show
 
 Sleep 700ms
-Type `claude "search Stack Overflow for why a sorted array is faster, and give me the answer"`
-Sleep 500ms
+Type "# 1. add searchts to any agent as an MCP server"
+Sleep 200ms
 Enter
-Sleep 19s
+Type "searchts mcp install"
+Sleep 400ms
+Enter
+Sleep 4.5s
+
+Type "# 2. or as a Claude Code slash command"
+Sleep 200ms
+Enter
+Type "searchts skill install"
+Sleep 400ms
+Enter
+Sleep 3.5s
 
 Sleep 1.5s

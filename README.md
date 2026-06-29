@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 <p align="center">
-  <img src="demo/demo1.gif" alt="searchts reading a Cloudflare-walled Stack Overflow page as clean Markdown and running a keyless web search" width="820">
+  <img src="demo/demo1.gif" alt="A Claude agent's fetch hits a 403 bot wall, so it routes through searchts, reads the page, and answers the question" width="860">
 </p>
 
 ## Why searchts?
@@ -64,10 +64,10 @@ searchts doctor                            # see what is configured and working
 
 ## Use it from your AI agent
 
-When an agent's own fetch hits a bot wall, it can install searchts on demand, retry, and get through:
+Add searchts to your agent in one line - as an MCP server, or as a Claude Code slash command:
 
 <p align="center">
-  <img src="demo/demo2.gif" alt="A Claude agent's fetch is blocked with HTTP 403; it installs the searchts skill on demand, retries through it, and gets the page" width="820">
+  <img src="demo/demo2.gif" alt="Installing searchts as an MCP server with claude mcp add, or as a Claude Code slash command with searchts skill install" width="820">
 </p>
 
 Two ways, both one command:
