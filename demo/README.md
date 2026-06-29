@@ -3,7 +3,8 @@
 The README GIFs are recorded with [vhs](https://github.com/charmbracelet/vhs).
 
 - `demo1.tape` - the hero: read a Cloudflare-walled page as clean Markdown, plus a keyless search.
-- `demo2.tape` - a normal agent fetch is blocked (HTTP 403), searchts gets through, then installs as an MCP server or a `/searchts` Claude Code skill.
+- `demo2.tape` - a staged Claude Code agent loop: the agent's built-in fetch is blocked (HTTP 403), it installs the `/searchts` skill on demand, retries through it, and answers. Drives `claude.sh`.
+- `claude.sh` - the staged agent narration used by `demo2.tape`; the narration is illustrative but the `searchts skill install` and page read it runs are real.
 - `bg.png` - the gradient backdrop used as `MarginFill`.
 - `Dockerfile` - layers Python + searchts onto the official vhs image, since vhs (ttyd) does not run natively on Windows and searchts needs Python in the recording shell.
 

@@ -64,10 +64,10 @@ searchts doctor                            # see what is configured and working
 
 ## Use it from your AI agent
 
-A normal agent fetch gets blocked by the bot-wall; searchts gets through, then installs in one line.
+When an agent's own fetch hits a bot wall, it can install searchts on demand, retry, and get through:
 
 <p align="center">
-  <img src="demo/demo2.gif" alt="A normal agent request is blocked with HTTP 403; searchts reads the same page, then installs as an MCP server or a Claude Code skill" width="820">
+  <img src="demo/demo2.gif" alt="A Claude agent's fetch is blocked with HTTP 403; it installs the searchts skill on demand, retries through it, and gets the page" width="820">
 </p>
 
 Two ways, both one command:
