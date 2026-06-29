@@ -8,7 +8,9 @@
 [![Downloads](https://img.shields.io/pypi/dm/searchts.svg)](https://pypi.org/project/searchts/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-<!-- TODO(demo): drop a short terminal GIF here showing `searchts read` clearing a bot-wall and returning clean Markdown. Record it with `vhs` (https://github.com/charmbracelet/vhs) for a crisp, scripted capture. A hero demo is the single highest-impact addition to this README. -->
+<p align="center">
+  <img src="demo/demo1.gif" alt="A Claude agent's fetch hits a 403 bot wall, so it routes through searchts, reads the page, and answers the question" width="860">
+</p>
 
 ## Why searchts?
 
@@ -61,6 +63,12 @@ searchts doctor                            # see what is configured and working
 `grab` flags: `--out <dir>`, `--kinds <images,icons,css,fonts,svg>`, `--read` (also save page.md), `--max <n>`, `--json`.
 
 ## Use it from your AI agent
+
+Add searchts to your agent in one line - as an MCP server, or as a Claude Code slash command:
+
+<p align="center">
+  <img src="demo/demo2.gif" alt="Installing searchts as an MCP server with claude mcp add, or as a Claude Code slash command with searchts skill install" width="820">
+</p>
 
 Two ways, both one command:
 
