@@ -15,7 +15,7 @@ Thank you for your interest in contributing to searchts! This document provides 
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/searchts.git
+git clone https://github.com/capad-xyz/searchts.git
 cd searchts
 
 # Install in development mode
@@ -77,4 +77,4 @@ When reporting bugs, please include:
 
 ## Questions?
 
-Feel free to open an issue for questions or join discussions.
+Open an issue or a discussion on GitHub, or reach out at oss@capad.fyi.
