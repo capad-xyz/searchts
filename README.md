@@ -12,17 +12,12 @@
 
 ## Why searchts?
 
-✅ Reads pages behind common bot walls
-
-✅ Works with Claude/Codex/MCP
-
-✅ Extracts clean Markdown
-
-✅ Searches without API keys
-
-✅ Downloads assets
-
-✅ Transcribes videos
+- Reads pages behind common bot walls
+- Works with Claude, Codex, and MCP agents
+- Extracts clean Markdown, ready to feed a model
+- Searches the web without API keys
+- Downloads a page's assets (images, fonts, palette)
+- Transcribes videos, subtitles-first
 
 ## Why it's free
 
