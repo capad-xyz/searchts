@@ -1,10 +1,14 @@
 # searchts
 
-**Give your AI agent eyes on the open web.** `searchts` is a Python CLI and library that lets an AI agent read and search the internet, fronted by a fully open-source "unlocker" that gets through common bot-walls without any paid proxy or unlocker service.
+**Give your AI agent eyes on the open web.** A Python CLI and library that lets an AI agent read and search the internet, fronted by a fully open-source "unlocker" that gets through common bot-walls with no paid proxy and no API key.
 
-License: MIT. Python 3.10+.
+[![CI](https://github.com/capad-xyz/searchts/actions/workflows/pytest.yml/badge.svg)](https://github.com/capad-xyz/searchts/actions/workflows/pytest.yml)
+[![PyPI](https://img.shields.io/pypi/v/searchts.svg)](https://pypi.org/project/searchts/)
+[![Python](https://img.shields.io/pypi/pyversions/searchts.svg)](https://pypi.org/project/searchts/)
+[![Downloads](https://img.shields.io/pypi/dm/searchts.svg)](https://pypi.org/project/searchts/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-> *Fun fact: "searchts" doesn't officially abbreviate anything. Off the record, it stands for "search this shit". 🥀*
+<!-- TODO(demo): drop a short terminal GIF here showing `searchts read` clearing a bot-wall and returning clean Markdown. Record it with `vhs` (https://github.com/charmbracelet/vhs) for a crisp, scripted capture. A hero demo is the single highest-impact addition to this README. -->
 
 ## Why
 
@@ -115,3 +119,9 @@ searchts can also reach GitHub, Twitter/X, Reddit, and LinkedIn through them, an
 ## License
 
 MIT. See [LICENSE](LICENSE). Original portions Copyright (c) 2025 Agent Eyes; modifications and additions Copyright (c) 2026 capad-xyz.
+
+---
+
+Built by [capad](https://github.com/capad-xyz). Questions or feedback: open an issue or email hi@capad.fyi.
+
+> *Fun fact: "searchts" doesn't officially abbreviate anything. Off the record, it stands for "search this shit".*
