@@ -77,4 +77,4 @@ When reporting bugs, please include:
 
 ## Questions?
 
-Open an issue or a discussion on GitHub, or reach out at hi@capad.fyi.
+Open an issue or a discussion on GitHub, or reach out at oss@capad.fyi.

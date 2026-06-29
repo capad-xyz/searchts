@@ -122,6 +122,6 @@ MIT. See [LICENSE](LICENSE). Original portions Copyright (c) 2025 Agent Eyes; mo
 
 ---
 
-Built by [capad](https://github.com/capad-xyz). Questions or feedback: open an issue or email hi@capad.fyi.
+Built by [capad](https://github.com/capad-xyz). Questions or feedback: open an issue or email oss@capad.fyi.
 
 > *Fun fact: "searchts" doesn't officially abbreviate anything. Off the record, it stands for "search this shit".*
