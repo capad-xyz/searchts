@@ -10,7 +10,21 @@
 
 <!-- TODO(demo): drop a short terminal GIF here showing `searchts read` clearing a bot-wall and returning clean Markdown. Record it with `vhs` (https://github.com/charmbracelet/vhs) for a crisp, scripted capture. A hero demo is the single highest-impact addition to this README. -->
 
-## Why
+## Why searchts?
+
+✅ Reads pages behind common bot walls
+
+✅ Works with Claude/Codex/MCP
+
+✅ Extracts clean Markdown
+
+✅ Searches without API keys
+
+✅ Downloads assets
+
+✅ Transcribes videos
+
+## Why it's free
 
 AI agents constantly need to read web pages, but the naive way they fetch is trivially blocked by modern anti-bot systems (Cloudflare, PerimeterX, DataDome). Paid unlocker services solve this, but the thing they really charge for is a large pool of clean residential IP addresses. `searchts` runs on your own machine, from your own connection, at personal volume, so it sidesteps that cost and gets through most of those walls for free.
 
