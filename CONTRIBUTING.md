@@ -65,6 +65,32 @@ searchts uses a unified channel interface. To add a new platform:
 - Follow existing code style
 - Reference any related issues
 
+## What we merge (and what we don't)
+
+searchts has a deliberately narrow identity: a **keyless, free, open-source** web layer for AI
+agents. That focus is the whole point, so we're intentionally selective about what we take on.
+
+**We're glad to merge:**
+
+- Working code that improves the core — `read` / `search` / `transcribe` / `grab`, the unlocker, or
+  its reliability — with tests.
+- Bug fixes, docs, and new cases for the unlocker benchmark.
+- Small, focused changes in preference to large refactors.
+
+**We generally won't merge:**
+
+- **Backends that only register a name.** A new integration has to actually *do* the thing (read,
+  search, return content) — not just add a config key or a `doctor` entry for a service.
+- **First-class dependencies on paid, keyed third-party APIs.** They cut against the keyless-first
+  promise. A bring-your-own-key extra may be considered, but a paid service is never a default or a
+  headline backend.
+- **Changes tied to promotion.** We decide on technical merit alone — please don't offer (or expect)
+  a shout-out, cross-post, or link exchange in return. No hard feelings; we just keep that separate.
+- **Unrelated reformatting bundled into a feature PR.** One change per PR keeps review honest.
+
+If you're unsure whether an idea fits, open an issue first — we'd rather help you shape it before you
+write the code.
+
 ## Reporting Issues
 
 When reporting bugs, please include:
