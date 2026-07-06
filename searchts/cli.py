@@ -9,10 +9,11 @@ Usage:
     searchts setup
 """
 
-import sys
 import argparse
+import difflib
 import json
 import os
+import sys
 import time
 
 from searchts import __version__
@@ -45,6 +46,31 @@ def _configure_logging(verbose: bool = False):
     logger.remove()  # Remove default stderr handler
     if verbose:
         logger.add(sys.stderr, level="INFO")
+
+
+def _first_command_token(argv):
+    """Return the first positional CLI token that could be a subcommand."""
+    skip_options = {"-v", "--verbose"}
+    terminal_options = {"-h", "--help", "--version"}
+    for token in argv:
+        if token in skip_options:
+            continue
+        if token in terminal_options:
+            return None
+        if token.startswith("-"):
+            return None
+        return token
+    return None
+
+
+def _maybe_print_command_suggestion(argv, commands):
+    """Suggest the nearest known command before argparse prints its error."""
+    command = _first_command_token(argv)
+    if not command or command in commands:
+        return
+    matches = difflib.get_close_matches(command, commands, n=1, cutoff=0.6)
+    if matches:
+        print(f"did you mean '{matches[0]}'?", file=sys.stderr)
 
 
 def main():
@@ -191,6 +217,7 @@ def main():
     # ── version ──
     sub.add_parser("version", help="Show version")
 
+    _maybe_print_command_suggestion(sys.argv[1:], sub.choices)
     args = parser.parse_args()
 
     # Suppress loguru noise unless --verbose
