@@ -106,6 +106,19 @@ for hit in search("open source vector db", max_results=5):
     print(hit.title, hit.url)
 ```
 
+## Does it actually work?
+
+Rather than take our word for it, searchts ships a reproducible benchmark: it runs the unlocker over a set of (often bot-walled) pages and reports how many it read — keyless — and which tier carried each.
+
+```bash
+python -m benchmarks.run              # print a scorecard
+python -m benchmarks.run --out docs/  # write docs/scorecard.md + results.json
+```
+
+Latest run: [docs/scorecard.md](docs/scorecard.md). Add your own targets — see [benchmarks/README.md](benchmarks/README.md).
+
+> The numbers only mean something from a **residential** connection: a datacenter IP (or a VPN that reshapes your TLS fingerprint) blocks the fast curl_cffi tier more than a real user sees.
+
 ## How it works, and its limits
 
 - It runs from your own residential IP at personal volume, which is why it needs no paid proxy pool. It is a personal-grade research tool, not a mass-scraping system.
