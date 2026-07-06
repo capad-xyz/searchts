@@ -1,0 +1,22 @@
+# Keep the build context (and image) small: only pyproject + package + README
+# are needed to build the wheel.
+.git
+.github
+.venv
+venv
+env
+demo
+tests
+docs
+*.mp4
+*.png
+*.jpg
+*.gif
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+dist
+build
+*.egg-info
