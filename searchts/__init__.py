@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """searchts — Give your AI Agent eyes to see the entire internet."""
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 __author__ = "capad-xyz"
 
 from searchts.core import Searchts
