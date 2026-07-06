@@ -21,3 +21,4 @@ DEVLOG.md
 # Benchmark: local-only target list and generated scorecards
 benchmarks/cases.local.json
 benchmarks/results/
+docs/results.json
