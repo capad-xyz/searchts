@@ -129,6 +129,10 @@ separately-installed platform CLIs (`gh`, `twitter-cli`, `opencli`, `mcporter`),
 searchts can also reach GitHub, Twitter/X, Reddit, and LinkedIn through them, and
 `searchts doctor` will report which are present. These are add-ons, not the core.
 
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md) for where searchts is headed — and what's deliberately out of scope.
+
 ## Credits
 
 `searchts` builds on and extends [Agent-Reach](https://github.com/Panniantong/Agent-Reach) (MIT), reusing its channel, installer, and diagnostics architecture. The escalating open-source unlocker, multi-provider search with rank fusion, prompt-injection scrubbing, per-domain backend memory, the human-in-the-loop CAPTCHA flow, the video transcript channels, the `read_url` / `web_search` MCP tools, and the `read` / `search` CLI commands are additions in `searchts`. Thanks to the original authors.
