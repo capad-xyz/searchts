@@ -2,6 +2,14 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.5.1] - 2026-07-07
+
+### Added
+- The CLI suggests the nearest command on a typo (e.g. `searchts reserch ...` → "did you mean 'search'?"). Thanks to @terminalchai for the first community contribution (#16, closes #14).
+
+### Docs
+- Published an unlocker benchmark scorecard ([`docs/scorecard.md`](docs/scorecard.md)) and a "Does it actually work?" section in the README.
+
 ## [0.5.0] - 2026-07-07
 
 ### Added
