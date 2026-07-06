@@ -90,6 +90,22 @@ class TestCLI:
             with pytest.raises(SystemExit):
                 main()
 
+    def test_unknown_subcommand_suggests_nearest_match(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["searchts", "reserch", "x"]):
+                main()
+        assert exc_info.value.code != 0
+        captured = capsys.readouterr()
+        assert "did you mean 'search'?" in captured.err
+        assert "invalid choice" in captured.err
+
+    def test_valid_subcommand_does_not_suggest_match(self, capsys):
+        from searchts.search import SearchResult
+        with patch("searchts.search.search", return_value=[SearchResult("T", "https://x.test", "", "")]):
+            with patch("sys.argv", ["searchts", "search", "q"]):
+                main()
+        assert "did you mean" not in capsys.readouterr().err
+
     def test_read_command_prints_text_to_stdout(self, capsys):
         from searchts.unlocker import FetchResult
         with patch("searchts.unlocker.fetch",
