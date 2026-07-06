@@ -73,7 +73,7 @@ Add searchts to your agent in one line - as an MCP server, or as a Claude Code s
 Two ways, both one command:
 
 ```bash
-# 1) MCP: gives the agent always-on read_url + web_search + fetch_asset + grab_site tools
+# 1) MCP: gives the agent always-on read_url + web_search + fetch_asset + grab_site + get_status tools
 pip install "searchts[mcp]"
 searchts mcp install          # prints the wiring, e.g. for Claude Code:
                               #   claude mcp add searchts -- searchts mcp serve
@@ -81,6 +81,8 @@ searchts mcp install          # prints the wiring, e.g. for Claude Code:
 # 2) Slash command: type /searchts <url-or-query> in Claude Code
 searchts skill install        # writes ~/.claude/commands/searchts.md
 ```
+
+See the [MCP server reference](docs/mcp.md) for all five tools (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`), their inputs and outputs, and when to use each.
 
 ## Features
 
@@ -90,7 +92,7 @@ searchts skill install        # writes ~/.claude/commands/searchts.md
 - **Asset + design grabber**: `searchts grab <url>` downloads a page's images/icons/css/fonts and extracts a color palette plus the fonts in use; `searchts get <url>` pulls a single asset. Both go through the same escalating unlock ladder, so they work on fingerprint-gated CDNs, not just open ones.
 - **Prompt-injection scrubbing**: strips invisible/bidi characters, flags injection indicators, optional redaction, so untrusted page content is safer to feed a model.
 - **Per-domain backend memory**: remembers which tier worked per domain and tries it first (`SEARCHTS_NO_MEMORY=1` to disable).
-- **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`, `fetch_asset`, `grab_site`), and a Python library.
+- **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`), and a Python library.
 
 ## Use as a library
 

@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "searchts": {
+      "command": "searchts",
+      "args": ["mcp", "serve"]
+    },
     "exa": {
       "baseUrl": "https://mcp.exa.ai/mcp"
     }
