@@ -1,0 +1,23 @@
+name: Feature request / idea
+description: Suggest an improvement to searchts
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        searchts is deliberately a keyless, focused `read` / `search` / `transcribe` / `grab` tool.
+        Before filing, a glance at [what we merge](https://github.com/capad-xyz/searchts/blob/main/CONTRIBUTING.md#what-we-merge-and-what-we-dont) saves us both time — working code over name-only backends, and no first-class paid-API dependencies.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: The use case or pain point — not just the proposed solution.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach (optional)
+      description: If you have one in mind. Bonus points if it stays keyless.
+    validations:
+      required: false
