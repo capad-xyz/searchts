@@ -1,0 +1,49 @@
+name: Bug report
+description: Something in searchts isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! For a blocked or failed read, the exact URL (if you can share it) and your `searchts doctor` output help a lot.
+  - type: input
+    id: version
+    attributes:
+      label: searchts version
+      description: Output of `searchts version`.
+      placeholder: "searchts vX.Y.Z"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.12"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The exact command you ran, what you expected, and what happened instead. Include any error output.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`searchts doctor` output (optional)"
+      description: Shows which unlocker tiers and providers are configured — very helpful for read/search issues.
+      render: text
+    validations:
+      required: false

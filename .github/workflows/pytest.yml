@@ -77,3 +77,35 @@ jobs:
           /tmp/smoke/bin/pip install --quiet dist/*.whl
           /tmp/smoke/bin/searchts version
           cd /tmp && /tmp/smoke/bin/python -c "import searchts; from importlib.resources import files; assert (files('searchts')/'skill'/'SKILL.md').is_file(); print('SKILL.md ships in site-packages OK')"
+
+  # The release version lives in two files; a mismatch ships a wrong version.
+  # This gate fails the build if they drift apart.
+  version-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Version must match in pyproject.toml and searchts/__init__.py
+        run: |
+          python - <<'PY'
+          import pathlib, re, sys
+          def grab(path, pattern):
+              text = pathlib.Path(path).read_text(encoding="utf-8")
+              m = re.search(pattern, text, re.MULTILINE)
+              return m.group(1) if m else None
+          pyproject = grab("pyproject.toml", r'^version\s*=\s*"([^"]+)"')
+          init = grab("searchts/__init__.py", r'^__version__\s*=\s*"([^"]+)"')
+          print(f"pyproject.toml       = {pyproject}")
+          print(f"searchts/__init__.py = {init}")
+          if not pyproject or not init:
+              sys.exit("could not find a version string in one of the files")
+          if pyproject != init:
+              sys.exit(f"version mismatch: {pyproject} != {init}")
+          print("versions match")
+          PY

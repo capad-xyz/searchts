@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/capad-xyz/searchts/security/advisories/new
+    about: Please report security issues privately here (see SECURITY.md), not as a public issue.
+  - name: Question or private note
+    url: mailto:oss@capad.fyi
+    about: For anything you'd rather not file in public.
