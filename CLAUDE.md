@@ -56,7 +56,7 @@ Repo: github.com/capad-xyz/searchts | License: MIT | Version: 0.4.1
 
 ## Rules
 - NEVER modify upstream open source projects' source code
-- Version must match in TWO places: `pyproject.toml` and `searchts/__init__.py` (the `version-sync` CI job enforces this)
+- Version must match in THREE files: `pyproject.toml`, `searchts/__init__.py`, and `server.json` (two fields) — the `version-sync` CI job enforces this
 - Always new branch for changes, PR to main, never push to main directly
 - Run `pytest tests/ -v` before committing — all tests must pass
 - Cookie-based auth (Twitter): use Cookie-Editor export method only, no QR scan

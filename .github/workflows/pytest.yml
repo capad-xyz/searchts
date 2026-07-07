@@ -78,8 +78,8 @@ jobs:
           /tmp/smoke/bin/searchts version
           cd /tmp && /tmp/smoke/bin/python -c "import searchts; from importlib.resources import files; assert (files('searchts')/'skill'/'SKILL.md').is_file(); print('SKILL.md ships in site-packages OK')"
 
-  # The release version lives in two files; a mismatch ships a wrong version.
-  # This gate fails the build if they drift apart.
+  # The release version lives in three files; a mismatch ships a wrong version
+  # (or a stale MCP-registry listing). This gate fails the build if they drift.
   version-sync:
     runs-on: ubuntu-latest
     steps:
@@ -91,21 +91,28 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Version must match in pyproject.toml and searchts/__init__.py
+      - name: Version must match in pyproject.toml, searchts/__init__.py, and server.json
         run: |
           python - <<'PY'
-          import pathlib, re, sys
+          import json, pathlib, re, sys
           def grab(path, pattern):
               text = pathlib.Path(path).read_text(encoding="utf-8")
               m = re.search(pattern, text, re.MULTILINE)
               return m.group(1) if m else None
           pyproject = grab("pyproject.toml", r'^version\s*=\s*"([^"]+)"')
           init = grab("searchts/__init__.py", r'^__version__\s*=\s*"([^"]+)"')
-          print(f"pyproject.toml       = {pyproject}")
-          print(f"searchts/__init__.py = {init}")
-          if not pyproject or not init:
+          server = json.loads(pathlib.Path("server.json").read_text(encoding="utf-8"))
+          versions = {
+              "pyproject.toml": pyproject,
+              "searchts/__init__.py": init,
+              "server.json (top-level)": server.get("version"),
+              "server.json (package)": server["packages"][0].get("version"),
+          }
+          for where, v in versions.items():
+              print(f"{where:26} = {v}")
+          if not all(versions.values()):
               sys.exit("could not find a version string in one of the files")
-          if pyproject != init:
-              sys.exit(f"version mismatch: {pyproject} != {init}")
+          if len(set(versions.values())) != 1:
+              sys.exit(f"version mismatch: {versions}")
           print("versions match")
           PY

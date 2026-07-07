@@ -2,6 +2,15 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.5.2] - 2026-07-07
+
+### Added
+- `server.json` and a README ownership marker so searchts can be published to the official MCP registry (registry.modelcontextprotocol.io).
+- The `version-sync` CI gate now also covers `server.json`.
+
+### Fixed
+- README images and links use absolute URLs so the demo GIFs and doc links render on PyPI (#19).
+
 ## [0.5.1] - 2026-07-07
 
 ### Added

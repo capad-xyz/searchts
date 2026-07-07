@@ -1,0 +1,43 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.capad-xyz/searchts",
+  "title": "searchts",
+  "description": "Keyless web access for AI agents: read bot-walled pages as Markdown, search, grab assets",
+  "repository": {
+    "url": "https://github.com/capad-xyz/searchts",
+    "source": "github"
+  },
+  "version": "0.5.2",
+  "websiteUrl": "https://github.com/capad-xyz/searchts",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "searchts",
+      "version": "0.5.2",
+      "runtimeHint": "uvx",
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--from",
+          "value": "searchts[mcp]",
+          "isRequired": true
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp",
+          "isRequired": true
+        },
+        {
+          "type": "positional",
+          "value": "serve",
+          "isRequired": true
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
