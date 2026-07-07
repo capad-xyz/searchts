@@ -6,10 +6,10 @@
 [![PyPI](https://img.shields.io/pypi/v/searchts.svg)](https://pypi.org/project/searchts/)
 [![Python](https://img.shields.io/pypi/pyversions/searchts.svg)](https://pypi.org/project/searchts/)
 [![Downloads](https://img.shields.io/pypi/dm/searchts.svg)](https://pypi.org/project/searchts/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/capad-xyz/searchts/blob/main/LICENSE)
 
 <p align="center">
-  <img src="demo/demo1.gif" alt="A Claude agent's fetch hits a 403 bot wall, so it routes through searchts, reads the page, and answers the question" width="860">
+  <img src="https://raw.githubusercontent.com/capad-xyz/searchts/main/demo/demo1.gif" alt="A Claude agent's fetch hits a 403 bot wall, so it routes through searchts, reads the page, and answers the question" width="860">
 </p>
 
 ## Why searchts?
@@ -67,7 +67,7 @@ searchts doctor                            # see what is configured and working
 Add searchts to your agent in one line - as an MCP server, or as a Claude Code slash command:
 
 <p align="center">
-  <img src="demo/demo2.gif" alt="Installing searchts as an MCP server with claude mcp add, or as a Claude Code slash command with searchts skill install" width="820">
+  <img src="https://raw.githubusercontent.com/capad-xyz/searchts/main/demo/demo2.gif" alt="Installing searchts as an MCP server with claude mcp add, or as a Claude Code slash command with searchts skill install" width="820">
 </p>
 
 Two ways, both one command:
@@ -82,7 +82,7 @@ searchts mcp install          # prints the wiring, e.g. for Claude Code:
 searchts skill install        # writes ~/.claude/commands/searchts.md
 ```
 
-See the [MCP server reference](docs/mcp.md) for all five tools (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`), their inputs and outputs, and when to use each.
+See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/docs/mcp.md) for all five tools (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`), their inputs and outputs, and when to use each.
 
 ## Features
 
@@ -115,7 +115,7 @@ python -m benchmarks.run              # print a scorecard
 python -m benchmarks.run --out docs/  # write docs/scorecard.md + results.json
 ```
 
-Latest run: [docs/scorecard.md](docs/scorecard.md). Add your own targets — see [benchmarks/README.md](benchmarks/README.md).
+Latest run: [docs/scorecard.md](https://github.com/capad-xyz/searchts/blob/main/docs/scorecard.md). Add your own targets — see [benchmarks/README.md](https://github.com/capad-xyz/searchts/blob/main/benchmarks/README.md).
 
 > The numbers only mean something from a **residential** connection: a datacenter IP (or a VPN that reshapes your TLS fingerprint) blocks the fast curl_cffi tier more than a real user sees.
 
@@ -146,7 +146,7 @@ searchts can also reach GitHub, Twitter/X, Reddit, and LinkedIn through them, an
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for where searchts is headed — and what's deliberately out of scope.
+See [ROADMAP.md](https://github.com/capad-xyz/searchts/blob/main/ROADMAP.md) for where searchts is headed — and what's deliberately out of scope.
 
 ## Credits
 
@@ -154,7 +154,7 @@ See [ROADMAP.md](ROADMAP.md) for where searchts is headed — and what's deliber
 
 ## License
 
-MIT. See [LICENSE](LICENSE). Original portions Copyright (c) 2025 Agent Eyes; modifications and additions Copyright (c) 2026 capad-xyz.
+MIT. See [LICENSE](https://github.com/capad-xyz/searchts/blob/main/LICENSE). Original portions Copyright (c) 2025 Agent Eyes; modifications and additions Copyright (c) 2026 capad-xyz.
 
 ---
 
