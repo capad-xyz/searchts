@@ -331,3 +331,9 @@ def test_fetch_warnings_attached_to_thin_best_effort(monkeypatch, stub_extract):
     r = fetch("https://site.test", use_memory=False)
     assert r.backend == "curl_cffi"
     assert r.warnings
+
+
+def test_looks_blocked_detects_fastly_and_extra_phrases():
+    assert looks_blocked(200, "Your request has been blocked as a possible bot by our security.") == "challenge"
+    assert looks_blocked(200, "See errors.edgesuite.net for details.") == "challenge"
+    assert looks_blocked(200, "Checking if the site connection is secure") == "challenge"
