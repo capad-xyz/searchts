@@ -8,6 +8,8 @@ All notable changes to searchts are documented here. This project follows semant
 - `read --json` and MCP `read_url` now carry two source-receipt fields — `fetched_at` (ISO-8601 UTC timestamp of the successful fetch) and `final_url` (the URL after redirects) — so an agent can cite *what* it read, *when*, and the post-redirect source. `final_url` is tracked through every unlocker backend (and correctly reports the requested URL for the Jina relay, not the `r.jina.ai` wire URL). Thanks to @tapheret2 (#25, closes #24).
 - Challenge-page detection for Fastly Bot Management, Akamai/EdgeSuite error interstitials, and an additional Cloudflare ("checking if the site connection is secure") phrasing. Thanks to @tapheret2 (#26).
 - Two benchmark cases — `python-docs` (server-rendered stdlib docs) and `httpbin-html` (an always-up HTML fixture). Thanks to @tapheret2 (#27).
+- `searchts doctor` now reports whether searchts is registered with the local AI agents it detects (Claude Code, Claude Desktop, Cursor, Codex, and the `/searchts` skill), and prints the one-liner to wire it in when it isn't (#21).
+- The benchmark scorecard now breaks out per-category pass rates. Thanks to @terminalchai (#23).
 
 ### Changed
 - MCP `read_url` now returns a JSON source-receipt object (`{url, final_url, fetched_at, backend, status, chars, text}`) instead of a bare markdown string; the page markdown is under `text`, with the prompt-injection warning/fence preserved inside it. This aligns `read_url` with the JSON-returning `fetch_asset`/`grab_site` tools and with `read --json`.
