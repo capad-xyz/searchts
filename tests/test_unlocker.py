@@ -63,22 +63,46 @@ def stub_extract(monkeypatch):
     monkeypatch.setattr(unlocker, "html_to_text", lambda body, url=None: body)
 
 
+def _pad(result, url="https://site.test"):
+    """Accept legacy (status, body) stubs or full (status, body, final_url)."""
+    if result is None:
+        return None
+    if len(result) == 2:
+        return (result[0], result[1], url)
+    return result
+
+
 def _set(monkeypatch, *, curl=None, jina=None, stealth=None):
     if curl is not None:
-        monkeypatch.setattr(unlocker, "_fetch_curl_cffi", lambda url, timeout=30: curl)
+        val = _pad(curl)
+        monkeypatch.setattr(
+            unlocker, "_fetch_curl_cffi",
+            lambda url, timeout=30, _v=val: _v,
+        )
     if jina is not None:
-        monkeypatch.setattr(unlocker, "_fetch_jina", lambda url, timeout=40: jina)
+        val = _pad(jina)
+        monkeypatch.setattr(
+            unlocker, "_fetch_jina",
+            lambda url, timeout=40, _v=val: _v,
+        )
     if stealth is not None:
-        monkeypatch.setattr(unlocker, "_fetch_stealth", lambda url, timeout=60: stealth)
+        val = _pad(stealth)
+        monkeypatch.setattr(
+            unlocker, "_fetch_stealth",
+            lambda url, timeout=60, _v=val: _v,
+        )
 
 
 def test_fetch_clean_curl_win(monkeypatch, stub_extract):
-    _set(monkeypatch, curl=(200, "C" * 800))
+    _set(monkeypatch, curl=(200, "C" * 800, "https://site.test/redirected"))
     r = fetch("https://site.test")
     assert isinstance(r, FetchResult)
     assert r.backend == "curl_cffi"
     assert r.status == 200
     assert len(r.text) == 800
+    assert r.final_url == "https://site.test/redirected"
+    assert r.fetched_at  # ISO-8601 UTC timestamp set on success
+    assert r.fetched_at.endswith("Z")
 
 
 def test_fetch_escalates_on_http_error(monkeypatch, stub_extract):
@@ -174,11 +198,11 @@ def test_memory_moves_remembered_backend_to_front(monkeypatch, stub_extract, tmp
 
     def curl(url, timeout=30):
         order_seen.append("curl_cffi")
-        return (200, "C" * 800)
+        return (200, "C" * 800, url)
 
     def jina(url, timeout=40):
         order_seen.append("Jina Reader")
-        return (200, "J" * 800)
+        return (200, "J" * 800, url)
 
     monkeypatch.setattr(unlocker, "_fetch_curl_cffi", curl)
     monkeypatch.setattr(unlocker, "_fetch_jina", jina)
@@ -193,9 +217,9 @@ def test_memory_disabled_via_use_memory_false(monkeypatch, stub_extract, tmp_cac
     unlocker.remember("site.test", "Jina Reader")
     order_seen = []
     monkeypatch.setattr(unlocker, "_fetch_curl_cffi",
-                        lambda url, timeout=30: (order_seen.append("curl_cffi"), (200, "C" * 800))[1])
+                        lambda url, timeout=30: (order_seen.append("curl_cffi"), (200, "C" * 800, url))[1])
     monkeypatch.setattr(unlocker, "_fetch_jina",
-                        lambda url, timeout=40: (order_seen.append("Jina Reader"), (200, "J" * 800))[1])
+                        lambda url, timeout=40: (order_seen.append("Jina Reader"), (200, "J" * 800, url))[1])
 
     r = unlocker.fetch("https://site.test/page", use_memory=False)
     # Default ladder order honored (curl first), and no new memory persisted.
@@ -209,9 +233,9 @@ def test_memory_disabled_via_env_off_switch(monkeypatch, stub_extract, tmp_cache
     unlocker.remember("site.test", "Jina Reader")
     order_seen = []
     monkeypatch.setattr(unlocker, "_fetch_curl_cffi",
-                        lambda url, timeout=30: (order_seen.append("curl_cffi"), (200, "C" * 800))[1])
+                        lambda url, timeout=30: (order_seen.append("curl_cffi"), (200, "C" * 800, url))[1])
     monkeypatch.setattr(unlocker, "_fetch_jina",
-                        lambda url, timeout=40: (order_seen.append("Jina Reader"), (200, "J" * 800))[1])
+                        lambda url, timeout=40: (order_seen.append("Jina Reader"), (200, "J" * 800, url))[1])
 
     unlocker.fetch("https://site.test/page")
     assert order_seen[0] == "curl_cffi"  # env off-switch ignores remembered backend
@@ -234,7 +258,7 @@ def test_human_fallback_invoked_on_challenge_when_allowed(monkeypatch, stub_extr
 
     def fake_human(url, timeout=180):
         called["url"] = url
-        return (200, "<html><body>" + ("solved " * 200) + "</body></html>")
+        return (200, "<html><body>" + ("solved " * 200) + "</body></html>", url)
 
     monkeypatch.setattr(unlocker, "_fetch_human", fake_human)
 
@@ -282,7 +306,7 @@ def test_human_fallback_reraises_when_still_blocked(monkeypatch, stub_extract):
 
     # Human browser opened but the user could not solve it (still blocked).
     monkeypatch.setattr(unlocker, "_fetch_human",
-                        lambda url, timeout=180: (200, "Just a moment..."))
+                        lambda url, timeout=180: (200, "Just a moment...", url))
     with pytest.raises(UnlockerError):
         unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
 

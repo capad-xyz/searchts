@@ -120,13 +120,19 @@ class TestCLI:
     def test_read_command_json(self, capsys):
         from searchts.unlocker import FetchResult
         with patch("searchts.unlocker.fetch",
-                   return_value=FetchResult("Jina Reader", "markdown text", 200)):
+                   return_value=FetchResult(
+                       "Jina Reader", "markdown text", 200,
+                       final_url="https://x.test/final",
+                       fetched_at="2026-07-09T12:00:00Z",
+                   )):
             with patch("sys.argv", ["searchts", "read", "https://x.test", "--json"]):
                 main()
         import json as _json
         payload = _json.loads(capsys.readouterr().out)
         assert payload == {
             "url": "https://x.test",
+            "final_url": "https://x.test/final",
+            "fetched_at": "2026-07-09T12:00:00Z",
             "backend": "Jina Reader",
             "status": 200,
             "chars": len("markdown text"),

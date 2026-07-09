@@ -5,6 +5,7 @@ read_url is a plain module-level function so it can be unit-tested without the
 optional `mcp` dependency or a running stdio server.
 """
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -16,18 +17,31 @@ from searchts.unlocker import FetchResult, UnlockerError
 
 def test_read_url_returns_markdown_text():
     with patch(
-        "searchts.unlocker.fetch", return_value=FetchResult("curl_cffi", "# Title\n\nbody", 200)
+        "searchts.unlocker.fetch",
+        return_value=FetchResult(
+            "curl_cffi", "# Title\n\nbody", 200,
+            final_url="https://x.test/",
+            fetched_at="2026-07-09T12:00:00Z",
+        ),
     ):
         out = read_url("https://x.test")
-    assert out == "# Title\n\nbody"
+    data = json.loads(out)
+    assert data["text"] == "# Title\n\nbody"
+    assert data["url"] == "https://x.test"
+    assert data["final_url"] == "https://x.test/"
+    assert data["fetched_at"] == "2026-07-09T12:00:00Z"
+    assert data["backend"] == "curl_cffi"
+    assert data["status"] == 200
+    assert data["chars"] == len("# Title\n\nbody")
 
 
 def test_read_url_strips_invisibles_always():
     with patch("searchts.unlocker.fetch", return_value=FetchResult("curl_cffi", "he​llo body", 200)):
         out = read_url("https://x.test")
-    assert "​" not in out
+    data = json.loads(out)
+    assert "​" not in data["text"]
     # No injection indicators -> returned plain, not fenced.
-    assert "UNTRUSTED WEB CONTENT" not in out
+    assert "UNTRUSTED WEB CONTENT" not in data["text"]
 
 
 def test_read_url_wraps_and_warns_on_injection():
@@ -39,11 +53,13 @@ def test_read_url_wraps_and_warns_on_injection():
     )
     with patch("searchts.unlocker.fetch", return_value=poisoned):
         out = read_url("https://x.test")
-    assert out.startswith("[!] WARNING")
-    assert "prompt-injection" in out
-    assert "----- BEGIN UNTRUSTED WEB CONTENT -----" in out
-    assert "----- END UNTRUSTED WEB CONTENT -----" in out
-    assert "ignore previous instructions" in out  # body preserved inside the fence
+    data = json.loads(out)
+    text = data["text"]
+    assert text.startswith("[!] WARNING")
+    assert "prompt-injection" in text
+    assert "----- BEGIN UNTRUSTED WEB CONTENT -----" in text
+    assert "----- END UNTRUSTED WEB CONTENT -----" in text
+    assert "ignore previous instructions" in text  # body preserved inside the fence
 
 
 def test_read_url_error_string_on_failure():
@@ -137,9 +153,7 @@ def test_create_server_raises_without_mcp(monkeypatch):
 
 # ── fetch_asset / grab_site ─────────────────────────────────────────────────
 
-import json  # noqa: E402
-
-from searchts.integrations.mcp_server import fetch_asset, grab_site  # noqa: E402
+from searchts.integrations.mcp_server import fetch_asset, grab_site
 
 
 def test_fetch_asset_returns_json(monkeypatch, tmp_path):
