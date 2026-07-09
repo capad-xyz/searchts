@@ -7,13 +7,13 @@
     "url": "https://github.com/capad-xyz/searchts",
     "source": "github"
   },
-  "version": "0.5.2",
+  "version": "0.6.0",
   "websiteUrl": "https://github.com/capad-xyz/searchts",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "searchts",
-      "version": "0.5.2",
+      "version": "0.6.0",
       "runtimeHint": "uvx",
       "runtimeArguments": [
         {
