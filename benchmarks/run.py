@@ -95,6 +95,14 @@ def render_markdown(results: list[dict], summary: dict) -> str:
         lines.append("- (nothing read)")
     lines += [
         "",
+        "## By category",
+        "",
+    ]
+    for category, counts in sorted(summary["by_category"].items()):
+        category_pct = round(counts["passed"] / counts["total"] * 100)
+        lines.append(f"- `{category}`: {counts['passed']}/{counts['total']} ({category_pct}%)")
+    lines += [
+        "",
         "## Per page",
         "",
         "| Page | Category | Read | Tier | Chars | Secs |",

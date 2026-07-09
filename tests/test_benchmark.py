@@ -75,11 +75,25 @@ def test_render_markdown_has_headline_and_rows():
             "seconds": 0.1,
             "error": None,
         },
+        {
+            "name": "b",
+            "url": "u2",
+            "category": "datadome",
+            "ok": False,
+            "backend": None,
+            "status": None,
+            "chars": 0,
+            "seconds": 0.2,
+            "error": "blocked",
+        },
     ]
     md = bench.render_markdown(results, bench.summarize(results))
     assert "# Unlocker benchmark" in md
-    assert "100%" in md
+    assert "50%" in md
     assert "curl_cffi" in md
+    assert "## By category" in md
+    assert "- `control`: 1/1 (100%)" in md
+    assert "- `datadome`: 0/1 (0%)" in md
 
 
 def test_load_cases_returns_defaults():
