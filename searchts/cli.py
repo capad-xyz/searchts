@@ -124,7 +124,7 @@ def main():
     p_read.add_argument("--backend", default=None,
                         help="Force a single backend (e.g. curl_cffi, 'Jina Reader', stealth-browser)")
     p_read.add_argument("--json", action="store_true",
-                        help="Print {url,backend,status,chars,text} as JSON instead of raw text")
+                        help="Print {url,final_url,fetched_at,backend,status,chars,text} as JSON instead of raw text")
     p_read.add_argument("--human", action="store_true",
                         help="On a CAPTCHA/challenge, open a headful browser to solve by hand")
     p_read.add_argument("--scrub", action="store_true",
@@ -1422,6 +1422,8 @@ def _cmd_read(args):
     if args.json:
         payload = {
             "url": args.url,
+            "final_url": result.final_url or args.url,
+            "fetched_at": result.fetched_at,
             "backend": result.backend,
             "status": result.status,
             "chars": len(result.text),

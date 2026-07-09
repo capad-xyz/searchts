@@ -29,6 +29,7 @@ import sys
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -90,6 +91,11 @@ class FetchResult:
     #: Defaulted so existing positional construction FetchResult(backend, text,
     #: status) keeps working unchanged.
     warnings: List[str] = field(default_factory=list)
+    #: URL after redirects (may differ from the requested URL). Defaults to None
+    #: so existing positional construction stays valid; ``fetch`` always sets it.
+    final_url: Optional[str] = None
+    #: ISO-8601 UTC timestamp of the successful fetch (set by ``fetch`` / ``_finalize``).
+    fetched_at: Optional[str] = None
 
 
 @dataclass
@@ -238,25 +244,28 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     return t.strip()
 
 
-# ── backend fetchers: each returns (status, body) or raises ──────────────────
+# ── backend fetchers: each returns (status, body, final_url) or raises ───────
 
-def _fetch_curl_cffi(url: str, timeout: int = 30) -> Tuple[int, str]:
+def _fetch_curl_cffi(url: str, timeout: int = 30) -> Tuple[int, str, str]:
     from curl_cffi import requests as cr
     r = cr.get(url, impersonate="chrome", timeout=timeout,
                headers={"Accept-Language": "en-US,en;q=0.9"})
-    return r.status_code, r.text
+    final = str(getattr(r, "url", None) or url)
+    return r.status_code, r.text, final
 
 
-def _fetch_jina(url: str, timeout: int = 40) -> Tuple[int, str]:
+def _fetch_jina(url: str, timeout: int = 40) -> Tuple[int, str, str]:
+    # Jina is a relay: we asked for `url`, so report that as the final source URL
+    # (the wire URL is r.jina.ai/... which is not useful for citations).
     req = urllib.request.Request(
         "https://r.jina.ai/" + url,
         headers={"User-Agent": _UA_REAL, "Accept": "text/plain"},
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return resp.status, resp.read().decode("utf-8", "replace")
+        return resp.status, resp.read().decode("utf-8", "replace"), url
 
 
-def _fetch_stealth(url: str, timeout: int = 60) -> Tuple[Optional[int], str]:
+def _fetch_stealth(url: str, timeout: int = 60) -> Tuple[Optional[int], str, str]:
     """Tier-2: render with an undetected headless Chromium (patchright).
 
     Lazy by construction — patchright is imported and the browser launched only
@@ -300,19 +309,20 @@ def _fetch_stealth(url: str, timeout: int = 60) -> Tuple[Optional[int], str]:
             # If the challenge cleared, the real status is 200 regardless of the
             # initial challenge response; otherwise keep the original status.
             status = 200 if looks_blocked(200, html) is None else init_status
-            return status, html
+            final = page.url or url
+            return status, html, final
         finally:
             browser.close()
 
 
-def _fetch_human(url: str, timeout: int = 180) -> Tuple[Optional[int], str]:
+def _fetch_human(url: str, timeout: int = 180) -> Tuple[Optional[int], str, str]:
     """Human-in-the-loop fallback: open a HEADFUL browser and let the user solve it.
 
     Last resort for interactive CAPTCHA / Turnstile (DataDome et al.) that no
     automated rung can clear. Launches a visible (headless=False) patchright
     Chromium, prints an instruction to stderr, then polls the page content until
     ``looks_blocked`` clears or `timeout` seconds elapse, and returns
-    (status, html). Raises RuntimeError if patchright is unavailable so the
+    (status, html, final_url). Raises RuntimeError if patchright is unavailable so the
     caller can re-raise the original UnlockerError.
     """
     try:
@@ -350,7 +360,8 @@ def _fetch_human(url: str, timeout: int = 180) -> Tuple[Optional[int], str]:
                 except Exception:  # noqa: BLE001 - page may navigate mid-read
                     break
             status = 200 if looks_blocked(200, html) is None else init_status
-            return status, html
+            final = page.url or url
+            return status, html, final
         finally:
             browser.close()
 
@@ -377,6 +388,8 @@ def _finalize(result: FetchResult, scrub: bool) -> FetchResult:
 
     out = sanitize.scrub(result.text, redact=scrub)
     result.text = out.text
+    if not result.fetched_at:
+        result.fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     result.warnings = out.findings
     return result
 
@@ -421,22 +434,23 @@ def fetch(url: str, backends: Optional[List[str]] = None,
 
     for backend in order:
         try:
+            final_url = url
             if backend == "curl_cffi":
-                status, body = _fetch_curl_cffi(url)
+                status, body, final_url = _fetch_curl_cffi(url)
                 reason = looks_blocked(status, body)
                 if reason:
                     attempts.append((backend, reason))
                     continue
                 text = html_to_text(body, url)
             elif backend == "Jina Reader":
-                status, body = _fetch_jina(url)
+                status, body, final_url = _fetch_jina(url)
                 reason = looks_blocked(status, body)
                 if reason:
                     attempts.append((backend, reason))
                     continue
                 text = body  # Jina already returns markdown
             elif backend == "stealth-browser":
-                status, body = _fetch_stealth(url)
+                status, body, final_url = _fetch_stealth(url)
                 reason = looks_blocked(status, body)
                 if reason:
                     attempts.append((backend, reason))
@@ -451,12 +465,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 if memory_on and domain:
                     remember(domain, backend)  # record the winner for next time
                 # clean win, stop here — sanitize untrusted content before return
-                return _finalize(FetchResult(backend, text, status), scrub)
+                return _finalize(
+                    FetchResult(backend, text, status, final_url=final_url or url), scrub
+                )
             # Real but thin (e.g. JS-rendered or genuinely short): keep as a
             # fallback and escalate in case a richer backend renders more.
             attempts.append((backend, f"thin-{len(text)}b"))
             if best is None or len(text) > len(best.text):
-                best = FetchResult(backend, text, status)
+                best = FetchResult(backend, text, status, final_url=final_url or url)
         except Exception as e:  # noqa: BLE001 — any backend failure escalates
             attempts.append((backend, f"{type(e).__name__}: {e}"))
             continue
@@ -471,14 +487,18 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     # failed on an interactive challenge/CAPTCHA we can't auto-clear.
     if allow_human and _challenge_seen(attempts):
         try:
-            status, html = _fetch_human(url)
+            status, html, final_url = _fetch_human(url)
         except Exception:  # noqa: BLE001 - patchright missing/launch failure
             raise err
         if looks_blocked(status, html) is None:
             text = html_to_text(html, url)
             if text:
                 return _finalize(
-                    FetchResult(backend="human-browser", text=text, status=status), scrub
+                    FetchResult(
+                        backend="human-browser", text=text, status=status,
+                        final_url=final_url or url,
+                    ),
+                    scrub,
                 )
         raise err  # stayed blocked / timed out -> original failure
 
