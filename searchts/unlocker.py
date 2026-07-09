@@ -77,6 +77,9 @@ _BLOCK_PHRASES = (
     "perfdrive.com",                             # Radware Bot Manager challenge host (validate/captcha.perfdrive.com)
     "window.kpsdk",                              # Kasada challenge bootstrap (usually HTTP 429)
     "reference #18.",                            # Akamai Bot Manager deny-page reference id
+    "errors.edgesuite.net",                     # Akamai/EdgeSuite error interstitial host
+    "your request has been blocked as a possible bot",  # Fastly Bot Management block copy
+    "checking if the site connection is secure",  # Cloudflare interstitial (alt phrasing)
 )
 
 _MIN_CHARS = 500
