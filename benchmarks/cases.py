@@ -36,6 +36,18 @@ DEFAULT_CASES: list[Case] = [
         "cloudflare-fronted",
         "public docs served behind Cloudflare",
     ),
+    Case(
+        "python-docs",
+        "https://docs.python.org/3/library/json.html",
+        "open",
+        "Python stdlib docs; server-rendered HTML",
+    ),
+    Case(
+        "httpbin-html",
+        "https://httpbin.org/html",
+        "open",
+        "public HTML fixture endpoint; always available",
+    ),
 ]
 
 
