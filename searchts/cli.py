@@ -705,6 +705,14 @@ def _cmd_mcp(args):
         _cmd_mcp_serve()
     elif mcp_command == "install":
         print(mcp_install_text(getattr(args, "client", None)))
+        from searchts.integrations.agent_wiring import check_agent_wiring
+        checks = check_agent_wiring()
+        if checks:
+            print("\nDetected wiring on this machine:")
+            for c in checks:
+                mark = "[ok]" if c["wired"] else "[!] "
+                extra = "" if c["wired"] else f"  (not registered — run: {c['hint']})"
+                print(f"  {mark} {c['client']}{extra}")
     else:
         print("Usage: searchts mcp serve")
         print("   or: searchts mcp install [--client claude|cursor|json]")
@@ -1548,6 +1556,9 @@ def _cmd_doctor(args=None):
         return
 
     rprint(format_report(results))
+
+    from searchts.integrations.agent_wiring import format_wiring_report
+    rprint(format_wiring_report())
 
     # Auto-install skill if not already present (fixes #154)
     _install_skill()
