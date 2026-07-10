@@ -33,3 +33,29 @@ jobs:
         with:
           generate_release_notes: true
           files: dist/*
+
+  mcp-registry:
+    # Republish server.json to the official MCP registry so downstream indexes
+    # (PulseMCP, Forge, Glama, ...) pick up the new version automatically.
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC login to the registry (owns io.github.capad-xyz/* because this workflow runs in that org's repo)
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mcp-publisher
+        run: |
+          curl -sSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher --version
+      - name: Publish to the MCP registry
+        run: |
+          ./mcp-publisher login github-oidc
+          # The registry validates the PyPI package; retry briefly in case the
+          # just-uploaded release is still propagating through PyPI's CDN.
+          for i in 1 2 3; do
+            ./mcp-publisher publish && exit 0
+            echo "publish attempt $i failed; retrying in 30s..."
+            sleep 30
+          done
+          exit 1
