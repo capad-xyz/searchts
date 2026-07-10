@@ -163,3 +163,5 @@ MIT. See [LICENSE](https://github.com/capad-xyz/searchts/blob/main/LICENSE). Ori
 Built by [capad](https://github.com/capad-xyz). Questions or feedback: open an issue or email oss@capad.fyi.
 
 > *Fun fact: "searchts" doesn't officially abbreviate anything. Off the record, it stands for "search this shit".*
+
+Guide: [docs/block-phrases.md](docs/block-phrases.md).
