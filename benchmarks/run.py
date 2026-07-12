@@ -85,6 +85,9 @@ def render_markdown(results: list[dict], summary: dict) -> str:
         "> Run from a residential connection for a representative number: from a datacenter "
         "IP (CI, cloud VM) the curl_cffi tier is blocked more often than a real user sees.",
         "",
+        "See [how to interpret this scorecard](https://github.com/capad-xyz/searchts/"
+        "blob/main/benchmarks/README.md#interpret-the-scorecard).",
+        "",
         "## Which tier carried it",
         "",
     ]

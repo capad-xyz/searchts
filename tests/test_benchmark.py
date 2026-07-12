@@ -91,6 +91,7 @@ def test_render_markdown_has_headline_and_rows():
     assert "# Unlocker benchmark" in md
     assert "50%" in md
     assert "curl_cffi" in md
+    assert "benchmarks/README.md#interpret-the-scorecard" in md
     assert "## By category" in md
     assert "- `control`: 1/1 (100%)" in md
     assert "- `datadome`: 0/1 (0%)" in md
