@@ -41,6 +41,11 @@ def test_looks_blocked_ignores_vendor_sensor_name():
     assert looks_blocked(200, body) is None
 
 
+def test_looks_blocked_accepts_headers_without_changing_verdict():
+    headers = {"cf-mitigated": "challenge"}
+    assert looks_blocked(200, "real content " * 100, headers) is None
+
+
 # ── html_to_text ─────────────────────────────────────────────────────────────
 
 
@@ -56,6 +61,11 @@ def test_html_to_text_strips_markup_and_keeps_text():
     assert "<script" not in out and "evil()" not in out
 
 
+def test_normalize_headers_lowercases_names_and_stringifies_values():
+    headers = unlocker._normalize_headers({"Server": "cloudflare", "X-Retry": 2})
+    assert headers == {"server": "cloudflare", "x-retry": "2"}
+
+
 # ── fetch ladder (backends mocked) ───────────────────────────────────────────
 
 
@@ -66,11 +76,13 @@ def stub_extract(monkeypatch):
 
 
 def _pad(result, url="https://site.test"):
-    """Accept legacy (status, body) stubs or full (status, body, final_url)."""
+    """Pad backend stubs to (status, body, final_url, headers)."""
     if result is None:
         return None
     if len(result) == 2:
-        return (result[0], result[1], url)
+        return (result[0], result[1], url, {})
+    if len(result) == 3:
+        return (*result, {})
     return result
 
 
@@ -99,15 +111,39 @@ def _set(monkeypatch, *, curl=None, jina=None, stealth=None):
 
 
 def test_fetch_clean_curl_win(monkeypatch, stub_extract):
-    _set(monkeypatch, curl=(200, "C" * 800, "https://site.test/redirected"))
+    _set(
+        monkeypatch,
+        curl=(
+            200,
+            "C" * 800,
+            "https://site.test/redirected",
+            {"server": "cloudflare"},
+        ),
+    )
     r = fetch("https://site.test")
     assert isinstance(r, FetchResult)
     assert r.backend == "curl_cffi"
     assert r.status == 200
     assert len(r.text) == 800
     assert r.final_url == "https://site.test/redirected"
+    assert r.headers == {"server": "cloudflare"}
     assert r.fetched_at  # ISO-8601 UTC timestamp set on success
     assert r.fetched_at.endswith("Z")
+
+
+@pytest.mark.parametrize(
+    ("backend", "stub_name"),
+    [
+        ("curl_cffi", "curl"),
+        ("Jina Reader", "jina"),
+        ("stealth-browser", "stealth"),
+    ],
+)
+def test_fetch_threads_headers_from_each_backend(monkeypatch, stub_extract, backend, stub_name):
+    response = (200, "content " * 100, "https://site.test/final", {"x-vendor": "signal"})
+    _set(monkeypatch, **{stub_name: response})
+    result = fetch("https://site.test", backends=[backend], use_memory=False)
+    assert result.headers == {"x-vendor": "signal"}
 
 
 def test_fetch_escalates_on_http_error(monkeypatch, stub_extract):
@@ -207,11 +243,11 @@ def test_memory_moves_remembered_backend_to_front(monkeypatch, stub_extract, tmp
 
     def curl(url, timeout=30):
         order_seen.append("curl_cffi")
-        return (200, "C" * 800, url)
+        return (200, "C" * 800, url, {})
 
     def jina(url, timeout=40):
         order_seen.append("Jina Reader")
-        return (200, "J" * 800, url)
+        return (200, "J" * 800, url, {})
 
     monkeypatch.setattr(unlocker, "_fetch_curl_cffi", curl)
     monkeypatch.setattr(unlocker, "_fetch_jina", jina)
@@ -228,12 +264,18 @@ def test_memory_disabled_via_use_memory_false(monkeypatch, stub_extract, tmp_cac
     monkeypatch.setattr(
         unlocker,
         "_fetch_curl_cffi",
-        lambda url, timeout=30: (order_seen.append("curl_cffi"), (200, "C" * 800, url))[1],
+        lambda url, timeout=30: (
+            order_seen.append("curl_cffi"),
+            (200, "C" * 800, url, {}),
+        )[1],
     )
     monkeypatch.setattr(
         unlocker,
         "_fetch_jina",
-        lambda url, timeout=40: (order_seen.append("Jina Reader"), (200, "J" * 800, url))[1],
+        lambda url, timeout=40: (
+            order_seen.append("Jina Reader"),
+            (200, "J" * 800, url, {}),
+        )[1],
     )
 
     r = unlocker.fetch("https://site.test/page", use_memory=False)
@@ -250,12 +292,18 @@ def test_memory_disabled_via_env_off_switch(monkeypatch, stub_extract, tmp_cache
     monkeypatch.setattr(
         unlocker,
         "_fetch_curl_cffi",
-        lambda url, timeout=30: (order_seen.append("curl_cffi"), (200, "C" * 800, url))[1],
+        lambda url, timeout=30: (
+            order_seen.append("curl_cffi"),
+            (200, "C" * 800, url, {}),
+        )[1],
     )
     monkeypatch.setattr(
         unlocker,
         "_fetch_jina",
-        lambda url, timeout=40: (order_seen.append("Jina Reader"), (200, "J" * 800, url))[1],
+        lambda url, timeout=40: (
+            order_seen.append("Jina Reader"),
+            (200, "J" * 800, url, {}),
+        )[1],
     )
 
     unlocker.fetch("https://site.test/page")
@@ -342,9 +390,13 @@ def test_human_fallback_reraises_when_still_blocked(monkeypatch, stub_extract):
 
 
 def test_fetchresult_positional_construction_still_works():
-    # The added `warnings` field is defaulted, so legacy 3-arg construction holds.
+    # Added result metadata is defaulted, so legacy 3-arg construction holds.
     r = FetchResult("curl_cffi", "body", 200)
     assert r.warnings == []
+    assert r.headers == {}
+    other = FetchResult("curl_cffi", "other", 200)
+    r.headers["x-test"] = "one"
+    assert other.headers == {}
 
 
 def test_fetch_strips_invisibles_always(monkeypatch, stub_extract):
