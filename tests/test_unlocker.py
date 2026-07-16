@@ -41,8 +41,22 @@ def test_looks_blocked_ignores_vendor_sensor_name():
     assert looks_blocked(200, body) is None
 
 
-def test_looks_blocked_accepts_headers_without_changing_verdict():
+@pytest.mark.parametrize("status", [200, 302])
+def test_looks_blocked_cloudflare_challenge_header(status):
     headers = {"cf-mitigated": "challenge"}
+    assert looks_blocked(status, "real content " * 100, headers) == "challenge"
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"server": "cloudflare"},
+        {"cf-mitigated": ""},
+        {"cf-mitigated": "none"},
+        {"cf-mitigated": "challenge-preview"},
+    ],
+)
+def test_looks_blocked_ignores_cloudflare_header_near_misses(headers):
     assert looks_blocked(200, "real content " * 100, headers) is None
 
 

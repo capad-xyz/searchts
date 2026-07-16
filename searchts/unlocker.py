@@ -216,15 +216,17 @@ def looks_blocked(
 ) -> Optional[str]:
     """Return a short reason if the response is a hard block/challenge page, else None.
 
-    Only HTTP errors and known challenge phrases count as blocked. Short-but-real
-    content is NOT a block (example.com is tiny yet valid); the fetch ladder treats a
-    thin extraction as a reason to escalate, then falls back to the best result. Headers
-    are accepted for transport compatibility but do not affect verdicts yet.
+    HTTP errors, known challenge phrases, and explicit challenge headers count as
+    blocked. Short-but-real content is NOT a block (example.com is tiny yet valid); the
+    fetch ladder treats a thin extraction as a reason to escalate, then falls back to
+    the best result.
     """
     if status is None:
         return "no-response"
     if status >= 400:
         return f"http-{status}"
+    if headers and headers.get("cf-mitigated") == "challenge":
+        return "challenge"
     head = (text or "")[:8192].lower()
     for phrase in _BLOCK_PHRASES:
         if phrase in head:
