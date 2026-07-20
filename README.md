@@ -17,6 +17,7 @@
 ## Why searchts?
 
 - Reads pages behind common bot walls
+- Reads complete ChatGPT / Claude / Gemini / Grok / Poe shared conversations
 - Works with Claude, Codex, and MCP agents
 - Extracts clean Markdown, ready to feed a model
 - Searches the web without API keys
@@ -36,6 +37,20 @@ AI agents constantly need to read web pages, but the naive way they fetch is tri
 3. **stealth browser**: an undetected headless Chromium (patchright), launched lazily only when the cheaper tiers fail, for live JS / Cloudflare managed challenges.
 
 If every tier is defeated by an interactive CAPTCHA, an optional human-in-the-loop step opens a real browser so you can solve it once and continue. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
+
+## AI-chat share links
+
+Share links from AI chat apps are a special kind of hard: the conversation never appears in the page HTML as extractable text, so generic readers (and most AI agents' built-in fetch) return an empty shell or a fragment cut off mid-chat. `searchts read` recognizes these URLs and decodes each provider's own data channel instead, returning the **complete conversation** as role-labeled Markdown — keyless, no login:
+
+| Provider | Share URL | How it's read |
+|----------|-----------|---------------|
+| ChatGPT | `chatgpt.com/share/…` | turbo-stream payload embedded in the page |
+| Claude | `claude.ai/share/…` | keyless snapshot API (behind Cloudflare) |
+| Gemini | `gemini.google.com/share/…` | keyless batchexecute RPC |
+| Grok | `grok.com/share/…` | keyless share-links API |
+| Poe | `poe.com/s/…` | `__NEXT_DATA__` payload embedded in the page |
+
+Each provider is a drop-in plugin module (`searchts/share_extractors/`); if a provider changes its format, extraction falls back to the normal unlocker ladder instead of failing.
 
 ## Install
 
