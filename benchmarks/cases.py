@@ -48,6 +48,39 @@ DEFAULT_CASES: list[Case] = [
         "open",
         "public HTML fixture endpoint; always available",
     ),
+    # AI-chat share links: SPAs whose conversation is invisible to generic HTML
+    # extraction; read via the tier-0 share extractors. Public, owner-shared
+    # conversations chosen for innocuous content.
+    Case(
+        "chatgpt-share",
+        "https://chatgpt.com/share/67a4266c-dbcc-800f-9b92-f0a8a6480e16",
+        "ai-share",
+        "public ChatGPT share (turbo-stream extraction)",
+    ),
+    Case(
+        "claude-share",
+        "https://claude.ai/share/805ee3e5-eb74-43b6-8036-03615b303f6d",
+        "ai-share",
+        "public Claude share (keyless snapshot API behind Cloudflare)",
+    ),
+    Case(
+        "gemini-share",
+        "https://gemini.google.com/share/6d141b742a13",
+        "ai-share",
+        "public Gemini share (keyless batchexecute RPC)",
+    ),
+    Case(
+        "grok-share",
+        "https://grok.com/share/bGVnYWN5_b8625806-94b3-4886-bc4c-0e559a77139e",
+        "ai-share",
+        "public Grok share (keyless share_links API)",
+    ),
+    Case(
+        "poe-share",
+        "https://poe.com/s/XBaS4nMuAk8YAWevOFmi",
+        "ai-share",
+        "public Poe share (__NEXT_DATA__ extraction)",
+    ),
 ]
 
 

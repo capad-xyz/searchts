@@ -439,6 +439,22 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         don't alter visible content).
     """
     url = normalize(url)
+
+    # Tier-0: AI-chat share links (chatgpt.com/share, claude.ai/share, poe.com/s)
+    # carry their conversation in provider-specific data channels that generic
+    # HTML extraction can't see (or sees only partially). A dedicated extractor
+    # returns the COMPLETE conversation; any failure falls through to the ladder.
+    try:
+        from searchts import share_extractors
+        share = share_extractors.extract(url) if share_extractors.matches(url) else None
+    except Exception:  # noqa: BLE001 - tier-0 must never break the ladder
+        share = None
+    if share is not None and share.markdown:
+        return _finalize(
+            FetchResult(f"share:{share.provider}", share.markdown, 200, final_url=url),
+            scrub,
+        )
+
     order = list(backends or DEFAULT_BACKENDS)
 
     memory_on = use_memory and _memory_enabled()

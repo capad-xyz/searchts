@@ -1,0 +1,33 @@
+<!-- Trimmed to the Copilot share conversation container; innocuous content.
+     The user-message article mirrors a live copilot.microsoft.com/shares render
+     (group/user-message, id ...-user-message, sr-only "You said" heading); the
+     Copilot article mirrors the symmetric "Copilot said" structure. -->
+<div data-testid="share-page">
+  <div data-testid="sticky-header"><span>Copilot</span></div>
+
+  <div class="group/user-message space-y-1" id="AbC123-user-message" tabindex="0" role="article">
+    <div class="relative space-y-3">
+      <h5 class="sr-only" aria-label="You said" data-copy="false">You said</h5>
+      <div class="flex w-full flex-col">
+        <div class="whitespace-pre-wrap">Recommend a beginner-friendly houseplant.</div>
+      </div>
+    </div>
+    <div class="opacity-0 group-hover/user-message:opacity-100">
+      <button data-testid="copy-user-message-button" aria-label="Copy message">Copy</button>
+    </div>
+  </div>
+
+  <div class="group/ai-message space-y-1" id="AbC123-response-message" tabindex="0" role="article">
+    <div class="relative space-y-3">
+      <h5 class="sr-only" aria-label="Copilot said" data-copy="false">Copilot said</h5>
+      <div class="space-y-3">
+        <p>A <strong>pothos</strong> is a great first houseplant.</p>
+        <p>It tolerates low light, forgives missed waterings, and grows quickly.</p>
+      </div>
+    </div>
+  </div>
+
+  <div data-testid="composer">
+    <div data-testid="composer-input" aria-label="Attach files, connect apps, or make something with Copilot.">Continue the conversation</div>
+  </div>
+</div>

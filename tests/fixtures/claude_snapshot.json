@@ -1,0 +1,26 @@
+{
+ "uuid": "00000000-0000-0000-0000-000000000001",
+ "snapshot_name": "Fibonacci helper",
+ "is_public": true,
+ "conversation_uuid": "00000000-0000-0000-0000-000000000002",
+ "chat_messages": [
+  {
+   "uuid": "m2",
+   "index": 1,
+   "sender": "assistant",
+   "text": "",
+   "content": [
+    {"type": "text", "text": "Sure! Here is an iterative version:\n\n```python\ndef fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a\n```"}
+   ],
+   "attachments": [], "files": []
+  },
+  {
+   "uuid": "m1",
+   "index": 0,
+   "sender": "human",
+   "text": "Can you write a fibonacci function in Python?",
+   "content": [],
+   "attachments": [], "files": []
+  }
+ ]
+}
