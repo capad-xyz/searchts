@@ -7,7 +7,7 @@
 [![CI](https://github.com/capad-xyz/searchts/actions/workflows/pytest.yml/badge.svg)](https://github.com/capad-xyz/searchts/actions/workflows/pytest.yml)
 [![PyPI](https://img.shields.io/pypi/v/searchts.svg)](https://pypi.org/project/searchts/)
 [![Python](https://img.shields.io/pypi/pyversions/searchts.svg)](https://pypi.org/project/searchts/)
-[![Downloads](https://img.shields.io/pypi/dm/searchts.svg)](https://pypi.org/project/searchts/)
+[![Downloads](https://static.pepy.tech/badge/searchts)](https://pepy.tech/projects/searchts)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/capad-xyz/searchts/blob/main/LICENSE)
 
 <p align="center">
