@@ -77,6 +77,18 @@ agents. That focus is the whole point, so we're intentionally selective about wh
 - Bug fixes, docs, and new cases for the unlocker benchmark.
 - Small, focused changes in preference to large refactors.
 
+### Writing fetch block phrases
+
+Block phrases decide whether the unlocker escalates to another backend, so false positives silently
+turn successful reads into slower retries. Prefer the narrowest stable text from the challenge page:
+`checking if the site connection is secure` identifies a specific interstitial, while a bare
+`blocked` can appear in legitimate articles and must not be used.
+
+For every phrase added to `_BLOCK_PHRASES`, add both a positive fixture that matches the real
+challenge and a negative near-miss that stays clean. Keep fixtures focused on the distinguishing
+wording rather than copying an entire vendor page. When a backend fetches through a relay, report
+the URL the user requested in results and diagnostics, not the relay's wire URL.
+
 **We generally won't merge:**
 
 - **Backends that only register a name.** A new integration has to actually *do* the thing (read,
