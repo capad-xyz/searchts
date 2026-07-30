@@ -73,7 +73,13 @@ def _maybe_print_command_suggestion(argv, commands):
         print(f"did you mean '{matches[0]}'?", file=sys.stderr)
 
 
-def main():
+def _run():
+    """Parse argv and dispatch to a command handler.
+
+    Kept separate from main() so the entry point can translate the two
+    interpreter-level failures every piped/interactive CLI hits into clean
+    exits instead of tracebacks.
+    """
     _ensure_utf8_console()
 
     parser = argparse.ArgumentParser(
@@ -259,6 +265,35 @@ def main():
         _cmd_get(args)
     elif args.command == "grab":
         _cmd_grab(args)
+
+
+def main():
+    """Console entry point.
+
+    `read`, `search`, `transcribe` and `grab` are long-running and stream
+    content to stdout, so the two things users actually do to them are Ctrl+C
+    and piping into `head`/`less`. Left unhandled, both surface as a raw
+    traceback: KeyboardInterrupt, or an "Exception ignored ... BrokenPipeError"
+    emitted during interpreter shutdown.
+    """
+    try:
+        _run()
+    except KeyboardInterrupt:
+        print("[!] Interrupted", file=sys.stderr)
+        # 128 + SIGINT, the shell convention for "cancelled by the user".
+        sys.exit(130)
+    except BrokenPipeError:
+        # A downstream reader (head, less) closed the pipe. Python flushes
+        # stdout at shutdown, which would raise a second BrokenPipeError that
+        # no handler can catch, so point the fd at devnull first.
+        # See https://docs.python.org/3/library/signal.html#note-on-sigpipe
+        try:
+            devnull = os.open(os.devnull, os.O_WRONLY)
+            os.dup2(devnull, sys.stdout.fileno())
+        except (OSError, ValueError):
+            # Captured or already-closed stdout (pytest, embedded use).
+            pass
+        sys.exit(141)  # 128 + SIGPIPE
 
 
 # ── Command handlers ────────────────────────────────
