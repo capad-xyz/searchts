@@ -18,7 +18,8 @@ Surfaces: CLI, MCP server (tools: read_url, web_search, fetch_asset, grab_site),
 Keyless and free by default. OPTIONAL: separately-installed platform CLIs (gh, twitter-cli,
 opencli, mcporter) let it also reach GitHub/Twitter/Reddit/LinkedIn, and `searchts doctor`
 reports them — but those are optional add-ons, not the core.
-Repo: github.com/capad-xyz/searchts | License: MIT | Version: 0.4.1
+Repo: github.com/capad-xyz/searchts | License: MIT
+Version: see pyproject.toml (kept in sync with searchts/__init__.py and server.json).
 
 ## Commands
 - `pip install -e .` — Dev install
