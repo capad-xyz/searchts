@@ -24,7 +24,7 @@ from __future__ import annotations
 import os
 import urllib.parse
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 #: Browser-ish UA so keyless HTTP providers (SearXNG instances) don't 403 us.
 _UA_REAL = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -213,9 +213,11 @@ def _provider_brave(query: str, max_results: int) -> List[SearchResult]:
     key = os.environ.get("BRAVE_API_KEY")
     if not key:
         raise RuntimeError("BRAVE_API_KEY not set")
+    # Annotated so the mixed str/int values do not widen to object.
+    params: Dict[str, Union[str, int]] = {"q": query, "count": max_results}
     resp = requests.get(
         "https://api.search.brave.com/res/v1/web/search",
-        params={"q": query, "count": max_results},
+        params=params,
         headers={
             "X-Subscription-Token": key,
             "Accept": "application/json",

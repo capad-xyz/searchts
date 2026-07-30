@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import time
+from typing import Callable
 
 from searchts import __version__
 
@@ -419,15 +420,15 @@ def _cmd_install(args):
         print("   it only happens once during install. Enter your password or click 'Allow'.)")
         try:
             from searchts.cookie_extract import configure_from_browser
-            results = configure_from_browser("chrome", config)
+            cookie_results = configure_from_browser("chrome", config)
             found = False
-            for platform, success, message in results:
+            for platform, success, message in cookie_results:
                 if success:
                     print(f"  [ok] {platform}: {message}")
                     found = True
             if not found:
-                results = configure_from_browser("firefox", config)
-                for platform, success, message in results:
+                cookie_results = configure_from_browser("firefox", config)
+                for platform, success, message in cookie_results:
                     if success:
                         print(f"  [ok] {platform}: {message}")
                         found = True
@@ -1583,10 +1584,14 @@ def _cmd_search(args):
 def _cmd_doctor(args=None):
     from searchts.config import Config
     from searchts.doctor import check_all, format_report
+
+    rprint: Callable[..., None]
     try:
-        from rich import print as rprint
+        from rich import print as rich_print
     except ImportError:
         rprint = print
+    else:
+        rprint = rich_print
     config = Config()
     results = check_all(config)
 

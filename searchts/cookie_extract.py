@@ -8,10 +8,24 @@ Usage:
     searchts configure --from-browser chrome
 """
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple, TypedDict
+
+
+class PlatformSpec(TypedDict):
+    """One platform's cookie extraction rule.
+
+    `cookies` is None when every cookie on the domain should be kept; the
+    extraction loop branches on that.
+    """
+
+    name: str
+    domains: List[str]
+    cookies: Optional[List[str]]
+    config_key: str
+
 
 # Platform cookie specs: (platform_name, domain_pattern, needed_cookies)
-PLATFORM_SPECS = [
+PLATFORM_SPECS: List[PlatformSpec] = [
     {
         "name": "Twitter/X",
         "domains": [".x.com", ".twitter.com"],
