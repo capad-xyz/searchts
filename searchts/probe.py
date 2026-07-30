@@ -74,25 +74,31 @@ def probe_command(
     if module is not None:
         if importlib.util.find_spec(module) is not None:
             invocation = [sys.executable, "-m", module]
-        elif shutil.which(cmd):
-            invocation = [shutil.which(cmd)]
         else:
-            return ProbeResult("missing")
+            # Fall back to a PATH binary. Resolve once: the original called
+            # which() twice, and the second call is what mypy could not narrow.
+            module_path = shutil.which(cmd)
+            if not module_path:
+                return ProbeResult("missing")
+            invocation = [module_path]
     else:
         path = shutil.which(cmd)
         if not path:
             return ProbeResult("missing")
         invocation = [path]
 
-    last: Optional[ProbeResult] = None
-    for _ in range(retries + 1):
-        last = _run_once(invocation, args, timeout, package or cmd)
+    # Run once up front so the return value is always a ProbeResult. The old
+    # `for _ in range(retries + 1)` returned None for a negative `retries`,
+    # which the signature does not allow.
+    last = _run_once(invocation, args, timeout, package or cmd)
+    for _ in range(max(retries, 0)):
         if last.ok:
             return last
         # missing/broken won't heal between retries — only transient
         # failures (timeout/error) are worth a second attempt
         if last.status in ("missing", "broken"):
             return last
+        last = _run_once(invocation, args, timeout, package or cmd)
     return last
 
 

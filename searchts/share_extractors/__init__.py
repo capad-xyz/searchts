@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
+import re
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
@@ -78,7 +79,7 @@ def _find_key(obj, key: str):
 
 # ── registry (auto-discovered from the package's modules) ────────────────────
 
-_EXTRACTORS: List[Tuple[object, Callable[..., Optional[ShareResult]]]] = []
+_EXTRACTORS: List[Tuple[re.Pattern[str], Callable[..., Optional[ShareResult]]]] = []
 
 
 def _discover() -> None:
