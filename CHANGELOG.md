@@ -2,6 +2,32 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.7.0] - 2026-07-31
+
+### Added
+- **AI-chat share links now read as complete conversations.** Share pages (`chatgpt.com/share`, `claude.ai/share`, `poe.com/s`, and others) are SPAs whose conversation never reaches the DOM as extractable text, so the generic ladder returned a thin shell or a partial render cut mid-chat. A tier-0 share-extractor step ahead of the ladder decodes each provider's own data channel into full conversation markdown. Eight providers are supported: ChatGPT, Claude, Poe, Grok, Gemini, DeepSeek, Perplexity, and Copilot.
+  - Grok and Gemini go through keyless APIs the Chrome-impersonated fetch clears without a browser (Grok's `share_links` JSON endpoint; Gemini's WIZ `batchexecute` RPC).
+  - DeepSeek, Perplexity, and Copilot are JS shells (DeepSeek serves a 202 anti-bot stub), so they use a lazy patchright render that mirrors the stealth tier's fingerprint, waits for a provider ready-selector, auto-scrolls until scroll height stabilizes to defeat list virtualization, and expands collapsed sections.
+  - Extractors are auto-discovered plugin modules, so adding a provider is a single new file.
+- `FetchResult` now carries normalized response `headers`. Thanks to @terminalchai (#39).
+- Cloudflare challenge detection, so a challenge page is classified rather than returned as content. Thanks to @terminalchai (#40).
+- A CDN challenge test matrix. Thanks to @terminalchai (#35).
+
+### Fixed
+- The CLI exits cleanly on Ctrl+C and on a closed pipe. Both previously escaped as a traceback: Ctrl+C exited `3221225786` on Windows instead of the conventional `130`, and piping into `head`/`less` printed an `Exception ignored ... BrokenPipeError` during interpreter shutdown, which contradicted the pipeable-stdout design of `read`. Now `130` and `141` with no traceback.
+- Cleared 11 outstanding mypy findings. None were live defects; the notable one was `probe_command` returning `None` for a negative `retries`, which its `-> ProbeResult` signature forbids.
+
+### CI
+- Ruff now runs in CI and the tree is clean against it, closing a gap where the linter was configured in `pyproject.toml` but never enforced (53 findings had accumulated). Thanks to @terminalchai (#45, closes #44).
+- mypy is gated the same way, closing the equivalent gap for type checking.
+- Both linters pin through `constraints.txt`, so a new release cannot turn `main` red on an unrelated PR.
+- `server.json` is republished to the MCP registry on tag push, so downstream indexes (PulseMCP, Forge, Glama) pick up new versions automatically.
+
+### Docs
+- Documented AI-chat share reading and added an `ai-share` benchmark category.
+- A block-phrase guide in `CONTRIBUTING.md`. Thanks to @terminalchai (#30).
+- Scorecard results are explained. Thanks to @terminalchai (#36).
+
 ## [0.6.0] - 2026-07-09
 
 ### Added
