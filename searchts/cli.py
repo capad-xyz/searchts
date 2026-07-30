@@ -267,6 +267,7 @@ def main():
 def _cmd_install(args):
     """One-shot deterministic installer."""
     import os
+
     from searchts.config import Config
     from searchts.doctor import check_all, format_report
 
@@ -321,17 +322,17 @@ def _cmd_install(args):
         env = _detect_environment()
 
     if env == "server":
-        print(f"Environment: Server/VPS (auto-detected)")
+        print("Environment: Server/VPS (auto-detected)")
     else:
-        print(f"Environment: Local computer (auto-detected)")
+        print("Environment: Local computer (auto-detected)")
 
     # Apply explicit flags
     if args.proxy:
         if dry_run:
-            print(f"[dry-run] Would save network proxy")
+            print("[dry-run] Would save network proxy")
         else:
             config.set("proxy", args.proxy)
-            print(f"[ok] Proxy saved (used when the agent accesses a restricted network)")
+            print("[ok] Proxy saved (used when the agent accesses a restricted network)")
 
     # ── Install core system dependencies (lightweight, always) ──
     print()
@@ -448,9 +449,9 @@ def _cmd_install(args):
 
 def _install_skill():
     """Install searchts as an agent skill (OpenClaw / Claude Code / .agents)."""
+    import importlib.resources
     import os
     import shutil
-    import importlib.resources
 
     def _is_english_locale(value: str) -> bool:
         normalized = value.strip().lower()
@@ -732,9 +733,9 @@ def _cmd_mcp_serve():
 
 def _install_system_deps():
     """Install system-level dependencies: gh CLI, Node.js (for mcporter)."""
+    import platform
     import shutil
     import subprocess
-    import platform
     import tempfile
 
     from searchts.utils.paths import get_ytdlp_config_dir, get_ytdlp_config_path
@@ -1135,6 +1136,7 @@ def _detect_environment():
 def _cmd_configure(args):
     """Set a config value and test it, or auto-extract from browser."""
     import shutil
+
     from searchts.config import Config
 
     config = Config()
@@ -1231,15 +1233,15 @@ def _cmd_configure(args):
 
     elif args.key == "github-token":
         config.set("github_token", value)
-        print(f"[ok] GitHub token configured!")
+        print("[ok] GitHub token configured!")
 
     elif args.key == "groq-key":
         config.set("groq_api_key", value)
-        print(f"[ok] Groq key configured!")
+        print("[ok] Groq key configured!")
 
     elif args.key == "openai-key":
         config.set("openai_api_key", value)
-        print(f"[ok] OpenAI key configured!")
+        print("[ok] OpenAI key configured!")
 
 
 def _cmd_transcribe(args):
@@ -1618,7 +1620,7 @@ def _cmd_setup():
     print("  Get one: https://github.com/settings/tokens (no permissions required)")
     current = config.get("github_token")
     if current:
-        print(f"  Current status: [ok] configured")
+        print("  Current status: [ok] configured")
     else:
         key = input("  GITHUB_TOKEN (press Enter to skip): ").strip()
         if key:
@@ -1639,7 +1641,7 @@ def _cmd_setup():
     print("  Free tier, sign up: https://console.groq.com")
     current = config.get("groq_api_key")
     if current:
-        print(f"  Current status: [ok] configured")
+        print("  Current status: [ok] configured")
     else:
         key = input("  GROQ_API_KEY (press Enter to skip): ").strip()
         if key:
@@ -1770,10 +1772,10 @@ def _is_newer_version(remote: str, local: str) -> bool:
         except ValueError:
             return None
 
-    r, l = parse(remote), parse(local)
-    if r is None or l is None:
+    remote_version, local_version = parse(remote), parse(local)
+    if remote_version is None or local_version is None:
         return remote != local  # unparseable — fall back to old behavior
-    return r > l
+    return remote_version > local_version
 
 
 def _cmd_check_update():
@@ -1806,7 +1808,7 @@ def _cmd_check_update():
             print()
             print(_UPDATE_INSTRUCTIONS)
             return "update_available"
-        print(f"[ok] Already up to date")
+        print("[ok] Already up to date")
         return "up_to_date"
 
     release_err = _classify_github_response_error(resp)
@@ -1843,9 +1845,9 @@ def _cmd_watch():
 
     Only outputs problems. If everything is fine, outputs a single line.
     """
+    from searchts import __version__
     from searchts.config import Config
     from searchts.doctor import check_all
-    from searchts import __version__
 
     config = Config()
     issues = []
@@ -1884,8 +1886,8 @@ def _cmd_watch():
         print(f"searchts: All systems normal ({ok}/{total} channels available, v{__version__} is up to date)")
         return
 
-    print(f"searchts monitoring report")
-    print(f"=" * 40)
+    print("searchts monitoring report")
+    print("=" * 40)
     print(f"Version: v{__version__}  |  Channels: {ok}/{total}")
 
     if issues:

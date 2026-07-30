@@ -4,9 +4,10 @@
 Each channel knows how to check itself. Doctor just collects the results.
 """
 
-from typing import Dict
-from searchts.config import Config
+from typing import Callable, Dict, Optional
+
 from searchts.channels import get_all_channels
+from searchts.config import Config
 
 
 def check_all(config: Config) -> Dict[str, dict]:
@@ -46,10 +47,16 @@ def _name_msg(r: dict, escape) -> str:
 
 def format_report(results: Dict[str, dict]) -> str:
     """Format results as a readable text report (with Rich markup)."""
+    rich_escape: Optional[Callable[[str], str]]
     try:
-        from rich.markup import escape
+        from rich.markup import escape as rich_escape_impl
     except ImportError:
-        escape = lambda x: x
+        rich_escape = None
+    else:
+        rich_escape = rich_escape_impl
+
+    def escape(value: str) -> str:
+        return rich_escape(value) if rich_escape is not None else value
 
     lines = []
     lines.append("[bold cyan]searchts status[/bold cyan]")
@@ -107,7 +114,6 @@ def format_report(results: Dict[str, dict]) -> str:
         )
 
     # Security check: config file permissions (Unix only)
-    import os
     import stat
     import sys
 

@@ -4,21 +4,21 @@ Channel registry — lists all supported platforms for doctor checks.
 """
 
 from typing import List, Optional
+
 from .base import Channel
+from .exa_search import ExaSearchChannel
+from .github import GitHubChannel
+from .instagram import InstagramChannel
+from .linkedin import LinkedInChannel
+from .reddit import RedditChannel
+from .redditvideo import RedditVideoChannel
+from .rss import RSSChannel
+from .tiktok import TikTokChannel
+from .twitter import TwitterChannel
 
 # Import all channels
 from .web import WebChannel
-from .github import GitHubChannel
-from .twitter import TwitterChannel
 from .youtube import YouTubeChannel
-from .tiktok import TikTokChannel
-from .instagram import InstagramChannel
-from .redditvideo import RedditVideoChannel
-from .reddit import RedditChannel
-from .rss import RSSChannel
-from .exa_search import ExaSearchChannel
-from .linkedin import LinkedInChannel
-
 
 ALL_CHANNELS: List[Channel] = [
     GitHubChannel(),

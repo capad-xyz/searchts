@@ -7,7 +7,6 @@ import pytest
 
 from searchts import assets
 
-
 # ── color / filename helpers ─────────────────────────────────────────────────
 
 def test_norm_hex_expands_shorthand_and_drops_alpha():

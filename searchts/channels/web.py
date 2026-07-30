@@ -5,8 +5,8 @@ Ladder (see searchts.unlocker): curl_cffi -> Jina Reader -> stealth-browser.
 Always available; falls back gracefully when a bot-wall blocks one backend.
 """
 
-from .base import Channel
 from .. import unlocker
+from .base import Channel
 
 
 class WebChannel(Channel):
