@@ -640,3 +640,53 @@ class TestYtdlpConfigInstall:
 
         assert target.exists()
         assert "--js-runtimes node" in target.read_text(encoding="utf-8")
+
+
+class TestEntryPointSignalHandling:
+    """main() must turn Ctrl+C and a closed pipe into clean exits.
+
+    Both reach the interpreter as exceptions, so without handling they print
+    a traceback -- for `read`/`search`/`transcribe`, the two most likely ways
+    a run ends.
+    """
+
+    def test_keyboard_interrupt_exits_130_without_traceback(self, monkeypatch, capsys):
+        def _interrupt():
+            raise KeyboardInterrupt()
+
+        monkeypatch.setattr(cli, "_run", _interrupt)
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 130
+        captured = capsys.readouterr()
+        assert "Interrupted" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_broken_pipe_exits_quietly(self, monkeypatch, capsys):
+        """`searchts read <url> | head` closes stdout early."""
+
+        def _broken_pipe():
+            raise BrokenPipeError()
+
+        monkeypatch.setattr(cli, "_run", _broken_pipe)
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 141
+        assert "Traceback" not in capsys.readouterr().err
+
+    def test_normal_exit_code_passes_through(self, monkeypatch):
+        """The wrapper must not swallow a handler's own sys.exit status."""
+
+        def _fail():
+            raise SystemExit(3)
+
+        monkeypatch.setattr(cli, "_run", _fail)
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+        assert exc_info.value.code == 3
