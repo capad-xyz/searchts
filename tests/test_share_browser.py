@@ -15,8 +15,6 @@ The patchright launch itself is never exercised here.
 
 from pathlib import Path
 
-import pytest
-
 from searchts import share_extractors
 from searchts.share_extractors import ShareResult, copilot, deepseek, extract, matches, perplexity
 

@@ -10,7 +10,13 @@ from unittest.mock import patch
 
 import pytest
 
-from searchts.integrations.mcp_server import get_status, read_url, web_search
+from searchts.integrations.mcp_server import (
+    fetch_asset,
+    get_status,
+    grab_site,
+    read_url,
+    web_search,
+)
 from searchts.search import SearchError, SearchResult
 from searchts.unlocker import FetchResult, UnlockerError
 
@@ -152,8 +158,6 @@ def test_create_server_raises_without_mcp(monkeypatch):
 
 
 # ── fetch_asset / grab_site ─────────────────────────────────────────────────
-
-from searchts.integrations.mcp_server import fetch_asset, grab_site
 
 
 def test_fetch_asset_returns_json(monkeypatch, tmp_path):

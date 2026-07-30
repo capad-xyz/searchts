@@ -9,8 +9,6 @@ are synthetic payloads mirroring the schemas verified against live pages.
 import json
 from pathlib import Path
 
-import pytest
-
 from searchts import share_extractors, unlocker
 from searchts.share_extractors import (
     ShareResult,

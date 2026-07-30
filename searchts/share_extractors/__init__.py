@@ -120,6 +120,10 @@ def extract(url: str) -> Optional[ShareResult]:
 _discover()
 
 # Back-compat / test-facing re-exports of the provider parsers.
-from searchts.share_extractors.chatgpt import parse_chatgpt_html  # noqa: E402
-from searchts.share_extractors.claude import parse_claude_snapshot  # noqa: E402
-from searchts.share_extractors.poe import parse_poe_html  # noqa: E402
+from searchts.share_extractors.chatgpt import (  # noqa: E402
+    parse_chatgpt_html as parse_chatgpt_html,
+)
+from searchts.share_extractors.claude import (  # noqa: E402
+    parse_claude_snapshot as parse_claude_snapshot,
+)
+from searchts.share_extractors.poe import parse_poe_html as parse_poe_html  # noqa: E402

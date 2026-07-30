@@ -20,7 +20,6 @@ from searchts.channels.redditvideo import RedditVideoChannel
 from searchts.channels.tiktok import TikTokChannel
 from searchts.config import Config
 
-
 # --- Fixtures ----------------------------------------------------------- #
 
 

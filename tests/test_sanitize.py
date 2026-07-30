@@ -3,7 +3,6 @@
 
 import pytest
 
-from searchts import sanitize
 from searchts.sanitize import (
     REDACTION_MARKER,
     ScrubResult,
@@ -13,7 +12,6 @@ from searchts.sanitize import (
     strip_invisibles,
     wrap_untrusted,
 )
-
 
 # ── strip_invisibles ──────────────────────────────────────────────────────────
 

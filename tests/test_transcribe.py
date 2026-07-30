@@ -16,7 +16,6 @@ def _hide_ytdlp_module(monkeypatch):
     yt-dlp ships with searchts, so its module is importable in the test venv;
     these tests must explicitly hide it to exercise the PATH-binary fallback.
     """
-    import importlib.util
 
     real_find_spec = tr.importlib.util.find_spec
 

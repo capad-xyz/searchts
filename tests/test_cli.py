@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 import requests
+
 import searchts.cli as cli
 from searchts.cli import main
 
@@ -625,7 +626,6 @@ class TestYtdlpConfigInstall:
 
     def test_install_uses_paths_helper_not_hardcoded(self, tmp_path, monkeypatch):
         """Regardless of OS, the installer routes through get_ytdlp_config_path."""
-        import searchts.utils.paths as paths
 
         target = tmp_path / "custom-ytdlp" / "config"
         monkeypatch.setattr(
