@@ -18,11 +18,8 @@ Thank you for your interest in contributing to searchts! This document provides 
 git clone https://github.com/capad-xyz/searchts.git
 cd searchts
 
-# Install in development mode
-pip install -e ".[dev]"
-
-# Install pre-commit hooks (optional but recommended)
-pre-commit install
+# Install in development mode, against the tested dependency set CI uses
+pip install -c constraints.txt -e ".[dev]"
 ```
 
 ## Code Style
@@ -33,19 +30,18 @@ We use the following tools to maintain code quality:
 - **mypy**: Type checking
 - **pytest**: Testing
 
-Run all checks before submitting a PR:
+CI gates on all three, so run them before submitting a PR:
 
 ```bash
-# Linting
 ruff check searchts tests
-ruff format searchts tests
-
-# Type checking
 mypy searchts
-
-# Tests
-pytest
+pytest -q
 ```
+
+Note there is no `ruff format` step. The tree is deliberately not
+ruff-format-clean, and running it would rewrite most files — which collides
+with the rule below about unrelated reformatting. Match the style of the code
+around your change instead.
 
 ## Adding New Channels
 
@@ -64,6 +60,13 @@ searchts uses a unified channel interface. To add a new platform:
 - Update documentation if needed
 - Follow existing code style
 - Reference any related issues
+
+**Title your PR as a conventional commit** (`type(scope): message`). PRs are
+squash-merged, so the title becomes the commit message on `main`, and release
+tooling reads it: a `feat:` cuts a minor release and a `fix:` cuts a patch one,
+while `ci:`, `docs:`, `test:`, `refactor:` and `chore:` ship silently with the
+next release. Maintainers cut releases by merging the standing release PR, so
+please do not bump version numbers in your PR.
 
 ## What we merge (and what we don't)
 

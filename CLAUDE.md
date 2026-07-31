@@ -22,12 +22,17 @@ Repo: github.com/capad-xyz/searchts | License: MIT
 Version: see pyproject.toml (kept in sync with searchts/__init__.py and server.json).
 
 ## Commands
-- `pip install -e .` — Dev install
+- `pip install -c constraints.txt -e ".[dev]"` — Dev install against the tested dependency set CI uses
 - `pytest tests/ -v` — All tests
 - `pytest tests/test_cli.py -v` — CLI tests only
+- `ruff check searchts tests` — Lint (CI gates on this)
+- `mypy searchts` — Type check (CI gates on this)
 - `bash test.sh` — Full integration test (creates venv, installs, runs doctor + channel tests)
 - `python -m searchts.cli doctor` — Run diagnostics
 - `python -m searchts.cli install --env=auto` — Auto-configure
+
+Do NOT run `ruff format` — the tree is deliberately not format-clean and it would
+rewrite most files.
 
 ## Structure
 - `searchts/cli.py` — CLI entry point (argparse)
@@ -41,6 +46,10 @@ Version: see pyproject.toml (kept in sync with searchts/__init__.py and server.j
 - `searchts/guides/` — Usage guides
 - `tests/` — pytest tests
 - `config/mcporter.json` — MCP tool config
+- `constraints.txt` — pinned tested dependency set; CI installs through it
+- `.github/workflows/pytest.yml` — lint, typecheck, test matrix, wheel-gate, version-sync
+- `.github/workflows/release.yml` — on a `v*` tag: PyPI, GitHub Release, MCP registry
+- `.release-please-config.json` / `.release-please-manifest.json` — release automation
 
 ## Conventions
 - Python 3.10+ with type hints
@@ -52,12 +61,20 @@ Version: see pyproject.toml (kept in sync with searchts/__init__.py and server.j
   for routing. Do not assume a channel-routing contract — there isn't one.
 - Each channel is a single file in `channels/`, inherits from `BaseChannel`.
 - Use `loguru` for logging, `rich` for CLI output
-- Commit format: `type(scope): message` (one commit = one thing)
+- Commit format: `type(scope): message` (one commit = one thing). PRs are
+  squash-merged, so the PR title must follow the same format — it becomes the
+  commit on `main` and release tooling parses it.
 - Optional platform integrations go through their public CLI/API, never hack internals
 
 ## Rules
 - NEVER modify upstream open source projects' source code
-- Version must match in THREE files: `pyproject.toml`, `searchts/__init__.py`, and `server.json` (two fields) — the `version-sync` CI job enforces this
+- NEVER hand-edit version numbers. release-please owns them and bumps all four
+  sites together (`pyproject.toml`, `searchts/__init__.py`, and `server.json`
+  twice); the `version-sync` CI job fails if they ever drift. Releases are cut by
+  merging the standing release PR, which tags and triggers the PyPI publish.
+- Only `feat`, `fix`, `perf` and `revert` cut a release. `ci`, `docs`, `test`,
+  `refactor`, `build`, `style` and `chore` ride along with the next one.
 - Always new branch for changes, PR to main, never push to main directly
-- Run `pytest tests/ -v` before committing — all tests must pass
+- Run `ruff check searchts tests`, `mypy searchts` and `pytest tests/ -v` before
+  committing — CI gates on all three
 - Cookie-based auth (Twitter): use Cookie-Editor export method only, no QR scan

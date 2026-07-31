@@ -16,6 +16,11 @@ pip install -c constraints.txt -e .[dev]
 
 ## Update workflow
 
+Dependabot proposes pin bumps here monthly, one PR per package, and CI validates
+each against the full matrix. The manual pass below is for changes it does not
+cover — widening a range in `pyproject.toml`, or coordinating several pins that
+have to move together.
+
 1. Update `pyproject.toml` dependency ranges as needed.
 2. Validate against latest compatible versions locally.
 3. Update pinned versions in `constraints.txt`.
