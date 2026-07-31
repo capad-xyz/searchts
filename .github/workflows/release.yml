@@ -15,7 +15,7 @@ jobs:
       id-token: write   # OIDC for PyPI Trusted Publishing (no stored token)
       contents: write   # create the GitHub Release for the tag
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -43,7 +43,7 @@ jobs:
       id-token: write   # OIDC login to the registry (owns io.github.capad-xyz/* because this workflow runs in that org's repo)
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install mcp-publisher
         run: |
           curl -sSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
