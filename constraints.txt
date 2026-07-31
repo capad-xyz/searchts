@@ -10,6 +10,10 @@ PyYAML==6.0.3
 rich==15.0.0
 yt-dlp==2025.5.22
 
+# Optional [mcp] extra. Pinned below 2 for the API break described in
+# pyproject.toml; CI installs it so the server is built against a real SDK.
+mcp==1.29.0
+
 pytest==8.0.0
 ruff==0.15.1
 mypy==2.3.0

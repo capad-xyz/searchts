@@ -157,6 +157,24 @@ def test_create_server_raises_without_mcp(monkeypatch):
         mcp_server.create_server()
 
 
+def test_create_server_builds_against_the_installed_sdk():
+    """Build the real server against whatever mcp version is installed.
+
+    Every other test here calls the tool functions directly or stubs HAS_MCP
+    off, so none of them touch the SDK. That let MCP SDK 2.0 -- which dropped
+    the low-level @server.list_tools decorator create_server() is built on --
+    break `searchts mcp serve` with an AttributeError at startup while the
+    suite stayed green.
+    """
+    from searchts.integrations import mcp_server
+
+    if not mcp_server.HAS_MCP:
+        pytest.skip("mcp extra not installed")
+
+    server = mcp_server.create_server()
+    assert server is not None
+
+
 # ── fetch_asset / grab_site ─────────────────────────────────────────────────
 
 
