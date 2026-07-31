@@ -1,0 +1,25 @@
+version: 2
+
+updates:
+  # Pinned action majors go stale silently until a runner deprecation breaks
+  # every workflow at once. Monthly keeps the churn to a PR or two.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci
+    labels:
+      - dependencies
+
+  # constraints.txt is the tested dependency set the lint, typecheck and test
+  # jobs all install through, so a bump here is a real change and wants CI.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: chore
+    labels:
+      - dependencies
+    open-pull-requests-limit: 3

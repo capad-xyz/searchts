@@ -1,8 +1,20 @@
 name: ci
 
 on:
+  # Scoped to main: every PR branch already gets a pull_request run, and an
+  # unscoped `push` made each PR run the whole matrix twice.
   push:
+    branches: [main]
   pull_request:
+
+# A new push to the same branch makes the in-flight run obsolete. main is
+# exempt so pushes there always produce a complete record.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
 
 jobs:
   lint:
@@ -15,6 +27,8 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: constraints.txt
 
       - name: Install Ruff
         run: python -m pip install -c constraints.txt ruff
@@ -32,6 +46,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            constraints.txt
+            pyproject.toml
 
       # Installs the dev extra rather than mypy alone: the type stubs
       # (types-requests, types-PyYAML) are what make the run accurate.
@@ -64,6 +82,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: |
+            constraints.txt
+            pyproject.toml
 
       - name: Install package and test deps
         run: |
