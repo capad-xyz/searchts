@@ -2,6 +2,16 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.7.1](https://github.com/capad-xyz/searchts/compare/v0.7.0...v0.7.1) (2026-07-31)
+
+
+### CI
+
+* halve CI runs, cache pip, scope token, add dependabot ([696cdb5](https://github.com/capad-xyz/searchts/commit/696cdb519da45a33b120bab30c2b3f9ba8bd4a5e))
+* halve CI runs, cache pip, scope token, add dependabot ([ffa5c8e](https://github.com/capad-xyz/searchts/commit/ffa5c8e51e641472182ee046cc1a9101c405e2ae))
+* **release:** automate release prep with release-please ([2845559](https://github.com/capad-xyz/searchts/commit/2845559230a7761f890c17904b6c2d1e702b39a0))
+* **release:** automate release prep with release-please ([025483c](https://github.com/capad-xyz/searchts/commit/025483caab84b6501f678b3ce3f6bc146971afaa))
+
 ## [0.7.0] - 2026-07-31
 
 ### Added
