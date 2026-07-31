@@ -1,0 +1,53 @@
+name: release-please
+
+# Keeps a standing release PR up to date: computes the next version from the
+# conventional-commit history, rewrites the four version sites and CHANGELOG.md.
+# Merging that PR tags the release, and release.yml publishes from the tag.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Never cancel: a half-finished release PR update is worse than a slow one.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maintain the release PR, and tag when it merges
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          # A tag pushed with GITHUB_TOKEN cannot trigger another workflow, so
+          # release.yml would never fire and nothing would reach PyPI. Setting
+          # RELEASE_PLEASE_TOKEN (fine-grained PAT with contents + pull-requests
+          # write) is what makes the publish chain run end to end. Without it
+          # the release PR and tag still work; only the publish needs a nudge,
+          # and the step below says so explicitly rather than failing silently.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Report outcome
+        env:
+          CREATED: ${{ steps.release.outputs.release_created }}
+          TAG: ${{ steps.release.outputs.tag_name }}
+          HAS_PAT: ${{ secrets.RELEASE_PLEASE_TOKEN != '' }}
+        run: |
+          if [ "$CREATED" != "true" ]; then
+            echo "No release cut. The standing release PR is up to date."
+            exit 0
+          fi
+          echo "Tagged $TAG."
+          if [ "$HAS_PAT" = "true" ]; then
+            echo "Tag pushed with a PAT, so release.yml will build and publish to PyPI."
+          else
+            echo "::warning::$TAG was created with GITHUB_TOKEN, which cannot trigger release.yml, so nothing will be published."
+            echo "::warning::Publish it by re-pushing the tag: git push origin :refs/tags/$TAG && git push origin $TAG"
+          fi
