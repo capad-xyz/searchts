@@ -17,7 +17,7 @@
 ## Why searchts?
 
 - Reads pages behind common bot walls
-- Reads complete ChatGPT / Claude / Gemini / Grok / Poe shared conversations
+- Reads complete ChatGPT / Claude / Gemini / Grok / Poe / DeepSeek / Perplexity / Copilot shared conversations
 - Works with Claude, Codex, and MCP agents
 - Extracts clean Markdown, ready to feed a model
 - Searches the web without API keys
@@ -49,6 +49,17 @@ Share links from AI chat apps are a special kind of hard: the conversation never
 | Gemini | `gemini.google.com/share/…` | keyless batchexecute RPC |
 | Grok | `grok.com/share/…` | keyless share-links API |
 | Poe | `poe.com/s/…` | `__NEXT_DATA__` payload embedded in the page |
+| DeepSeek | `chat.deepseek.com/share/…` | stealth render, scrolled to the end |
+| Perplexity | `perplexity.ai/search/…` | stealth render, scrolled to the end |
+| Copilot | `copilot.microsoft.com/shares/…` | stealth render, scrolled to the end |
+
+The first five need no browser. The last three are JavaScript shells with
+nothing in the initial HTML, so those reuse the stealth tier: wait for the
+conversation to render, auto-scroll until the page height stops changing (list
+virtualization will otherwise truncate a long chat), then expand the collapsed
+sections before reading. The benchmark currently covers the five that read
+without a browser and passes all five; the three that need one are not in it
+yet.
 
 Each provider is a drop-in plugin module (`searchts/share_extractors/`); if a provider changes its format, extraction falls back to the normal unlocker ladder instead of failing.
 

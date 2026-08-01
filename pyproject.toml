@@ -62,7 +62,11 @@ dev = [
 searchts = "searchts.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/capad-xyz/searchts"
+# Homepage points at the write-up rather than back at this repo, which the
+# Repository link already covers. It also closes the loop the other way: the
+# case study names the author, so the package, the site and the person resolve
+# to one another instead of three unconnected pages.
+Homepage = "https://capad.fyi/work/searchts"
 Repository = "https://github.com/capad-xyz/searchts"
 Issues = "https://github.com/capad-xyz/searchts/issues"
 
