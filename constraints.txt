@@ -2,7 +2,7 @@
 # Usage:
 #   pip install -c constraints.txt -e .[dev]
 
-requests==2.32.5
+requests==2.34.2
 feedparser==6.0.12
 python-dotenv==1.2.1
 loguru==0.7.3
