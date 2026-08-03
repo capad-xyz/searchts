@@ -12,6 +12,8 @@
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/capad-xyz/searchts/main/demo/demo1.gif" alt="A Claude agent's fetch hits a 403 bot wall, so it routes through searchts, reads the page, and answers the question" width="860">
+  <br>
+  <a href="https://github.com/capad-xyz/searchts/releases/download/v0.7.0/searchts-demo-v5.mp4">▶ Watch the full 1-minute demo</a>
 </p>
 
 ## Why searchts?
