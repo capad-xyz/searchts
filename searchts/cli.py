@@ -133,7 +133,7 @@ def _run():
     p_read.add_argument("--json", action="store_true",
                         help="Print {url,final_url,fetched_at,backend,status,chars,text} as JSON instead of raw text")
     p_read.add_argument("--human", action="store_true",
-                        help="On a CAPTCHA/challenge, open a headful browser to solve by hand")
+                        help="If no tier gets clean content, open a headful browser to clear it by hand")
     p_read.add_argument("--scrub", action="store_true",
                         help="Redact prompt-injection spans from the content (invisible-char "
                              "stripping + indicator scanning always run regardless)")
