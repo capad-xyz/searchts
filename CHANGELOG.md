@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.7.2](https://github.com/capad-xyz/searchts/compare/v0.7.1...v0.7.2) (2026-08-04)
+
+
+### Fixed
+
+* **share:** capture full Grok share ids and read Perplexity Pages ([#71](https://github.com/capad-xyz/searchts/issues/71)) ([7106ed1](https://github.com/capad-xyz/searchts/commit/7106ed19e5d69fcff9fc14004281d2e1eb46da96))
+
 ## [0.7.1](https://github.com/capad-xyz/searchts/compare/v0.7.0...v0.7.1) (2026-08-04)
 
 
