@@ -4,6 +4,18 @@ on:
   push:
     tags:
       - "v*"
+  # Manual recovery path. A tag pushed by release-please carries the default
+  # GITHUB_TOKEN, and GitHub does not start workflows from GITHUB_TOKEN events
+  # (it is the guard against recursive runs), so the `push` trigger above never
+  # fires for an automated release and the publish is silently skipped. Until
+  # release-please is given a PAT / App token, dispatch this with the tag to
+  # publish an already-tagged version.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish, e.g. v0.7.1"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -14,14 +26,19 @@ jobs:
     permissions:
       id-token: write   # OIDC for PyPI Trusted Publishing (no stored token)
       contents: write   # create the GitHub Release for the tag
+    env:
+      # On a tag push this is the tag; on a manual dispatch it is the input.
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Verify tag matches package version
         run: |
-          python -c "import tomllib,os;t=os.environ['GITHUB_REF_NAME'];v=tomllib.load(open('pyproject.toml','rb'))['project']['version'];assert t==f'v{v}',f'tag {t} != pyproject v{v}';print('version OK',t)"
+          python -c "import tomllib,os;t=os.environ['RELEASE_TAG'];v=tomllib.load(open('pyproject.toml','rb'))['project']['version'];assert t==f'v{v}',f'tag {t} != pyproject v{v}';print('version OK',t)"
       - name: Build sdist and wheel
         run: |
           python -m pip install --upgrade pip build
@@ -31,6 +48,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
           generate_release_notes: true
           files: dist/*
 
@@ -44,6 +62,9 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          # server.json must be the released version's, not main's.
+          ref: ${{ inputs.tag || github.ref_name }}
       - name: Install mcp-publisher
         run: |
           curl -sSL "https://github.com/modelcontextprotocol/registry/releases/download/v1.7.9/mcp-publisher_linux_amd64.tar.gz" | tar xz mcp-publisher
