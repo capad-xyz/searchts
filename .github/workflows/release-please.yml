@@ -22,7 +22,7 @@ jobs:
     steps:
       - name: Maintain the release PR, and tag when it merges
         id: release
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         with:
           # A tag pushed with GITHUB_TOKEN cannot trigger another workflow, so
           # release.yml would never fire and nothing would reach PyPI. Setting
