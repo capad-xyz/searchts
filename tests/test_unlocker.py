@@ -504,3 +504,109 @@ def test_looks_blocked_detects_cdn_challenge_phrases(vendor, body):
 )
 def test_looks_blocked_ignores_cdn_challenge_near_misses(case, body):
     assert looks_blocked(200, body) is None, case
+
+
+# ── SPA hydration (regression: stealth returned the pre-hydration shell) ──────
+
+
+class _FakePage:
+    """Minimal page double: yields a scripted sequence of content() reads.
+
+    Frames model reads AFTER the initial one, since `_await_hydration` is
+    handed the first `page.content()` result by its caller.
+    """
+
+    def __init__(self, frames):
+        self._frames = frames
+        self._i = 0
+
+    def wait_for_timeout(self, ms):
+        pass
+
+    def content(self):
+        frame = self._frames[min(self._i, len(self._frames) - 1)]
+        self._i += 1
+        if isinstance(frame, Exception):
+            raise frame
+        return frame
+
+
+def test_await_hydration_waits_for_spa_to_fill_in():
+    # An SPA shell that fills in over two polls, then stabilizes.
+    page = _FakePage(["a" * 200, "a" * 5000, "a" * 5000])
+    out = unlocker._await_hydration(page, "<html>x</html>", budget_ms=4000, step_ms=500)
+    assert len(out) == 5000
+
+
+def test_await_hydration_returns_immediately_for_static_page():
+    page = _FakePage(["S" * 900])
+    out = unlocker._await_hydration(page, "S" * 900, budget_ms=8000, step_ms=500)
+    assert out == "S" * 900
+
+
+def test_await_hydration_survives_a_page_that_navigates_mid_read():
+    page = _FakePage([RuntimeError("navigated")])
+    out = unlocker._await_hydration(page, "partial", budget_ms=2000, step_ms=500)
+    assert out == "partial"
+
+
+def test_await_hydration_is_bounded_by_budget():
+    # Content that never stops growing must still return once the budget is spent.
+    page = _FakePage(["a" * n for n in range(100, 100000, 100)])
+    out = unlocker._await_hydration(page, "", budget_ms=1000, step_ms=500)
+    assert len(out) < 100000  # returned, did not spin
+
+
+# ── --human reachability (regression: soft walls skipped the human rung) ──────
+
+
+def test_human_fallback_fires_on_a_soft_wall(monkeypatch, stub_extract):
+    """A login wall served as HTTP 200 is thin, not a challenge.
+
+    The thin result used to be returned before the human rung was considered,
+    which made --human a silent no-op on exactly the pages it exists for.
+    """
+    _set(monkeypatch, curl=(200, "login required"), jina=(200, "login"),
+         stealth=(200, "login"))
+    monkeypatch.setattr(
+        unlocker, "_fetch_human",
+        lambda url, timeout=180: (200, "H" * 900, url),
+    )
+    res = unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    assert res.backend == "human-browser"
+    assert len(res.text) == 900
+
+
+def test_human_fallback_not_used_when_it_gets_less(monkeypatch, stub_extract):
+    """If the human rung comes back thinner, keep the automated best effort."""
+    _set(monkeypatch, curl=(200, "A" * 300), jina=(200, "B" * 50),
+         stealth=(200, "C" * 40))
+    monkeypatch.setattr(
+        unlocker, "_fetch_human",
+        lambda url, timeout=180: (200, "tiny", url),
+    )
+    res = unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    assert res.backend == "curl_cffi"
+    assert len(res.text) == 300
+
+
+def test_human_fallback_stays_off_by_default(monkeypatch, stub_extract):
+    """Without the flag, a thin result is returned and no browser is opened."""
+    def boom(url, timeout=180):
+        raise AssertionError("human browser must not open without allow_human")
+
+    _set(monkeypatch, curl=(200, "thin"), jina=(200, "t"), stealth=(200, "t"))
+    monkeypatch.setattr(unlocker, "_fetch_human", boom)
+    res = unlocker.fetch("https://site.test", use_memory=False)
+    assert res.text == "thin"
+
+
+def test_human_fallback_failure_falls_back_to_best(monkeypatch, stub_extract):
+    """patchright missing / launch failure must not lose the thin result."""
+    def boom(url, timeout=180):
+        raise RuntimeError("no patchright")
+
+    _set(monkeypatch, curl=(200, "thin but real"), jina=(200, "t"), stealth=(200, "t"))
+    monkeypatch.setattr(unlocker, "_fetch_human", boom)
+    res = unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    assert res.text == "thin but real"

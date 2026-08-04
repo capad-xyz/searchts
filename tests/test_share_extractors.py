@@ -164,3 +164,102 @@ def test_fetch_non_share_url_skips_extractor(monkeypatch):
     )
     unlocker.fetch("https://example.com/", backends=["curl_cffi"], use_memory=False)
     assert calls == []  # matches() gate prevents the extract call entirely
+
+
+# ── ChatGPT short-share links (/s/<id>) ──────────────────────────────────────
+#
+# Regression: ChatGPT issues single-turn shares at `/s/t_<hex>`, which the
+# `/share/`-only PATTERN never matched, so tier-0 was skipped and the generic
+# ladder returned the un-hydrated SPA shell. The route also serves its turns as
+# a flat `messages` list rather than `linear_conversation` nodes, so widening
+# the URL pattern alone was not enough.
+
+
+def test_matches_chatgpt_short_share_urls():
+    assert matches("https://chatgpt.com/s/t_6a714d2148c8819188f1ce1f4c074a19")
+    assert matches("https://chat.openai.com/s/t_6a714d2148c8819188f1ce1f4c074a19")
+    # The `t_` prefix means the id contains an underscore; a pattern without
+    # `_` in its character class silently truncates and fails to match.
+    assert matches("https://chatgpt.com/s/abc_123-XYZ")
+
+
+def test_matches_all_chatgpt_short_share_prefixes():
+    """`/s/` ids carry a type prefix and there is more than one.
+
+    Verified live: t_ = thread, m_ = single message, dr_ = deep research,
+    cd_ = Codex session. Keep the id class permissive rather than pinning the
+    known prefixes, since OpenAI adds new ones without notice.
+    """
+    for prefix in ("t_", "m_", "dr_", "cd_"):
+        url = f"https://chatgpt.com/s/{prefix}6a714d2148c8819188f1ce1f4c074a19"
+        assert matches(url), prefix
+
+
+def test_matches_still_rejects_chatgpt_non_share_paths():
+    assert not matches("https://chatgpt.com/s/")           # no id
+    assert not matches("https://chatgpt.com/s")            # no trailing segment
+    assert not matches("https://chatgpt.com/c/abc123")     # private chat, not a share
+
+
+def _turbo_stream_html(pool):
+    """Wrap a turbo-stream pool the way a share page ships it."""
+    return (
+        "<script>streamController.enqueue("
+        + json.dumps(json.dumps(pool))
+        + ");</script>"
+    )
+
+
+def test_parse_chatgpt_flat_messages_schema():
+    """`/s/` shares carry `messages` (flat dicts), not `linear_conversation`."""
+    pool = [
+        {"_1": 2},            # 0: {loaderData: <2>}
+        "loaderData",         # 1
+        {"_3": 4, "_15": 16},  # 2: {messages: <4>, title: <16>}
+        "messages",           # 3
+        [5],                  # 4: [<5>]
+        {"_6": 7, "_10": 11},  # 5: {author: <7>, content: <11>}
+        "author",             # 6
+        {"_8": 9},            # 7: {role: <9>}
+        "role",               # 8
+        "assistant",          # 9
+        "content",            # 10
+        {"_12": 13},          # 11: {parts: <13>}
+        "parts",              # 12
+        [14],                 # 13: [<14>]
+        "hello from a single-turn share",  # 14
+        "title",              # 15
+        "Synthetic single turn",  # 16
+    ]
+    res = parse_chatgpt_html(_turbo_stream_html(pool))
+    assert isinstance(res, ShareResult)
+    assert res.provider == "chatgpt"
+    assert res.title == "Synthetic single turn"
+    assert "**ChatGPT:**" in res.markdown
+    assert "hello from a single-turn share" in res.markdown
+
+
+def test_parse_chatgpt_flat_messages_ignores_non_dict_entries():
+    """A malformed entry in `messages` must be skipped, not raise."""
+    pool = [
+        {"_1": 2},
+        "loaderData",
+        {"_3": 4},
+        "messages",
+        [5, 6],               # 4: one junk entry, one real message
+        "not-a-message",      # 5
+        {"_7": 8, "_11": 12},  # 6
+        "author",             # 7
+        {"_9": 10},           # 8
+        "role",               # 9
+        "user",               # 10
+        "content",            # 11
+        {"_13": 14},          # 12
+        "parts",              # 13
+        [15],                 # 14
+        "still parsed",       # 15
+    ]
+    res = parse_chatgpt_html(_turbo_stream_html(pool))
+    assert isinstance(res, ShareResult)
+    assert "**User:**" in res.markdown
+    assert "still parsed" in res.markdown

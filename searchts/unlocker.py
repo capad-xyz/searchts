@@ -283,6 +283,32 @@ def _fetch_jina(url: str, timeout: int = 40) -> Tuple[int, str, str, Dict[str, s
         return resp.status, resp.read().decode("utf-8", "replace"), url, headers
 
 
+def _await_hydration(page, html: str, budget_ms: int = 8000, step_ms: int = 500) -> str:
+    """Poll until the rendered HTML stops growing; return the fullest seen.
+
+    A JS app is still an empty shell at ``domcontentloaded``, so reading
+    ``page.content()`` immediately yields pre-hydration markup and the caller
+    judges a live page to be thin. Polling for content-length stability beats
+    waiting for ``networkidle``, which never settles on pages holding a live
+    connection (streaming, websockets, analytics beacons).
+
+    Stops as soon as two consecutive reads agree, so an already-rendered page
+    costs one extra step rather than the whole budget.
+    """
+    waited = 0
+    while waited < budget_ms:
+        page.wait_for_timeout(step_ms)
+        waited += step_ms
+        try:
+            current = page.content()
+        except Exception:  # noqa: BLE001 - page may navigate mid-read
+            break
+        if len(current) <= len(html):
+            break  # stopped growing: hydrated, or static all along
+        html = current
+    return html
+
+
 def _fetch_stealth(
     url: str, timeout: int = 60
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
@@ -317,7 +343,9 @@ def _fetch_stealth(
             resp = page.goto(url, wait_until="domcontentloaded", timeout=ms)
             init_status = resp.status if resp else None
             headers = _normalize_headers(resp.all_headers()) if resp else {}
-            html = page.content()
+            # Let a JS app hydrate before judging the page; otherwise an SPA
+            # comes back as a near-empty shell and reads as "thin".
+            html = _await_hydration(page, page.content())
             # Wait (bounded) for a managed JS challenge to auto-resolve.
             waited = 0
             while waited < 15000 and looks_blocked(200, html) == "challenge":
@@ -371,7 +399,7 @@ def _fetch_human(url: str, timeout: int = 180) -> Tuple[Optional[int], str, str]
             page = ctx.new_page()
             resp = page.goto(url, wait_until="domcontentloaded", timeout=min(60000, deadline_ms))
             init_status = resp.status if resp else None
-            html = page.content()
+            html = _await_hydration(page, page.content())
             waited = 0
             while waited < deadline_ms and looks_blocked(200, html) == "challenge":
                 page.wait_for_timeout(1500)
@@ -385,14 +413,6 @@ def _fetch_human(url: str, timeout: int = 180) -> Tuple[Optional[int], str, str]
             return status, html, final
         finally:
             browser.close()
-
-
-def _challenge_seen(attempts: List[Tuple[str, str]]) -> bool:
-    """True if any failed attempt looked like an interactive challenge/CAPTCHA."""
-    for _backend, reason in attempts:
-        if reason == "challenge" or reason.startswith("http-403"):
-            return True
-    return False
 
 
 # ── the ladder ───────────────────────────────────────────────────────────────
@@ -428,9 +448,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         recorded as the winner for this URL's registrable domain is moved to the
         FRONT of the ladder, and a fresh clean win is persisted for next time.
     allow_human:
-        When True and the automated ladder fails on an interactive challenge /
-        CAPTCHA, fall back to a HEADFUL browser the user solves by hand
-        (Feature D). Default False so normal/agent use is never interrupted.
+        When True and no rung produced a clean win, fall back to a HEADFUL
+        browser the user solves by hand (Feature D). Covers interactive
+        CAPTCHAs and soft walls alike — a login page served as HTTP 200 is a
+        thin result, not a challenge, and must still reach this rung. Default
+        False so normal/agent use is never interrupted.
     scrub:
         Prompt-injection handling for the returned content. Invisible/control
         characters are ALWAYS stripped and the text is ALWAYS scanned, with any
@@ -529,22 +551,21 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             attempts.append((backend, f"{type(e).__name__}: {e}"))
             continue
 
-    if best is not None:
-        # best-effort real content beats reporting a false block
-        return _finalize(best, scrub)
-
-    err = UnlockerError(url, attempts)
-
-    # Human-in-the-loop last resort: only when explicitly allowed AND the ladder
-    # failed on an interactive challenge/CAPTCHA we can't auto-clear.
-    if allow_human and _challenge_seen(attempts):
+    # Human-in-the-loop last resort. Runs BEFORE the `best` fallback below:
+    # a soft wall (login page served as HTTP 200) leaves a thin `best`, and
+    # returning it here would skip the human rung entirely — exactly the case
+    # --human exists for. Reaching this point already means no rung produced a
+    # clean win, and the flag is explicit and off by default, so honour it
+    # rather than second-guessing which failures a human could fix.
+    if allow_human:
         try:
             status, html, final_url = _fetch_human(url)
         except Exception:  # noqa: BLE001 - patchright missing/launch failure
-            raise err
+            status, html, final_url = None, "", url
         if looks_blocked(status, html) is None:
             text = html_to_text(html, url)
-            if text:
+            # Only prefer it if the human actually got us further.
+            if text and (best is None or len(text) > len(best.text)):
                 return _finalize(
                     FetchResult(
                         backend="human-browser", text=text, status=status,
@@ -552,6 +573,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     ),
                     scrub,
                 )
-        raise err  # stayed blocked / timed out -> original failure
 
-    raise err
+    if best is not None:
+        # best-effort real content beats reporting a false block
+        return _finalize(best, scrub)
+
+    raise UnlockerError(url, attempts)
