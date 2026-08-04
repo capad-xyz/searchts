@@ -12,11 +12,14 @@ from pathlib import Path
 from searchts import share_extractors, unlocker
 from searchts.share_extractors import (
     ShareResult,
+    copilot,
     extract,
+    grok,
     matches,
     parse_chatgpt_html,
     parse_claude_snapshot,
     parse_poe_html,
+    perplexity,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -263,3 +266,90 @@ def test_parse_chatgpt_flat_messages_ignores_non_dict_entries():
     assert isinstance(res, ShareResult)
     assert "**User:**" in res.markdown
     assert "still parsed" in res.markdown
+
+
+# ── share-id capture (regression: patterns matched but truncated the id) ─────
+#
+# These patterns never failed loudly. They matched the URL and captured a
+# truncated id, which for Grok then 404s against its share_links API.
+
+
+def test_grok_captures_base64_padding_in_share_id():
+    """A grok id is `<base64 shard>_<uuid>` and the base64 may carry `=`."""
+    cases = [
+        # literal padding
+        ("https://grok.com/share/bGVnYWN5LWNvcHk=_3c82dc3b-a9fb-4c63-9482-0d9a3131dbe2",
+         "bGVnYWN5LWNvcHk=_3c82dc3b-a9fb-4c63-9482-0d9a3131dbe2"),
+        # percent-encoded padding, same share
+        ("https://grok.com/share/c2hhcmQtMg%3D%3D_4e6798eb-9288-4a09-b00f-8292ce23dab6",
+         "c2hhcmQtMg%3D%3D_4e6798eb-9288-4a09-b00f-8292ce23dab6"),
+        # unpadded
+        ("https://grok.com/share/bGVnYWN5_6dae0579-f14f-4eec-b89a-f7bbdd8c52ea",
+         "bGVnYWN5_6dae0579-f14f-4eec-b89a-f7bbdd8c52ea"),
+        # bare uuid, no shard prefix
+        ("https://grok.com/share/7497a668-4a30-4862-a79d-901f624650e0",
+         "7497a668-4a30-4862-a79d-901f624650e0"),
+        # x.com base62 and hex32 forms
+        ("https://x.com/i/grok/share/ya31uGG63eMvwCIako6OEkD1r",
+         "ya31uGG63eMvwCIako6OEkD1r"),
+        ("https://x.com/i/grok/share/02c6fe33a715493fbd66090b8fec7458",
+         "02c6fe33a715493fbd66090b8fec7458"),
+    ]
+    for url, expected in cases:
+        m = grok.PATTERN.match(url)
+        assert m is not None, url
+        assert m.group(1) == expected, url
+
+
+def test_grok_share_id_is_percent_decoded_for_the_api(monkeypatch):
+    """Both encodings of one share must hit the same API id."""
+    seen = []
+
+    class _Resp:
+        status_code = 404
+        headers: dict = {}
+
+    monkeypatch.setattr(
+        grok, "_fetch", lambda u, *a, **k: (seen.append(u), _Resp())[1]
+    )
+    for url in (
+        "https://grok.com/share/c2hhcmQtMg%3D%3D_4e6798eb-9288-4a09-b00f-8292ce23dab6",
+        "https://grok.com/share/c2hhcmQtMg==_4e6798eb-9288-4a09-b00f-8292ce23dab6",
+    ):
+        grok.extract_share(url, grok.PATTERN.match(url))
+    assert len(seen) == 2
+    assert seen[0] == seen[1], "percent-encoded and literal padding must agree"
+    assert seen[0].endswith("c2hhcmQtMg==_4e6798eb-9288-4a09-b00f-8292ce23dab6")
+
+
+def test_perplexity_matches_pages_and_captures_full_id():
+    # Published Pages are a distinct path that previously did not match at all.
+    page = "https://www.perplexity.ai/page/scratchpad-ai-reasoning-framew-790vL5qORlyvX7VSwMYmzg"
+    assert matches(page)
+    # Ids use `.` and `_`; `-` is the slug separator.
+    m = perplexity.PATTERN.match(
+        "https://www.perplexity.ai/search/explain-perplexity-as-Jenq7WDWRiqT_FwX0nvalg")
+    assert m.group(1) == "explain-perplexity-as-Jenq7WDWRiqT_FwX0nvalg"
+    m = perplexity.PATTERN.match(
+        "https://www.perplexity.ai/search/summarize-the-so2l6.dLT8C9xKubqLB8pQ")
+    assert m.group(1) == "summarize-the-so2l6.dLT8C9xKubqLB8pQ"
+
+
+def test_perplexity_excludes_spaces():
+    """Spaces are restricted by default; do not spend a render on them."""
+    assert not matches("https://www.perplexity.ai/spaces/osint-K6xoTsgxRlWSIGNL3HlniA")
+
+
+def test_copilot_shared_page_id_is_not_the_word_pages():
+    m = copilot.PATTERN.match(
+        "https://copilot.microsoft.com/shares/pages/GXnUTdR5Cqakvtxw5ndAo")
+    assert m is not None
+    assert m.group(1) == "GXnUTdR5Cqakvtxw5ndAo"
+    # Plain conversation shares are unaffected.
+    m = copilot.PATTERN.match(
+        "https://copilot.microsoft.com/shares/4rcdcS2vcxrwe3UyaEWXa")
+    assert m.group(1) == "4rcdcS2vcxrwe3UyaEWXa"
+
+
+def test_copilot_excludes_private_chats():
+    assert not matches("https://copilot.microsoft.com/chats/94EXsDefVqjHqgdqAZ1Mq")

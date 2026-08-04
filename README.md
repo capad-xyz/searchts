@@ -49,11 +49,11 @@ Share links from AI chat apps are a special kind of hard: the conversation never
 | ChatGPT | `chatgpt.com/share/…`, `chatgpt.com/s/…` | turbo-stream payload embedded in the page |
 | Claude | `claude.ai/share/…` | keyless snapshot API (behind Cloudflare) |
 | Gemini | `gemini.google.com/share/…` | keyless batchexecute RPC |
-| Grok | `grok.com/share/…` | keyless share-links API |
+| Grok | `grok.com/share/…`, `x.com/i/grok/share/…` | keyless share-links API |
 | Poe | `poe.com/s/…` | `__NEXT_DATA__` payload embedded in the page |
 | DeepSeek | `chat.deepseek.com/share/…` | stealth render, scrolled to the end |
-| Perplexity | `perplexity.ai/search/…` | stealth render, scrolled to the end |
-| Copilot | `copilot.microsoft.com/shares/…` | stealth render, scrolled to the end |
+| Perplexity | `perplexity.ai/search/…`, `perplexity.ai/page/…` | stealth render, scrolled to the end |
+| Copilot | `copilot.microsoft.com/shares/…`, `…/shares/pages/…` | stealth render, scrolled to the end |
 
 The first five need no browser. The last three are JavaScript shells with
 nothing in the initial HTML, so those reuse the stealth tier: wait for the
