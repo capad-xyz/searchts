@@ -8,7 +8,7 @@ python-dotenv==1.2.2
 loguru==0.7.3
 PyYAML==6.0.3
 rich==15.0.0
-yt-dlp==2025.5.22
+yt-dlp==2026.7.4
 
 # Optional [mcp] extra. Pinned below 2 for the API break described in
 # pyproject.toml; CI installs it so the server is built against a real SDK.
