@@ -38,7 +38,7 @@ AI agents constantly need to read web pages, but the naive way they fetch is tri
 2. **Jina Reader**: a JavaScript-rendering relay, for pages that only fill in content after running JS.
 3. **stealth browser**: an undetected headless Chromium (patchright), launched lazily only when the cheaper tiers fail, for live JS / Cloudflare managed challenges.
 
-If every tier is defeated by an interactive CAPTCHA, an optional human-in-the-loop step opens a real browser so you can solve it once and continue. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
+If no tier comes back with real content, an optional human-in-the-loop step opens a real browser so you can clear the page once and continue. That covers interactive CAPTCHAs and soft walls alike: a login page served as HTTP 200 is not a challenge, but it is still a page only a human gets past. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
 
 ## AI-chat share links
 
@@ -46,7 +46,7 @@ Share links from AI chat apps are a special kind of hard: the conversation never
 
 | Provider | Share URL | How it's read |
 |----------|-----------|---------------|
-| ChatGPT | `chatgpt.com/share/…` | turbo-stream payload embedded in the page |
+| ChatGPT | `chatgpt.com/share/…`, `chatgpt.com/s/…` | turbo-stream payload embedded in the page |
 | Claude | `claude.ai/share/…` | keyless snapshot API (behind Cloudflare) |
 | Gemini | `gemini.google.com/share/…` | keyless batchexecute RPC |
 | Grok | `grok.com/share/…` | keyless share-links API |
@@ -62,6 +62,10 @@ virtualization will otherwise truncate a long chat), then expand the collapsed
 sections before reading. The benchmark currently covers the five that read
 without a browser and passes all five; the three that need one are not in it
 yet.
+
+ChatGPT issues two shapes: `/share/<uuid>` for a whole conversation, and the
+newer `/s/<prefix>_<id>` short links for a single shared turn (`t_` thread,
+`m_` message, `dr_` deep research, `cd_` Codex). Both are read.
 
 Each provider is a drop-in plugin module (`searchts/share_extractors/`); if a provider changes its format, extraction falls back to the normal unlocker ladder instead of failing.
 
@@ -88,7 +92,7 @@ searchts get https://example.com/logo.png  # download one asset (image/PDF/font/
 searchts doctor                            # see what is configured and working
 ```
 
-`read` flags: `--json`, `--backend <tier>`, `--human` (CAPTCHA handoff), `--scrub` (redact injection).
+`read` flags: `--json`, `--backend <tier>`, `--human` (hand off a CAPTCHA or login wall to a real browser), `--scrub` (redact injection).
 `search` flags: `-n <count>`, `--json`, `--provider <name>`. Content goes to stdout (pipeable); status to stderr.
 `grab` flags: `--out <dir>`, `--kinds <images,icons,css,fonts,svg>`, `--read` (also save page.md), `--max <n>`, `--json`.
 
@@ -152,7 +156,7 @@ Latest run: [docs/scorecard.md](https://github.com/capad-xyz/searchts/blob/main/
 ## How it works, and its limits
 
 - It runs from your own residential IP at personal volume, which is why it needs no paid proxy pool. It is a personal-grade research tool, not a mass-scraping system.
-- Interactive CAPTCHAs (DataDome / Turnstile press-and-hold) are the honest ceiling. Use `--human` for those.
+- Interactive CAPTCHAs (DataDome / Turnstile press-and-hold) and login walls are the honest ceiling. Use `--human` for those.
 - Some platforms (notably Instagram, and YouTube in 2026) may need your browser cookies or fail intermittently; that is platform-side.
 - Anti-bot systems evolve; this is an arms race and the techniques may need occasional updates. Respect each site's terms of service and use responsibly.
 

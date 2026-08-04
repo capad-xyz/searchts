@@ -11,7 +11,7 @@ searchts read "https://example.com/article"
 # Structured output (backend used, status, text)
 searchts read "https://example.com/article" --json
 
-# Hand off an interactive CAPTCHA to a real browser you solve once
+# Hand off a CAPTCHA or login wall to a real browser you clear once
 searchts read "https://example.com/article" --human
 ```
 
