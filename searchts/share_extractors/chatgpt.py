@@ -26,7 +26,7 @@ from searchts.share_extractors import (
 )
 
 PATTERN = re.compile(
-    r"^https?://(?:chatgpt\.com|chat\.openai\.com)/share/([A-Za-z0-9-]+)")
+    r"^https?://(?:chatgpt\.com|chat\.openai\.com)/(?:share|s)/([A-Za-z0-9_-]+)")
 
 
 def _hydrate_turbo_stream(pool: list, index, depth: int = 0):
@@ -49,8 +49,28 @@ def _hydrate_turbo_stream(pool: list, index, depth: int = 0):
     return value
 
 
+def _conversation_messages(data) -> Optional[List[object]]:
+    """Ordered message dicts from either share-page schema, or None if absent.
+
+    ``/share/<id>`` (full conversation) carries ``linear_conversation``, a list of
+    nodes that each WRAP a message. ``/s/<id>`` (single-turn share) carries a flat
+    ``messages`` list of the same message dicts, unwrapped. Normalize both to a
+    plain list of message dicts so the caller has one shape to walk.
+    """
+    conv = _find_key(data, "linear_conversation")
+    if isinstance(conv, list):
+        return [
+            node.get("message") if isinstance(node, dict) else None
+            for node in conv
+        ]
+    msgs = _find_key(data, "messages")
+    if isinstance(msgs, list):
+        return list(msgs)
+    return None
+
+
 def parse_chatgpt_html(html: str) -> Optional[ShareResult]:
-    """Decode a chatgpt.com/share page's turbo-stream into conversation markdown."""
+    """Decode a chatgpt.com share page's turbo-stream into conversation markdown."""
     chunks = re.findall(
         r'streamController\.enqueue\((".*?")\);</script>', html, re.S)
     for raw in chunks:
@@ -61,13 +81,12 @@ def parse_chatgpt_html(html: str) -> Optional[ShareResult]:
         if not isinstance(pool, list) or not pool:
             continue
         data = _hydrate_turbo_stream(pool, 0)
-        conv = _find_key(data, "linear_conversation")
-        if not isinstance(conv, list):
+        messages = _conversation_messages(data)
+        if messages is None:
             continue
         title = _find_key(data, "title")
         turns: List[Turn] = []
-        for node in conv:
-            msg = (node or {}).get("message") if isinstance(node, dict) else None
+        for msg in messages:
             if not isinstance(msg, dict):
                 continue
             role = ((msg.get("author") or {}).get("role")) or ""
