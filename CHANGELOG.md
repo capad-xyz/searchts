@@ -2,6 +2,14 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.7.1](https://github.com/capad-xyz/searchts/compare/v0.7.0...v0.7.1) (2026-08-04)
+
+
+### Fixed
+
+* **mcp:** cap the SDK below 2.0, which breaks the server on startup ([#60](https://github.com/capad-xyz/searchts/issues/60)) ([607db0a](https://github.com/capad-xyz/searchts/commit/607db0ad32844091944f8dc9ff8bca1996b29e30))
+* **unlocker:** read ChatGPT /s/ shares and stop soft walls swallowing --human ([#68](https://github.com/capad-xyz/searchts/issues/68)) ([9057628](https://github.com/capad-xyz/searchts/commit/905762840dac613da2c492fe360b4a3beac9c0e7))
+
 ## [0.7.0] - 2026-07-31
 
 ### Added
