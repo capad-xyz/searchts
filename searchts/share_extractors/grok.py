@@ -19,12 +19,19 @@ in ``message`` (falling back to ``query``), a ``createTime`` timestamp, and a
 from __future__ import annotations
 
 import re
+import urllib.parse
 from typing import List, Optional
 
 from searchts.share_extractors import ShareResult, Turn, _fetch, _render
 
+#: A grok.com share id is ``<base64 shard label>_<uuid>`` (e.g. ``bGVnYWN5`` ->
+#: "legacy"), so it can carry base64 ``=`` padding, either literal or
+#: percent-encoded — both circulate for the same share. Bare uuids also occur,
+#: as do x.com's 25-char base62 and 32-char hex forms. The class must admit
+#: ``=`` and ``%``: without them the match still succeeds but the id is
+#: truncated at the padding, and the truncated id 404s against the API below.
 PATTERN = re.compile(
-    r"^https?://(?:www\.)?(?:grok\.com/share|x\.com/i/grok/share)/([A-Za-z0-9._-]+)")
+    r"^https?://(?:www\.)?(?:grok\.com/share|x\.com/i/grok/share)/([A-Za-z0-9._%=~-]+)")
 
 _API = "https://grok.com/rest/app-chat/share_links/{share_id}"
 
@@ -62,7 +69,11 @@ def parse_grok_share(data: dict) -> Optional[ShareResult]:
 
 
 def extract_share(url: str, match: "re.Match[str]") -> Optional[ShareResult]:
-    r = _fetch(_API.format(share_id=match.group(1)))
+    # Normalize the id before it reaches the API: the same share circulates with
+    # its base64 padding literal (`...k=_uuid`) and percent-encoded
+    # (`...k%3D%3D_uuid`), and the endpoint wants the decoded form.
+    share_id = urllib.parse.unquote(match.group(1))
+    r = _fetch(_API.format(share_id=share_id))
     if r.status_code != 200 or "json" not in (r.headers.get("content-type") or ""):
         return None
     try:

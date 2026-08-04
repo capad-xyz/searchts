@@ -24,7 +24,17 @@ from typing import List, Optional
 from searchts.share_extractors import ShareResult, Turn, _render
 from searchts.share_extractors._browser import attr, collect_turns, has_class, render
 
-PATTERN = re.compile(r"^https?://(?:www\.)?perplexity\.ai/search/([A-Za-z0-9-]+)")
+#: Threads live at ``/search/``; a published Page is the same rendered shape at
+#: ``/page/``. The trailing id uses ``.`` and ``_`` (never ``-``, which is the
+#: slug separator), so a class without them captures only the slug — harmless
+#: while ``extract_share`` renders the whole URL and ignores the group, but a
+#: trap for anyone who later reaches for it.
+#:
+#: ``/spaces/`` (formerly ``/collections/``, which now 301s there) is
+#: deliberately excluded: Spaces are restricted by default, and matching them
+#: would spend a 60s headless render on a page that is usually private anyway.
+PATTERN = re.compile(
+    r"^https?://(?:www\.)?perplexity\.ai/(?:search|page)/([A-Za-z0-9._-]+)")
 
 #: A ``.prose`` answer body means the first turn has hydrated.
 _READY_SELECTOR = "div.prose"

@@ -34,7 +34,13 @@ from typing import List, Optional
 from searchts.share_extractors import ShareResult, Turn, _render
 from searchts.share_extractors._browser import attr, collect_turns, has_class, render
 
-PATTERN = re.compile(r"^https?://copilot\.microsoft\.com/shares/([A-Za-z0-9_-]+)")
+#: Conversation shares are ``/shares/<id>``; a shared Copilot Page is
+#: ``/shares/pages/<id>``. The optional ``pages/`` segment has to be consumed
+#: explicitly, or it is captured as the id itself. Ids are base58 in practice;
+#: the class is left as a safe superset. ``/chats/<id>`` is the private form and
+#: is excluded.
+PATTERN = re.compile(
+    r"^https?://copilot\.microsoft\.com/shares/(?:pages/)?([A-Za-z0-9_-]+)")
 
 #: The share page mounted its conversation once an article exists.
 _READY_SELECTOR = '[role="article"]'
