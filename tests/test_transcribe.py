@@ -5,6 +5,7 @@ import sys
 from typing import List
 
 import pytest
+from conftest import Tripwire
 
 from searchts import transcribe as tr
 from searchts.config import Config
@@ -222,7 +223,7 @@ class TestOrchestrator:
         fake_config.set("groq_api_key", "gsk_test")
 
         def boom_download(*a, **k):
-            raise AssertionError("yt-dlp must not be called for local files")
+            raise Tripwire("yt-dlp must not be called for local files")
 
         # Stub heavy external steps to no-ops that keep file paths valid.
         compressed = tmp_path / "compressed.m4a"
@@ -345,7 +346,7 @@ class TestLocalBackend:
         monkeypatch.setattr(tr, "compress_audio", lambda src, out_dir: compressed)
 
         def boom_post(*a, **k):
-            raise AssertionError("local must not make HTTP calls")
+            raise Tripwire("local must not make HTTP calls")
 
         monkeypatch.setattr(tr.requests, "post", boom_post)
         text = tr.transcribe(
@@ -592,7 +593,7 @@ class TestSubtitlesFirst:
         )
 
         def boom_download(*a, **k):
-            raise AssertionError("must not download audio when subtitles exist")
+            raise Tripwire("must not download audio when subtitles exist")
 
         monkeypatch.setattr(tr, "download_audio", boom_download)
         monkeypatch.setattr(
@@ -630,7 +631,7 @@ class TestSubtitlesFirst:
         monkeypatch.setattr(tr, "local_available", lambda: False)
 
         def boom_download(*a, **k):
-            raise AssertionError("should fail validation before downloading")
+            raise Tripwire("should fail validation before downloading")
 
         monkeypatch.setattr(tr, "download_audio", boom_download)
         with pytest.raises(tr.NoProviderConfigured):
@@ -660,7 +661,7 @@ class TestSubtitlesFirst:
         fake_config.set("groq_api_key", "gsk_test")
 
         def boom_subs(*a, **k):
-            raise AssertionError("fetch_subtitles must not be consulted with prefer_subtitles=False")
+            raise Tripwire("fetch_subtitles must not be consulted with prefer_subtitles=False")
 
         monkeypatch.setattr(tr, "fetch_subtitles", boom_subs)
         compressed = tmp_path / "compressed.m4a"
@@ -684,7 +685,7 @@ class TestSubtitlesFirst:
         fake_config.set("groq_api_key", "gsk_test")
 
         def boom_subs(*a, **k):
-            raise AssertionError("fetch_subtitles must not run for local files")
+            raise Tripwire("fetch_subtitles must not run for local files")
 
         monkeypatch.setattr(tr, "fetch_subtitles", boom_subs)
         compressed = tmp_path / "compressed.m4a"

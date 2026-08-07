@@ -9,6 +9,8 @@ are synthetic payloads mirroring the schemas verified against live pages.
 import json
 from pathlib import Path
 
+from conftest import Tripwire
+
 from searchts import share_extractors, unlocker
 from searchts.share_extractors import (
     ShareResult,
@@ -127,7 +129,7 @@ def test_fetch_uses_share_extractor(monkeypatch):
     monkeypatch.setattr(share_extractors, "extract", lambda url: hit)
 
     def boom(*a, **k):  # the ladder must not run when tier-0 wins
-        raise AssertionError("ladder backend called despite share hit")
+        raise Tripwire("ladder backend called despite share hit")
 
     monkeypatch.setattr(unlocker, "_fetch_curl_cffi", boom)
     monkeypatch.setattr(unlocker, "_fetch_jina", boom)

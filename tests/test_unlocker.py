@@ -2,6 +2,7 @@
 """Unit tests for the escalating open-source unlocker (no network)."""
 
 import pytest
+from conftest import Tripwire, tripwire
 
 from searchts import unlocker
 from searchts.unlocker import FetchResult, UnlockerError, fetch, html_to_text, looks_blocked
@@ -361,15 +362,26 @@ def test_human_fallback_not_invoked_when_disallowed(monkeypatch, stub_extract):
     monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
 
     def fail_human(url, timeout=180):
-        raise AssertionError("_fetch_human must not run when allow_human is False")
+        raise Tripwire("_fetch_human must not run when allow_human is False")
 
     monkeypatch.setattr(unlocker, "_fetch_human", fail_human)
     with pytest.raises(UnlockerError):
         unlocker.fetch("https://site.test", allow_human=False, use_memory=False)
 
 
-def test_human_fallback_not_invoked_without_challenge(monkeypatch, stub_extract):
-    # All rungs fail with non-challenge errors (timeouts) -> no human fallback even if allowed.
+def test_human_fallback_invoked_even_without_a_challenge(monkeypatch, stub_extract):
+    """0.7.1 removed the challenge gate, and this test used to assert it.
+
+    It previously required a `challenge`/`http-403` reason before the human
+    rung could run, which meant a soft wall (a login page served as HTTP 200)
+    could never reach it. That gate WAS the bug. The rung now runs whenever no
+    tier produced a clean win, so the assertion is inverted here.
+
+    Worth knowing why this did not fail when the behaviour changed: its
+    tripwire raised `AssertionError`, and `fetch` catches `Exception` around
+    the human rung, so the forbidden call happened and was swallowed. See
+    conftest.Tripwire.
+    """
     def boom_timeout(url, timeout=None):
         raise TimeoutError("slow")
 
@@ -377,12 +389,27 @@ def test_human_fallback_not_invoked_without_challenge(monkeypatch, stub_extract)
     monkeypatch.setattr(unlocker, "_fetch_jina", boom_timeout)
     monkeypatch.setattr(unlocker, "_fetch_stealth", boom_timeout)
 
-    def fail_human(url, timeout=180):
-        raise AssertionError("_fetch_human must not run without a challenge reason")
+    called = {}
 
-    monkeypatch.setattr(unlocker, "_fetch_human", fail_human)
-    with pytest.raises(UnlockerError):
-        unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    def fake_human(url, timeout=180):
+        called["url"] = url
+        return (200, "<html><body>" + ("solved " * 200) + "</body></html>", url)
+
+    monkeypatch.setattr(unlocker, "_fetch_human", fake_human)
+    res = unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    assert called["url"] == "https://site.test"
+    assert res.backend == "human-browser"
+
+
+def test_no_human_rung_when_a_tier_already_won(monkeypatch, stub_extract):
+    """A clean win must short-circuit before the human rung is considered."""
+    _set(monkeypatch, curl=(200, "C" * 800))
+    monkeypatch.setattr(
+        unlocker, "_fetch_human",
+        tripwire("_fetch_human must not run after a clean win"),
+    )
+    res = unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    assert res.backend == "curl_cffi"
 
 
 def test_human_fallback_reraises_when_still_blocked(monkeypatch, stub_extract):
@@ -593,7 +620,7 @@ def test_human_fallback_not_used_when_it_gets_less(monkeypatch, stub_extract):
 def test_human_fallback_stays_off_by_default(monkeypatch, stub_extract):
     """Without the flag, a thin result is returned and no browser is opened."""
     def boom(url, timeout=180):
-        raise AssertionError("human browser must not open without allow_human")
+        raise Tripwire("human browser must not open without allow_human")
 
     _set(monkeypatch, curl=(200, "thin"), jina=(200, "t"), stealth=(200, "t"))
     monkeypatch.setattr(unlocker, "_fetch_human", boom)
