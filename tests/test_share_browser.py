@@ -15,6 +15,8 @@ The patchright launch itself is never exercised here.
 
 from pathlib import Path
 
+from conftest import Tripwire
+
 from searchts import share_extractors
 from searchts.share_extractors import ShareResult, copilot, deepseek, extract, matches, perplexity
 
@@ -137,7 +139,7 @@ def test_parse_copilot_dom_empty():
 def _boobytrap_renders(monkeypatch):
     """Replace every provider's render with one that fails loudly if called."""
     def boom(*args, **kwargs):
-        raise AssertionError("render() launched a browser but should not have")
+        raise Tripwire("render() launched a browser but should not have")
 
     monkeypatch.setattr(deepseek, "render", boom)
     monkeypatch.setattr(copilot, "render", boom)
