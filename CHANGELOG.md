@@ -2,6 +2,17 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.7.3](https://github.com/capad-xyz/searchts/compare/v0.7.2...v0.7.3) (2026-08-20)
+
+
+### Fixed
+
+* **benchmark:** thin content is not a pass; label smoke suite ([#79](https://github.com/capad-xyz/searchts/issues/79)) ([9dc6af4](https://github.com/capad-xyz/searchts/commit/9dc6af401f824384311c202475ec6b68b57d6ba0))
+* **config:** drop dead knobs; load .env without override ([#81](https://github.com/capad-xyz/searchts/issues/81)) ([3b4f333](https://github.com/capad-xyz/searchts/commit/3b4f33361c8f34159346b79c576015621200495d))
+* **config:** environment variables beat YAML ([#82](https://github.com/capad-xyz/searchts/issues/82)) ([02463b9](https://github.com/capad-xyz/searchts/commit/02463b997b92644d22b9d680edeea3cf92bd9f3c))
+* **deps:** pin curl_cffi, trafilatura, and ddgs ([#83](https://github.com/capad-xyz/searchts/issues/83)) ([c365dbc](https://github.com/capad-xyz/searchts/commit/c365dbcb0407885680b1c4f7a2fe23b594de29fb))
+* **doctor:** honest stealth probe; stop skill install side effect ([#74](https://github.com/capad-xyz/searchts/issues/74)) ([102a94c](https://github.com/capad-xyz/searchts/commit/102a94cf1a3f4e0fd22edc179742145f429907a9))
+
 ## [0.7.2](https://github.com/capad-xyz/searchts/compare/v0.7.1...v0.7.2) (2026-08-04)
 
 
