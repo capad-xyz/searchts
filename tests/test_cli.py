@@ -38,6 +38,34 @@ class TestCLI:
         assert "✅" not in captured.out
         assert "❌" not in captured.out
 
+    def test_doctor_does_not_install_skill(self, monkeypatch):
+        called = {"skill": False}
+
+        def _must_not_install():
+            called["skill"] = True
+
+        monkeypatch.setattr(cli, "_install_skill", _must_not_install)
+        monkeypatch.setattr(
+            "searchts.doctor.check_all",
+            lambda config: {
+                "web": {
+                    "status": "ok",
+                    "name": "Any web page",
+                    "message": "ok",
+                    "tier": 0,
+                    "backends": ["curl_cffi"],
+                    "active_backend": "curl_cffi",
+                }
+            },
+        )
+        monkeypatch.setattr(
+            "searchts.integrations.agent_wiring.format_wiring_report",
+            lambda: "",
+        )
+        with patch("sys.argv", ["searchts", "doctor"]):
+            main()
+        assert called["skill"] is False
+
     def test_transcribe_command_prints_text(self, capsys):
         with patch("searchts.transcribe.transcribe", return_value="hello transcript"):
             with patch("sys.argv", ["searchts", "transcribe", "audio.mp3"]):

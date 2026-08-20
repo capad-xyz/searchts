@@ -1603,9 +1603,7 @@ def _cmd_doctor(args=None):
 
     from searchts.integrations.agent_wiring import format_wiring_report
     rprint(format_wiring_report())
-
-    # Auto-install skill if not already present (fixes #154)
-    _install_skill()
+    # doctor is read-only: skill install stays on `searchts install` / `searchts skill`.
 
 
 def _cmd_setup():
