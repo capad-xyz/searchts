@@ -15,10 +15,6 @@ class LinkedInChannel(Channel):
     backends = ["linkedin-scraper-mcp", "Jina Reader"]
     tier = 2
 
-    def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-        return "linkedin.com" in urlparse(url).netloc.lower()
-
     def check(self, config=None):
         self.active_backend = None
         probe = probe_command("mcporter", ["config", "list"], timeout=10, package="mcporter")
@@ -35,7 +31,7 @@ class LinkedInChannel(Channel):
             return "error", f"mcporter execution error: {probe.hint or probe.output or probe.status}"
         if "linkedin" in probe.output.lower():
             self.active_backend = "linkedin-scraper-mcp"
-            return "ok", "Fully available (profiles, companies, job search)"
+            return "ok", "linkedin helper is present"
         return "off", (
             "mcporter is installed but the LinkedIn MCP is not configured. Run:\n"
             "  pip install linkedin-scraper-mcp\n"

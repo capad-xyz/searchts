@@ -28,18 +28,18 @@
 
 - [x] **P0.1** Doctor stealth: probe patchright/Chromium; `warn` if missing; never list an uninstalled tier as available — #74
 - [x] **P0.2** Doctor: remove `_install_skill()`; skill only via `searchts install` / `searchts skill` — #74
-- [ ] **P0.3** Dead knobs: remove `REDDIT_PROXY` from `.env.example`; remove or implement `youtube_cookies_from`; remove or wire `github_token` → `GH_TOKEN` for `gh`; call `load_dotenv` or drop `python-dotenv`
-- [ ] **P0.4** Config: env wins over YAML (`fix` release note for anyone relying on YAML override)
-- [ ] **P0.5** Constraints: pin tested versions of `curl_cffi`, `trafilatura`, `ddgs`
-- [ ] **P0.6** Release: fail if `RELEASE_PLEASE_TOKEN` missing (no silent `GITHUB_TOKEN` tag)
+- [x] **P0.3** Dead knobs: remove `REDDIT_PROXY` from `.env.example`; remove or implement `youtube_cookies_from`; remove or wire `github_token` → `GH_TOKEN` for `gh`; call `load_dotenv` or drop `python-dotenv`
+- [x] **P0.4** Config: env wins over YAML (`fix` release note for anyone relying on YAML override)
+- [x] **P0.5** Constraints: pin tested versions of `curl_cffi`, `trafilatura`, `ddgs`
+- [x] **P0.6** Release: fail if `RELEASE_PLEASE_TOKEN` missing (no silent `GITHUB_TOKEN` tag)
 - [x] **P0.7** Scorecard honesty: README splits smoke vs walled; benchmark `ok` requires `chars >= _MIN_CHARS` unless case sets `allow_thin` — #79
 
 **Q1-B — Channel cleanup (verified: `can_handle` unused in production)**
 
-- [ ] **P0.8** Remove `can_handle` from channel base + implementations (tests only use it today)
-- [ ] **P0.9** Rewrite doctor messages: optional CLIs are "present on PATH / authenticated," not "searchts can read GitHub/Twitter"
-- [ ] **P0.10** Docs/CLAUDE.md/SKILL references: no channel-routing contract; one read path = `unlocker.fetch`
-- [ ] **P0.11** Tests: drop or rewrite `can_handle` contract tests; keep probe/`check()` tests
+- [x] **P0.8** Remove `can_handle` from channel base + implementations (tests only use it today)
+- [x] **P0.9** Rewrite doctor messages: optional CLIs are "present on PATH / authenticated," not "searchts can read GitHub/Twitter"
+- [x] **P0.10** Docs/CLAUDE.md/SKILL references: no channel-routing contract; one read path = `unlocker.fetch`
+- [x] **P0.11** Tests: drop or rewrite `can_handle` contract tests; keep probe/`check()` tests
 
 ### P1 — Agent reach (highest product leverage)
 

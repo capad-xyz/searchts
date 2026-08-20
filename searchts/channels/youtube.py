@@ -26,12 +26,6 @@ class YouTubeChannel(Channel):
     backends = ["yt-dlp"]
     tier = 0
 
-    def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-
-        d = urlparse(url).netloc.lower()
-        return "youtube.com" in d or "youtu.be" in d
-
     def check(self, config=None):
         # Actually run yt-dlp --version to probe liveness, distinguishing not-installed / broken venv / won't-run.
         # yt-dlp ships as a Python dependency, so probe it as the `yt_dlp` module:

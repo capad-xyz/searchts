@@ -23,20 +23,6 @@ class RedditVideoChannel(Channel):
     backends = ["yt-dlp"]
     tier = 0  # v.redd.it needs no login, unlike the text Reddit channel
 
-    def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(url)
-        d = parsed.netloc.lower()
-        # v.redd.it is the direct video CDN host — always a video.
-        if "v.redd.it" in d:
-            return True
-        # A reddit.com post permalink may host a video; treat /comments/ URLs as
-        # transcribable candidates (yt-dlp returns nothing if there is no video).
-        if "reddit.com" in d and "/comments/" in parsed.path.lower():
-            return True
-        return False
-
     def check(self, config=None):
         # Actually run yt-dlp --version to probe liveness, distinguishing not-installed / broken venv / won't-run.
         # yt-dlp ships as a Python dependency, so probe it as the `yt_dlp` module:

@@ -148,13 +148,6 @@ class TestRedditChannel:
         assert "pipx install --force" in msg
         assert ch.active_backend is None
 
-    def test_can_handle_reddit_urls(self):
-        from searchts.channels.reddit import RedditChannel
-        ch = RedditChannel()
-        assert ch.can_handle("https://www.reddit.com/r/python/comments/abc123/")
-        assert ch.can_handle("https://redd.it/abc123")
-        assert not ch.can_handle("https://github.com/user/repo")
-        assert not ch.can_handle("https://example.com/t/123")
 
 
 class TestYouTubeChannel:

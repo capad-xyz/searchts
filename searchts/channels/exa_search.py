@@ -15,9 +15,6 @@ class ExaSearchChannel(Channel):
     backends = ["Exa via mcporter"]
     tier = 0
 
-    def can_handle(self, url: str) -> bool:
-        return False  # Search-only channel
-
     def check(self, config=None):
         self.active_backend = None
         probe = probe_command("mcporter", ["config", "list"], timeout=10, package="mcporter")

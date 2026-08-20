@@ -121,11 +121,10 @@ searchts doctor
 
 ## Optional external integrations
 
-For most reads you can just `searchts read <the-url>` on the public page. If you
-have separately-installed platform CLIs (`gh`, `twitter-cli`, `opencli`,
-`mcporter`), searchts can also reach GitHub/Twitter/Reddit/LinkedIn through them
-and `searchts doctor` will report them. These are optional add-ons, not the
-core — the per-platform reference files note where they help.
+For most reads, `searchts read <the-url>` (one path: `unlocker.fetch`). Optional
+CLIs (`gh`, `twitter-cli`, `opencli`, `mcporter`) are PATH probes in
+`searchts doctor`, not a routing table. Per-platform reference files note
+where those CLIs help the agent, not searchts.
 
 ## Workspace rules
 

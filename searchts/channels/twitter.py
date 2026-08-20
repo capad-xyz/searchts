@@ -12,11 +12,6 @@ class TwitterChannel(Channel):
     backends = ["twitter-cli", "OpenCLI", "bird CLI (legacy)"]
     tier = 1
 
-    def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-        d = urlparse(url).netloc.lower()
-        return "x.com" in d or "twitter.com" in d
-
     def check(self, config=None):
         """Probe candidates in order; first fully-usable backend wins.
 
@@ -77,10 +72,7 @@ class TwitterChannel(Channel):
 
         output = probe.output
         if "ok: true" in output:
-            return "ok", (
-                "twitter-cli fully available (search, read tweets, timeline, long-form/Article, "
-                "user queries, threads)"
-            )
+            return "ok", "twitter-cli is on PATH and authenticated"
         if "not_authenticated" in output:
             return "warn", (
                 "twitter-cli is installed but not authenticated. Set it up with:\n"

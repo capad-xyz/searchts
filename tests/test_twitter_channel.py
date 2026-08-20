@@ -25,7 +25,7 @@ def test_check_twitter_cli_found_and_auth_ok():
         status, message = channel.check()
     assert status == "ok"
     assert "twitter-cli" in message
-    assert "fully available" in message
+    assert "authenticated" in message
     assert channel.active_backend == "twitter-cli"
 
 

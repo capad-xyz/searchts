@@ -10,9 +10,6 @@ class RSSChannel(Channel):
     backends = ["feedparser"]
     tier = 0
 
-    def can_handle(self, url: str) -> bool:
-        return any(x in url.lower() for x in ["/feed", "/rss", ".xml", "atom"])
-
     def check(self, config=None):
         try:
             import feedparser  # noqa: F401

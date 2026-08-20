@@ -61,14 +61,14 @@ def format_report(results: Dict[str, dict]) -> str:
     lines = []
     lines.append("[bold cyan]searchts status[/bold cyan]")
     lines.append("[cyan]" + "=" * 40 + "[/cyan]")
-    lines.append(r"Legend: [green]\[ok][/green] available  [yellow][!][/yellow] installed but needs config/login  [red][X][/red] not installed")
+    lines.append(r"Legend: [green]\[ok][/green] probe passed  [yellow][!][/yellow] present but needs login  [red][X][/red] not on PATH")
 
     ok_count = sum(1 for r in results.values() if r["status"] == "ok")
     total = len(results)
 
     # Tier 0 — zero config
     lines.append("")
-    lines.append(r"[bold]\[ok] Ready to use out of the box:[/bold]")
+    lines.append(r"[bold]\[ok] Probes (not a routing table):[/bold]")
     for key, r in results.items():
         if r["tier"] == 0:
             name_msg = _name_msg(r, escape)
@@ -85,7 +85,7 @@ def format_report(results: Dict[str, dict]) -> str:
     tier1_inactive = {k: r for k, r in tier1.items() if r["status"] != "ok"}
     if tier1_active:
         lines.append("")
-        lines.append("[bold]Optional channels (installed):[/bold]")
+        lines.append("[bold]Optional CLIs present:[/bold]")
         for key, r in tier1_active.items():
             lines.append(rf"  [green]\[ok][/green] {_name_msg(r, escape)}")
 
@@ -96,21 +96,21 @@ def format_report(results: Dict[str, dict]) -> str:
     if tier2_active:
         if not tier1_active:
             lines.append("")
-            lines.append("[bold]Optional channels (installed):[/bold]")
+            lines.append("[bold]Optional CLIs present:[/bold]")
         for key, r in tier2_active.items():
             lines.append(rf"  [green]\[ok][/green] {_name_msg(r, escape)}")
 
     lines.append("")
     status_color = "green" if ok_count == total else ("yellow" if ok_count > 0 else "red")
-    lines.append(f"Status: [{status_color}]{ok_count}/{total}[/{status_color}] channels available")
+    lines.append(f"Status: [{status_color}]{ok_count}/{total}[/{status_color}] probes ok")
 
     # Summarize inactive optional channels in one line instead of listing each
     all_inactive = list(tier1_inactive.values()) + list(tier2_inactive.values())
     if all_inactive:
         names = [r["name"] for r in all_inactive]
         lines.append(
-            f"{len(names)} more optional channels can be unlocked ({', '.join(names)}); "
-            "just tell your agent \"install XXX for me\""
+            f"{len(names)} optional CLIs not present ({', '.join(names)}). "
+            "These are PATH checks, not searchts platform readers."
         )
 
     # Security check: config file permissions (Unix only)
