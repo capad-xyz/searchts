@@ -25,17 +25,22 @@ def run_case(case: Case) -> dict:
     t0 = time.perf_counter()
     try:
         # use_memory=False so a cached per-domain winner doesn't skew the ladder.
-        r = unlocker.fetch(case.url, use_memory=False)
+        # allow_thin cases accept the first rung's body; do not escalate for size.
+        fetch_min = 0 if case.allow_thin else unlocker._MIN_CHARS
+        r = unlocker.fetch(case.url, use_memory=False, min_chars=fetch_min)
+        chars = len(r.text or "")
+        min_chars = unlocker._MIN_CHARS
+        thin = (not case.allow_thin) and chars < min_chars
         return {
             "name": case.name,
             "url": case.url,
             "category": case.category,
-            "ok": True,
+            "ok": not thin,
             "backend": r.backend,
             "status": r.status,
-            "chars": len(r.text or ""),
+            "chars": chars,
             "seconds": round(time.perf_counter() - t0, 2),
-            "error": None,
+            "error": (f"thin content ({chars} < {min_chars} chars)" if thin else None),
         }
     except Exception as e:  # UnlockerError, or anything a rung raised
         return {
@@ -124,7 +129,7 @@ def render_markdown(results: list[dict], summary: dict) -> str:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m benchmarks.run",
-        description="Measure how often searchts reads a set of (often bot-walled) pages.",
+        description="Measure how often searchts reads the smoke-suite pages.",
     )
     ap.add_argument("--out", metavar="DIR", help="also write scorecard.md + results.json here")
     ap.add_argument("--cases", metavar="FILE", help="JSON file of extra cases to include")

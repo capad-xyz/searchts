@@ -1,9 +1,8 @@
 """The benchmark's page set.
 
-The committed list is a conservative, public, robots-friendly baseline — enough to
-exercise the ladder and produce a repeatable number. Add tougher targets locally via
-a git-ignored ``benchmarks/cases.local.json`` (see ``load_cases``), so we don't ship a
-list of third-party sites to hammer.
+The committed list is a **smoke** suite: public, robots-friendly pages that
+exercise the ladder. It is not evidence about hard bot-walls. Walled targets
+belong in a git-ignored ``benchmarks/cases.local.json``.
 """
 
 from __future__ import annotations
@@ -12,7 +11,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-_KNOWN_FIELDS = {"name", "url", "category", "note"}
+_KNOWN_FIELDS = {"name", "url", "category", "note", "allow_thin"}
 
 
 @dataclass(frozen=True)
@@ -21,10 +20,17 @@ class Case:
     url: str
     category: str
     note: str = ""
+    allow_thin: bool = False
 
 
 DEFAULT_CASES: list[Case] = [
-    Case("example", "https://example.com", "control", "plain static page; should always read"),
+    Case(
+        "example",
+        "https://example.com",
+        "control",
+        "plain static page; short on purpose",
+        allow_thin=True,
+    ),
     Case("wikipedia", "https://en.wikipedia.org/wiki/Web_scraping", "open", "large open article"),
     Case(
         "mdn", "https://developer.mozilla.org/en-US/docs/Web/HTTP", "open", "server-rendered docs"
@@ -89,7 +95,8 @@ def load_cases(extra_path: str | None = None) -> list[Case]:
 
     Extra cases come from ``extra_path`` when given, otherwise an optional,
     git-ignored ``benchmarks/cases.local.json``. The JSON is a list of objects:
-    ``{"name": ..., "url": ..., "category": ..., "note": ...}`` (``note`` optional).
+    ``{"name": ..., "url": ..., "category": ..., "note": ..., "allow_thin": false}``
+    (``note`` and ``allow_thin`` optional).
     """
     cases = list(DEFAULT_CASES)
     path = Path(extra_path) if extra_path else Path(__file__).with_name("cases.local.json")

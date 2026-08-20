@@ -142,7 +142,7 @@ for hit in search("open source vector db", max_results=5):
 
 ## Does it actually work?
 
-Rather than take our word for it, searchts ships a reproducible benchmark: it runs the unlocker over a set of (often bot-walled) pages and reports how many it read — keyless — and which tier carried each.
+Rather than take our word for it, searchts ships a reproducible **smoke** benchmark: it runs the unlocker over a small public page set and reports how many it read — keyless — and which tier carried each. A short body under the unlocker's minimum-content threshold is a fail, not a pass. Hard bot-walls belong in a local case file, not this suite — see [benchmarks/README.md](https://github.com/capad-xyz/searchts/blob/main/benchmarks/README.md).
 
 ```bash
 python -m benchmarks.run              # print a scorecard
