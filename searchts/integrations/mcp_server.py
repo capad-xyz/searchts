@@ -35,6 +35,35 @@ MCP_MISSING_MESSAGE = (
     '  pip install "searchts[mcp]"'
 )
 
+# Tool descriptions are module-level so tests can assert the #22 retry language
+# without building the SDK server.
+READ_URL_DESCRIPTION = (
+    "Read one web page as clean Markdown, escalating through an unlocker "
+    "ladder (Chrome-fingerprint fetch -> JS-rendering relay -> stealth "
+    "browser) that stops at the first tier returning real content. Use "
+    "this when a plain HTTP fetch is blocked (403/429, a "
+    "Cloudflare/DataDome/PerimeterX bot-wall, or an 'enable JavaScript' "
+    "page), the content is rendered client-side, or a previous web_search "
+    "snippet was blocked, thin, or empty. Do not answer from a blocked "
+    "snippet — call this tool on that URL. Returns Markdown ready to feed "
+    "a model, always strips invisible/control characters, and if "
+    "prompt-injection indicators are detected it fences the body as "
+    "untrusted and prepends a one-line warning. Returns an 'Error: ...' "
+    "string (not an exception) when every tier fails."
+)
+
+WEB_SEARCH_DESCRIPTION = (
+    "Search the web across multiple providers and return a ranked, "
+    "de-duplicated list of results (title + URL + snippet), fusion-merged "
+    "with reciprocal-rank fusion. Keyless by default (DuckDuckGo); also "
+    "uses SearXNG/Exa/Brave/Tavily when their keys are configured. Use "
+    "this to discover URLs or answer open-ended questions before reading "
+    "pages. Snippets are not the page: if you need the content, or a hit "
+    "is 403/429/challenge/thin, call read_url on that URL. Do not answer "
+    "from the snippet. Returns a formatted text block, or an 'Error: ...' "
+    "string when every provider fails."
+)
+
 
 class MCPNotInstalledError(RuntimeError):
     """Raised when an MCP entrypoint runs without the optional `mcp` package."""
@@ -62,17 +91,7 @@ def create_server():
             ),
             Tool(
                 name="read_url",
-                description="Read one web page as clean Markdown, escalating through an unlocker "
-                "ladder (Chrome-fingerprint fetch -> JS-rendering relay -> stealth "
-                "browser) that stops at the first tier returning real content. Use "
-                "this when a plain HTTP fetch is blocked (403/429, a "
-                "Cloudflare/DataDome/PerimeterX bot-wall, or an 'enable JavaScript' "
-                "page) or the content is rendered client-side; it beats most common "
-                "bot-walls. Returns Markdown ready to feed a model, always strips "
-                "invisible/control characters, and if prompt-injection indicators are "
-                "detected it fences the body as untrusted and prepends a one-line "
-                "warning. Returns an 'Error: ...' string (not an exception) when every "
-                "tier fails.",
+                description=READ_URL_DESCRIPTION,
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -86,13 +105,7 @@ def create_server():
             ),
             Tool(
                 name="web_search",
-                description="Search the web across multiple providers and return a ranked, "
-                "de-duplicated list of results (title + URL + snippet), fusion-merged "
-                "with reciprocal-rank fusion. Keyless by default (DuckDuckGo); also "
-                "uses SearXNG/Exa/Brave/Tavily when their keys are configured. Use "
-                "this to discover URLs or answer open-ended questions before reading "
-                "pages. Returns a formatted text block, or an 'Error: ...' string when "
-                "every provider fails.",
+                description=WEB_SEARCH_DESCRIPTION,
                 inputSchema={
                     "type": "object",
                     "properties": {
