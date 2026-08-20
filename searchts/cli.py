@@ -463,8 +463,12 @@ def _cmd_install(args):
         print(format_report(results))
         print()
 
-        # ── Install agent skill ──
+        # ── Install agent skill + user-scope reach rule ──
         _install_skill()
+        from searchts.integrations.memory_rule import install_memory_rules
+        print()
+        print("Agent reach rule (user-scope)...")
+        install_memory_rules()
 
         print(f"[ok] Installation complete! {ok}/{total} channels active.")
 
@@ -700,6 +704,10 @@ def _cmd_skill_install(args):
     path = write_slash_command(target_dir)
     print(f"Wrote Claude Code slash-command: {path}")
     print("Use it in Claude Code with: /searchts <url | video url | query>")
+    from searchts.integrations.memory_rule import install_memory_rules
+    print()
+    print("Agent reach rule (user-scope)...")
+    install_memory_rules()
 
 
 # ── mcp command ─────────────────────────────────────
