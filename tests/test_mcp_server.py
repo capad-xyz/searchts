@@ -11,6 +11,8 @@ from unittest.mock import patch
 import pytest
 
 from searchts.integrations.mcp_server import (
+    READ_URL_DESCRIPTION,
+    WEB_SEARCH_DESCRIPTION,
     fetch_asset,
     get_status,
     grab_site,
@@ -19,6 +21,16 @@ from searchts.integrations.mcp_server import (
 )
 from searchts.search import SearchError, SearchResult
 from searchts.unlocker import FetchResult, UnlockerError
+
+
+def test_web_search_description_tells_agent_to_call_read_url():
+    assert "read_url" in WEB_SEARCH_DESCRIPTION
+    assert "snippet" in WEB_SEARCH_DESCRIPTION.lower()
+
+
+def test_read_url_description_covers_followup_after_search():
+    assert "web_search" in READ_URL_DESCRIPTION
+    assert "snippet" in READ_URL_DESCRIPTION.lower()
 
 
 def test_read_url_returns_markdown_text():
