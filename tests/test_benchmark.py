@@ -101,3 +101,38 @@ def test_load_cases_returns_defaults():
     cases = load_cases()
     assert cases and all(isinstance(c, Case) for c in cases)
     assert any(c.category == "control" for c in cases)
+
+
+def test_thin_content_is_not_a_pass():
+    from searchts.unlocker import _MIN_CHARS
+
+    short = Case("thin", "https://thin.test", "control")
+    allowed = Case("thin-ok", "https://thin.test", "control", allow_thin=True)
+    fat = Case("fat", "https://fat.test", "control")
+
+    def fake_fetch(url, **kwargs):
+        if "fat" in url:
+            return FetchResult("curl_cffi", "x" * _MIN_CHARS, 200)
+        return FetchResult("curl_cffi", "x" * 35, 200)
+
+    with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+        thin = bench.run_case(short)
+        opted = bench.run_case(allowed)
+        enough = bench.run_case(fat)
+
+    assert thin["ok"] is False
+    assert thin["backend"] == "curl_cffi"
+    assert thin["chars"] == 35
+    assert "thin content" in thin["error"]
+    assert opted["ok"] is True and opted["error"] is None
+    assert enough["ok"] is True and enough["chars"] == _MIN_CHARS
+
+
+def test_load_cases_honors_allow_thin(tmp_path):
+    extra = tmp_path / "cases.local.json"
+    extra.write_text(
+        '[{"name": "short", "url": "https://s.test", "category": "control", "allow_thin": true}]',
+        encoding="utf-8",
+    )
+    loaded = load_cases(str(extra))
+    assert any(c.name == "short" and c.allow_thin is True for c in loaded)

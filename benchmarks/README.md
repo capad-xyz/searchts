@@ -1,8 +1,8 @@
 # Unlocker benchmark
 
-How often does searchts actually read bot-walled pages, and which tier carries it?
-This is a small, reproducible harness that runs the unlocker over a set of pages and
-prints a scorecard — a proof point, a regression canary, and an easy first contribution.
+How often does searchts actually read the pages in its smoke suite, and which tier
+carries it? This is a small, reproducible harness — a regression canary, not proof
+against hard bot-walls. Walled targets go in ``cases.local.json``.
 
 ## Run it
 
@@ -41,10 +41,12 @@ The tier counts show how much work the unlocker needed:
 - `stealth-browser` is the local Chromium fallback for live JavaScript or managed
   challenges.
 
-In the per-page table, `Chars` is a quick content sanity check, not a quality score, and
-`Secs` is wall-clock time for that run. A datacenter, CI, or some VPN connections can
-report a lower pass rate or more fallback-tier usage because their IP reputation and
-TLS fingerprint differ from a normal residential connection.
+In the per-page table, `Chars` is a content sanity check, not a quality score.
+A fetch that returns fewer than `unlocker._MIN_CHARS` (500) characters fails
+unless the case sets `allow_thin: true`. `Secs` is wall-clock time for that run.
+A datacenter, CI, or some VPN connections can report a lower pass rate or more
+fallback-tier usage because their IP reputation and TLS fingerprint differ from
+a normal residential connection.
 
 Generate a local scorecard and its raw data with:
 
@@ -54,13 +56,14 @@ python -m benchmarks.run --out results/
 
 ## Add a case (a great first contribution)
 
-The committed set (`cases.py`) is a conservative, public baseline. To benchmark against
-your own, tougher targets **without committing a list of third-party sites**, drop a
-git-ignored `benchmarks/cases.local.json`:
+The committed set (`cases.py`) is a smoke suite, not a walled-site scorecard.
+To benchmark tougher targets **without committing a list of third-party sites**,
+drop a git-ignored `benchmarks/cases.local.json`:
 
 ```json
 [
-  {"name": "some-site", "url": "https://example.org/page", "category": "datadome", "note": "press-and-hold on failure"}
+  {"name": "some-site", "url": "https://example.org/page", "category": "datadome", "note": "press-and-hold on failure"},
+  {"name": "tiny", "url": "https://example.com", "category": "control", "allow_thin": true}
 ]
 ```
 
