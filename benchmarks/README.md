@@ -42,7 +42,7 @@ The tier counts show how much work the unlocker needed:
   challenges.
 
 In the per-page table, `Chars` is a content sanity check, not a quality score.
-A fetch that returns fewer than `unlocker._MIN_CHARS` (500) characters fails
+A fetch that returns fewer than `unlocker._MIN_CHARS` characters fails
 unless the case sets `allow_thin: true`. `Secs` is wall-clock time for that run.
 A datacenter, CI, or some VPN connections can report a lower pass rate or more
 fallback-tier usage because their IP reputation and TLS fingerprint differ from

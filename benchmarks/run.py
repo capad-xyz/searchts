@@ -25,7 +25,9 @@ def run_case(case: Case) -> dict:
     t0 = time.perf_counter()
     try:
         # use_memory=False so a cached per-domain winner doesn't skew the ladder.
-        r = unlocker.fetch(case.url, use_memory=False)
+        # allow_thin cases accept the first rung's body; do not escalate for size.
+        fetch_min = 0 if case.allow_thin else unlocker._MIN_CHARS
+        r = unlocker.fetch(case.url, use_memory=False, min_chars=fetch_min)
         chars = len(r.text or "")
         min_chars = unlocker._MIN_CHARS
         thin = (not case.allow_thin) and chars < min_chars

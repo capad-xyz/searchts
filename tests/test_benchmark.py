@@ -110,7 +110,10 @@ def test_thin_content_is_not_a_pass():
     allowed = Case("thin-ok", "https://thin.test", "control", allow_thin=True)
     fat = Case("fat", "https://fat.test", "control")
 
+    calls = []
+
     def fake_fetch(url, **kwargs):
+        calls.append(kwargs)
         if "fat" in url:
             return FetchResult("curl_cffi", "x" * _MIN_CHARS, 200)
         return FetchResult("curl_cffi", "x" * 35, 200)
@@ -126,6 +129,9 @@ def test_thin_content_is_not_a_pass():
     assert "thin content" in thin["error"]
     assert opted["ok"] is True and opted["error"] is None
     assert enough["ok"] is True and enough["chars"] == _MIN_CHARS
+    assert calls[0]["min_chars"] == _MIN_CHARS
+    assert calls[1]["min_chars"] == 0
+    assert calls[2]["min_chars"] == _MIN_CHARS
 
 
 def test_load_cases_honors_allow_thin(tmp_path):
