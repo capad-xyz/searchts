@@ -12,11 +12,6 @@ class TwitterChannel(Channel):
     backends = ["twitter-cli", "OpenCLI", "bird CLI (legacy)"]
     tier = 1
 
-    def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-        d = urlparse(url).netloc.lower()
-        return "x.com" in d or "twitter.com" in d
-
     def check(self, config=None):
         """Probe candidates in order; first fully-usable backend wins.
 

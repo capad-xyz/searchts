@@ -24,15 +24,6 @@ class InstagramChannel(Channel):
     backends = ["yt-dlp"]
     tier = 0
 
-    def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(url)
-        if "instagram.com" not in parsed.netloc.lower():
-            return False
-        path = parsed.path.lower()
-        return any(seg in path for seg in ("/reel/", "/reels/", "/p/", "/tv/"))
-
     def check(self, config=None):
         # Actually run yt-dlp --version to probe liveness, distinguishing not-installed / broken venv / won't-run.
         # yt-dlp ships as a Python dependency, so probe it as the `yt_dlp` module:

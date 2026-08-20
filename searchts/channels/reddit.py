@@ -38,12 +38,6 @@ class RedditChannel(Channel):
     backends = ["OpenCLI", "rdt-cli"]
     tier = 1  # no zero-config path exists — see module docstring
 
-    def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-
-        d = urlparse(url).netloc.lower()
-        return "reddit.com" in d or "redd.it" in d
-
     def check(self, config=None):
         """Probe candidates in order; first fully-usable backend wins."""
         self.active_backend = None

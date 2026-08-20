@@ -32,9 +32,6 @@ class WebChannel(Channel):
     backends = ["curl_cffi", "Jina Reader", "stealth-browser"]
     tier = 0
 
-    def can_handle(self, url: str) -> bool:
-        return True  # Fallback — handles any URL
-
     def check(self, config=None):
         # Always report the keyless rungs; probe only whether stealth is installed.
         self.active_backend = self.backends[0]

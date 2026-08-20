@@ -17,16 +17,6 @@ class TikTokChannel(Channel):
     backends = ["yt-dlp"]
     tier = 0
 
-    def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-
-        parsed = urlparse(url)
-        d = parsed.netloc.lower()
-        if "tiktok.com" in d or "vm.tiktok.com" in d:
-            return True
-        # Bare share links sometimes carry the host in the path; still match /video/ ids.
-        return "tiktok.com" in url.lower() and "/video/" in parsed.path
-
     def check(self, config=None):
         # Actually run yt-dlp --version to probe liveness, distinguishing not-installed / broken venv / won't-run.
         # yt-dlp ships as a Python dependency, so probe it as the `yt_dlp` module:

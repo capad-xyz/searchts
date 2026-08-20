@@ -12,10 +12,6 @@ class GitHubChannel(Channel):
     backends = ["gh CLI"]
     tier = 0
 
-    def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-        return "github.com" in urlparse(url).netloc.lower()
-
     def check(self, config=None):
         # Actually run `gh auth status` to probe liveness. Note: when not logged in, rc != 0 is a normal
         # business state (warn), not an error.

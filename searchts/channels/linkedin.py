@@ -15,10 +15,6 @@ class LinkedInChannel(Channel):
     backends = ["linkedin-scraper-mcp", "Jina Reader"]
     tier = 2
 
-    def can_handle(self, url: str) -> bool:
-        from urllib.parse import urlparse
-        return "linkedin.com" in urlparse(url).netloc.lower()
-
     def check(self, config=None):
         self.active_backend = None
         probe = probe_command("mcporter", ["config", "list"], timeout=10, package="mcporter")

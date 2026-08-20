@@ -63,56 +63,6 @@ def _hide_ytdlp_module(monkeypatch):
     monkeypatch.setattr(probe_mod.importlib.util, "find_spec", fake_find_spec)
 
 
-# --- can_handle: URL patterns ------------------------------------------ #
-
-
-class TestTikTokCanHandle:
-    def test_matches_tiktok_urls(self):
-        ch = TikTokChannel()
-        assert ch.can_handle("https://www.tiktok.com/@user/video/1234567890")
-        assert ch.can_handle("https://vm.tiktok.com/ZMabcdef/")
-        assert ch.can_handle("https://tiktok.com/@creator/video/999")
-
-    def test_rejects_other_urls(self):
-        ch = TikTokChannel()
-        assert not ch.can_handle("https://youtube.com/watch?v=abc")
-        assert not ch.can_handle("https://instagram.com/reel/abc/")
-        assert not ch.can_handle("https://example.com/video/1")
-
-
-class TestInstagramCanHandle:
-    def test_matches_instagram_media_urls(self):
-        ch = InstagramChannel()
-        assert ch.can_handle("https://www.instagram.com/reel/Cabc123/")
-        assert ch.can_handle("https://instagram.com/reels/Cabc123/")
-        assert ch.can_handle("https://www.instagram.com/p/Cxyz789/")
-        assert ch.can_handle("https://instagram.com/tv/Cabc/")
-
-    def test_rejects_profile_and_other_urls(self):
-        ch = InstagramChannel()
-        # Bare profile / non-media paths should not match.
-        assert not ch.can_handle("https://www.instagram.com/someuser/")
-        assert not ch.can_handle("https://tiktok.com/@user/video/1")
-        assert not ch.can_handle("https://example.com/p/abc/")
-
-
-class TestRedditVideoCanHandle:
-    def test_matches_video_urls(self):
-        ch = RedditVideoChannel()
-        assert ch.can_handle("https://v.redd.it/abc123")
-        assert ch.can_handle(
-            "https://www.reddit.com/r/aww/comments/abc123/cute_cat/"
-        )
-
-    def test_rejects_non_video_reddit_and_others(self):
-        ch = RedditVideoChannel()
-        # Subreddit listing is not a video post permalink.
-        assert not ch.can_handle("https://www.reddit.com/r/python/")
-        # redd.it short links (text posts) are handled by the text channel, not here.
-        assert not ch.can_handle("https://redd.it/abc123")
-        assert not ch.can_handle("https://youtube.com/watch?v=abc")
-
-
 # --- check(): yt-dlp probe statuses ------------------------------------ #
 
 

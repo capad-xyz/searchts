@@ -4,7 +4,6 @@ Channel base class — platform availability checking.
 
 Each channel represents a platform (YouTube, Twitter, GitHub, etc.)
 and provides:
-  - can_handle(url) → does this URL belong to this platform?
   - check(config) → is the upstream tool installed and configured?
 
 After installation, agents call upstream tools directly.
@@ -22,11 +21,10 @@ Backend routing semantics:
     (or env var `<CHANNEL>_BACKEND`); ordered_backends() applies it.
 """
 
-from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 
 
-class Channel(ABC):
+class Channel:
     """Base class for all channels."""
 
     name: str = ""                    # e.g. "youtube"
@@ -36,11 +34,6 @@ class Channel(ABC):
 
     #: Backend currently serving this channel; set by check(), None = unavailable.
     active_backend: Optional[str] = None
-
-    @abstractmethod
-    def can_handle(self, url: str) -> bool:
-        """Check if this channel can handle this URL."""
-        ...
 
     def ordered_backends(self, config=None) -> List[str]:
         """Candidate backends in probe order, honoring the user override.
