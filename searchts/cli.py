@@ -82,6 +82,8 @@ def _run():
     exits instead of tracebacks.
     """
     _ensure_utf8_console()
+    from searchts.config import load_dotenv_if_available
+    load_dotenv_if_available()
 
     parser = argparse.ArgumentParser(
         prog="searchts",
@@ -1208,6 +1210,21 @@ def _cmd_configure(args):
         print("   or: searchts configure --from-browser chrome")
         return
 
+    if args.key == "youtube-cookies":
+        print(
+            "[!] youtube-cookies is not wired. yt-dlp does not read this key. "
+            "Use yt-dlp --cookies-from-browser yourself, or wait for the later "
+            "opt-in device-session extra (PLAN.md F7)."
+        )
+        return
+
+    if args.key == "github-token":
+        print(
+            "[!] github-token is not stored. Export GITHUB_TOKEN or GH_TOKEN in the environment "
+            "or put it in .env (see .env.example). Nothing in searchts reads a YAML token."
+        )
+        return
+
     value = " ".join(args.value) if args.value else ""
     if not value:
         print(f"Missing value for {args.key}")
@@ -1261,15 +1278,6 @@ def _cmd_configure(args):
             print("   Accepted formats:")
             print("   1. searchts configure twitter-cookies AUTH_TOKEN CT0")
             print('   2. searchts configure twitter-cookies "auth_token=xxx; ct0=yyy; ..."')
-
-    elif args.key == "youtube-cookies":
-        config.set("youtube_cookies_from", value)
-        print(f"[ok] YouTube cookie source configured: {value}")
-        print("   yt-dlp will use cookies from this browser for age-restricted/member videos.")
-
-    elif args.key == "github-token":
-        config.set("github_token", value)
-        print("[ok] GitHub token configured!")
 
     elif args.key == "groq-key":
         config.set("groq_api_key", value)
@@ -1652,20 +1660,14 @@ def _cmd_setup():
             print("     mcporter config add exa https://mcp.exa.ai/mcp")
         print()
 
-    # Step 2: GitHub token
-    print("[Optional] GitHub Token -- raise the API rate limit")
-    print("  Without token: 60/hour | With token: 5000/hour")
-    print("  Get one: https://github.com/settings/tokens (no permissions required)")
-    current = config.get("github_token")
-    if current:
-        print("  Current status: [ok] configured")
+    # Step 2: GitHub token (env only — searchts does not store this in YAML)
+    print("[Optional] GitHub Token -- raise gh/API rate limits")
+    print("  Export GITHUB_TOKEN or add it to .env. searchts does not store this key.")
+    print("  Get one: https://github.com/settings/tokens")
+    if os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN"):
+        print("  Current status: [ok] GITHUB_TOKEN/GH_TOKEN is set in the environment")
     else:
-        key = input("  GITHUB_TOKEN (press Enter to skip): ").strip()
-        if key:
-            config.set("github_token", key)
-            print("  [ok] GitHub API raised to 5000/hour!")
-        else:
-            print("  Skipped. The public API works too")
+        print("  Current status: -- not set. Skipped; the public API works too")
     print()
 
     # Step 3: Reddit — rdt-cli

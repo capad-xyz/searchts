@@ -718,3 +718,53 @@ class TestEntryPointSignalHandling:
             main()
 
         assert exc_info.value.code == 3
+
+
+class TestConfigureDeadKnobs:
+    def test_youtube_cookies_does_not_write_config(self, tmp_path, monkeypatch, capsys):
+        from types import SimpleNamespace
+
+        from searchts.config import Config
+
+        cfg = Config(config_path=tmp_path / "config.yaml")
+        monkeypatch.setattr("searchts.config.Config", lambda: cfg)
+        cli._cmd_configure(
+            SimpleNamespace(from_browser=None, key="youtube-cookies", value=["chrome"])
+        )
+        out = capsys.readouterr().out
+        assert "not wired" in out
+        assert "youtube_cookies_from" not in cfg.data
+
+    def test_github_token_does_not_write_config(self, tmp_path, monkeypatch, capsys):
+        from types import SimpleNamespace
+
+        from searchts.config import Config
+
+        cfg = Config(config_path=tmp_path / "config.yaml")
+        monkeypatch.setattr("searchts.config.Config", lambda: cfg)
+        cli._cmd_configure(
+            SimpleNamespace(from_browser=None, key="github-token", value=["ghp_test"])
+        )
+        out = capsys.readouterr().out
+        assert "GITHUB_TOKEN" in out
+        assert "github_token" not in cfg.data
+
+    def test_dead_keys_do_not_require_a_value(self, tmp_path, monkeypatch, capsys):
+        from types import SimpleNamespace
+
+        from searchts.config import Config
+
+        cfg = Config(config_path=tmp_path / "config.yaml")
+        monkeypatch.setattr("searchts.config.Config", lambda: cfg)
+        cli._cmd_configure(
+            SimpleNamespace(from_browser=None, key="youtube-cookies", value=[])
+        )
+        yt = capsys.readouterr().out
+        assert "not wired" in yt
+        assert "Missing value" not in yt
+        cli._cmd_configure(
+            SimpleNamespace(from_browser=None, key="github-token", value=[])
+        )
+        gh = capsys.readouterr().out
+        assert "GITHUB_TOKEN" in gh
+        assert "Missing value" not in gh
