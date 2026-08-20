@@ -2,11 +2,25 @@
 """Web — any URL via an escalating open-source unlocker.
 
 Ladder (see searchts.unlocker): curl_cffi -> Jina Reader -> stealth-browser.
-Always available; falls back gracefully when a bot-wall blocks one backend.
+curl_cffi + Jina are always available; stealth-browser needs the optional
+``searchts[browser]`` extra (patchright + Chromium).
 """
 
 from .. import unlocker
 from .base import Channel
+
+
+def _stealth_installed() -> bool:
+    """True when the optional patchright package is importable.
+
+    Does not launch Chromium — doctor must stay offline and fast. A broken
+    browser install still surfaces later when the stealth tier is actually used.
+    """
+    try:
+        import patchright  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
 
 class WebChannel(Channel):
@@ -20,9 +34,19 @@ class WebChannel(Channel):
         return True  # Fallback — handles any URL
 
     def check(self, config=None):
-        # Always-available fallback channel: no network probe, keeping overhead at zero.
+        # Always report the keyless rungs; probe only whether stealth is installed.
         self.active_backend = self.backends[0]
-        return "ok", "Escalating fetch unlocker: curl_cffi -> Jina Reader -> stealth-browser"
+        if _stealth_installed():
+            return (
+                "ok",
+                "Escalating fetch unlocker: curl_cffi -> Jina Reader -> stealth-browser",
+            )
+        return (
+            "warn",
+            "Escalating fetch unlocker: curl_cffi -> Jina Reader available; "
+            "stealth-browser not installed "
+            "(pip install 'searchts[browser]' && patchright install chromium)",
+        )
 
     def read(self, url: str, config=None) -> str:
         """Read the page body, escalating through backends in order until real content is obtained."""
