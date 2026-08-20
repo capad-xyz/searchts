@@ -18,7 +18,9 @@ def _stealth_installed() -> bool:
     """
     try:
         import patchright  # noqa: F401
-    except ImportError:
+    except Exception:
+        # Any import-time failure (missing extra, broken install) is "not available"
+        # for this offline doctor probe. A real stealth fetch still surfaces later.
         return False
     return True
 
