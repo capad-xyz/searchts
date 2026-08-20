@@ -337,6 +337,8 @@ def serve():
     """
     if not HAS_MCP:
         raise MCPNotInstalledError(MCP_MISSING_MESSAGE)
+    from searchts.config import load_dotenv_if_available
+    load_dotenv_if_available()
     asyncio.run(_run_stdio())
 
 

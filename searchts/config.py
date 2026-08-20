@@ -12,6 +12,20 @@ from typing import Any, Optional
 import yaml
 
 
+def load_dotenv_if_available() -> None:
+    """Load a local ``.env`` without overriding real environment variables.
+
+    Missing python-dotenv is a no-op so the CLI still starts.
+    """
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        return
+    env_path = Path.cwd() / ".env"
+    if env_path.is_file():
+        load_dotenv(env_path, override=False)
+
+
 class Config:
     """Manages searchts configuration."""
 
@@ -24,7 +38,6 @@ class Config:
         "twitter_xreach": ["twitter_auth_token", "twitter_ct0"],  # legacy key name; used by twitter-cli
         "groq_whisper": ["groq_api_key"],
         "openai_whisper": ["openai_api_key"],
-        "github_token": ["github_token"],
     }
 
     def __init__(self, config_path: Optional[Path] = None):

@@ -2,6 +2,8 @@
 """Tests for searchts config module."""
 
 
+import os
+
 import pytest
 
 from searchts.config import Config
@@ -82,3 +84,37 @@ class TestConfig:
             # File should be owner-only read/write (0o600)
             assert not (mode & stat.S_IRGRP), "group read should not be set"
             assert not (mode & stat.S_IROTH), "other read should not be set"
+
+    def test_github_token_is_not_a_config_feature(self):
+        assert "github_token" not in Config.FEATURE_REQUIREMENTS
+
+    def test_load_dotenv_if_available_is_safe_without_package(self, monkeypatch):
+        import builtins
+        real_import = builtins.__import__
+
+        def _block_dotenv(name, *args, **kwargs):
+            if name == "dotenv" or name.startswith("dotenv."):
+                raise ImportError("blocked")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", _block_dotenv)
+        from searchts.config import load_dotenv_if_available
+        load_dotenv_if_available()
+
+    def test_load_dotenv_does_not_override_env(self, tmp_path, monkeypatch):
+        pytest.importorskip("dotenv")
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".env").write_text("SEARCHTS_DOTENV_PROBE=from-file\n", encoding="utf-8")
+        monkeypatch.setenv("SEARCHTS_DOTENV_PROBE", "from-env")
+        from searchts.config import load_dotenv_if_available
+        load_dotenv_if_available()
+        assert os.environ["SEARCHTS_DOTENV_PROBE"] == "from-env"
+
+    def test_load_dotenv_fills_missing_env(self, tmp_path, monkeypatch):
+        pytest.importorskip("dotenv")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("SEARCHTS_DOTENV_FILL", raising=False)
+        (tmp_path / ".env").write_text("SEARCHTS_DOTENV_FILL=from-file\n", encoding="utf-8")
+        from searchts.config import load_dotenv_if_available
+        load_dotenv_if_available()
+        assert os.environ["SEARCHTS_DOTENV_FILL"] == "from-file"
