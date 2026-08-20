@@ -80,14 +80,12 @@ class Config:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
 
     def get(self, key: str, default: Any = None) -> Any:
-        """Get a config value. Also checks environment variables (uppercase)."""
-        # Config file first
+        """Get a config value. Environment (uppercase key) beats YAML."""
+        env_name = key.upper()
+        if env_name in os.environ:
+            return os.environ[env_name]
         if key in self.data:
             return self.data[key]
-        # Then env var (uppercase)
-        env_val = os.environ.get(key.upper())
-        if env_val:
-            return env_val
         return default
 
     def set(self, key: str, value: Any):
