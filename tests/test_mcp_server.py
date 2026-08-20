@@ -9,6 +9,7 @@ import json
 from unittest.mock import patch
 
 import pytest
+
 from searchts.integrations.mcp_server import (
     READ_URL_DESCRIPTION,
     WEB_SEARCH_DESCRIPTION,
