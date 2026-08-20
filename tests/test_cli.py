@@ -748,3 +748,23 @@ class TestConfigureDeadKnobs:
         out = capsys.readouterr().out
         assert "GITHUB_TOKEN" in out
         assert Config(config_path=tmp_path / "config.yaml").get("github_token") is None
+
+    def test_dead_keys_do_not_require_a_value(self, tmp_path, monkeypatch, capsys):
+        from types import SimpleNamespace
+
+        from searchts.config import Config
+
+        cfg = Config(config_path=tmp_path / "config.yaml")
+        monkeypatch.setattr("searchts.config.Config", lambda: cfg)
+        cli._cmd_configure(
+            SimpleNamespace(from_browser=None, key="youtube-cookies", value=[])
+        )
+        yt = capsys.readouterr().out
+        assert "not wired" in yt
+        assert "Missing value" not in yt
+        cli._cmd_configure(
+            SimpleNamespace(from_browser=None, key="github-token", value=[])
+        )
+        gh = capsys.readouterr().out
+        assert "GITHUB_TOKEN" in gh
+        assert "Missing value" not in gh

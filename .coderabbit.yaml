@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: false
+  auto_review:
+    enabled: true
+    drafts: true
+    auto_incremental_review: true
+  path_instructions:
+    - path: "searchts/**/*.py"
+      instructions: |
+        searchts is a keyless unlocker. Prefer honesty over features.
+        One read path: unlocker.fetch. Do not suggest channel-based routing.
+        Doctor is read-only. Do not suggest wiring dead config keys.
+        Flag tests that stub the function they claim to cover.
+    - path: "tests/**/*.py"
+      instructions: |
+        Tests must exercise the real function. Mock I/O, not the unit under test.
+knowledge_base:
+  learnings:
+    scope: auto
+chat:
+  auto_reply: true

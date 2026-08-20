@@ -1210,6 +1210,21 @@ def _cmd_configure(args):
         print("   or: searchts configure --from-browser chrome")
         return
 
+    if args.key == "youtube-cookies":
+        print(
+            "[!] youtube-cookies is not wired. yt-dlp does not read this key. "
+            "Use yt-dlp --cookies-from-browser yourself, or wait for the later "
+            "opt-in device-session extra (PLAN.md F7)."
+        )
+        return
+
+    if args.key == "github-token":
+        print(
+            "[!] github-token is not stored. Export GITHUB_TOKEN in the environment "
+            "or put it in .env (see .env.example). Nothing in searchts reads a YAML token."
+        )
+        return
+
     value = " ".join(args.value) if args.value else ""
     if not value:
         print(f"Missing value for {args.key}")
@@ -1263,19 +1278,6 @@ def _cmd_configure(args):
             print("   Accepted formats:")
             print("   1. searchts configure twitter-cookies AUTH_TOKEN CT0")
             print('   2. searchts configure twitter-cookies "auth_token=xxx; ct0=yyy; ..."')
-
-    elif args.key == "youtube-cookies":
-        print(
-            "[!] youtube-cookies is not wired. yt-dlp does not read this key. "
-            "Use yt-dlp --cookies-from-browser yourself, or wait for the later "
-            "opt-in device-session extra (PLAN.md F7)."
-        )
-
-    elif args.key == "github-token":
-        print(
-            "[!] github-token is not stored. Export GITHUB_TOKEN in the environment "
-            "or put it in .env (see .env.example). Nothing in searchts reads a YAML token."
-        )
 
     elif args.key == "groq-key":
         config.set("groq_api_key", value)
