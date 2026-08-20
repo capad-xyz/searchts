@@ -86,12 +86,15 @@
 
 ### Communications
 
-- [ ] **X1** After P0.7: smoke vs walled; thin is not a pass
+- [x] **X1** After P0.7: smoke vs walled; thin is not a pass (posted 2026-08-20)
 - [ ] **X2** After P1 demo: 403 → agent calls `read_url` (issue #22)
 - [ ] **X3** After P3.1+P3.2: one wall before/after
 - [ ] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`
 - [ ] Cadence ≤2 posts/week; no chore tweets (pins, dead keys, YAML)
-- [ ] Article: draft anytime; **publish after P0 on main** (ideally + one user-visible win)
+- [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article drafted in Notion; publish same week as X2/X3.
+- [x] **CI** PRs: lint + typecheck + version-sync + ubuntu 3.12 tests. Full matrix + wheel-gate on `main` only.
+
+- [ ] Article: drafted (Notion, parked). Publish same week as X2 or X3.
 
 ---
 
@@ -240,3 +243,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 |---|---|
 | 2026-08-20 | Freeze: Q1=B, Q2=A, Q3=A, Q4=A, Q5=A; verified + unverified + future folded; full checklist |
 | 2026-08-20 | P0.1 / P0.2 (#74) and P0.7 (#79) on main. F7: device sessions are P4/later, not P0.3. |
+| 2026-08-21 | P0.3–P0.11 on main. CI: PR-slim / main-full. X1 posted; article parked. |
