@@ -59,7 +59,33 @@ jobs:
       - name: Run mypy
         run: mypy searchts
 
+  # PRs: one interpreter. OS / version surprises wait for main.
   test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            constraints.txt
+            pyproject.toml
+
+      - name: Install package and test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -c constraints.txt -e ".[dev,mcp]"
+
+      - name: Run tests
+        run: pytest -q
+
+  test-full:
+    if: github.event_name == 'push'
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -102,6 +128,7 @@ jobs:
   # can pass tests and still fail every real `pip install` from source.
   # This job builds the actual wheel and installs it into a clean venv.
   wheel-gate:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
