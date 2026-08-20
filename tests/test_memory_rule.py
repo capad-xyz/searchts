@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-from pathlib import Path
-
 from searchts.integrations.memory_rule import (
     BEGIN,
     RULE,
