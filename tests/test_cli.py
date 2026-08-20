@@ -733,7 +733,7 @@ class TestConfigureDeadKnobs:
         )
         out = capsys.readouterr().out
         assert "not wired" in out
-        assert Config(config_path=tmp_path / "config.yaml").get("youtube_cookies_from") is None
+        assert "youtube_cookies_from" not in cfg.data
 
     def test_github_token_does_not_write_config(self, tmp_path, monkeypatch, capsys):
         from types import SimpleNamespace
@@ -747,7 +747,7 @@ class TestConfigureDeadKnobs:
         )
         out = capsys.readouterr().out
         assert "GITHUB_TOKEN" in out
-        assert Config(config_path=tmp_path / "config.yaml").get("github_token") is None
+        assert "github_token" not in cfg.data
 
     def test_dead_keys_do_not_require_a_value(self, tmp_path, monkeypatch, capsys):
         from types import SimpleNamespace

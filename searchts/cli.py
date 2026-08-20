@@ -1220,7 +1220,7 @@ def _cmd_configure(args):
 
     if args.key == "github-token":
         print(
-            "[!] github-token is not stored. Export GITHUB_TOKEN in the environment "
+            "[!] github-token is not stored. Export GITHUB_TOKEN or GH_TOKEN in the environment "
             "or put it in .env (see .env.example). Nothing in searchts reads a YAML token."
         )
         return
