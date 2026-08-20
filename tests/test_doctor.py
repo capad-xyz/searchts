@@ -100,10 +100,10 @@ class TestDoctor:
         import re
         plain = re.sub(r"\[[^\]]*\]", "", report)
         assert "searchts" in plain
-        assert "Ready to use out of the box:" in plain
-        assert "1/3 channels available" in plain
+        assert "Probes (not a routing table):" in plain
+        assert "1/3 probes ok" in plain
         # Inactive optional channels should be summarized in one line
-        assert "optional channels can be unlocked" in plain
+        assert "optional CLIs not present" in plain
 
 
 def test_stale_active_backend_does_not_leak_into_errored_result(monkeypatch):

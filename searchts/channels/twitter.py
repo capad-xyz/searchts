@@ -72,10 +72,7 @@ class TwitterChannel(Channel):
 
         output = probe.output
         if "ok: true" in output:
-            return "ok", (
-                "twitter-cli fully available (search, read tweets, timeline, long-form/Article, "
-                "user queries, threads)"
-            )
+            return "ok", "twitter-cli is on PATH and authenticated"
         if "not_authenticated" in output:
             return "warn", (
                 "twitter-cli is installed but not authenticated. Set it up with:\n"

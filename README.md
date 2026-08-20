@@ -172,11 +172,11 @@ Run `searchts doctor` to check what is configured and working.
 
 ## Optional integrations
 
-The core is `read` / `search` / `transcribe`, and for most reads you can just
-`searchts read <the-url>` on the public page. As an optional extra, if you have
-separately-installed platform CLIs (`gh`, `twitter-cli`, `opencli`, `mcporter`),
-searchts can also reach GitHub, Twitter/X, Reddit, and LinkedIn through them, and
-`searchts doctor` will report which are present. These are add-ons, not the core.
+The core is `read` / `search` / `transcribe`. Every `searchts read` goes through
+`unlocker.fetch` — there is no per-platform router. `searchts doctor` only probes
+whether optional CLIs (`gh`, `twitter-cli`, `opencli`, `mcporter`) are on PATH
+and authenticated. Presence is not a claim that searchts reads those sites
+through those CLIs.
 
 ## Roadmap
 

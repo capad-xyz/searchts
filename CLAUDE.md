@@ -57,7 +57,7 @@ rewrite most files.
   and `transcribe.py`; the CLI verbs in `cli.py` call them directly.
 - `channels/` today mainly powers `searchts doctor` health checks: only the web
   channel implements `read()`, only the 4 video channels (youtube, tiktok,
-  instagram, redditvideo) implement `transcribe()`, and there is no `can_handle()` routing contract.
+  instagram, redditvideo) implement `transcribe()`, and there is no channel-routing contract. One read path: `unlocker.fetch`.
 - Each channel is a single file in `channels/`, inherits from `BaseChannel`.
 - Use `loguru` for logging, `rich` for CLI output
 - Commit format: `type(scope): message` (one commit = one thing). PRs are

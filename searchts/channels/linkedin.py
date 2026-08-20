@@ -31,7 +31,7 @@ class LinkedInChannel(Channel):
             return "error", f"mcporter execution error: {probe.hint or probe.output or probe.status}"
         if "linkedin" in probe.output.lower():
             self.active_backend = "linkedin-scraper-mcp"
-            return "ok", "Fully available (profiles, companies, job search)"
+            return "ok", "linkedin helper is present"
         return "off", (
             "mcporter is installed but the LinkedIn MCP is not configured. Run:\n"
             "  pip install linkedin-scraper-mcp\n"

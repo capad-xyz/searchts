@@ -33,7 +33,7 @@ class GitHubChannel(Channel):
             return "warn", "gh CLI status check timed out. Run gh auth status for details"
         if probe.ok:
             self.active_backend = "gh CLI"
-            return "ok", "Fully available (read, search, fork, issues, PRs, etc.)"
+            return "ok", "gh is on PATH and authenticated"
         # rc != 0: gh is alive but not authenticated (the normal business state of gh auth status)
         self.active_backend = "gh CLI"
-        return "warn", "gh CLI is installed but not authenticated. Run gh auth login to unlock full functionality"
+        return "warn", "gh is on PATH but not authenticated. Run: gh auth login"
