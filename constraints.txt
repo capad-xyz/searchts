@@ -9,6 +9,12 @@ loguru==0.7.3
 PyYAML==6.0.3
 rich==15.0.0
 yt-dlp==2026.7.4
+# Unlocker / search runtime. These were missing from the file, so CI
+# floated to whatever PyPI served. Pins are the current releases as of
+# 2026-08-20 (satisfy curl_cffi>=0.7, trafilatura>=1.8, ddgs>=9.0).
+curl_cffi==0.16.0
+trafilatura==2.2.0
+ddgs==9.15.0
 
 # Optional [mcp] extra. Pinned below 2 for the API break described in
 # pyproject.toml; CI installs it so the server is built against a real SDK.
