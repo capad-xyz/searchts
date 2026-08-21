@@ -98,6 +98,8 @@
 - [ ] Article: drafted (Notion, parked). Publish same week as X2 or X3.
 - [ ] **PyPI 0.7.3** when P0+P1.1/1.2/1.2b should be what `pip install` gets (index still 0.7.2).
 
+- [ ] **Install story** (docs, not a feature): **keep** = `pipx install "searchts[mcp]"`; **try / MCP** = `uvx --from "searchts[mcp]" searchts …`. `pip` is for venvs only.
+
 ---
 
 ## 2. Plan by phase
@@ -211,6 +213,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F4** Sitemap / small multi-page crawl (bounded)
 - **F5** Document share-extractors as the official fail-open extension point (one file pattern) — **not** a generic plugin system
 - **F6** Claude/marketplace plugin polish beyond P4.2 minimum
+- **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills` — Codex will not see the skill until we add that path (measure demand first).
 - **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships.
 
 ### N — Not planned (explicit)
@@ -247,3 +250,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-20 | P0.1 / P0.2 (#74) and P0.7 (#79) on main. F7: device sessions are P4/later, not P0.3. |
 | 2026-08-21 | P0.3–P0.11 on main. CI: PR-slim / main-full. X1 posted; article parked. |
 | 2026-08-22 | P1.1 #86, P1.2 #88, P1.2b #89 on main. P1.3 still a live gate. |
+| 2026-08-22 | pipx = keep CLI; uvx = try/MCP. Folded, not scheduled. |
