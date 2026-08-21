@@ -45,8 +45,9 @@
 
 **Verified gap + behavioral hypothesis (#22)**
 
-- [ ] **P1.1** Install path writes short memory rule (~8 lines): on 403/429/challenge/thin page → `read_url` / `searchts read`; do not satisfice on a snippet. Targets: Claude Code user memory + Cursor rule if detected. **Prompt before overwrite.**
-- [ ] **P1.2** MCP tool descriptions: explicit retry-via-`read_url` language
+- [x] **P1.1** Install path writes short memory rule (~8 lines): on 403/429/challenge/thin page → `read_url` / `searchts read`; do not satisfice on a snippet. Targets: Claude Code user memory + Cursor rule if detected. **Prompt before overwrite.** — #86
+- [x] **P1.2** MCP tool descriptions: explicit retry-via-`read_url` language — #88
+- [x] **P1.2b** Skill YAML `description` ≤ 1024 (Agent Skills hosts skip the skill otherwise) — #89
 - [ ] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls
 - [ ] **P1.4** *(unverified track)* Scripted acceptance harness so #22 is pass/fail, not anecdote
 
@@ -95,6 +96,7 @@
 - [x] **CI** PRs: lint + typecheck + version-sync + ubuntu 3.12 tests. Full matrix + wheel-gate on `main` only.
 
 - [ ] Article: drafted (Notion, parked). Publish same week as X2 or X3.
+- [ ] **PyPI 0.7.3** when P0+P1.1/1.2/1.2b should be what `pip install` gets (index still 0.7.2).
 
 ---
 
@@ -244,3 +246,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-20 | Freeze: Q1=B, Q2=A, Q3=A, Q4=A, Q5=A; verified + unverified + future folded; full checklist |
 | 2026-08-20 | P0.1 / P0.2 (#74) and P0.7 (#79) on main. F7: device sessions are P4/later, not P0.3. |
 | 2026-08-21 | P0.3–P0.11 on main. CI: PR-slim / main-full. X1 posted; article parked. |
+| 2026-08-22 | P1.1 #86, P1.2 #88, P1.2b #89 on main. P1.3 still a live gate. |
