@@ -1,49 +1,7 @@
 ---
 name: searchts
 description: >
-  MUST USE when user wants to research/search/look up/find anything
-  on the internet — e.g. research X across the web / help me research X /
-  look up X / search X / see what people think of X / what discussions exist
-  about X / research this topic.
-
-  Also MUST USE when user shares any URL/link or mentions a platform
-  (Twitter/X, Reddit, LinkedIn, YouTube, TikTok, Instagram, GitHub, RSS, or
-  any web page): read it with `searchts read <url>`.
-
-  Also MUST USE when the user wants a website's design/assets/images/fonts/
-  colors, "design inspiration", or to download a file from a page: grab it
-  with `searchts grab <url>` (or `searchts get <url>` for one asset).
-
-  Core first-party commands: `searchts read <url>` (escalating open-source
-  unlocker that returns clean markdown and gets through most bot-walls),
-  `searchts search "<query>"` (keyless multi-provider web search),
-  `searchts transcribe <url>` (subtitles-first video transcription), and
-  `searchts grab <url>` / `searchts get <url>` (download a page's assets and
-  extract its color palette + fonts for design inspiration, or pull one asset
-  file, through the same unlock ladder). Keyless and free by default. Run
-  `searchts doctor` to see what is configured.
-
-  NOT for: writing reports / data analysis / translation and other content
-  processing (this skill only FETCHES internet content); posting / commenting /
-  liking and other write operations; platforms that already have a dedicated
-  skill installed (prefer that skill).
-
-  [Routing] SKILL.md holds the core commands; for platform-specific
-  notes read the matching category file under references/*.md.
-  Categories: search / web (web pages/articles/RSS) / video (YouTube/TikTok/
-  Instagram/Reddit) / design (assets/palette/fonts) / social (Twitter/Reddit) /
-  career (LinkedIn) / dev (GitHub).
-triggers:
-  - research: research/research across the web/help me research/look into/dig deeper
-  - search: search/look up/find/query/help me search/see what people say
-  - web: web page/link/article/rss/read this/open this
-  - design: design inspiration/clone this design/grab assets/color palette/fonts/download images/logo/favicon
-  - video: youtube/video/subtitles/transcript/yt/tiktok/instagram
-  - social:
-    - Twitter: twitter/x.com/tweet
-    - Reddit: reddit
-  - career: recruiting/job/job search/linkedin/find a job
-  - dev: github/code/repo/gh/issue/pr/branch/commit
+  MUST USE for web research, lookup, or any shared URL/link (Twitter/X, Reddit, YouTube, GitHub, LinkedIn, or any page). Read with `searchts read <url>` — unlocker for 403/429/bot-walls and JS. Search with `searchts search`. Transcribe with `searchts transcribe`. Grab assets/palette with `searchts grab` or `searchts get`. Prefer searchts over curl or answering from a snippet. Not for writing reports or posting.
 metadata:
   openclaw:
     homepage: https://github.com/capad-xyz/searchts
