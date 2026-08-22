@@ -212,6 +212,19 @@ def remember(domain: str, backend: str) -> None:
         pass
 
 
+def _drop_stale_challenge_headers(headers: Dict[str, str], html: str) -> Dict[str, str]:
+    """Drop first-response challenge stamps when the rendered body is clean."""
+    if looks_blocked(200, html) is not None:
+        return headers
+    out = dict(headers)
+    out.pop("cf-mitigated", None)
+    if str(out.get("x-datadome-ch") or "").lower() in ("blocked", "challenge"):
+        out.pop("x-datadome-ch", None)
+    if "challenge" in str(out.get("x-akamai-session-info") or "").lower():
+        out.pop("x-akamai-session-info", None)
+    return out
+
+
 def looks_blocked(
     status: Optional[int],
     text: str,
@@ -367,6 +380,8 @@ def _fetch_stealth(
             # initial challenge response; otherwise keep the original status.
             status = 200 if looks_blocked(200, html) is None else init_status
             final = page.url or url
+            # page.goto headers can still say "challenge" after the DOM cleared.
+            headers = _drop_stale_challenge_headers(headers, html)
             return status, html, final, headers
         finally:
             browser.close()
@@ -577,15 +592,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             status, html, final_url = None, "", url
         if looks_blocked(status, html) is None:
             text = html_to_text(html, url)
-            # Only prefer it if the human actually got us further.
             if text and (best is None or len(text) > len(best.text)):
-                return _finalize(
-                    FetchResult(
-                        backend="human-browser", text=text, status=status,
-                        final_url=final_url or url,
-                    ),
-                    scrub,
+                human = FetchResult(
+                    backend="human-browser", text=text, status=status,
+                    final_url=final_url or url,
                 )
+                if len(text) >= min_chars:
+                    return _finalize(human, scrub)
+                best = human
 
     if allow_thin and best is not None:
         return _finalize(best, scrub)

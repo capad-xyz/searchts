@@ -654,8 +654,8 @@ def test_human_fallback_stays_off_by_default(monkeypatch, stub_extract):
         unlocker.fetch("https://site.test", use_memory=False)
 
 
-def test_human_fallback_failure_falls_back_to_best(monkeypatch, stub_extract):
-    """patchright missing / launch failure must not lose the thin result."""
+def test_human_fallback_failure_is_still_thin_error(monkeypatch, stub_extract):
+    """patchright missing does not mint a thin success when allow_thin is off."""
     def boom(url, timeout=180):
         raise RuntimeError("no patchright")
 
@@ -663,3 +663,34 @@ def test_human_fallback_failure_falls_back_to_best(monkeypatch, stub_extract):
     monkeypatch.setattr(unlocker, "_fetch_human", boom)
     with pytest.raises(UnlockerError):
         unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+
+
+def test_human_thin_result_obeys_allow_thin(monkeypatch, stub_extract):
+    _set(monkeypatch, curl=(200, "x"), jina=(200, "y"), stealth=(200, "z"))
+    monkeypatch.setattr(
+        unlocker, "_fetch_human",
+        lambda url, timeout=180: (200, "H" * 80, url),
+    )
+    with pytest.raises(UnlockerError):
+        unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    r = unlocker.fetch(
+        "https://site.test", allow_human=True, use_memory=False, allow_thin=True,
+    )
+    assert r.backend == "human-browser"
+    assert r.text == "H" * 80
+
+
+def test_drop_stale_challenge_headers_when_body_is_clean():
+    headers = {
+        "cf-mitigated": "challenge",
+        "x-datadome-ch": "blocked",
+        "server": "cloudflare",
+    }
+    out = unlocker._drop_stale_challenge_headers(headers, "real article " * 80)
+    assert "cf-mitigated" not in out
+    assert "x-datadome-ch" not in out
+    assert out["server"] == "cloudflare"
+    kept = unlocker._drop_stale_challenge_headers(
+        {"cf-mitigated": "challenge"}, "Just a moment..."
+    )
+    assert kept.get("cf-mitigated") == "challenge"
