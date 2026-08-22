@@ -80,6 +80,9 @@ _BLOCK_PHRASES = (
     "errors.edgesuite.net",                     # Akamai/EdgeSuite error interstitial host
     "your request has been blocked as a possible bot",  # Fastly Bot Management block copy
     "checking if the site connection is secure",  # Cloudflare interstitial (alt phrasing)
+    "complete the challenge below",  # Reddit bot interstitial (often HTTP 200)
+    "let us know you're a real person",
+    "let us know you are a real person",
 )
 
 _MIN_CHARS = 500
@@ -209,6 +212,19 @@ def remember(domain: str, backend: str) -> None:
         pass
 
 
+def _drop_stale_challenge_headers(headers: Dict[str, str], html: str) -> Dict[str, str]:
+    """Drop first-response challenge stamps when the rendered body is clean."""
+    if looks_blocked(200, html) is not None:
+        return headers
+    out = dict(headers)
+    out.pop("cf-mitigated", None)
+    if str(out.get("x-datadome-ch") or "").lower() in ("blocked", "challenge"):
+        out.pop("x-datadome-ch", None)
+    if "challenge" in str(out.get("x-akamai-session-info") or "").lower():
+        out.pop("x-akamai-session-info", None)
+    return out
+
+
 def looks_blocked(
     status: Optional[int],
     text: str,
@@ -216,17 +232,22 @@ def looks_blocked(
 ) -> Optional[str]:
     """Return a short reason if the response is a hard block/challenge page, else None.
 
-    HTTP errors, known challenge phrases, and explicit challenge headers count as
-    blocked. Short-but-real content is NOT a block (example.com is tiny yet valid); the
-    fetch ladder treats a thin extraction as a reason to escalate, then falls back to
-    the best result.
+    HTTP errors (including vendor codes like 999), known challenge phrases, and
+    explicit challenge headers count as blocked. Thin-but-real pages are not a
+    block; ``fetch`` escalates, then fails unless ``allow_thin`` is set.
     """
     if status is None:
         return "no-response"
     if status >= 400:
         return f"http-{status}"
-    if headers and headers.get("cf-mitigated") == "challenge":
-        return "challenge"
+    if headers:
+        if headers.get("cf-mitigated") == "challenge":
+            return "challenge"
+        # Explicit block stamps (not "Server: AkamaiGHost" — that hosts real pages).
+        if str(headers.get("x-datadome-ch") or "").lower() in ("blocked", "challenge"):
+            return "challenge"
+        if str(headers.get("x-akamai-session-info") or "").lower().find("challenge") >= 0:
+            return "challenge"
     head = (text or "")[:8192].lower()
     for phrase in _BLOCK_PHRASES:
         if phrase in head:
@@ -359,6 +380,8 @@ def _fetch_stealth(
             # initial challenge response; otherwise keep the original status.
             status = 200 if looks_blocked(200, html) is None else init_status
             final = page.url or url
+            # page.goto headers can still say "challenge" after the DOM cleared.
+            headers = _drop_stale_challenge_headers(headers, html)
             return status, html, final, headers
         finally:
             browser.close()
@@ -437,7 +460,8 @@ def _finalize(result: FetchResult, scrub: bool) -> FetchResult:
 
 def fetch(url: str, backends: Optional[List[str]] = None,
           min_chars: int = _MIN_CHARS, use_memory: bool = True,
-          allow_human: bool = False, scrub: bool = False) -> FetchResult:
+          allow_human: bool = False, scrub: bool = False,
+          allow_thin: bool = False) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -447,6 +471,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         When True (and SEARCHTS_NO_MEMORY is unset), a backend previously
         recorded as the winner for this URL's registrable domain is moved to the
         FRONT of the ladder, and a fresh clean win is persisted for next time.
+    allow_thin:
+        When True and no rung met ``min_chars``, return the longest non-blocked
+        body instead of raising. Default False: thin/challenge leftovers are
+        UnlockerError (P3.2). Scorecard smoke cases pass ``min_chars=0``.
     allow_human:
         When True and no rung produced a clean win, fall back to a HEADFUL
         browser the user solves by hand (Feature D). Covers interactive
@@ -564,18 +592,16 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             status, html, final_url = None, "", url
         if looks_blocked(status, html) is None:
             text = html_to_text(html, url)
-            # Only prefer it if the human actually got us further.
             if text and (best is None or len(text) > len(best.text)):
-                return _finalize(
-                    FetchResult(
-                        backend="human-browser", text=text, status=status,
-                        final_url=final_url or url,
-                    ),
-                    scrub,
+                human = FetchResult(
+                    backend="human-browser", text=text, status=status,
+                    final_url=final_url or url,
                 )
+                if len(text) >= min_chars:
+                    return _finalize(human, scrub)
+                best = human
 
-    if best is not None:
-        # best-effort real content beats reporting a false block
+    if allow_thin and best is not None:
         return _finalize(best, scrub)
 
     raise UnlockerError(url, attempts)

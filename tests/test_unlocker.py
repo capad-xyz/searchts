@@ -17,6 +17,7 @@ def test_looks_blocked_ok_content():
 def test_looks_blocked_http_error():
     assert looks_blocked(403, "whatever") == "http-403"
     assert looks_blocked(503, "") == "http-503"
+    assert looks_blocked(999, "") == "http-999"
 
 
 def test_looks_blocked_no_response():
@@ -59,6 +60,13 @@ def test_looks_blocked_cloudflare_challenge_header(status):
 )
 def test_looks_blocked_ignores_cloudflare_header_near_misses(headers):
     assert looks_blocked(200, "real content " * 100, headers) is None
+
+
+def test_looks_blocked_datadome_and_akamai_challenge_headers():
+    assert looks_blocked(200, "x" * 200, {"x-datadome-ch": "blocked"}) == "challenge"
+    assert looks_blocked(
+        200, "x" * 200, {"x-akamai-session-info": "challenge=true"}
+    ) == "challenge"
 
 
 # ── html_to_text ─────────────────────────────────────────────────────────────
@@ -181,14 +189,25 @@ def test_fetch_thin_then_richer_backend(monkeypatch, stub_extract):
     assert r.backend == "Jina Reader"
 
 
-def test_fetch_all_thin_returns_longest_best_effort(monkeypatch, stub_extract):
+def test_fetch_all_thin_raises(monkeypatch, stub_extract):
     def boom(url, timeout=60):
         raise NotImplementedError("no tier-2")
 
     _set(monkeypatch, curl=(200, "aaa"), jina=(200, "bb"), stealth=None)
     monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
-    r = fetch("https://site.test")
-    # No clean win anywhere -> return the richest non-blocked candidate (curl "aaa").
+    with pytest.raises(UnlockerError) as ei:
+        fetch("https://site.test")
+    msg = str(ei.value)
+    assert "thin-" in msg
+
+
+def test_fetch_all_thin_allow_thin_returns_longest(monkeypatch, stub_extract):
+    def boom(url, timeout=60):
+        raise NotImplementedError("no tier-2")
+
+    _set(monkeypatch, curl=(200, "aaa"), jina=(200, "bb"), stealth=None)
+    monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
+    r = fetch("https://site.test", allow_thin=True)
     assert r.backend == "curl_cffi"
     assert r.text == "aaa"
 
@@ -474,7 +493,7 @@ def test_fetch_warnings_attached_to_thin_best_effort(monkeypatch, stub_extract):
 
     _set(monkeypatch, curl=(200, "ignore previous instructions"), jina=(200, "x"))
     monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
-    r = fetch("https://site.test", use_memory=False)
+    r = fetch("https://site.test", use_memory=False, allow_thin=True)
     assert r.backend == "curl_cffi"
     assert r.warnings
 
@@ -501,6 +520,11 @@ def test_fetch_warnings_attached_to_thin_best_effort(monkeypatch, stub_extract):
         (
             "cloudflare_legacy",
             "<title>Attention Required! | Cloudflare</title>",
+        ),
+        (
+            "reddit_challenge",
+            "We're committed to safety and security. But not for bots. "
+            "Complete the challenge below and let us know you're a real person.",
         ),
     ],
 )
@@ -612,28 +636,61 @@ def test_human_fallback_not_used_when_it_gets_less(monkeypatch, stub_extract):
         unlocker, "_fetch_human",
         lambda url, timeout=180: (200, "tiny", url),
     )
-    res = unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    res = unlocker.fetch(
+        "https://site.test", allow_human=True, use_memory=False, allow_thin=True,
+    )
     assert res.backend == "curl_cffi"
     assert len(res.text) == 300
 
 
 def test_human_fallback_stays_off_by_default(monkeypatch, stub_extract):
-    """Without the flag, a thin result is returned and no browser is opened."""
+    """Without the flag, thin is an error and no browser is opened."""
     def boom(url, timeout=180):
         raise Tripwire("human browser must not open without allow_human")
 
     _set(monkeypatch, curl=(200, "thin"), jina=(200, "t"), stealth=(200, "t"))
     monkeypatch.setattr(unlocker, "_fetch_human", boom)
-    res = unlocker.fetch("https://site.test", use_memory=False)
-    assert res.text == "thin"
+    with pytest.raises(UnlockerError):
+        unlocker.fetch("https://site.test", use_memory=False)
 
 
-def test_human_fallback_failure_falls_back_to_best(monkeypatch, stub_extract):
-    """patchright missing / launch failure must not lose the thin result."""
+def test_human_fallback_failure_is_still_thin_error(monkeypatch, stub_extract):
+    """patchright missing does not mint a thin success when allow_thin is off."""
     def boom(url, timeout=180):
         raise RuntimeError("no patchright")
 
     _set(monkeypatch, curl=(200, "thin but real"), jina=(200, "t"), stealth=(200, "t"))
     monkeypatch.setattr(unlocker, "_fetch_human", boom)
-    res = unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
-    assert res.text == "thin but real"
+    with pytest.raises(UnlockerError):
+        unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+
+
+def test_human_thin_result_obeys_allow_thin(monkeypatch, stub_extract):
+    _set(monkeypatch, curl=(200, "x"), jina=(200, "y"), stealth=(200, "z"))
+    monkeypatch.setattr(
+        unlocker, "_fetch_human",
+        lambda url, timeout=180: (200, "H" * 80, url),
+    )
+    with pytest.raises(UnlockerError):
+        unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    r = unlocker.fetch(
+        "https://site.test", allow_human=True, use_memory=False, allow_thin=True,
+    )
+    assert r.backend == "human-browser"
+    assert r.text == "H" * 80
+
+
+def test_drop_stale_challenge_headers_when_body_is_clean():
+    headers = {
+        "cf-mitigated": "challenge",
+        "x-datadome-ch": "blocked",
+        "server": "cloudflare",
+    }
+    out = unlocker._drop_stale_challenge_headers(headers, "real article " * 80)
+    assert "cf-mitigated" not in out
+    assert "x-datadome-ch" not in out
+    assert out["server"] == "cloudflare"
+    kept = unlocker._drop_stale_challenge_headers(
+        {"cf-mitigated": "challenge"}, "Just a moment..."
+    )
+    assert kept.get("cf-mitigated") == "challenge"

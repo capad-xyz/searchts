@@ -64,8 +64,8 @@
 
 **Verified code issues**
 
-- [ ] **P3.1** Block detection: header/status signals (CF, DataDome, Akamai, Fastly) + body phrases; unit tests on **fixtures**, not live vendors
-- [ ] **P3.2** Thin content = failure (`UnlockerError`), not success / best-effort return under `_MIN_CHARS`
+- [x] **P3.1** Block detection: header/status signals (CF, DataDome, Akamai, Fastly) + body phrases; unit tests on **fixtures**, not live vendors — #93
+- [x] **P3.2** Thin content = failure (`UnlockerError`), not success / best-effort return under `_MIN_CHARS` — #93
 - [ ] **P3.3** Domain memory: TTL (default 24h); un-pin remembered backend when that backend fails before walking the rest of the ladder
 - [ ] **P3.4** UA: remove hardcoded Chrome 126; current stable string or align with curl_cffi impersonate profile
 - [ ] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
@@ -251,3 +251,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-21 | P0.3–P0.11 on main. CI: PR-slim / main-full. X1 posted; article parked. |
 | 2026-08-22 | P1.1 #86, P1.2 #88, P1.2b #89 on main. P1.3 still a live gate. |
 | 2026-08-22 | pipx = keep CLI; uvx = try/MCP. Folded, not scheduled. |
+| 2026-08-22 | P3.1 + P3.2: fail loud on 999/challenge/thin. |
