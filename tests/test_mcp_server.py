@@ -183,10 +183,12 @@ def test_create_server_builds_against_the_installed_sdk():
     if not mcp_server.HAS_MCP:
         pytest.skip("mcp extra not installed")
 
+    import asyncio
+
     server = mcp_server.create_server()
     assert server is not None
-    # FastMCP.list_tools is async; the tool manager is the sync inventory.
-    names = {t.name for t in server._tool_manager.list_tools()}
+    tools = asyncio.run(server.list_tools())
+    names = {t.name for t in tools}
     assert names == {
         "get_status",
         "read_url",
