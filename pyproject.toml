@@ -44,10 +44,7 @@ dependencies = [
 browser = ["patchright>=1.50"]  # tier-2 stealth-browser backend (undetected Playwright)
 cookies = ["browser-cookie3>=0.19"]
 # Capped below 2: the MCP SDK 2.0 removed the low-level Server decorator API
-# (@server.list_tools / @server.call_tool) that integrations/mcp_server.py is
-# built on, so `searchts mcp serve` raises AttributeError on startup there.
-# Lifting the cap requires porting that module to the 2.x handler API first.
-mcp = ["mcp[cli]>=1.0,<2"]  # stdio MCP server (searchts mcp serve)
+mcp = ["mcp[cli]>=1.0,<2"]  # FastMCP stdio (P2.1); lift pin in P2.3
 local-transcribe = ["faster-whisper>=1.0"]  # keyless local Whisper (searchts transcribe --provider local)
 all = ["patchright>=1.50", "mcp[cli]>=1.0,<2", "browser-cookie3>=0.19", "faster-whisper>=1.0"]
 dev = [

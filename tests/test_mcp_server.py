@@ -185,6 +185,15 @@ def test_create_server_builds_against_the_installed_sdk():
 
     server = mcp_server.create_server()
     assert server is not None
+    # FastMCP.list_tools is async; the tool manager is the sync inventory.
+    names = {t.name for t in server._tool_manager.list_tools()}
+    assert names == {
+        "get_status",
+        "read_url",
+        "web_search",
+        "fetch_asset",
+        "grab_site",
+    }
 
 
 # ── fetch_asset / grab_site ─────────────────────────────────────────────────
