@@ -213,6 +213,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F4** Sitemap / small multi-page crawl (bounded)
 - **F5** Document share-extractors as the official fail-open extension point (one file pattern) — **not** a generic plugin system
 - **F6** Claude/marketplace plugin polish beyond P4.2 minimum
+- **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. Public/hosted MCP URL is still N2 — add only if we explicitly break that non-goal. Not in P2.1–P2.3.
 - **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills` — Codex will not see the skill until we add that path (measure demand first).
 - **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships.
 
@@ -253,3 +254,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-22 | pipx = keep CLI; uvx = try/MCP. Folded, not scheduled. |
 | 2026-08-22 | P3.1 + P3.2: fail loud on 999/challenge/thin. |
 | 2026-08-23 | P2.1 FastMCP on mcp 1.x. |
+| 2026-08-22 | F9: localhost HTTP later; hosted URL = break N2. |
