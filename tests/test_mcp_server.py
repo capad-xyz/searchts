@@ -183,8 +183,19 @@ def test_create_server_builds_against_the_installed_sdk():
     if not mcp_server.HAS_MCP:
         pytest.skip("mcp extra not installed")
 
+    import asyncio
+
     server = mcp_server.create_server()
     assert server is not None
+    tools = asyncio.run(server.list_tools())
+    names = {t.name for t in tools}
+    assert names == {
+        "get_status",
+        "read_url",
+        "web_search",
+        "fetch_asset",
+        "grab_site",
+    }
 
 
 # ── fetch_asset / grab_site ─────────────────────────────────────────────────

@@ -55,7 +55,7 @@
 
 **Verified:** low-level `@server.list_tools()` API is what 2.x deleted; pin is `<2`
 
-- [ ] **P2.1** Rewrite `mcp_server.py` → FastMCP + `@tool` on existing five module-level functions; delete hand-written schema + `if name ==` switch; keep `"Error: …"` string contract; stay on `mcp>=1,<2`
+- [x] **P2.1** Rewrite `mcp_server.py` → FastMCP + `@tool` on existing five module-level functions; delete hand-written schema + `if name ==` switch; keep `"Error: …"` string contract; stay on `mcp>=1,<2` — this PR
 - [ ] **P2.2** CI job: clean install `mcp>=2,<3`, build server, list tools (red until P2.3)
 - [ ] **P2.3** Rename FastMCP → MCPServer; lift extra to `mcp>=2,<3`; pin in `constraints.txt`; smoke stdio + one host
 - [ ] **P2.4** Do **not** add `transcribe`, HTTP/SSE, or resources in these PRs
@@ -252,3 +252,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-22 | P1.1 #86, P1.2 #88, P1.2b #89 on main. P1.3 still a live gate. |
 | 2026-08-22 | pipx = keep CLI; uvx = try/MCP. Folded, not scheduled. |
 | 2026-08-22 | P3.1 + P3.2: fail loud on 999/challenge/thin. |
+| 2026-08-23 | P2.1 FastMCP on mcp 1.x. |

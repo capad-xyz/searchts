@@ -21,9 +21,7 @@ import asyncio
 import json
 
 try:
-    from mcp.server import Server
-    from mcp.server.stdio import stdio_server
-    from mcp.types import TextContent, Tool
+    from mcp.server.fastmcp import FastMCP
 
     HAS_MCP = True
 except ImportError:
@@ -70,140 +68,71 @@ class MCPNotInstalledError(RuntimeError):
 
 
 def create_server():
+    """Build a FastMCP server over the five module-level tool functions.
+
+    Stays on ``mcp>=1,<2`` (P2.1). Tool bodies keep returning ``Error: …`` strings
+    instead of raising so hosts surface failures as normal tool results.
+    """
     if not HAS_MCP:
         raise MCPNotInstalledError(MCP_MISSING_MESSAGE)
 
-    server = Server("searchts")
+    mcp = FastMCP("searchts")
 
-    @server.list_tools()
-    async def list_tools():
-        return [
-            Tool(
-                name="get_status",
-                description="Report the health of this searchts install: which unlocker tiers, "
-                "search providers, and optional platform integrations are installed, "
-                "configured, and working. Use this first when another searchts tool "
-                "fails or before relying on an optional capability (e.g. keyed search "
-                "providers, transcription). Takes no arguments and performs no web "
-                "requests; returns a human-readable text report, one line per channel "
-                "with an ok/warn/error status and a fix hint.",
-                inputSchema={"type": "object", "properties": {}},
-            ),
-            Tool(
-                name="read_url",
-                description=READ_URL_DESCRIPTION,
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "Absolute http(s) URL of the page to read.",
-                        },
-                    },
-                    "required": ["url"],
-                },
-            ),
-            Tool(
-                name="web_search",
-                description=WEB_SEARCH_DESCRIPTION,
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "The search query."},
-                        "max_results": {
-                            "type": "integer",
-                            "description": "How many results to return "
-                            "(default 5; clamped to 1-25).",
-                        },
-                    },
-                    "required": ["query"],
-                },
-            ),
-            Tool(
-                name="fetch_asset",
-                description="Download a single asset file (image, PDF, font, CSS, any file) from "
-                "its URL through the same unlock ladder as read_url, save it to disk, "
-                "and return {path, content_type, bytes} as JSON. Use this for one "
-                "specific file by its direct URL; to pull a whole page's assets at "
-                "once use grab_site instead. Saves into out_dir when given, otherwise "
-                "the current directory. Returns an 'Error: ...' string on failure.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "url": {
-                            "type": "string",
-                            "description": "Direct URL of the asset file to download.",
-                        },
-                        "out_dir": {
-                            "type": "string",
-                            "description": "Directory to save into (optional; defaults to "
-                            "the current directory).",
-                        },
-                    },
-                    "required": ["url"],
-                },
-            ),
-            Tool(
-                name="grab_site",
-                description="Grab a page for design inspiration: fetch it through the unlock "
-                "ladder, download its assets (images/icons/css/fonts/svg), extract "
-                "the color palette and the fonts in use, and return a manifest (with "
-                "local file paths) as JSON. Use this for a whole page's design/assets "
-                "at once; for a single known file use fetch_asset. Saves into out_dir "
-                "when given, otherwise a 'searchts-grab-<host>' folder. Set read=true "
-                "to also save the page text as page.md. Returns an 'Error: ...' string "
-                "on failure.",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "url": {"type": "string", "description": "URL of the page to grab."},
-                        "out_dir": {
-                            "type": "string",
-                            "description": "Directory to save into (optional; defaults to "
-                            "'searchts-grab-<host>').",
-                        },
-                        "read": {
-                            "type": "boolean",
-                            "description": "If true, also save the page text as page.md "
-                            "(default false).",
-                        },
-                    },
-                    "required": ["url"],
-                },
-            ),
-        ]
+    @mcp.tool(
+        name="get_status",
+        description=(
+            "Report the health of this searchts install: which unlocker tiers, "
+            "search providers, and optional platform integrations are installed, "
+            "configured, and working. Use this first when another searchts tool "
+            "fails or before relying on an optional capability (e.g. keyed search "
+            "providers, transcription). Takes no arguments and performs no web "
+            "requests; returns a human-readable text report, one line per channel "
+            "with an ok/warn/error status and a fix hint."
+        ),
+    )
+    def get_status_tool() -> str:
+        return get_status()
 
-    @server.call_tool()
-    async def call_tool(name: str, arguments: dict):
-        try:
-            if name == "get_status":
-                result = get_status()
-            elif name == "read_url":
-                result = read_url(arguments.get("url", ""))
-            elif name == "web_search":
-                n = max(1, min(int(arguments.get("max_results", 5) or 5), 25))
-                result = web_search(arguments.get("query", ""), n)
-            elif name == "fetch_asset":
-                result = fetch_asset(arguments.get("url", ""), arguments.get("out_dir", ""))
-            elif name == "grab_site":
-                result = grab_site(
-                    arguments.get("url", ""),
-                    arguments.get("out_dir", ""),
-                    bool(arguments.get("read", False)),
-                )
-            else:
-                result = f"Unknown tool: {name}"
+    @mcp.tool(name="read_url", description=READ_URL_DESCRIPTION)
+    def read_url_tool(url: str) -> str:
+        return read_url(url)
 
-            text = (
-                json.dumps(result, ensure_ascii=False, indent=2)
-                if isinstance(result, (dict, list))
-                else str(result)
-            )
-            return [TextContent(type="text", text=text)]
-        except Exception as e:
-            return [TextContent(type="text", text=f"Error: {str(e)}")]
+    @mcp.tool(name="web_search", description=WEB_SEARCH_DESCRIPTION)
+    def web_search_tool(query: str, max_results: int = 5) -> str:
+        n = max(1, min(int(max_results or 5), 25))
+        return web_search(query, n)
 
-    return server
+    @mcp.tool(
+        name="fetch_asset",
+        description=(
+            "Download a single asset file (image, PDF, font, CSS, any file) from "
+            "its URL through the same unlock ladder as read_url, save it to disk, "
+            "and return {path, content_type, bytes} as JSON. Use this for one "
+            "specific file by its direct URL; to pull a whole page's assets at "
+            "once use grab_site instead. Saves into out_dir when given, otherwise "
+            "the current directory. Returns an 'Error: ...' string on failure."
+        ),
+    )
+    def fetch_asset_tool(url: str, out_dir: str = "") -> str:
+        return fetch_asset(url, out_dir)
+
+    @mcp.tool(
+        name="grab_site",
+        description=(
+            "Grab a page for design inspiration: fetch it through the unlock "
+            "ladder, download its assets (images/icons/css/fonts/svg), extract "
+            "the color palette and the fonts in use, and return a manifest (with "
+            "local file paths) as JSON. Use this for a whole page's design/assets "
+            "at once; for a single known file use fetch_asset. Saves into out_dir "
+            "when given, otherwise a 'searchts-grab-<host>' folder. Set read=true "
+            "to also save the page text as page.md. Returns an 'Error: ...' string "
+            "on failure."
+        ),
+    )
+    def grab_site_tool(url: str, out_dir: str = "", read: bool = False) -> str:
+        return grab_site(url, out_dir, read)
+
+    return mcp
 
 
 def get_status() -> str:
@@ -337,8 +266,7 @@ def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
 async def _run_stdio():
     """Wire the server up to the stdio transport and block until the client exits."""
     server = create_server()
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+    await server.run_stdio_async()
 
 
 def serve():
