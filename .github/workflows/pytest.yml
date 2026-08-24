@@ -218,6 +218,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Python
         uses: actions/setup-python@v7
@@ -231,7 +233,10 @@ jobs:
 
       - name: Verify SDK version
         run: |
-          python -c "import mcp; print(f'mcp {mcp.__version__}')"
+          python - <<'PY'
+          from importlib.metadata import version
+          print(f"mcp {version('mcp')}")
+          PY
 
       - name: Build server and list tools
         # RED until P2.3: mcp 2.x removed the low-level @server.list_tools API
