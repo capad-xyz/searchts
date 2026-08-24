@@ -48,14 +48,14 @@
 - [x] **P1.1** Install path writes short memory rule (~8 lines): on 403/429/challenge/thin page → `read_url` / `searchts read`; do not satisfice on a snippet. Targets: Claude Code user memory + Cursor rule if detected. **Prompt before overwrite.** — #86
 - [x] **P1.2** MCP tool descriptions: explicit retry-via-`read_url` language — #88
 - [x] **P1.2b** Skill YAML `description` ≤ 1024 (Agent Skills hosts skip the skill otherwise) — #89
-- [ ] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls
+- [ ] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *2026-08-24 GLM: `read_url` first (reach yes); not a clean skill-off X2 yet.*
 - [ ] **P1.4** *(unverified track)* Scripted acceptance harness so #22 is pass/fail, not anecdote
 
 ### P2 — MCP 2.x hygiene (parallel with P1)
 
 **Verified:** low-level `@server.list_tools()` API is what 2.x deleted; pin is `<2`
 
-- [x] **P2.1** Rewrite `mcp_server.py` → FastMCP + `@tool` on existing five module-level functions; delete hand-written schema + `if name ==` switch; keep `"Error: …"` string contract; stay on `mcp>=1,<2` — this PR
+- [x] **P2.1** Rewrite `mcp_server.py` → FastMCP + `@tool` on existing five module-level functions; delete hand-written schema + `if name ==` switch; keep `"Error: …"` string contract; stay on `mcp>=1,<2` — #94
 - [ ] **P2.2** CI job: clean install `mcp>=2,<3`, build server, list tools (red until P2.3)
 - [ ] **P2.3** Rename FastMCP → MCPServer; lift extra to `mcp>=2,<3`; pin in `constraints.txt`; smoke stdio + one host
 - [ ] **P2.4** Do **not** add `transcribe`, HTTP/SSE, or resources in these PRs
@@ -66,6 +66,7 @@
 
 - [x] **P3.1** Block detection: header/status signals (CF, DataDome, Akamai, Fastly) + body phrases; unit tests on **fixtures**, not live vendors — #93
 - [x] **P3.2** Thin content = failure (`UnlockerError`), not success / best-effort return under `_MIN_CHARS` — #93
+- [ ] **P3.10** MCP stealth: sync Playwright fails under FastMCP asyncio (“Sync API inside asyncio loop”). Run stealth in a worker thread (or async API) so the third rung works over MCP, not only CLI.
 - [ ] **P3.3** Domain memory: TTL (default 24h); un-pin remembered backend when that backend fails before walking the rest of the ladder
 - [ ] **P3.4** UA: remove hardcoded Chrome 126; current stable string or align with curl_cffi impersonate profile
 - [ ] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
@@ -88,8 +89,8 @@
 ### Communications
 
 - [x] **X1** After P0.7: smoke vs walled; thin is not a pass (posted 2026-08-20)
-- [ ] **X2** After P1 demo: 403 → agent calls `read_url` (issue #22)
-- [ ] **X3** After P3.1+P3.2: one wall before/after
+- [ ] **X2** After P1 demo: 403 → agent calls `read_url` (issue #22). *Not posted. Need cleaner MCP-only / no-skill session than 2026-08-22/24 anecdotes.*
+- [ ] **X3** After P3.1+P3.2: one wall before/after. *Evidence ready 2026-08-24: Reddit hot was “200 + challenge success” → now `Error: all backends failed` (thin-124 / Jina 403 / stealth asyncio). Not posted. Do not claim bypass.*
 - [ ] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`
 - [ ] Cadence ≤2 posts/week; no chore tweets (pins, dead keys, YAML)
 - [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article drafted in Notion; publish same week as X2/X3.
@@ -176,6 +177,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 | constraints miss curl_cffi/trafilatura/ddgs | P0.5 |
 | release-please can tag with GITHUB_TOKEN | P0.6 |
 | `cli.py` ~1949 lines | P4.5 |
+| MCP FastMCP + sync Playwright: stealth dies in asyncio loop | P3.10 |
 
 ### Unverified (hypothesis — measure, then maybe build)
 
@@ -255,3 +257,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-22 | P3.1 + P3.2: fail loud on 999/challenge/thin. |
 | 2026-08-23 | P2.1 FastMCP on mcp 1.x. |
 | 2026-08-22 | F9: localhost HTTP later; hosted URL = break N2. |
+| 2026-08-24 | Reddit re-eval: honesty pass; MCP stealth asyncio = P3.10; X2/X3 still unposted. |
