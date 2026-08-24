@@ -89,6 +89,10 @@ _BLOCK_PHRASES = (
     "let us know you are a real person",
     "we're committed to safety",  # Reddit interstitial lead-in (short extract)
     "we are committed to safety",
+    # Reddit login walls (old.reddit / .com) — long enough to beat thin gate
+    "accounts are required to access old reddit",
+    "to keep reddit safe",
+    "log in, or continue without an account",
 )
 
 _MIN_CHARS = 500
