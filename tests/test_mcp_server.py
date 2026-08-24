@@ -249,19 +249,19 @@ def test_grab_site_requires_url():
 
 
 def test_read_url_tool_yields_loop_while_blocked():
-    """Another task must run while read_url's browser rung is pending (P3.10).
+    """Another task must run while the registered MCP read_url is pending (P3.10).
 
-    The MCP ``read_url`` tool is ``async`` and runs the sync-Playwright work in
-    ``asyncio.to_thread``. Without a non-blocking boundary, the sync browser
-    wait would hold the FastMCP event-loop thread and the sibling task below
-    would only be scheduled after read_url returned. This exercises the exact
-    boundary the tool uses (real ``read_url`` + ``asyncio.to_thread``) with a
-    slow ``unlocker.fetch`` standing in for the stealth-browser render.
+    Calls ``create_server().call_tool('read_url', ...)``, not a copy of
+    ``asyncio.to_thread(read_url)``. A sync registration or a wiring miss
+    would fail ``is_async`` or never yield to the sibling. I/O is mocked at
+    ``unlocker.fetch`` only.
     """
     from searchts.integrations import mcp_server
 
     if not mcp_server.HAS_MCP:
         pytest.skip("mcp extra not installed")
+
+    server = mcp_server.create_server()
 
     events: list = []
 
@@ -273,9 +273,6 @@ def test_read_url_tool_yields_loop_while_blocked():
         for _ in range(10):
             events.append("browser")
             time.sleep(0.005)
-            # If the loop were blocked, the sibling would never run until this
-            # loop finished all 10 iterations. Observing a sibling event while
-            # still busy proves the loop was free (the to_thread boundary).
             if "sibling" in events:
                 break
         return FetchResult(
@@ -289,11 +286,10 @@ def test_read_url_tool_yields_loop_while_blocked():
             await asyncio.sleep(0)
 
     async def main() -> None:
-        # Mirror the tool body: `await asyncio.to_thread(read_url, url)`.
-        async def read() -> str:
-            return await asyncio.to_thread(read_url, "https://x.test")
-
-        await asyncio.gather(read(), sibling())
+        await asyncio.gather(
+            server.call_tool("read_url", {"url": "https://x.test"}),
+            sibling(),
+        )
 
     with patch("searchts.unlocker.fetch", _slow_fetch):
         asyncio.run(main())
