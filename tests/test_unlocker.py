@@ -694,3 +694,48 @@ def test_drop_stale_challenge_headers_when_body_is_clean():
         {"cf-mitigated": "challenge"}, "Just a moment..."
     )
     assert kept.get("cf-mitigated") == "challenge"
+
+
+# ── P3.10: sync Playwright off asyncio (MCP FastMCP path) ───────────────────
+
+
+def test_call_sync_browser_inline_without_loop():
+    assert unlocker._call_sync_browser(lambda: 42) == 42
+
+
+def test_call_sync_browser_offloads_when_loop_running():
+    import asyncio
+    import threading
+
+    outer = threading.get_ident()
+
+    def worker():
+        return threading.get_ident()
+
+    async def run():
+        tid = unlocker._call_sync_browser(worker)
+        assert tid != threading.get_ident()
+        assert tid != outer
+        return tid
+
+    asyncio.run(run())
+
+
+def test_reddit_safety_interstitial_is_challenge():
+    html = (
+        "We're committed to safety. Complete the challenge below to continue."
+    )
+    assert unlocker.looks_blocked(200, html) == "challenge"
+
+
+def test_fetch_stealth_wrapper_uses_impl(monkeypatch):
+    """Public _fetch_stealth must still return the impl result (thread or not)."""
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_stealth_impl",
+        lambda url, timeout=60: (200, "<html>ok</html>", url, {"x": "1"}),
+    )
+    status, body, final, headers = unlocker._fetch_stealth("https://x.test")
+    assert status == 200
+    assert "ok" in body
+    assert headers["x"] == "1"
