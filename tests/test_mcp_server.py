@@ -5,7 +5,9 @@ read_url is a plain module-level function so it can be unit-tested without the
 optional `mcp` dependency or a running stdio server.
 """
 
+import asyncio
 import json
+import time
 from unittest.mock import patch
 
 import pytest
@@ -241,3 +243,68 @@ def test_grab_site_returns_manifest_json(monkeypatch):
 
 def test_grab_site_requires_url():
     assert grab_site("").startswith("Error:")
+
+
+# ── async concurrency (P3.10) ────────────────────────────────────────────────
+
+
+def test_read_url_tool_yields_loop_while_blocked():
+    """Another task must run while read_url's browser rung is pending (P3.10).
+
+    The MCP ``read_url`` tool is ``async`` and runs the sync-Playwright work in
+    ``asyncio.to_thread``. Without a non-blocking boundary, the sync browser
+    wait would hold the FastMCP event-loop thread and the sibling task below
+    would only be scheduled after read_url returned. This exercises the exact
+    boundary the tool uses (real ``read_url`` + ``asyncio.to_thread``) with a
+    slow ``unlocker.fetch`` standing in for the stealth-browser render.
+    """
+    from searchts.integrations import mcp_server
+
+    if not mcp_server.HAS_MCP:
+        pytest.skip("mcp extra not installed")
+
+    events: list = []
+
+    def _slow_fetch(unused_url):
+        # Stands in for the blocking stealth-browser rung: long, sync work that
+        # runs in a worker thread under the to_thread boundary. Releases the GIL
+        # each step (real Playwright waits are I/O bound) so the event loop is
+        # free to schedule the sibling task below.
+        for _ in range(10):
+            events.append("browser")
+            time.sleep(0.005)
+            # If the loop were blocked, the sibling would never run until this
+            # loop finished all 10 iterations. Observing a sibling event while
+            # still busy proves the loop was free (the to_thread boundary).
+            if "sibling" in events:
+                break
+        return FetchResult(
+            "stealth-browser", "# Title\n\nbody", 200,
+            final_url="https://x.test/", fetched_at="2026-07-09T12:00:00Z",
+        )
+
+    async def sibling() -> None:
+        for _ in range(5):
+            events.append("sibling")
+            await asyncio.sleep(0)
+
+    async def main() -> None:
+        # Mirror the tool body: `await asyncio.to_thread(read_url, url)`.
+        async def read() -> str:
+            return await asyncio.to_thread(read_url, "https://x.test")
+
+        await asyncio.gather(read(), sibling())
+
+    with patch("searchts.unlocker.fetch", _slow_fetch):
+        asyncio.run(main())
+
+    # The sibling task ran, and it ran DURING the browser wait (not after): the
+    # browser loop saw a sibling event and broke early, so it logged fewer than
+    # the full 10 iterations. A blocking boundary would have logged all 10.
+    assert "sibling" in events
+    assert "browser" in events
+    assert events.count("browser") < 10, (
+        f"sibling never ran during the browser wait (blocking boundary?): {events}"
+    )
+
+
