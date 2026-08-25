@@ -8,7 +8,6 @@ optional `mcp` dependency or a running stdio server.
 import asyncio
 import json
 import threading
-import time
 from unittest.mock import patch
 
 import pytest
