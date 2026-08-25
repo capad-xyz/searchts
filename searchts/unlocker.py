@@ -501,7 +501,7 @@ def _finalize(result: FetchResult, scrub: bool) -> FetchResult:
 def fetch(url: str, backends: Optional[List[str]] = None,
           min_chars: int = _MIN_CHARS, use_memory: bool = True,
           allow_human: bool = False, scrub: bool = False,
-          allow_thin: bool = False) -> FetchResult:
+          allow_thin: bool = False, progress: bool = False) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -527,7 +527,20 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         findings attached to ``result.warnings``. When True, matched injection
         spans are additionally redacted from the text. Default False (report,
         don't alter visible content).
+    progress:
+        When True, print one stderr line per ladder rung (``trying curl_cffi…``)
+        so long CLI fetches are not silent. Off by default so MCP/library
+        callers stay quiet. Also on when ``SEARCHTS_PROGRESS=1``.
     """
+    if not progress:
+        progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
+            "1", "true", "True", "yes",
+        )
+
+    def _tick(msg: str) -> None:
+        if progress:
+            print(msg, file=sys.stderr, flush=True)
+
     url = normalize(url)
 
     # Tier-0: AI-chat share links (chatgpt.com/share, claude.ai/share, poe.com/s)
@@ -561,6 +574,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     status: Optional[int] = None
 
     for backend in order:
+        _tick(f"trying {backend}…")
         try:
             final_url = url
             headers: Dict[str, str] = {}
@@ -569,6 +583,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 reason = looks_blocked(status, body, headers)
                 if reason:
                     attempts.append((backend, reason))
+                    _tick(f"  {backend}: {reason}")
                     continue
                 text = html_to_text(body, url)
             elif backend == "Jina Reader":
@@ -576,6 +591,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 reason = looks_blocked(status, body, headers)
                 if reason:
                     attempts.append((backend, reason))
+                    _tick(f"  {backend}: {reason}")
                     continue
                 text = body  # Jina already returns markdown
             elif backend == "stealth-browser":
@@ -583,6 +599,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 reason = looks_blocked(status, body, headers)
                 if reason:
                     attempts.append((backend, reason))
+                    _tick(f"  {backend}: {reason}")
                     continue
                 text = html_to_text(body, url)
             else:
@@ -593,6 +610,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             if len(text) >= min_chars:
                 if memory_on and domain:
                     remember(domain, backend)  # record the winner for next time
+                _tick(f"  {backend}: ok ({len(text)} chars)")
                 # clean win, stop here — sanitize untrusted content before return
                 return _finalize(
                     FetchResult(
@@ -607,6 +625,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             # Real but thin (e.g. JS-rendered or genuinely short): keep as a
             # fallback and escalate in case a richer backend renders more.
             attempts.append((backend, f"thin-{len(text)}b"))
+            _tick(f"  {backend}: thin-{len(text)}b")
             if best is None or len(text) > len(best.text):
                 best = FetchResult(
                     backend,
@@ -616,7 +635,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     headers=headers,
                 )
         except Exception as e:  # noqa: BLE001 — any backend failure escalates
-            attempts.append((backend, f"{type(e).__name__}: {e}"))
+            why = f"{type(e).__name__}: {e}"
+            attempts.append((backend, why))
+            _tick(f"  {backend}: {why}")
             continue
 
     # Human-in-the-loop last resort. Runs BEFORE the `best` fallback below:
@@ -626,6 +647,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     # clean win, and the flag is explicit and off by default, so honour it
     # rather than second-guessing which failures a human could fix.
     if allow_human:
+        _tick("trying human-browser…")
         try:
             status, html, final_url = _fetch_human(url)
         except Exception:  # noqa: BLE001 - patchright missing/launch failure

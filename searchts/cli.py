@@ -770,6 +770,13 @@ def _cmd_mcp_serve():
     """Run the stdio MCP server, exiting cleanly if the optional `mcp` pkg is absent."""
     from searchts.integrations import mcp_server
 
+    # Stdio MCP has no banner on stdout (that would break the protocol). One
+    # stderr line so a human running `searchts mcp serve` knows it is waiting.
+    print(
+        "searchts MCP server on stdio — waiting for host (Ctrl+C to stop)",
+        file=sys.stderr,
+        flush=True,
+    )
     try:
         mcp_server.serve()
     except mcp_server.MCPNotInstalledError as e:
@@ -1461,6 +1468,8 @@ def _cmd_read(args):
         result = unlocker.fetch(
             args.url, backends=backends, allow_human=args.human,
             scrub=getattr(args, "scrub", False),
+            # Live ticks on stderr so long ladder runs (stealth) are not silent.
+            progress=True,
         )
     except unlocker.UnlockerError as e:
         print(f"Failed to read {e.url}", file=sys.stderr)
