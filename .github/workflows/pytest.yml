@@ -204,16 +204,10 @@ jobs:
           print("versions match")
           PY
 
-  # P2.2 — verify the MCP server builds and lists tools under mcp>=2,<3.
-  #
-  # constraints.txt pins mcp==1.29.0 (the P2.1 cap), so this job deliberately
-  # skips `-c constraints.txt` and installs mcp>=2,<3 directly. Under the 2.x
-  # SDK the server's create_server() / list_tools() call breaks (2.x deleted
-  # the low-level API FastMCP was built on), so this job is EXPECTED RED until
-  # P2.3 lifts the SDK pin and the MCPServer rewrite lands. continue-on-error
-  # keeps it from gating any PR.
+  # P2.2/P2.3 — clean-install mcp>=2,<3, build server, list tools.
+  # Skips constraints.txt so it always tracks current 2.x; required after P2.3.
   mcp2-compat:
-    continue-on-error: true
+    continue-on-error: false
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -239,9 +233,6 @@ jobs:
           PY
 
       - name: Build server and list tools
-        # RED until P2.3: mcp 2.x removed the low-level @server.list_tools API
-        # that FastMCP's create_server/list_tools rely on. This step surfaces
-        # the breakage as a tracked failure rather than a silent import-time error.
         run: |
           python - <<'PY'
           import asyncio, sys

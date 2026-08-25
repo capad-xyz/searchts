@@ -16,9 +16,8 @@ curl_cffi==0.16.0
 trafilatura==2.2.0
 ddgs==9.15.0
 
-# Optional [mcp] extra. Pinned below 2 for the API break described in
-# pyproject.toml; CI installs it so the server is built against a real SDK.
-mcp==1.29.0
+# Optional [mcp] extra. P2.3: SDK 2.x (FastMCP -> MCPServer).
+mcp==2.0.0
 
 pytest==8.0.0
 ruff==0.15.1

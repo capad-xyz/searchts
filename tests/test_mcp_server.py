@@ -175,10 +175,8 @@ def test_create_server_builds_against_the_installed_sdk():
     """Build the real server against whatever mcp version is installed.
 
     Every other test here calls the tool functions directly or stubs HAS_MCP
-    off, so none of them touch the SDK. That let MCP SDK 2.0 -- which dropped
-    the low-level @server.list_tools decorator create_server() is built on --
-    break `searchts mcp serve` with an AttributeError at startup while the
-    suite stayed green.
+    off, so none of them touch the SDK. P2.3 requires create_server() to
+    import MCPServer and list the five tools under mcp 2.x.
     """
     from searchts.integrations import mcp_server
 
