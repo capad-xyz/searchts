@@ -21,6 +21,8 @@ a human in the loop.
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
 import json
 import os
 import re
@@ -31,7 +33,9 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional, Tuple
+from typing import Callable, Dict, List, Mapping, Optional, Tuple, TypeVar
+
+_T = TypeVar("_T")
 
 #: Default ladder order. curl_cffi first keeps the URL local + private and is
 #: the strongest single backend; Jina is the JS-rendering fallback; the browser
@@ -83,6 +87,12 @@ _BLOCK_PHRASES = (
     "complete the challenge below",  # Reddit bot interstitial (often HTTP 200)
     "let us know you're a real person",
     "let us know you are a real person",
+    "we're committed to safety",  # Reddit interstitial lead-in (short extract)
+    "we are committed to safety",
+    # Reddit login walls (old.reddit / .com) — long enough to beat thin gate
+    "accounts are required to access old reddit",
+    "to keep reddit safe",
+    "log in, or continue without an account",
 )
 
 _MIN_CHARS = 500
@@ -330,6 +340,22 @@ def _await_hydration(page, html: str, budget_ms: int = 8000, step_ms: int = 500)
     return html
 
 
+def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:
+    """Run sync Playwright work off a running asyncio loop (MCP FastMCP path).
+
+    ``mcp`` 1.x FastMCP invokes sync tools on the event-loop thread. Patchright's
+    ``sync_playwright`` refuses to start there (\"Sync API inside asyncio loop\").
+    When a loop is already running, offload to a one-shot worker thread; CLI and
+    plain sync callers keep the inline path.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return fn(*args, **kwargs)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(fn, *args, **kwargs).result()
+
+
 def _fetch_stealth(
     url: str, timeout: int = 60
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
@@ -343,7 +369,15 @@ def _fetch_stealth(
     the page execute and polling until the challenge markup clears. Interactive
     CAPTCHA (DataDome, Turnstile click-to-verify) is the honest ceiling and will
     still come back as a challenge page.
+
+    Safe under MCP/FastMCP: see ``_call_sync_browser``.
     """
+    return _call_sync_browser(_fetch_stealth_impl, url, timeout)
+
+
+def _fetch_stealth_impl(
+    url: str, timeout: int = 60
+) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     try:
         from patchright.sync_api import sync_playwright
     except ImportError as e:  # pragma: no cover - environment dependent
@@ -396,7 +430,13 @@ def _fetch_human(url: str, timeout: int = 180) -> Tuple[Optional[int], str, str]
     ``looks_blocked`` clears or `timeout` seconds elapse, and returns
     (status, html, final_url). Raises RuntimeError if patchright is unavailable so the
     caller can re-raise the original UnlockerError.
+
+    Safe under MCP/FastMCP: see ``_call_sync_browser``.
     """
+    return _call_sync_browser(_fetch_human_impl, url, timeout)
+
+
+def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str, str]:
     try:
         from patchright.sync_api import sync_playwright
     except ImportError as e:  # pragma: no cover - environment dependent

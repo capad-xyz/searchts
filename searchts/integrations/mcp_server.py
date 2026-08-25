@@ -94,8 +94,12 @@ def create_server():
         return get_status()
 
     @mcp.tool(name="read_url", description=READ_URL_DESCRIPTION)
-    def read_url_tool(url: str) -> str:
-        return read_url(url)
+    async def read_url_tool(url: str) -> str:
+        # The stealth-browser rung is sync Playwright work that refuses to run
+        # on a running asyncio loop. ``asyncio.to_thread`` runs it in a worker
+        # thread and yields control back to the loop, so other MCP tasks keep
+        # making progress while a slow browser render is pending (P3.10).
+        return await asyncio.to_thread(read_url, url)
 
     @mcp.tool(name="web_search", description=WEB_SEARCH_DESCRIPTION)
     def web_search_tool(query: str, max_results: int = 5) -> str:

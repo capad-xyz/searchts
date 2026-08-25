@@ -5,7 +5,9 @@ read_url is a plain module-level function so it can be unit-tested without the
 optional `mcp` dependency or a running stdio server.
 """
 
+import asyncio
 import json
+import threading
 from unittest.mock import patch
 
 import pytest
@@ -241,3 +243,63 @@ def test_grab_site_returns_manifest_json(monkeypatch):
 
 def test_grab_site_requires_url():
     assert grab_site("").startswith("Error:")
+
+
+# ── async concurrency (P3.10) ────────────────────────────────────────────────
+
+
+def test_read_url_tool_yields_loop_while_blocked() -> None:
+    """Another task must run while the registered MCP read_url is pending (P3.10).
+
+    Calls ``create_server().call_tool('read_url', ...)``, not a copy of
+    ``asyncio.to_thread(read_url)``. A sync registration or a wiring miss
+    would fail ``is_async`` or never yield to the sibling. I/O is mocked at
+    ``unlocker.fetch`` only.
+
+    Handshake (not sleep windows): the worker signals start; the sibling
+    releases it. If the loop cannot schedule the sibling while the tool is
+    pending, ``sibling_acked.wait`` times out.
+    """
+    from searchts.integrations import mcp_server
+
+    if not mcp_server.HAS_MCP:
+        pytest.skip("mcp extra not installed")
+
+    server = mcp_server.create_server()
+
+    browser_started = threading.Event()
+    sibling_acked = threading.Event()
+
+    def _slow_fetch(unused_url: str) -> FetchResult:
+        # Stands in for the blocking stealth-browser rung under to_thread.
+        browser_started.set()
+        if not sibling_acked.wait(timeout=2.0):
+            raise AssertionError(
+                "sibling never ran during the browser wait (blocking boundary?)"
+            )
+        return FetchResult(
+            "stealth-browser",
+            "# Title\n\nbody",
+            200,
+            final_url="https://x.test/",
+            fetched_at="2026-07-09T12:00:00Z",
+        )
+
+    async def sibling() -> None:
+        while not browser_started.is_set():
+            await asyncio.sleep(0)
+        sibling_acked.set()
+
+    async def main() -> None:
+        await asyncio.gather(
+            server.call_tool("read_url", {"url": "https://x.test"}),
+            sibling(),
+        )
+
+    with patch("searchts.unlocker.fetch", _slow_fetch):
+        asyncio.run(main())
+
+    assert browser_started.is_set()
+    assert sibling_acked.is_set()
+
+
