@@ -53,11 +53,11 @@
 
 ### P2 — MCP 2.x hygiene (parallel with P1)
 
-**Verified:** low-level `@server.list_tools()` API is what 2.x deleted; pin is `<2`
+**Verified:** low-level `@server.list_tools()` API is what 2.x deleted; pin is now `>=2,<3`
 
 - [x] **P2.1** Rewrite `mcp_server.py` → FastMCP + `@tool` on existing five module-level functions; delete hand-written schema + `if name ==` switch; keep `"Error: …"` string contract; stay on `mcp>=1,<2` — #94
-- [ ] **P2.2** CI job: clean install `mcp>=2,<3`, build server, list tools (red until P2.3)
-- [ ] **P2.3** Rename FastMCP → MCPServer; lift extra to `mcp>=2,<3`; pin in `constraints.txt`; smoke stdio + one host
+- [x] **P2.2** CI job: clean install `mcp>=2,<3`, build server, list tools (red until P2.3) — #97
+- [x] **P2.3** Rename FastMCP → MCPServer; lift extra to `mcp>=2,<3`; pin in `constraints.txt`; smoke stdio + one host
 - [ ] **P2.4** Do **not** add `transcribe`, HTTP/SSE, or resources in these PRs
 
 ### P3 — Unlocker quality (core product)
@@ -258,4 +258,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-23 | P2.1 FastMCP on mcp 1.x. |
 | 2026-08-22 | F9: localhost HTTP later; hosted URL = break N2. |
 | 2026-08-24 | Reddit re-eval: honesty pass; MCP stealth asyncio = P3.10; X2/X3 still unposted. |
+| 2026-08-24 | P2.2 #97 + P3.10 #96 on main. P2.3: MCPServer + mcp>=2,<3. |
 | 2026-08-24 | P3.10: Playwright off asyncio for MCP. |

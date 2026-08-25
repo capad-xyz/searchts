@@ -21,7 +21,7 @@ import asyncio
 import json
 
 try:
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
 
     HAS_MCP = True
 except ImportError:
@@ -68,15 +68,15 @@ class MCPNotInstalledError(RuntimeError):
 
 
 def create_server():
-    """Build a FastMCP server over the five module-level tool functions.
+    """Build an MCPServer over the five module-level tool functions.
 
-    Stays on ``mcp>=1,<2`` (P2.1). Tool bodies keep returning ``Error: …`` strings
+    ``mcp>=2,<3`` (P2.3). Tool bodies keep returning ``Error: …`` strings
     instead of raising so hosts surface failures as normal tool results.
     """
     if not HAS_MCP:
         raise MCPNotInstalledError(MCP_MISSING_MESSAGE)
 
-    mcp = FastMCP("searchts")
+    mcp = MCPServer("searchts")
 
     @mcp.tool(
         name="get_status",
