@@ -48,7 +48,7 @@
 - [x] **P1.1** Install path writes short memory rule (~8 lines): on 403/429/challenge/thin page → `read_url` / `searchts read`; do not satisfice on a snippet. Targets: Claude Code user memory + Cursor rule if detected. **Prompt before overwrite.** — #86
 - [x] **P1.2** MCP tool descriptions: explicit retry-via-`read_url` language — #88
 - [x] **P1.2b** Skill YAML `description` ≤ 1024 (Agent Skills hosts skip the skill otherwise) — #89
-- [ ] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *2026-08-24 GLM: `read_url` first (reach yes); not a clean skill-off X2 yet.*
+- [ ] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *2026-08-24/25 GLM: `read_url` first (reach yes); not a clean skill-off X2 yet.*
 - [ ] **P1.4** *(unverified track)* Scripted acceptance harness so #22 is pass/fail, not anecdote
 
 ### P2 — MCP 2.x hygiene (parallel with P1)
@@ -57,7 +57,7 @@
 
 - [x] **P2.1** Rewrite `mcp_server.py` → FastMCP + `@tool` on existing five module-level functions; delete hand-written schema + `if name ==` switch; keep `"Error: …"` string contract; stay on `mcp>=1,<2` — #94
 - [x] **P2.2** CI job: clean install `mcp>=2,<3`, build server, list tools (red until P2.3) — #97
-- [x] **P2.3** Rename FastMCP → MCPServer; lift extra to `mcp>=2,<3`; pin in `constraints.txt`; smoke stdio + one host
+- [x] **P2.3** Rename FastMCP → MCPServer; lift extra to `mcp>=2,<3`; pin in `constraints.txt` — #98. *CI: create_server + list_tools. Real stdio host smoke still required for **X4** (post-merge).*
 - [ ] **P2.4** Do **not** add `transcribe`, HTTP/SSE, or resources in these PRs
 
 ### P3 — Unlocker quality (core product)
@@ -66,7 +66,7 @@
 
 - [x] **P3.1** Block detection: header/status signals (CF, DataDome, Akamai, Fastly) + body phrases; unit tests on **fixtures**, not live vendors — #93
 - [x] **P3.2** Thin content = failure (`UnlockerError`), not success / best-effort return under `_MIN_CHARS` — #93
-- [x] **P3.10** MCP stealth: sync Playwright under FastMCP asyncio → `_call_sync_browser` worker thread for stealth + human. Reddit interstitial phrases tightened.
+- [x] **P3.10** MCP stealth: async `read_url` + `asyncio.to_thread`; Reddit interstitial + login phrases; concurrency test via registered `call_tool` — #96
 - [ ] **P3.3** Domain memory: TTL (default 24h); un-pin remembered backend when that backend fails before walking the rest of the ladder
 - [ ] **P3.4** UA: remove hardcoded Chrome 126; current stable string or align with curl_cffi impersonate profile
 - [ ] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
@@ -89,9 +89,9 @@
 ### Communications
 
 - [x] **X1** After P0.7: smoke vs walled; thin is not a pass (posted 2026-08-20)
-- [ ] **X2** After P1 demo: 403 → agent calls `read_url` (issue #22). *Not posted. Need cleaner MCP-only / no-skill session than 2026-08-22/24 anecdotes.*
-- [ ] **X3** After P3.1+P3.2: one wall before/after. *Evidence ready 2026-08-24: Reddit hot was “200 + challenge success” → now `Error: all backends failed` (thin-124 / Jina 403 / stealth asyncio). Not posted. Do not claim bypass.*
-- [ ] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`
+- [ ] **X2** After P1 demo: 403 → agent calls `read_url` (issue #22). *Not posted. Need cleaner MCP-only / no-skill session than 2026-08-22/25 anecdotes.*
+- [ ] **X3** After P3.1+P3.2: one wall before/after. *Evidence ready: Reddit hot was “200 + challenge success” → now `Error: all backends failed`. Draft in Notion. **Ready to post.** Do not claim bypass.*
+- [ ] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`. *Code on main (#98); needs one real host stdio smoke before posting.*
 - [ ] Cadence ≤2 posts/week; no chore tweets (pins, dead keys, YAML)
 - [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article drafted in Notion; publish same week as X2/X3.
 - [x] **CI** PRs: lint + typecheck + version-sync + ubuntu 3.12 tests. Full matrix + wheel-gate on `main` only.
@@ -218,6 +218,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. Public/hosted MCP URL is still N2 — add only if we explicitly break that non-goal. Not in P2.1–P2.3.
 - **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills` — Codex will not see the skill until we add that path (measure demand first).
 - **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships.
+- **F10** **WebMCP** (site-exposed tools in the browser / ChatGPT Sites). Complementary surface to local MCP, not a replacement. Explore only after core reach + honesty are solid; any product/revenue layer (hosted API, team unlocker, site tools) is a **later** decision and must not dilute the free local CLI. No sprint this phase.
 
 ### N — Not planned (explicit)
 
@@ -237,7 +238,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 | X1 | P0.7 merged | Scorecard was smoke; thin ≠ pass; smoke vs walled |
 | X2 | P1 acceptance green | Demo: wall → `read_url` without being told (#22) |
 | X3 | P3.1 + P3.2 | One before/after on a real wall; name the signal, not "we beat Vendor forever" |
-| X4 | P2.3 | One line: mcp 2.x no longer kills the server |
+| X4 | P2.3 + host smoke | One line: mcp 2.x no longer kills the server |
 
 Article after P0 (better with one P1/P3 win). Draft free; publish when the repo matches the story.
 
@@ -258,5 +259,6 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-23 | P2.1 FastMCP on mcp 1.x. |
 | 2026-08-22 | F9: localhost HTTP later; hosted URL = break N2. |
 | 2026-08-24 | Reddit re-eval: honesty pass; MCP stealth asyncio = P3.10; X2/X3 still unposted. |
-| 2026-08-24 | P2.2 #97 + P3.10 #96 on main. P2.3: MCPServer + mcp>=2,<3. |
-| 2026-08-24 | P3.10: Playwright off asyncio for MCP. |
+| 2026-08-24 | P2.2 #97 + P3.10 #96 on main. |
+| 2026-08-25 | P2.3 #98: MCPServer + mcp>=2,<3. Host smoke still for X4. |
+| 2026-08-26 | F10: WebMCP = future complementary surface; revenue/hosted later. X3 ready to post. |
