@@ -203,3 +203,54 @@ jobs:
               sys.exit(f"version mismatch: {versions}")
           print("versions match")
           PY
+
+  # P2.2 — verify the MCP server builds and lists tools under mcp>=2,<3.
+  #
+  # constraints.txt pins mcp==1.29.0 (the P2.1 cap), so this job deliberately
+  # skips `-c constraints.txt` and installs mcp>=2,<3 directly. Under the 2.x
+  # SDK the server's create_server() / list_tools() call breaks (2.x deleted
+  # the low-level API FastMCP was built on), so this job is EXPECTED RED until
+  # P2.3 lifts the SDK pin and the MCPServer rewrite lands. continue-on-error
+  # keeps it from gating any PR.
+  mcp2-compat:
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install mcp>=2,<3 and searchts (no constraints pin)
+        run: |
+          python -m pip install --upgrade pip
+          pip install "mcp[cli]>=2,<3" -e .
+
+      - name: Verify SDK version
+        run: |
+          python - <<'PY'
+          from importlib.metadata import version
+          print(f"mcp {version('mcp')}")
+          PY
+
+      - name: Build server and list tools
+        # RED until P2.3: mcp 2.x removed the low-level @server.list_tools API
+        # that FastMCP's create_server/list_tools rely on. This step surfaces
+        # the breakage as a tracked failure rather than a silent import-time error.
+        run: |
+          python - <<'PY'
+          import asyncio, sys
+          from searchts.integrations.mcp_server import create_server
+          server = create_server()
+          tools = asyncio.run(server.list_tools())
+          names = sorted(t.name for t in tools)
+          print(f"mcp2 server tools: {names}")
+          expected = {"fetch_asset", "get_status", "grab_site", "read_url", "web_search"}
+          assert set(names) == expected, f"tool mismatch: {names} != {expected}"
+          print("mcp2 compatibility: OK")
+          PY
