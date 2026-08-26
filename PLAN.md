@@ -90,8 +90,15 @@
   - [x] `read` ladder progress + `mcp serve` banner (#100)
   - [x] `doctor`: per-channel progress (`checking web…`, `checking github…`) while probes run
   - [x] `search`: provider attempt ticks (or one “searching…” if fusion is quick) — #110
-  - [ ] `transcribe` / `grab` / `get`: phase ticks (download / extract / whisper / assets)
-  - [ ] Audit other verbs: same rule — silent only if sub-second by design
+  - [x] `transcribe` / `grab` / `get`: phase ticks (download / extract / whisper / assets) — #109
+    - `transcribe`: `fetching subtitles…` → (`downloading audio…`) → `transcribing…`; `progress` threaded from `transcribe()` (None → `SEARCHTS_PROGRESS=1`), CLI passes `True`
+    - `get`: `fetching asset…` → `saving asset…`
+    - `grab`: `fetching page…` → `downloading assets…` (one tick for the whole asset batch, not per-asset)
+    - `fetch_bytes`: `trying <rung>…` per ladder rung (shared by get/grab)
+  - [x] Audit other verbs: same rule — silent only if sub-second by design — #109
+    - `check-update`: one `checking for updates…` tick before the GitHub round-trip
+    - `watch`: `checking channels…` + `checking for updates…` ticks
+    - `install` / `setup` / `configure` / `skill` / `mcp` / `uninstall`: already chatty (print statements) — no ticks needed
   - Do **not** route through loguru (suppressed without `-v`). Plain stderr is correct.
 
 ### Communications

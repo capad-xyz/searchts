@@ -16,7 +16,9 @@ fingerprint-gated CDNs / Cloudflare come through, not just open ones.
 from __future__ import annotations
 
 import json
+import os
 import re
+import sys
 import urllib.parse
 from collections import Counter
 from dataclasses import dataclass, field
@@ -24,6 +26,24 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from searchts.unlocker import _UA_REAL, jina_enabled, looks_blocked, normalize
+
+
+def _tick(progress: bool, msg: str) -> None:
+    # Best-effort only: a closed/broken stderr must never abort a fetch/grab.
+    if not progress:
+        return
+    try:
+        print(msg, file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
+
+
+def _progress_default(progress: Optional[bool]) -> bool:
+    """Resolve a tri-state progress flag; None follows SEARCHTS_PROGRESS=1."""
+    if progress is None:
+        return os.environ.get("SEARCHTS_PROGRESS", "") in ("1", "true", "True", "yes")
+    return progress
+
 
 #: Asset fetch ladder: cheap fingerprinted GET, then the stealth browser.
 DEFAULT_ASSET_BACKENDS: List[str] = ["curl_cffi", "stealth-browser"]
@@ -143,14 +163,16 @@ def _fetch_bytes_jina_html(url: str, timeout: int) -> AssetResult:
 
 
 def fetch_bytes(url: str, *, backends: Optional[List[str]] = None,
-                timeout: int = 30) -> AssetResult:
+                timeout: int = 30, progress: Optional[bool] = None) -> AssetResult:
     """Fetch raw bytes for `url`, escalating through the unlock ladder."""
+    progress = _progress_default(progress)
     url = normalize(url)
     order = list(backends or DEFAULT_ASSET_BACKENDS)
     if not jina_enabled():
         order = [b for b in order if b != "jina-html"]
     attempts: List[Tuple[str, str]] = []
     for backend in order:
+        _tick(progress, f"trying {backend}…")
         try:
             if backend == "curl_cffi":
                 return _fetch_bytes_curl(url, timeout)
@@ -205,9 +227,12 @@ def _unique_path(path: Path) -> Path:
         i += 1
 
 
-def get_asset(url: str, out_path: Optional[str] = None, *, timeout: int = 30) -> Path:
+def get_asset(url: str, out_path: Optional[str] = None, *, timeout: int = 30,
+              progress: Optional[bool] = None) -> Path:
     """Download one asset to disk; return the saved path."""
-    res = fetch_bytes(url, timeout=timeout)
+    progress = _progress_default(progress)
+    _tick(progress, "fetching asset…")
+    res = fetch_bytes(url, timeout=timeout, progress=progress)
     if out_path:
         dest = Path(out_path)
         if dest.is_dir():
@@ -216,6 +241,7 @@ def get_asset(url: str, out_path: Optional[str] = None, *, timeout: int = 30) ->
         dest = Path(guess_filename(res.final_url, res.content_type))
     if dest.parent and not dest.parent.exists():
         dest.parent.mkdir(parents=True, exist_ok=True)
+    _tick(progress, "saving asset…")
     dest.write_bytes(res.content)
     return dest
 
@@ -375,13 +401,15 @@ def _title(html: str) -> Optional[str]:
 def grab(page_url: str, out_dir: str, *,
          kinds: Tuple[str, ...] = ("images", "icons", "css", "fonts", "svg"),
          include_scripts: bool = False, read: bool = False,
-         max_assets: int = 60, max_total_mb: int = 50, timeout: int = 30) -> Dict:
+         max_assets: int = 60, max_total_mb: int = 50, timeout: int = 30,
+         progress: Optional[bool] = None) -> Dict:
     """Fetch a page, download its assets, and extract design tokens.
 
     Writes the assets under out_dir/<kind>/, a manifest.json, and (with read=True)
     a page.md. Best-effort: a single failed asset is recorded, never fatal.
     Returns the manifest dict.
     """
+    progress = _progress_default(progress)
     page_url = normalize(page_url)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -389,10 +417,13 @@ def grab(page_url: str, out_dir: str, *,
     # The page itself gets the full ladder (curl -> Jina HTML relay -> stealth
     # browser): one justified solve for a walled site. Assets below stay
     # curl-only so a page with dozens of assets never spawns dozens of browsers.
+    _tick(progress, "fetching page…")
     page = fetch_bytes(page_url, backends=["curl_cffi", "jina-html", "stealth-browser"],
-                       timeout=max(timeout, 45))
+                       timeout=max(timeout, 45), progress=progress)
     html = page.content.decode("utf-8", "replace")
     assets = extract_assets(html, page.final_url)
+
+    _tick(progress, "downloading assets…")
 
     css_texts: List[str] = []
     for cu in assets.get("css", [])[:20]:

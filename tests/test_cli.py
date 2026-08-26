@@ -83,7 +83,8 @@ class TestCLI:
     def test_transcribe_command_accepts_provider_local(self, capsys):
         seen = {}
 
-        def fake_transcribe(source, *, provider="auto", prefer_subtitles=True):
+        def fake_transcribe(source, *, provider="auto", prefer_subtitles=True,
+                            progress=None):
             seen["provider"] = provider
             seen["prefer_subtitles"] = prefer_subtitles
             return "local out"
@@ -99,7 +100,8 @@ class TestCLI:
     def test_transcribe_command_no_subtitles_flag(self, capsys):
         seen = {}
 
-        def fake_transcribe(source, *, provider="auto", prefer_subtitles=True):
+        def fake_transcribe(source, *, provider="auto", prefer_subtitles=True,
+                            progress=None):
             seen["prefer_subtitles"] = prefer_subtitles
             return "audio out"
 
@@ -117,6 +119,20 @@ class TestCLI:
         with patch("sys.argv", ["searchts", "transcribe", "audio.mp3", "--provider", "azure"]):
             with pytest.raises(SystemExit):
                 main()
+
+    def test_transcribe_command_passes_progress_true(self, capsys):
+        seen = {}
+
+        def fake_transcribe(source, *, provider="auto", prefer_subtitles=True,
+                            progress=None):
+            seen["progress"] = progress
+            return "out"
+
+        with patch("searchts.transcribe.transcribe", side_effect=fake_transcribe):
+            with patch("sys.argv", ["searchts", "transcribe", "audio.mp3"]):
+                main()
+        # CLI enables progress ticks (P4.6).
+        assert seen["progress"] is True
 
     def test_unknown_subcommand_suggests_nearest_match(self, capsys):
         with pytest.raises(SystemExit) as exc_info:
@@ -483,6 +499,13 @@ class TestCheckUpdateRetry:
         assert "Network timeout" in captured.out
         assert "retried 3 times" in captured.out
 
+    def test_check_update_ticks_on_stderr(self, capsys):
+        with patch("searchts.cli._github_get_with_retry", return_value=(None, "timeout", 3)):
+            cli._cmd_check_update()
+        captured = capsys.readouterr()
+        # Best-effort tick so a slow GitHub round-trip is not silent (P4.6).
+        assert "checking for updates" in captured.err
+
 
 class TestVersionCompare:
     def test_newer_remote_triggers_update(self):
@@ -518,9 +541,13 @@ class TestWatchVersionCompare:
                             "tier": 0, "backends": ["Jina Reader"], "active_backend": "Jina Reader"}},
         )
         cli._cmd_watch()
-        out = capsys.readouterr().out
+        captured = capsys.readouterr()
+        out = captured.out
         assert "New version available" not in out
         assert "All systems normal" in out
+        # P4.6: best-effort ticks so the channel + update round-trips are not silent.
+        assert "checking channels" in captured.err
+        assert "checking for updates" in captured.err
 
 
 class TestMcpInstall:

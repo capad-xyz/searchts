@@ -9,7 +9,7 @@ import searchts.transcribe as T
 def test_transcribe_removes_temp_dir_on_success(monkeypatch):
     captured = {}
 
-    def fake_run(source, work_dir, provider, cfg, prefer_subtitles):
+    def fake_run(source, work_dir, provider, cfg, prefer_subtitles, progress=False):
         captured["dir"] = work_dir
         assert work_dir.exists(), "workspace should exist during transcription"
         return "transcript text"
@@ -23,7 +23,7 @@ def test_transcribe_removes_temp_dir_on_success(monkeypatch):
 def test_transcribe_removes_temp_dir_on_failure(monkeypatch):
     captured = {}
 
-    def boom(source, work_dir, provider, cfg, prefer_subtitles):
+    def boom(source, work_dir, provider, cfg, prefer_subtitles, progress=False):
         captured["dir"] = work_dir
         raise T.TranscribeError("kaboom")
 
@@ -34,7 +34,7 @@ def test_transcribe_removes_temp_dir_on_failure(monkeypatch):
 
 
 def test_transcribe_keeps_explicit_out_dir(monkeypatch, tmp_path):
-    def fake_run(source, work_dir, provider, cfg, prefer_subtitles):
+    def fake_run(source, work_dir, provider, cfg, prefer_subtitles, progress=False):
         (work_dir / "leftover.m4a").write_bytes(b"x")
         return "t"
 

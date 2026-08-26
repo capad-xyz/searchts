@@ -1325,6 +1325,8 @@ def _cmd_transcribe(args):
             args.source,
             provider=args.provider,
             prefer_subtitles=args.prefer_subtitles,
+            # Progress ticks make long ladder/audio runs visible; stderr only.
+            progress=True,
         )
     except TranscribeError as e:
         print(f"[x] {e}")
@@ -1510,7 +1512,7 @@ def _cmd_get(args):
     from searchts import assets
 
     try:
-        path = assets.get_asset(args.url, args.output)
+        path = assets.get_asset(args.url, args.output, progress=True)
     except assets.AssetError as e:
         print(f"Failed to get asset: {e}", file=sys.stderr)
         sys.exit(1)
@@ -1534,6 +1536,8 @@ def _cmd_grab(args):
         manifest = assets.grab(
             args.url, out, kinds=kinds, include_scripts=args.scripts,
             read=args.read, max_assets=args.max_assets,
+            # Ticks go to stderr only, so --json stdout stays machine-clean.
+            progress=not getattr(args, "json", False),
         )
     except assets.AssetError as e:
         print(f"Failed to grab {args.url}: {e}", file=sys.stderr)
@@ -1847,6 +1851,8 @@ def _cmd_check_update():
     from searchts import __version__
 
     print(f"Current version: v{__version__}")
+    # One best-effort tick: the GitHub round-trip can block a few seconds.
+    print("checking for updates…", file=sys.stderr, flush=True)
     release_url = "https://api.github.com/repos/capad-xyz/searchts/releases/latest"
     commit_url = "https://api.github.com/repos/capad-xyz/searchts/commits/main"
 
@@ -1917,6 +1923,7 @@ def _cmd_watch():
     issues = []
 
     # Check channels
+    print("checking channels…", file=sys.stderr, flush=True)
     results = check_all(config)
     ok = sum(1 for r in results.values() if r["status"] == "ok")
     total = len(results)
@@ -1932,6 +1939,7 @@ def _cmd_watch():
     update_available = False
     new_version = ""
     release_body = ""
+    print("checking for updates…", file=sys.stderr, flush=True)
     resp, err, _attempts = _github_get_with_retry(
         "https://api.github.com/repos/capad-xyz/searchts/releases/latest",
         timeout=10,

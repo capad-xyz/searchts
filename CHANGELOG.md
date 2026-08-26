@@ -2,6 +2,14 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.7.3](https://github.com/capad-xyz/searchts/compare/v0.7.2...v0.7.3) (2026-08-27)
+
+
+### Added
+- **cli(progress):** phase ticks for the long media verbs so they never look hung (P4.6). `transcribe` prints `fetching subtitles…` → (`downloading audio…`) → `transcribing…`; `get` prints `fetching asset…` → `saving asset…`; `grab` prints `fetching page…` → `downloading assets…`; `fetch_bytes` prints `trying <rung>…` per ladder rung. All go to **stderr** best-effort (never break pipeable stdout / MCP), follow `SEARCHTS_PROGRESS=1`, and stay quiet for `--json` / library / MCP callers. ([#110](https://github.com/capad-xyz/searchts/issues/110))
+- **cli(progress):** a single best-effort stderr tick for `check-update` and `watch` before their GitHub round-trip (P4.6 audit of the other verbs). ([#110](https://github.com/capad-xyz/searchts/issues/110))
+
+
 ## [0.7.2](https://github.com/capad-xyz/searchts/compare/v0.7.1...v0.7.2) (2026-08-04)
 
 
