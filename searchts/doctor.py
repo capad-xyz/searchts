@@ -20,18 +20,18 @@ def _tick(msg: str) -> None:
         pass
 
 
-def check_all(config: Config, progress: bool = False) -> Dict[str, dict]:
+def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict]:
     """Check all channels and return status dict.
 
     A single misbehaving channel must never take the whole report down,
     so per-channel exceptions degrade to status="error".
 
     progress:
-        When True, print one stderr line per channel probe (``checking
-        web…``) so long interactive runs are not silent. Off by default so
-        MCP/library callers stay quiet. Also on when ``SEARCHTS_PROGRESS=1``.
+        True: stderr ticks. False: never ticks (CLI ``--json``). None: follow
+        ``SEARCHTS_PROGRESS=1``. Library/MCP callers omit the arg so they stay
+        quiet unless the env is set.
     """
-    if not progress:
+    if progress is None:
         progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
             "1", "true", "True", "yes",
         )
