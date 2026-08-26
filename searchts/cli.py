@@ -1623,7 +1623,8 @@ def _cmd_doctor(args=None):
     else:
         rprint = rich_print
     config = Config()
-    results = check_all(config)
+    # Progress ticks go to stderr only, so --json stdout stays machine-clean.
+    results = check_all(config, progress=not getattr(args, "json", False))
 
     if args is not None and getattr(args, "json", False):
         print(json.dumps(results, ensure_ascii=False, indent=2))

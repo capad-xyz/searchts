@@ -47,8 +47,7 @@ class TestCLI:
         monkeypatch.setattr(cli, "_install_skill", _must_not_install)
         monkeypatch.setattr(
             "searchts.doctor.check_all",
-            lambda config: {
-                "web": {
+            lambda config, progress=False: {                "web": {
                     "status": "ok",
                     "name": "Any web page",
                     "message": "ok",

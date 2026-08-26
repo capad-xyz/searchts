@@ -87,7 +87,7 @@
 - [ ] **P4.5** Split `cli.py` only when a verb is being changed (`commands/read.py` etc.) — no big-bang rewrite
 - [ ] **P4.6** **CLI UX feedback (tomorrow / small PRs)** — long verbs must not look hung. Pattern from #100: stderr ticks, best-effort, never break pipeable stdout / MCP protocol.
   - [x] `read` ladder progress + `mcp serve` banner (#100)
-  - [ ] `doctor`: per-channel progress (`checking web…`, `checking github…`) while probes run
+  - [x] `doctor`: per-channel progress (`checking web…`, `checking github…`) while probes run
   - [ ] `search`: provider attempt ticks (or one “searching…” if fusion is quick)
   - [ ] `transcribe` / `grab` / `get`: phase ticks (download / extract / whisper / assets)
   - [ ] Audit other verbs: same rule — silent only if sub-second by design
@@ -272,3 +272,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-26 | #100: `read` progress + mcp serve banner. **P4.6** CLI UX for doctor/search/transcribe/grab — schedule tomorrow. |
 | 2026-08-26 | P3.3: domain memory TTL (24h default) + unpin on remembered-backend failure. |
 | 2026-08-26 | P3.4: drop hardcoded Chrome 126 UA; `_UA_REAL` single-sourced in unlocker, imported by search.py + share_extractors/_browser.py; updated to Chrome 152 stable. |
+| 2026-08-26 | P4.6 doctor slice: stderr ticks in check_all (progress=), CLI enables, --json keeps stdout clean. |
