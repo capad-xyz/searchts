@@ -85,6 +85,13 @@
 - [ ] **P4.3** CI job with `[browser]` extra (skip if no Chromium)
 - [ ] **P4.4** Docker: `slim` (current default) + `browser` tag
 - [ ] **P4.5** Split `cli.py` only when a verb is being changed (`commands/read.py` etc.) — no big-bang rewrite
+- [ ] **P4.6** **CLI UX feedback (tomorrow / small PRs)** — long verbs must not look hung. Pattern from #100: stderr ticks, best-effort, never break pipeable stdout / MCP protocol.
+  - [x] `read` ladder progress + `mcp serve` banner (#100)
+  - [ ] `doctor`: per-channel progress (`checking web…`, `checking github…`) while probes run
+  - [ ] `search`: provider attempt ticks (or one “searching…” if fusion is quick)
+  - [ ] `transcribe` / `grab` / `get`: phase ticks (download / extract / whisper / assets)
+  - [ ] Audit other verbs: same rule — silent only if sub-second by design
+  - Do **not** route through loguru (suppressed without `-v`). Plain stderr is correct.
 
 ### Communications
 
@@ -262,3 +269,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-24 | P2.2 #97 + P3.10 #96 on main. |
 | 2026-08-25 | P2.3 #98: MCPServer + mcp>=2,<3. Host smoke still for X4. |
 | 2026-08-26 | F10: WebMCP = future complementary surface; revenue/hosted later. X3 ready to post. |
+| 2026-08-26 | #100: `read` progress + mcp serve banner. **P4.6** CLI UX for doctor/search/transcribe/grab — schedule tomorrow. |
