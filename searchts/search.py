@@ -52,6 +52,8 @@ _TRACKING_PARAMS = frozenset({
 
 def _tick(msg: str) -> None:
     # Best-effort only: a closed/broken stderr must never abort a search.
+    if sys.stderr is None:
+        return
     try:
         print(msg, file=sys.stderr, flush=True)
     except (OSError, ValueError):
