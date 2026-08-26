@@ -27,8 +27,8 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 #: Browser-ish UA so keyless HTTP providers (SearXNG instances) don't 403 us.
-_UA_REAL = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+#: Single source of truth lives in unlocker._UA_REAL — import, don't duplicate.
+from searchts.unlocker import _UA_REAL  # noqa: E402
 
 #: Reciprocal Rank Fusion constant. 60 is the value from the original RRF paper
 #: (Cormack et al.) and the de-facto default; it damps the influence of the very

@@ -43,7 +43,7 @@ _T = TypeVar("_T")
 DEFAULT_BACKENDS: List[str] = ["curl_cffi", "Jina Reader", "stealth-browser"]
 
 _UA_REAL = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+            "(KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36")
 
 #: A response containing one of these is a block / challenge page, not content.
 #: NOTE: match block-PAGE phrases, never vendor names — legit pages embed bot
