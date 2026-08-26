@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from searchts.unlocker import _UA_REAL, looks_blocked, normalize
+from searchts.unlocker import _UA_REAL, jina_enabled, looks_blocked, normalize
 
 #: Asset fetch ladder: cheap fingerprinted GET, then the stealth browser.
 DEFAULT_ASSET_BACKENDS: List[str] = ["curl_cffi", "stealth-browser"]
@@ -146,7 +146,9 @@ def fetch_bytes(url: str, *, backends: Optional[List[str]] = None,
                 timeout: int = 30) -> AssetResult:
     """Fetch raw bytes for `url`, escalating through the unlock ladder."""
     url = normalize(url)
-    order = backends or DEFAULT_ASSET_BACKENDS
+    order = list(backends or DEFAULT_ASSET_BACKENDS)
+    if not jina_enabled():
+        order = [b for b in order if b != "jina-html"]
     attempts: List[Tuple[str, str]] = []
     for backend in order:
         try:

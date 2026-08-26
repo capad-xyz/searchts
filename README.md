@@ -35,7 +35,7 @@ AI agents constantly need to read web pages, but the naive way they fetch is tri
 `searchts` reads any URL through an escalating ladder and stops at the first tier that returns real content:
 
 1. **curl_cffi**: a fetch that impersonates a real Chrome's TLS/JA3 and HTTP2 fingerprint. Beats user-agent and fingerprint filters. Fast, local, private.
-2. **Jina Reader**: a JavaScript-rendering relay, for pages that only fill in content after running JS.
+2. **Jina Reader**: a JavaScript-rendering relay (`r.jina.ai`), for pages that only fill in content after running JS. **Default on** — the target URL is sent to Jina's servers on this rung. Opt out with `SEARCHTS_NO_JINA=1` or config `jina: false` (local curl + stealth only).
 3. **stealth browser**: an undetected headless Chromium (patchright), launched lazily only when the cheaper tiers fail, for live JS / Cloudflare managed challenges.
 
 If no tier comes back with real content, an optional human-in-the-loop step opens a real browser so you can clear the page once and continue. That covers interactive CAPTCHAs and soft walls alike: a login page served as HTTP 200 is not a challenge, but it is still a page only a human gets past. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
@@ -126,6 +126,7 @@ See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/d
 - **Asset + design grabber**: `searchts grab <url>` downloads a page's images/icons/css/fonts and extracts a color palette plus the fonts in use; `searchts get <url>` pulls a single asset. Both go through the same escalating unlock ladder, so they work on fingerprint-gated CDNs, not just open ones.
 - **Prompt-injection scrubbing**: strips invisible/bidi characters, flags injection indicators, optional redaction, so untrusted page content is safer to feed a model.
 - **Per-domain backend memory**: remembers which tier worked per domain and tries it first (`SEARCHTS_NO_MEMORY=1` to disable).
+- **Jina opt-out**: the JS-render relay is on by default; `SEARCHTS_NO_JINA=1` (or `jina: false` in `~/.searchts` config) skips it so URLs never hit `r.jina.ai`.
 - **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`), and a Python library.
 
 ## Use as a library

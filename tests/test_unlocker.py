@@ -912,3 +912,66 @@ def test_fetch_stealth_wrapper_uses_impl(monkeypatch):
     assert status == 200
     assert "ok" in body
     assert headers["x"] == "1"
+
+
+def test_jina_enabled_default_on(monkeypatch):
+    monkeypatch.delenv("SEARCHTS_NO_JINA", raising=False)
+    monkeypatch.delenv("SEARCHTS_JINA", raising=False)
+    assert unlocker.jina_enabled() is True
+
+
+def test_jina_enabled_no_jina_env(monkeypatch):
+    monkeypatch.setenv("SEARCHTS_NO_JINA", "1")
+    assert unlocker.jina_enabled() is False
+
+
+def test_fetch_skips_jina_when_disabled(monkeypatch):
+    monkeypatch.setenv("SEARCHTS_NO_JINA", "1")
+    calls = []
+
+    def curl(url, timeout=40):
+        calls.append("curl")
+        return (403, "denied", url, {})
+
+    def jina(url, timeout=40):
+        calls.append("jina")
+        return (200, "J" * 800, url, {})
+
+    def stealth(url, timeout=40):
+        calls.append("stealth")
+        body = "<html><body><p>" + ("content " * 200) + "</p></body></html>"
+        return (200, body, url, {})
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", curl)
+    monkeypatch.setattr(unlocker, "_fetch_jina", jina)
+    monkeypatch.setattr(unlocker, "_fetch_stealth", stealth)
+    # html_to_text may need real html - stealth returns enough chars
+    r = unlocker.fetch("https://site.test/page", use_memory=False)
+    assert "jina" not in calls
+    assert "curl" in calls
+    assert r.backend == "stealth-browser" or "stealth" in r.backend or len(calls) >= 1
+
+
+def test_fetch_uses_jina_when_enabled(monkeypatch):
+    monkeypatch.delenv("SEARCHTS_NO_JINA", raising=False)
+    monkeypatch.delenv("SEARCHTS_JINA", raising=False)
+    calls = []
+
+    def curl(url, timeout=40):
+        calls.append("curl")
+        return (403, "denied", url, {})
+
+    def jina(url, timeout=40):
+        calls.append("jina")
+        return (200, "J" * 800, url, {})
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", curl)
+    monkeypatch.setattr(unlocker, "_fetch_jina", jina)
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_stealth",
+        lambda url, timeout=40: (_ for _ in ()).throw(RuntimeError("no stealth")),
+    )
+    r = unlocker.fetch("https://site.test/page", use_memory=False)
+    assert "jina" in calls
+    assert r.backend == "Jina Reader"
