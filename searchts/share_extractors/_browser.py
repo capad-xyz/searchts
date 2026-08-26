@@ -29,10 +29,10 @@ import time
 from html.parser import HTMLParser
 from typing import Callable, List, Optional, Sequence, Tuple
 
-# Mirror the unlocker's tier-2 fingerprint exactly (kept in sync by copy, not
-# import, so this module has no hard dependency on unlocker internals).
-_UA_REAL = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+#: Single source of truth for the browser user-agent string lives in
+#: unlocker._UA_REAL; this module mirrors that fingerprint by importing it
+#: rather than maintaining a copy that drifts out of date.
+from searchts.unlocker import _UA_REAL  # noqa: E402
 
 
 def render(

@@ -68,7 +68,7 @@
 - [x] **P3.2** Thin content = failure (`UnlockerError`), not success / best-effort return under `_MIN_CHARS` — #93
 - [x] **P3.10** MCP stealth: async `read_url` + `asyncio.to_thread`; Reddit interstitial + login phrases; concurrency test via registered `call_tool` — #96
 - [x] **P3.3** Domain memory: TTL (default 24h); un-pin remembered backend when that backend fails before walking the rest of the ladder
-- [ ] **P3.4** UA: remove hardcoded Chrome 126; current stable string or align with curl_cffi impersonate profile
+- [x] **P3.4** UA: remove hardcoded Chrome 126; single `_UA_REAL` in unlocker, imported elsewhere; updated to current stable Chrome 152
 - [ ] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
 - [ ] **P3.6** SSRF for **MCP only**: reject `file://`, `data:`, loopback, link-local, RFC1918, cloud metadata IPs; CLI stays unrestricted
 - [ ] **P3.7** Walled scorecard: public suite of real walls; publish pass *rate*; smoke suite stays separate
@@ -271,3 +271,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-26 | F10: WebMCP = future complementary surface; revenue/hosted later. X3 ready to post. |
 | 2026-08-26 | #100: `read` progress + mcp serve banner. **P4.6** CLI UX for doctor/search/transcribe/grab — schedule tomorrow. |
 | 2026-08-26 | P3.3: domain memory TTL (24h default) + unpin on remembered-backend failure. |
+| 2026-08-26 | P3.4: drop hardcoded Chrome 126 UA; `_UA_REAL` single-sourced in unlocker, imported by search.py + share_extractors/_browser.py; updated to Chrome 152 stable. |
