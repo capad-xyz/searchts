@@ -14,6 +14,7 @@ Rejected:
 - loopback (127.0.0.0/8, ::1, localhost)
 - IPv4/IPv6 link-local (169.254.0.0/16, fe80::/10)
 - RFC1918 (10/8, 172.16/12, 192.168/16)
+- IPv6 unique-local (fc00::/7; same role as RFC1918)
 - cloud metadata endpoints (169.254.169.254 and the well-known metadata
   hostnames/IPv6 address shared by AWS/GCP/Azure IMDS)
 """
@@ -41,6 +42,7 @@ _RFC1918 = (
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
 )
+_ULA_V6 = ipaddress.ip_network("fc00::/7")
 
 
 def _classify(ip: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> Optional[str]:
@@ -67,6 +69,10 @@ def _classify(ip: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> Optional[s
     for net in _RFC1918:
         if ip.version == net.version and ip in net:
             return "private RFC1918 address"
+
+    # IPv6 unique-local (fc00::/7) — same role as RFC1918 on v4.
+    if ip.version == 6 and ip in _ULA_V6:
+        return "IPv6 unique-local address (fc00::/7)"
 
     return None
 

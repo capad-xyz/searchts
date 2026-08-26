@@ -333,6 +333,7 @@ _SSRF_BLOCKED = [
     "http://192.168.1.1/",                     # RFC1918 192.168/16
     "http://192.168.0.254:8000/",              # RFC1918 192.168/16 + port
     "http://[fe80::1]/",                       # link-local v6
+    "http://[fd12:3456::1]/",                  # IPv6 unique-local fc00::/7
 ]
 
 # Hosts/IPs that must be allowed (no live vendor hit — only the guard runs).
@@ -415,6 +416,12 @@ def test_grab_site_blocks_ssrf(monkeypatch):
 
 
 def test_read_url_allows_public_example(monkeypatch):
+    monkeypatch.setattr(
+        "searchts.ssrf.socket.getaddrinfo",
+        lambda h, p, **kw: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+        ],
+    )
     monkeypatch.setattr(
         "searchts.unlocker.fetch",
         lambda u: FetchResult(
