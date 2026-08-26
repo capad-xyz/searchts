@@ -1,6 +1,6 @@
 # searchts — master plan (frozen 2026-08-20)
 
-**Repo:** https://github.com/capad-xyz/searchts  
+**Repo:** https://github.com/capad-xyz/searchts
 **Identity:** free, open-source, keyless web layer for agents — won by reliability and being easy to reach for, not by feature count.  
 **Status:** Decisions locked (see §0). Work ordered P0 → P1∥P2 → P3 → P4 → Later.
 
@@ -89,7 +89,7 @@
 - [ ] **P4.6** **CLI UX feedback (tomorrow / small PRs)** — long verbs must not look hung. Pattern from #100: stderr ticks, best-effort, never break pipeable stdout / MCP protocol.
   - [x] `read` ladder progress + `mcp serve` banner (#100)
   - [x] `doctor`: per-channel progress (`checking web…`, `checking github…`) while probes run
-  - [ ] `search`: provider attempt ticks (or one “searching…” if fusion is quick)
+  - [x] `search`: provider attempt ticks (or one "searching…" if fusion is quick)
   - [ ] `transcribe` / `grab` / `get`: phase ticks (download / extract / whisper / assets)
   - [ ] Audit other verbs: same rule — silent only if sub-second by design
   - Do **not** route through loguru (suppressed without `-v`). Plain stderr is correct.
@@ -128,8 +128,8 @@ P0 Honesty + channel delete-theater
     ├─► P1 Agent reach (#22)
     ├─► P2 MCP 2.x (parallel)
     └─► P3 Unlocker quality
-            └─► P4 Surfaces
-                    └─► Later / footnote
+        └─► P4 Surfaces
+            └─► Later / footnote
 ```
 
 ### Architecture invariants (do not violate in any phase)
@@ -279,3 +279,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-26 | P3.5: Jina stays default; document r.jina.ai sees URLs; `SEARCHTS_NO_JINA=1` / config `jina: false`. |
 | 2026-08-26 | **X3** posted: wall before/after honesty (no bypass claim). |
 | 2026-08-26 | **X4** posted: mcp 2.x no longer kills `mcp serve`. |
+| 2026-08-26 | P4.6 search: provider attempt ticks via progress param (stderr), --json silent |
+| 2026-08-26 | 429 handling: Laguna S blocked mid-run; Laguna-XS continues from there. |

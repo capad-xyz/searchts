@@ -22,6 +22,7 @@ Design goals (parallel to ``unlocker.fetch``):
 from __future__ import annotations
 
 import os
+import sys
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple, Union
@@ -47,6 +48,14 @@ _TRACKING_PARAMS = frozenset({
     "gclid", "fbclid", "msclkid", "mc_cid", "mc_eid", "ref", "ref_src",
     "igshid", "spm", "_ga", "yclid",
 })
+
+
+def _tick(msg: str) -> None:
+    # Best-effort only: a closed/broken stderr must never abort a search.
+    try:
+        print(msg, file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
 
 
 @dataclass
@@ -366,6 +375,7 @@ def search(
     query: str,
     max_results: int = 10,
     providers: Optional[List[str]] = None,
+    progress: Optional[bool] = None,
 ) -> List[SearchResult]:
     """Multi-source web search with Reciprocal Rank Fusion.
 
@@ -378,11 +388,21 @@ def search(
         :data:`PROVIDERS` are recorded as ``unknown-provider``. When omitted, the
         default is DuckDuckGo plus every provider whose key/env is present.
 
+    progress:
+        True: stderr ticks (``searching <name>…``) before each provider. False:
+        never ticks (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
+        Library/MCP callers omit the arg so they stay quiet unless the env is set.
+
     Returns the top ``max_results`` fused :class:`SearchResult` objects. Raises
     :class:`SearchError` (with a per-provider breakdown) if every selected
     provider failed or returned nothing.
     """
     selected = list(providers) if providers is not None else _available_providers()
+
+    if progress is None:
+        progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
+            "1", "true", "True", "yes",
+        )
 
     attempts: List[Tuple[str, str]] = []
     per_provider: List[Tuple[str, List[SearchResult]]] = []
@@ -390,8 +410,12 @@ def search(
     for name in selected:
         fn = PROVIDERS.get(name)
         if fn is None:
+            if progress:
+                _tick(f"searching {name}…")
             attempts.append((name, "unknown-provider"))
             continue
+        if progress:
+            _tick(f"searching {name}…")
         try:
             results = fn(query, max_results) or []
         except Exception as e:  # noqa: BLE001 - any provider failure is recorded, never raised

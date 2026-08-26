@@ -1584,6 +1584,7 @@ def _cmd_search(args):
     try:
         results = search_mod.search(
             args.query, max_results=args.max_results, providers=providers,
+            progress=not args.json,
         )
     except search_mod.SearchError as e:
         print(f"Search failed for {e.query!r}", file=sys.stderr)
