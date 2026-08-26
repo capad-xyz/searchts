@@ -267,8 +267,15 @@ def _make_entry(backend: str) -> Dict[str, str]:
 
 def _write_raw(raw: Dict[str, object]) -> None:
     """Persist the raw cache dict. Best-effort, never raises."""
-    # Drop expired entries so memory doesn't accumulate tombstones.
-    cleaned = {d: v for d, v in raw.items() if not _entry_is_expired(v)}
+    # Drop expired *and* malformed entries so memory doesn't accumulate
+    # tombstones (Rabbit: fresh invalid values must not stick on disk).
+    cleaned = {
+        d: v
+        for d, v in raw.items()
+        if isinstance(d, str)
+        and _entry_backend(v) is not None
+        and not _entry_is_expired(v)
+    }
     if not cleaned:
         try:
             _cache_path().unlink(missing_ok=True)

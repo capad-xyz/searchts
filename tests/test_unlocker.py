@@ -377,6 +377,22 @@ def test_load_memory_treats_string_only_as_expired(tmp_cache):
     assert not tmp_cache.exists()
 
 
+def test_load_memory_drops_fresh_malformed_entries(tmp_cache):
+    # Fresh dict missing backend / garbage value — must leave disk, not only RAM.
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cache = {
+        "bad.test": {"ts": ts},  # no backend key
+        "good.test": {"backend": "curl_cffi", "ts": ts},
+        "num.test": 42,
+    }
+    tmp_cache.write_text(json.dumps(cache), encoding="utf-8")
+    assert unlocker.load_memory() == {"good.test": "curl_cffi"}
+    on_disk = json.loads(tmp_cache.read_text(encoding="utf-8"))
+    assert set(on_disk.keys()) == {"good.test"}
+    assert on_disk["good.test"]["backend"] == "curl_cffi"
+
+
 def test_expired_entry_not_promoted(tmp_cache, monkeypatch, stub_extract):
     from datetime import datetime, timedelta, timezone
     # Write an entry that's 24h+1 expired.
