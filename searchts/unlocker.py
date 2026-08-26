@@ -137,11 +137,20 @@ def normalize(url: str) -> str:
 # repeat visits skip straight to the rung that works instead of re-walking the
 # whole ladder from curl_cffi. Stored at <config-dir>/unlocker_cache.json; all
 # IO is best-effort and NEVER raises — a corrupt or unwritable cache silently
-# degrades to "no memory" rather than breaking a fetch.
+# degrades to "no memory" rather than breaking a fetch. Each entry carries an
+# ISO-8601 UTC timestamp (P3.3); entries older than _MEMORY_TTL_SECONDS (default
+# 24h) are expired — ignored on promotion and dropped on load/save. A remembered
+# backend that fails (block/thin/exception) before a clean win is unpinned so
+# later fetches aren't stuck on a dead rung.
 
 #: Same config dir as searchts.config.Config (~/.searchts).
 _CACHE_DIR = Path.home() / ".searchts"
 _CACHE_PATH = _CACHE_DIR / "unlocker_cache.json"
+
+#: Default TTL for a remembered backend: 24h. After this an entry is expired
+#: (ignored on promotion, dropped on load/save) so a dead rung can't pin a
+#: domain forever.
+_MEMORY_TTL_SECONDS: int = 24 * 60 * 60
 
 #: Multi-label public suffixes we special-case so the registrable domain keeps
 #: the right number of labels (e.g. bbc.co.uk, not co.uk). Not exhaustive — a
@@ -182,42 +191,173 @@ def registrable_domain(url: str) -> str:
     return last_two
 
 
-def load_memory() -> Dict[str, str]:
-    """Load the domain -> backend map. Best-effort: returns {} on any error."""
+def _cache_path() -> Path:
+    """Resolve the cache path, honouring SEARCHTS_CACHE_DIR for tests/overrides."""
+    override = os.environ.get("SEARCHTS_CACHE_DIR")
+    if override:
+        d = Path(override)
+        return d / "unlocker_cache.json"
+    return _CACHE_PATH
+
+
+def _load_raw() -> Dict[str, object]:
+    """Load the raw cache dict (domain -> backend or domain -> {backend, ts}).
+
+    Best-effort: returns {} on any error (missing/corrupt file). Does NOT
+    apply TTL — callers filter expired entries themselves.
+    """
     try:
-        with open(_CACHE_PATH, "r", encoding="utf-8") as f:
+        with open(_cache_path(), "r", encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
-            return {str(k): str(v) for k, v in data.items()}
+            return {str(k): v for k, v in data.items()}
     except Exception:  # noqa: BLE001 - missing/corrupt cache is non-fatal
         pass
     return {}
 
 
-def remember(domain: str, backend: str) -> None:
-    """Record `backend` as the last winner for `domain`. Best-effort, never raises."""
-    if not domain or not backend:
+def _entry_backend(val: object) -> Optional[str]:
+    """Extract the backend name from a cache entry (str or dict)."""
+    if isinstance(val, str):
+        return val
+    if isinstance(val, dict):
+        b = val.get("backend")
+        if isinstance(b, str):
+            return b
+    return None
+
+
+def _entry_ts(val: object) -> Optional[str]:
+    """Extract the ISO timestamp from a cache entry (string-only or dict)."""
+    if isinstance(val, dict):
+        ts = val.get("ts")
+        if isinstance(ts, str):
+            return ts
+    return None
+
+
+def _entry_is_expired(val: object) -> bool:
+    """True if the entry has no usable timestamp (string-only) or is older than TTL.
+
+    String-only entries (old cache format) count as expired so a stale file can
+    never pin a domain forever.
+    """
+    ts = _entry_ts(val)
+    if ts is None:
+        return True
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except (ValueError, TypeError):
+        return True
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - dt).total_seconds()
+    return age >= _MEMORY_TTL_SECONDS
+
+
+def _now_iso() -> str:
+    """ISO-8601 UTC timestamp for cache entries."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _make_entry(backend: str) -> Dict[str, str]:
+    """Build a timestamped cache entry for a domain."""
+    return {"backend": backend, "ts": _now_iso()}
+
+
+def _write_raw(raw: Dict[str, object]) -> None:
+    """Persist the raw cache dict. Best-effort, never raises."""
+    # Drop expired *and* malformed entries so memory doesn't accumulate
+    # tombstones (Rabbit: fresh invalid values must not stick on disk).
+    cleaned = {
+        d: v
+        for d, v in raw.items()
+        if isinstance(d, str)
+        and _entry_backend(v) is not None
+        and not _entry_is_expired(v)
+    }
+    if not cleaned:
+        try:
+            _cache_path().unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001 - best-effort
+            pass
         return
     try:
-        mem = load_memory()
-        if mem.get(domain) == backend:
-            return  # no change — skip the write
-        mem[domain] = backend
-        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        # Write owner-only from the start (mirrors Config.save); fall back to a
-        # plain write on platforms where the os.open flags aren't honored.
-        payload = json.dumps(mem, ensure_ascii=False, indent=2)
+        _cache_path().parent.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(cleaned, ensure_ascii=False, indent=2)
         try:
             fd = os.open(
-                str(_CACHE_PATH),
+                str(_cache_path()),
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
                 stat.S_IRUSR | stat.S_IWUSR,  # 0o600
             )
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 f.write(payload)
         except OSError:
-            with open(_CACHE_PATH, "w", encoding="utf-8") as f:
+            with open(_cache_path(), "w", encoding="utf-8") as f:
                 f.write(payload)
+    except Exception:  # noqa: BLE001 - cache write failure must not break fetch
+        pass
+
+
+def load_memory() -> Dict[str, str]:
+    """Load the domain -> backend map, with expired entries dropped.
+
+    Best-effort: returns {} on any error. Honours SEARCHTS_NO_MEMORY (already
+    disabled by callers, but safe if called directly).
+    """
+    if not _memory_enabled():
+        return {}
+    raw = _load_raw()
+    out: Dict[str, str] = {}
+    dropped = False
+    for domain, val in raw.items():
+        if not isinstance(domain, str):
+            continue
+        backend = _entry_backend(val)
+        if backend is None:
+            dropped = True
+            continue
+        # String-only entries have no timestamp → treat as expired so stale
+        # cache files can never pin a domain forever.
+        if _entry_is_expired(val):
+            dropped = True
+            continue
+        out[domain] = backend
+    if dropped:
+        _write_raw(raw)
+    return out
+
+
+def remember(domain: str, backend: str) -> None:
+    """Record `backend` as the last winner for `domain`. Best-effort, never raises."""
+    if not domain or not backend:
+        return
+    if not _memory_enabled():
+        return
+    try:
+        raw = _load_raw()
+        raw[domain] = _make_entry(backend)
+        _write_raw(raw)
+    except Exception:  # noqa: BLE001 - cache write failure must not break fetch
+        pass
+
+
+def unpin(domain: str) -> None:
+    """Remove the remembered backend for `domain`. Best-effort, never raises.
+
+    Called when a remembered backend fails before walking the rest of the
+    ladder, so later fetches don't get stuck on a dead winner.
+    """
+    if not domain:
+        return
+    if not _memory_enabled():
+        return
+    try:
+        raw = _load_raw()
+        if domain in raw:
+            del raw[domain]
+            _write_raw(raw)
     except Exception:  # noqa: BLE001 - cache write failure must not break fetch
         pass
 
@@ -567,9 +707,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
 
     memory_on = use_memory and _memory_enabled()
     domain = registrable_domain(url) if memory_on else ""
+    remembered: Optional[str] = None
     if memory_on and domain:
+        # load_memory drops expired entries, so a remembered backend here is
+        # non-expired and safe to promote to the front of the ladder.
         remembered = load_memory().get(domain)
-        # Move a remembered, still-valid backend to the front of the ladder.
         if remembered and remembered in order:
             order.remove(remembered)
             order.insert(0, remembered)
@@ -589,6 +731,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 if reason:
                     attempts.append((backend, reason))
                     _tick(f"  {backend}: {reason}")
+                    if backend == remembered:
+                        unpin(domain)
+                        remembered = None
                     continue
                 text = html_to_text(body, url)
             elif backend == "Jina Reader":
@@ -597,6 +742,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 if reason:
                     attempts.append((backend, reason))
                     _tick(f"  {backend}: {reason}")
+                    if backend == remembered:
+                        unpin(domain)
+                        remembered = None
                     continue
                 text = body  # Jina already returns markdown
             elif backend == "stealth-browser":
@@ -605,10 +753,17 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 if reason:
                     attempts.append((backend, reason))
                     _tick(f"  {backend}: {reason}")
+                    if backend == remembered:
+                        unpin(domain)
+                        remembered = None
                     continue
                 text = html_to_text(body, url)
             else:
                 attempts.append((backend, "unknown-backend"))
+                _tick(f"  {backend}: unknown-backend")
+                if backend == remembered:
+                    unpin(domain)
+                    remembered = None
                 continue
 
             text = text or ""
@@ -631,6 +786,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             # fallback and escalate in case a richer backend renders more.
             attempts.append((backend, f"thin-{len(text)}b"))
             _tick(f"  {backend}: thin-{len(text)}b")
+            if backend == remembered:
+                # Remembered backend produced a thin result, not a clean win —
+                # unpin so the ladder isn't stuck on a flaky winner.
+                unpin(domain)
+                remembered = None
             if best is None or len(text) > len(best.text):
                 best = FetchResult(
                     backend,
@@ -643,6 +803,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             why = f"{type(e).__name__}: {e}"
             attempts.append((backend, why))
             _tick(f"  {backend}: {why}")
+            if backend == remembered:
+                unpin(domain)
+                remembered = None
             continue
 
     # Human-in-the-loop last resort. Runs BEFORE the `best` fallback below:

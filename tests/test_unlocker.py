@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 """Unit tests for the escalating open-source unlocker (no network)."""
 
+import json
+
 import pytest
 from conftest import Tripwire, tripwire
 
@@ -260,6 +262,8 @@ def tmp_cache(monkeypatch, tmp_path):
     cache = tmp_path / "unlocker_cache.json"
     monkeypatch.setattr(unlocker, "_CACHE_PATH", cache)
     monkeypatch.setattr(unlocker, "_CACHE_DIR", tmp_path)
+    # Honour SEARCHTS_CACHE_DIR if set in the environment; never hit ~/.searchts.
+    monkeypatch.setenv("SEARCHTS_CACHE_DIR", str(tmp_path))
     monkeypatch.delenv("SEARCHTS_NO_MEMORY", raising=False)
     return cache
 
@@ -348,6 +352,175 @@ def test_load_memory_best_effort_on_corrupt_file(tmp_cache):
     tmp_cache.write_text("{not valid json", encoding="utf-8")
     assert unlocker.load_memory() == {}  # never raises
 
+
+def test_load_memory_drops_expired_entries(tmp_cache):
+    # Write an entry with a timestamp 25h ago → expired.
+    from datetime import datetime, timedelta, timezone
+    old_ts = (datetime.now(timezone.utc) - timedelta(hours=25)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cache = {"site.test": {"backend": "Jina Reader", "ts": old_ts}}
+    tmp_cache.write_text(json.dumps(cache), encoding="utf-8")
+    assert unlocker.load_memory() == {}  # expired entry dropped
+    assert not tmp_cache.exists()  # disk GC on load, not only on remember/unpin
+
+
+def test_load_memory_keeps_fresh_entries(tmp_cache):
+    # Write an entry with a current timestamp → not expired.
+    cache = {"site.test": {"backend": "curl_cffi", "ts": unlocker._now_iso()}}
+    tmp_cache.write_text(json.dumps(cache), encoding="utf-8")
+    assert unlocker.load_memory() == {"site.test": "curl_cffi"}
+
+
+def test_load_memory_treats_string_only_as_expired(tmp_cache):
+    # Old cache format: {"domain": "backend"} → no ts → expired.
+    tmp_cache.write_text(json.dumps({"site.test": "curl_cffi"}), encoding="utf-8")
+    assert unlocker.load_memory() == {}  # string-only counts as no ts → expired
+    assert not tmp_cache.exists()
+
+
+def test_load_memory_drops_fresh_malformed_entries(tmp_cache):
+    # Fresh dict missing backend / garbage value — must leave disk, not only RAM.
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cache = {
+        "bad.test": {"ts": ts},  # no backend key
+        "good.test": {"backend": "curl_cffi", "ts": ts},
+        "num.test": 42,
+    }
+    tmp_cache.write_text(json.dumps(cache), encoding="utf-8")
+    assert unlocker.load_memory() == {"good.test": "curl_cffi"}
+    on_disk = json.loads(tmp_cache.read_text(encoding="utf-8"))
+    assert set(on_disk.keys()) == {"good.test"}
+    assert on_disk["good.test"]["backend"] == "curl_cffi"
+
+
+def test_expired_entry_not_promoted(tmp_cache, monkeypatch, stub_extract):
+    from datetime import datetime, timedelta, timezone
+    # Write an entry that's 24h+1 expired.
+    old_ts = (datetime.now(timezone.utc) - timedelta(hours=25)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    cache = {"site.test": {"backend": "Jina Reader", "ts": old_ts}}
+    tmp_cache.write_text(json.dumps(cache), encoding="utf-8")
+    order_seen = []
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi",
+        lambda url, timeout=30: (
+            order_seen.append("curl_cffi"),
+            (200, "C" * 800, url, {}),
+        )[1],
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_jina",
+        lambda url, timeout=40: (
+            order_seen.append("Jina Reader"),
+            (200, "J" * 800, url, {}),
+        )[1],
+    )
+    unlocker.fetch("https://site.test/page")
+    assert order_seen[0] == "curl_cffi"  # default order, expired entry not promoted
+
+
+def test_unpin_after_failure_of_remembered_backend(tmp_cache, monkeypatch, stub_extract):
+    # Remember Jina for this domain; Jina returns a challenge, curl wins.
+    unlocker.remember("site.test", "Jina Reader")
+    _set(
+        monkeypatch,
+        curl=(200, "C" * 800),
+        jina=(200, "Just a moment..."),
+    )
+    r = unlocker.fetch("https://site.test/page")
+    assert r.backend == "curl_cffi"
+    # Jina was unpinned and curl recorded as the new winner.
+    assert unlocker.load_memory() == {"site.test": "curl_cffi"}
+
+
+def test_unpin_after_thin_remembered_backend(tmp_cache, monkeypatch, stub_extract):
+    # Remember curl; curl returns thin, Jina wins with full content.
+    unlocker.remember("site.test", "curl_cffi")
+    _set(
+        monkeypatch,
+        curl=(200, "tiny"),
+        jina=(200, "J" * 800),
+    )
+    r = unlocker.fetch("https://site.test/page")
+    assert r.backend == "Jina Reader"
+    # curl was unpinned and Jina recorded as the new winner.
+    assert unlocker.load_memory() == {"site.test": "Jina Reader"}
+
+
+def test_unpin_after_exception_of_remembered_backend(tmp_cache, monkeypatch, stub_extract):
+    # Remember curl; curl raises, Jina wins.
+    unlocker.remember("site.test", "curl_cffi")
+    def boom(url, timeout=30):
+        raise ConnectionError("network down")
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", boom)
+    monkeypatch.setattr(unlocker, "_fetch_jina", lambda url, timeout=40: (200, "J" * 800, url, {}))
+    r = unlocker.fetch("https://site.test/page")
+    assert r.backend == "Jina Reader"
+    # curl was unpinned and Jina recorded as the new winner.
+    assert unlocker.load_memory() == {"site.test": "Jina Reader"}
+
+
+def test_unpin_after_failure_then_remember_new_winner(tmp_cache, monkeypatch, stub_extract):
+    # Remember Jina; Jina fails, curl wins. Cache should now pin curl.
+    unlocker.remember("site.test", "Jina Reader")
+    _set(
+        monkeypatch,
+        curl=(200, "C" * 800),
+        jina=(200, "Just a moment..."),
+    )
+    r1 = unlocker.fetch("https://site.test/page")
+    assert r1.backend == "curl_cffi"
+    assert unlocker.load_memory() == {"site.test": "curl_cffi"}
+    # Second fetch: curl is remembered and should be promoted.
+    order_seen = []
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda url, timeout=30: (
+            order_seen.append("curl_cffi"),
+            (200, "C" * 800, url, {}),
+        )[1],
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_jina",
+        lambda url, timeout=40: (
+            order_seen.append("Jina Reader"),
+            (200, "J" * 800, url, {}),
+        )[1],
+    )
+    r2 = unlocker.fetch("https://site.test/page")
+    assert r2.backend == "curl_cffi"
+    assert order_seen[0] == "curl_cffi"  # remembered winner tried first
+
+
+def test_memory_disabled_still_off_via_env(tmp_cache, monkeypatch, stub_extract):
+    monkeypatch.setenv("SEARCHTS_NO_MEMORY", "1")
+    # Pre-seed the cache file directly (bypassing remember, which checks env).
+    tmp_cache.write_text(
+        json.dumps({"site.test": {"backend": "Jina Reader", "ts": unlocker._now_iso()}}),
+        encoding="utf-8",
+    )
+    order_seen = []
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi",
+        lambda url, timeout=30: (
+            order_seen.append("curl_cffi"),
+            (200, "C" * 800, url, {}),
+        )[1],
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_jina",
+        lambda url, timeout=40: (
+            order_seen.append("Jina Reader"),
+            (200, "J" * 800, url, {}),
+        )[1],
+    )
+    unlocker.fetch("https://site.test/page")
+    # env off-switch: no promotion, no persistence.
+    assert order_seen[0] == "curl_cffi"
+    assert unlocker.load_memory() == {}
+
+# ── Feature D: human-in-the-loop CAPTCHA fallback ────────────────────────────
 
 # ── Feature D: human-in-the-loop CAPTCHA fallback ────────────────────────────
 
