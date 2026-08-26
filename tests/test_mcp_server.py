@@ -7,6 +7,7 @@ optional `mcp` dependency or a running stdio server.
 
 import asyncio
 import json
+import socket
 import threading
 from unittest.mock import patch
 
@@ -22,6 +23,7 @@ from searchts.integrations.mcp_server import (
     web_search,
 )
 from searchts.search import SearchError, SearchResult
+from searchts.ssrf import guard_mcp_url
 from searchts.unlocker import FetchResult, UnlockerError
 
 
@@ -299,5 +301,130 @@ def test_read_url_tool_yields_loop_while_blocked() -> None:
 
     assert browser_started.is_set()
     assert sibling_acked.is_set()
+
+
+# ── P3.6 SSRF guard ──────────────────────────────────────────────────────────
+
+
+# Hosts/IPs that must be rejected.
+_SSRF_BLOCKED = [
+    "file:///etc/passwd",                      # file scheme
+    "file://C:/Windows/win.ini",               # file scheme (win)
+    "data:text/html,<script>alert(1)</script>",  # data scheme
+    "ftp://127.0.0.1/",                        # non-http scheme
+    "http://127.0.0.1/",                       # loopback v4
+    "http://127.0.0.1:8080/admin",             # loopback v4 + port
+    "https://2130706433/",                     # decimal-encoded 127.0.0.1
+    "http://0x7f000001/",                      # hex-encoded 127.0.0.1
+    "http://[::1]/",                           # loopback v6
+    "http://localhost/",                       # loopback hostname
+    "http://localhost:9000/",                  # loopback hostname + port
+    "http://[::ffff:127.0.0.1]/",              # ipv4-mapped loopback
+    "http://169.254.0.1/",                     # link-local v4
+    "http://169.254.169.254/",                 # cloud metadata v4
+    "http://169.254.169.254/latest/meta-data/",  # AWS IMDS path
+    "https://metadata.google.internal/",       # GCP metadata host
+    "https://compute.metadata.google.internal/",  # GCP metadata subdomain
+    "http://metadata/",                        # generic metadata host
+    "http://[fd00:fd00:fd00::a9fe:a9fe]/",     # GCP metadata IPv6
+    "http://10.0.0.5/",                        # RFC1918 10/8
+    "http://172.16.0.1/",                      # RFC1918 172.16/12
+    "http://172.31.255.254/",                  # RFC1918 172.16/12 high
+    "http://192.168.1.1/",                     # RFC1918 192.168/16
+    "http://192.168.0.254:8000/",              # RFC1918 192.168/16 + port
+    "http://[fe80::1]/",                       # link-local v6
+]
+
+# Hosts/IPs that must be allowed (no live vendor hit — only the guard runs).
+_SSRF_ALLOWED = [
+    "http://example.com/",
+    "https://example.com/path?q=1",
+    "http://example.com:8080/page",
+    "https://1.2.3.4/",                         # public IP
+    "https://8.8.8.8/",                         # public DNS IP
+    "http://example.org",                       # no trailing slash
+    "news.ycombinator.com",                     # scheme-less, normalized to https
+    "http://[2606:4700:4700::1111]/",           # public v6
+]
+
+
+@pytest.mark.parametrize("url", _SSRF_BLOCKED)
+def test_ssrf_guard_rejects_dangerous(url):
+    err = guard_mcp_url(url, resolve_dns=False)
+    assert err is not None
+    assert err.startswith("Error: SSRF guard")
+    assert "http" not in err.split("SSRF guard:")[1].split("'")[0].strip()  # not a scheme bug
+
+
+@pytest.mark.parametrize("url", _SSRF_ALLOWED)
+def test_ssrf_guard_allows_public(url):
+    assert guard_mcp_url(url, resolve_dns=False) is None
+
+
+def test_ssrf_guard_rejects_via_dns_resolution(monkeypatch):
+    """A public-looking hostname that resolves to a blocked IP fails closed."""
+    host = "innocent.example.net"
+    # Resolve to loopback (and one public address to show first hit wins).
+    monkeypatch.setattr(
+        "socket.getaddrinfo",
+        lambda h, p, **kw: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0)),
+        ],
+    )
+    err = guard_mcp_url(f"http://{host}/", resolve_dns=True)
+    assert err is not None
+    assert "127.0.0.1" in err
+
+
+def test_ssrf_guard_fails_open_on_unresolvable(monkeypatch):
+    """An unresolvable public hostname does NOT hard-block (documented fail-open)."""
+    def _raise(*a, **k):
+        raise socket.gaierror("no address")
+    monkeypatch.setattr("socket.getaddrinfo", _raise)
+    assert guard_mcp_url("http://does-not-exist.example/", resolve_dns=True) is None
+
+
+def test_ssrf_guard_unknown_scheme_rejected():
+    # Any non-http(s) scheme is blocked (covers gopher, jar, javascript, etc.).
+    assert guard_mcp_url("gopher://127.0.0.1:70/") is not None
+    assert guard_mcp_url("javascript:alert(1)") is not None
+
+
+def test_read_url_blocks_ssrf_without_fetch(monkeypatch):
+    """read_url rejects a blocked URL before any unlocker.fetch call."""
+    called = {"fetch": False}
+    def _no_fetch(url):
+        called["fetch"] = True
+        raise AssertionError(f"fetch should not be reached for {url}")
+    monkeypatch.setattr("searchts.unlocker.fetch", _no_fetch)
+    out = read_url("http://169.254.169.254/")
+    assert out.startswith("Error: SSRF guard")
+    assert not called["fetch"]
+
+
+def test_fetch_asset_blocks_ssrf(monkeypatch):
+    monkeypatch.setattr("searchts.assets.get_asset", lambda u, out=None: None)
+    out = fetch_asset("file:///etc/passwd")
+    assert out.startswith("Error: SSRF guard")
+
+
+def test_grab_site_blocks_ssrf(monkeypatch):
+    monkeypatch.setattr("searchts.assets.grab", lambda u, o, read=False: {})
+    out = grab_site("http://127.0.0.1/")
+    assert out.startswith("Error: SSRF guard")
+
+
+def test_read_url_allows_public_example(monkeypatch):
+    monkeypatch.setattr(
+        "searchts.unlocker.fetch",
+        lambda u: FetchResult(
+            "curl_cffi", "# Title", 200,
+            final_url="https://example.com/", fetched_at="2026-08-26T00:00:00Z",
+        ),
+    )
+    data = json.loads(read_url("https://example.com"))
+    assert data["url"] == "https://example.com"
+    assert data["text"] == "# Title"
+
 
 
