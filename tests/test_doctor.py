@@ -69,6 +69,64 @@ class TestDoctor:
             },
         }
 
+    def test_check_all_quiet_by_default(self, tmp_config, monkeypatch, capsys):
+        monkeypatch.delenv("SEARCHTS_PROGRESS", raising=False)
+        monkeypatch.setattr(
+            doctor,
+            "get_all_channels",
+            lambda: [_StubChannel("web", "Web page", 0, "ok", "Can scrape web pages")],
+        )
+
+        doctor.check_all(tmp_config)
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
+    def test_check_all_progress_ticks_on_stderr(self, tmp_config, monkeypatch, capsys):
+        monkeypatch.setattr(
+            doctor,
+            "get_all_channels",
+            lambda: [
+                _StubChannel("web", "Web page", 0, "ok", "Can scrape web pages"),
+                _StubChannel("github", "GitHub", 0, "warn", "gh is not installed"),
+            ],
+        )
+
+        doctor.check_all(tmp_config, progress=True)
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == "checking web…\nchecking github…\n"
+
+    def test_check_all_progress_env_var(self, tmp_config, monkeypatch, capsys):
+        monkeypatch.setenv("SEARCHTS_PROGRESS", "1")
+        monkeypatch.setattr(
+            doctor,
+            "get_all_channels",
+            lambda: [_StubChannel("web", "Web page", 0, "ok", "Can scrape web pages")],
+        )
+
+        doctor.check_all(tmp_config)
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "checking web…" in captured.err
+
+    def test_check_all_progress_false_ignores_env(self, tmp_config, monkeypatch, capsys):
+        monkeypatch.setenv("SEARCHTS_PROGRESS", "1")
+        monkeypatch.setattr(
+            doctor,
+            "get_all_channels",
+            lambda: [_StubChannel("web", "Web page", 0, "ok", "Can scrape web pages")],
+        )
+
+        doctor.check_all(tmp_config, progress=False)
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
     def test_format_report(self):
         report = doctor.format_report(
             {

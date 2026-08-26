@@ -4,20 +4,42 @@
 Each channel knows how to check itself. Doctor just collects the results.
 """
 
+import os
+import sys
 from typing import Callable, Dict, Optional
 
 from searchts.channels import get_all_channels
 from searchts.config import Config
 
 
-def check_all(config: Config) -> Dict[str, dict]:
+def _tick(msg: str) -> None:
+    # Best-effort only: a closed/broken stderr must never abort a check.
+    try:
+        print(msg, file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
+
+
+def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict]:
     """Check all channels and return status dict.
 
     A single misbehaving channel must never take the whole report down,
     so per-channel exceptions degrade to status="error".
+
+    progress:
+        True: stderr ticks. False: never ticks (CLI ``--json``). None: follow
+        ``SEARCHTS_PROGRESS=1``. Library/MCP callers omit the arg so they stay
+        quiet unless the env is set.
     """
+    if progress is None:
+        progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
+            "1", "true", "True", "yes",
+        )
+
     results = {}
     for ch in get_all_channels():
+        if progress:
+            _tick(f"checking {ch.name}…")
         try:
             status, message = ch.check(config)
             active = getattr(ch, "active_backend", None)
