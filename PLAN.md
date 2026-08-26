@@ -70,7 +70,8 @@
 - [x] **P3.3** Domain memory: TTL (default 24h); un-pin remembered backend when that backend fails before walking the rest of the ladder
 - [x] **P3.4** UA: remove hardcoded Chrome 126; single `_UA_REAL` in unlocker, imported elsewhere; updated to current stable Chrome 152
 - [ ] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
-- [x] **P3.6** SSRF for **MCP only**: reject `file://`, `data:`, loopback, link-local, RFC1918, cloud metadata IPs; CLI stays unrestricted
+- [x] **P3.6** SSRF for **MCP only** (first layer): reject `file://`, `data:`, loopback, link-local, RFC1918, IPv6 ULA (`fc00::/7`), cloud metadata IPs; CLI stays unrestricted. Guard at MCP URL tools only — not the fetch ladder. *#105; hop checks are P3.6b.*
+- [ ] **P3.6b** Redirect / DNS-rebinding (follow-up, **not this sprint**): validate each connected destination and redirect target so `curl_cffi` / urllib / stealth `page.goto` cannot follow a public URL into RFC1918/loopback/metadata. Touches the unlocker ladder; keep CLI unrestricted for humans. Do **not** fold into P3.6. Distinct from **U5** (expand SSRF beyond MCP if HTTP transport ships).
 - [ ] **P3.7** Walled scorecard: public suite of real walls; publish pass *rate*; smoke suite stays separate
 
 **Unverified measurements (run before over-building)**
@@ -179,7 +180,8 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 | Doctor installs skill on text doctor | P0.2 |
 | WebChannel always `ok`, names full ladder | P0.1 |
 | MCP: no transcribe; Error strings as success text; low-level API breaks on mcp 2.x | P2.*, P4.1 |
-| No MCP URL allowlist | P3.6 |
+| No MCP URL allowlist (MCP first layer) | P3.6 |
+| Redirect / DNS-rebinding can skip the MCP URL check | P3.6b (parked) |
 | Docker omits browser | P4.4 |
 | constraints miss curl_cffi/trafilatura/ddgs | P0.5 |
 | release-please can tag with GITHUB_TOKEN | P0.6 |
@@ -194,7 +196,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 | Chrome 126 materially lowers stealth pass rate | P3.4 + P3.8 A/B | U2 |
 | Domain-memory poisoning is common in real use | P3.3 + P3.9 counters | U3 |
 | Jina privacy/rate limits pain users | Ship opt-out first; change default only on evidence | U4 |
-| SSRF matters beyond local stdio | P3.6 is cheap prep; revisit if HTTP MCP ever ships | U5 |
+| SSRF matters beyond local stdio | P3.6 is cheap MCP prep; **U5** = expand past MCP if HTTP ships; hop/redirect = **P3.6b** | U5 |
 | Thin "success" confuses models | Coupled to P3.2; re-run #22 session after | U6 |
 | Demand for MCP transcribe / marketplace plugin | Wait for issues or own workflows | U7 |
 
@@ -210,7 +212,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **U2 — UA A/B:** same URLs, stealth only, UA 126 vs current; ship P3.4 either way (stale UA is still wrong), invest further only if delta is large.
 - **U3 — Memory telemetry:** count remember-hit then fail; justifies TTL complexity.
 - **U4 — Jina default:** only flip to opt-in if privacy/rate-limit evidence appears.
-- **U5 — SSRF scope:** expand beyond MCP if transport is no longer local-only.
+- **U5 — SSRF scope:** expand beyond MCP if transport is no longer local-only. Per-hop redirect/rebinding on the ladder is **P3.6b**, not U5.
 - **U6 — Thin-content × agents:** after P3.2, re-check whether models retry correctly.
 - **U7 — Demand signals:** MCP `transcribe`, plugin installs, directory traffic — drive P4 priority, not vibes.
 
@@ -273,3 +275,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-26 | P3.3: domain memory TTL (24h default) + unpin on remembered-backend failure. |
 | 2026-08-26 | P3.4: drop hardcoded Chrome 126 UA; `_UA_REAL` single-sourced in unlocker, imported by search.py + share_extractors/_browser.py; updated to Chrome 152 stable. |
 | 2026-08-26 | P4.6 doctor slice: stderr ticks in check_all (progress=), CLI enables, --json keeps stdout clean. |
+| 2026-08-26 | **P3.6b** parked: per-hop SSRF (redirect / DNS rebinding) after P3.6 first-layer MCP guard. Not U5. |
