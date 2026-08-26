@@ -170,13 +170,14 @@ def _memory_enabled() -> bool:
 
 
 def jina_enabled() -> bool:
-    """Whether the Jina Reader rung is on the default ladder (P3.5 / Q4).
+    """Whether the Jina Reader relay is allowed (P3.5 / Q4).
 
     Default is **on**. ``SEARCHTS_NO_JINA=1`` (or true/yes) disables the
     third-party relay so URLs never leave the machine via r.jina.ai.
-    Config key ``jina: false`` (YAML under ~/.searchts) also disables when the
-    env is unset. Explicit ``backends=[..., "Jina Reader"]`` still runs Jina —
-    only the default ladder is filtered.
+    Config key ``jina: false`` (YAML under ``~/.searchts``) also disables when
+    the env is unset. When disabled, the Jina rung is stripped from **every**
+    ladder walk — including an explicit ``backends=[..., "Jina Reader"]`` list —
+    so opt-out is a hard privacy switch, not only a default-order tweak.
     """
     no = os.environ.get("SEARCHTS_NO_JINA", "").strip().lower()
     if no in ("1", "true", "yes", "on"):

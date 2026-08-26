@@ -914,19 +914,30 @@ def test_fetch_stealth_wrapper_uses_impl(monkeypatch):
     assert headers["x"] == "1"
 
 
+def _isolate_jina_config(monkeypatch):
+    """Keep jina_enabled() off the user's ~/.searchts config.yaml."""
+    class _Empty:
+        data: dict = {}
+
+    monkeypatch.setattr("searchts.config.Config", lambda *a, **k: _Empty())
+
+
 def test_jina_enabled_default_on(monkeypatch):
     monkeypatch.delenv("SEARCHTS_NO_JINA", raising=False)
     monkeypatch.delenv("SEARCHTS_JINA", raising=False)
+    _isolate_jina_config(monkeypatch)
     assert unlocker.jina_enabled() is True
 
 
 def test_jina_enabled_no_jina_env(monkeypatch):
     monkeypatch.setenv("SEARCHTS_NO_JINA", "1")
+    _isolate_jina_config(monkeypatch)
     assert unlocker.jina_enabled() is False
 
 
 def test_fetch_skips_jina_when_disabled(monkeypatch):
     monkeypatch.setenv("SEARCHTS_NO_JINA", "1")
+    _isolate_jina_config(monkeypatch)
     calls = []
 
     def curl(url, timeout=40):
@@ -955,6 +966,7 @@ def test_fetch_skips_jina_when_disabled(monkeypatch):
 def test_fetch_uses_jina_when_enabled(monkeypatch):
     monkeypatch.delenv("SEARCHTS_NO_JINA", raising=False)
     monkeypatch.delenv("SEARCHTS_JINA", raising=False)
+    _isolate_jina_config(monkeypatch)
     calls = []
 
     def curl(url, timeout=40):
