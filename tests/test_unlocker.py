@@ -262,6 +262,8 @@ def tmp_cache(monkeypatch, tmp_path):
     cache = tmp_path / "unlocker_cache.json"
     monkeypatch.setattr(unlocker, "_CACHE_PATH", cache)
     monkeypatch.setattr(unlocker, "_CACHE_DIR", tmp_path)
+    # Honour SEARCHTS_CACHE_DIR if set in the environment; never hit ~/.searchts.
+    monkeypatch.setenv("SEARCHTS_CACHE_DIR", str(tmp_path))
     monkeypatch.delenv("SEARCHTS_NO_MEMORY", raising=False)
     return cache
 
@@ -358,6 +360,7 @@ def test_load_memory_drops_expired_entries(tmp_cache):
     cache = {"site.test": {"backend": "Jina Reader", "ts": old_ts}}
     tmp_cache.write_text(json.dumps(cache), encoding="utf-8")
     assert unlocker.load_memory() == {}  # expired entry dropped
+    assert not tmp_cache.exists()  # disk GC on load, not only on remember/unpin
 
 
 def test_load_memory_keeps_fresh_entries(tmp_cache):
@@ -371,6 +374,7 @@ def test_load_memory_treats_string_only_as_expired(tmp_cache):
     # Old cache format: {"domain": "backend"} → no ts → expired.
     tmp_cache.write_text(json.dumps({"site.test": "curl_cffi"}), encoding="utf-8")
     assert unlocker.load_memory() == {}  # string-only counts as no ts → expired
+    assert not tmp_cache.exists()
 
 
 def test_expired_entry_not_promoted(tmp_cache, monkeypatch, stub_extract):

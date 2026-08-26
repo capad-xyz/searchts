@@ -303,17 +303,22 @@ def load_memory() -> Dict[str, str]:
         return {}
     raw = _load_raw()
     out: Dict[str, str] = {}
+    dropped = False
     for domain, val in raw.items():
         if not isinstance(domain, str):
             continue
         backend = _entry_backend(val)
         if backend is None:
+            dropped = True
             continue
         # String-only entries have no timestamp → treat as expired so stale
         # cache files can never pin a domain forever.
         if _entry_is_expired(val):
+            dropped = True
             continue
         out[domain] = backend
+    if dropped:
+        _write_raw(raw)
     return out
 
 
