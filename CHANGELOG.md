@@ -2,7 +2,7 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
-## [0.7.3](https://github.com/capad-xyz/searchts/compare/v0.7.2...v0.7.3) (2026-08-27)
+## [Unreleased]
 
 
 ### Added

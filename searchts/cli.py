@@ -1852,7 +1852,8 @@ def _cmd_check_update():
 
     print(f"Current version: v{__version__}")
     # One best-effort tick: the GitHub round-trip can block a few seconds.
-    print("checking for updates…", file=sys.stderr, flush=True)
+    if sys.stderr is not None:
+        print("checking for updates…", file=sys.stderr, flush=True)
     release_url = "https://api.github.com/repos/capad-xyz/searchts/releases/latest"
     commit_url = "https://api.github.com/repos/capad-xyz/searchts/commits/main"
 
@@ -1923,7 +1924,8 @@ def _cmd_watch():
     issues = []
 
     # Check channels
-    print("checking channels…", file=sys.stderr, flush=True)
+    if sys.stderr is not None:
+        print("checking channels…", file=sys.stderr, flush=True)
     results = check_all(config)
     ok = sum(1 for r in results.values() if r["status"] == "ok")
     total = len(results)
@@ -1939,7 +1941,8 @@ def _cmd_watch():
     update_available = False
     new_version = ""
     release_body = ""
-    print("checking for updates…", file=sys.stderr, flush=True)
+    if sys.stderr is not None:
+        print("checking for updates…", file=sys.stderr, flush=True)
     resp, err, _attempts = _github_get_with_retry(
         "https://api.github.com/repos/capad-xyz/searchts/releases/latest",
         timeout=10,

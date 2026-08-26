@@ -271,7 +271,8 @@ def test_grab_ticks_fetch_and_assets(monkeypatch, tmp_path, capsys):
     assets.grab("https://demo.test/", str(tmp_path / "g"), progress=True)
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert captured.err == "fetching page\n" or captured.err == "fetching page…\ndownloading assets…\n"
+    # Both phase ticks must land on stderr (not just "fetching page").
+    assert "fetching page" in captured.err and "downloading assets" in captured.err
 
 
 def test_get_asset_progress_false_is_quiet(monkeypatch, tmp_path, capsys):

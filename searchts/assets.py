@@ -32,6 +32,8 @@ def _tick(progress: bool, msg: str) -> None:
     # Best-effort only: a closed/broken stderr must never abort a fetch/grab.
     if not progress:
         return
+    if sys.stderr is None:
+        return
     try:
         print(msg, file=sys.stderr, flush=True)
     except (OSError, ValueError):
