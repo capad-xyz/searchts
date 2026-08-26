@@ -70,7 +70,7 @@
 - [x] **P3.3** Domain memory: TTL (default 24h); un-pin remembered backend when that backend fails before walking the rest of the ladder
 - [x] **P3.4** UA: remove hardcoded Chrome 126; single `_UA_REAL` in unlocker, imported elsewhere; updated to current stable Chrome 152
 - [ ] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
-- [ ] **P3.6** SSRF for **MCP only**: reject `file://`, `data:`, loopback, link-local, RFC1918, cloud metadata IPs; CLI stays unrestricted
+- [x] **P3.6** SSRF for **MCP only**: reject `file://`, `data:`, loopback, link-local, RFC1918, cloud metadata IPs; CLI stays unrestricted
 - [ ] **P3.7** Walled scorecard: public suite of real walls; publish pass *rate*; smoke suite stays separate
 
 **Unverified measurements (run before over-building)**

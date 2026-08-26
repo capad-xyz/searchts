@@ -162,10 +162,15 @@ def read_url(url: str) -> str:
     Returns a clear error string (rather than raising) when every backend fails,
     so the MCP layer surfaces a readable message to the agent.
     """
-    from searchts import sanitize, unlocker
+    from searchts import sanitize, ssrf, unlocker
 
     if not url:
         return "Error: read_url requires a 'url' argument."
+    # P3.6: an agent reaching read_url over MCP must never hit internal / cloud
+    # metadata targets. Returns an Error string (fail closed) when blocked.
+    blocked = ssrf.guard_mcp_url(url)
+    if blocked:
+        return blocked
     try:
         result = unlocker.fetch(url)
     except unlocker.UnlockerError as e:
@@ -229,10 +234,14 @@ def fetch_asset(url: str, out_dir: str = "") -> str:
     """
     import mimetypes
 
-    from searchts import assets
+    from searchts import assets, ssrf
 
     if not url:
         return "Error: fetch_asset requires a 'url' argument."
+    # P3.6: same SSRF boundary as read_url.
+    blocked = ssrf.guard_mcp_url(url)
+    if blocked:
+        return blocked
     try:
         path = assets.get_asset(url, out_dir or None)
     except assets.AssetError as e:
@@ -254,10 +263,14 @@ def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
     """
     from urllib.parse import urlparse
 
-    from searchts import assets
+    from searchts import assets, ssrf
 
     if not url:
         return "Error: grab_site requires a 'url' argument."
+    # P3.6: same SSRF boundary as read_url.
+    blocked = ssrf.guard_mcp_url(url)
+    if blocked:
+        return blocked
     host = urlparse(assets.normalize(url)).netloc.replace(":", "_") or "site"
     out = out_dir or f"searchts-grab-{host}"
     try:
