@@ -7,7 +7,9 @@ not a bot-wall challenge page:
   1. ``curl_cffi``      local fetch impersonating a real Chrome (TLS/JA3 + HTTP2
                         fingerprint). Beats user-agent and fingerprint filters.
   2. ``Jina Reader``    free JS-rendering relay (r.jina.ai); good when a page
-                        only renders content after JavaScript.
+                        only renders content after JavaScript. Default on;
+                        set ``SEARCHTS_NO_JINA=1`` or config ``jina: false`` to
+                        skip this third-party hop (URLs are sent to r.jina.ai).
   3. ``stealth-browser`` lazy headless browser for live JS challenges (tier-2,
                         undetected Chromium via patchright; launched only when
                         the lighter rungs fail).
@@ -165,6 +167,41 @@ _MULTI_SUFFIXES = frozenset({
 def _memory_enabled() -> bool:
     """Global off-switch via env var (SEARCHTS_NO_MEMORY=1)."""
     return os.environ.get("SEARCHTS_NO_MEMORY", "") not in ("1", "true", "True", "yes")
+
+
+def jina_enabled() -> bool:
+    """Whether the Jina Reader relay is allowed (P3.5 / Q4).
+
+    Default is **on**. ``SEARCHTS_NO_JINA=1`` (or true/yes) disables the
+    third-party relay so URLs never leave the machine via r.jina.ai.
+    Config key ``jina: false`` (YAML under ``~/.searchts``) also disables when
+    the env is unset. When disabled, the Jina rung is stripped from **every**
+    ladder walk — including an explicit ``backends=[..., "Jina Reader"]`` list —
+    so opt-out is a hard privacy switch, not only a default-order tweak.
+    """
+    no = os.environ.get("SEARCHTS_NO_JINA", "").strip().lower()
+    if no in ("1", "true", "yes", "on"):
+        return False
+    # Optional positive/negative via SEARCHTS_JINA (env beats YAML).
+    j = os.environ.get("SEARCHTS_JINA", "").strip().lower()
+    if j in ("0", "false", "no", "off"):
+        return False
+    if j in ("1", "true", "yes", "on"):
+        return True
+    try:
+        from searchts.config import Config
+        raw = Config().data.get("jina", True)
+    except Exception:  # noqa: BLE001 - config must never break fetch
+        return True
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return bool(raw)
+    if isinstance(raw, str) and raw.strip().lower() in ("0", "false", "no", "off"):
+        return False
+    return True
+
+
 
 
 def registrable_domain(url: str) -> str:
@@ -703,7 +740,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             scrub,
         )
 
-    order = list(backends or DEFAULT_BACKENDS)
+    order = list(backends if backends is not None else DEFAULT_BACKENDS)
+    if not jina_enabled():
+        order = [b for b in order if b != "Jina Reader"]
 
     memory_on = use_memory and _memory_enabled()
     domain = registrable_domain(url) if memory_on else ""

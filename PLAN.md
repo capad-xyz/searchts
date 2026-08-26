@@ -69,7 +69,7 @@
 - [x] **P3.10** MCP stealth: async `read_url` + `asyncio.to_thread`; Reddit interstitial + login phrases; concurrency test via registered `call_tool` — #96
 - [x] **P3.3** Domain memory: TTL (default 24h); un-pin remembered backend when that backend fails before walking the rest of the ladder
 - [x] **P3.4** UA: remove hardcoded Chrome 126; single `_UA_REAL` in unlocker, imported elsewhere; updated to current stable Chrome 152
-- [ ] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
+- [x] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
 - [x] **P3.6** SSRF for **MCP only** (first layer): reject `file://`, `data:`, loopback, link-local, RFC1918, IPv6 ULA (`fc00::/7`), cloud metadata IPs; CLI stays unrestricted. Guard at MCP URL tools only — not the fetch ladder. *#105; hop checks are P3.6b.*
 - [ ] **P3.6b** Redirect / DNS-rebinding (follow-up, **not this sprint**): validate each connected destination and redirect target so `curl_cffi` / urllib / stealth `page.goto` cannot follow a public URL into RFC1918/loopback/metadata. Touches the unlocker ladder; keep CLI unrestricted for humans. Do **not** fold into P3.6. Distinct from **U5** (expand SSRF beyond MCP if HTTP transport ships).
 - [ ] **P3.7** Walled scorecard: public suite of real walls; publish pass *rate*; smoke suite stays separate
@@ -99,7 +99,7 @@
 - [x] **X1** After P0.7: smoke vs walled; thin is not a pass (posted 2026-08-20)
 - [ ] **X2** After P1 demo: 403 → agent calls `read_url` (issue #22). *Not posted. Need cleaner MCP-only / no-skill session than 2026-08-22/25 anecdotes.*
 - [ ] **X3** After P3.1+P3.2: one wall before/after. *Evidence ready: Reddit hot was “200 + challenge success” → now `Error: all backends failed`. Draft in Notion. **Ready to post.** Do not claim bypass.*
-- [ ] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`. *Code on main (#98); needs one real host stdio smoke before posting.*
+- [x] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`. *Posted 2026-08-26 (`@aadarsh_io`). Host stdio smoke done.*
 - [ ] Cadence ≤2 posts/week; no chore tweets (pins, dead keys, YAML)
 - [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article drafted in Notion; publish same week as X2/X3.
 - [x] **CI** PRs: lint + typecheck + version-sync + ubuntu 3.12 tests. Full matrix + wheel-gate on `main` only.
@@ -276,3 +276,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-26 | P3.4: drop hardcoded Chrome 126 UA; `_UA_REAL` single-sourced in unlocker, imported by search.py + share_extractors/_browser.py; updated to Chrome 152 stable. |
 | 2026-08-26 | P4.6 doctor slice: stderr ticks in check_all (progress=), CLI enables, --json keeps stdout clean. |
 | 2026-08-26 | **P3.6b** parked: per-hop SSRF (redirect / DNS rebinding) after P3.6 first-layer MCP guard. Not U5. |
+| 2026-08-26 | P3.5: Jina stays default; document r.jina.ai sees URLs; `SEARCHTS_NO_JINA=1` / config `jina: false`. |
+| 2026-08-26 | **X4** posted: mcp 2.x no longer kills `mcp serve`. |
