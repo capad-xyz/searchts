@@ -71,14 +71,26 @@ Each provider is a drop-in plugin module (`searchts/share_extractors/`); if a pr
 
 ## Install
 
-```bash
-pipx install searchts            # recommended: global, isolated CLI
-# or
-pip install searchts
+Keep it (global isolated CLI, MCP extra included):
 
-# optional extras
-pip install "searchts[browser]" && patchright install chromium   # stealth-browser tier
-pip install "searchts[mcp]"                                       # MCP server for agents
+```bash
+pipx install "searchts[mcp]"
+```
+
+Try it without installing (one-shot, copy-paste):
+
+```bash
+uvx --from "searchts[mcp]" searchts <verb>
+```
+
+venv / packaging only (not the recommended path for the CLI):
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install "searchts[mcp]"
+# optional stealth-browser extra, still venv-only:
+# pip install "searchts[browser]" && patchright install chromium
 ```
 
 ## Quickstart
@@ -107,10 +119,13 @@ Add searchts to your agent in one line - as an MCP server, or as a Claude Code s
 Two ways, both one command:
 
 ```bash
-# 1) MCP: gives the agent always-on read_url + web_search + fetch_asset + grab_site + get_status tools
-pip install "searchts[mcp]"
-searchts mcp install          # prints the wiring, e.g. for Claude Code:
-                              #   claude mcp add searchts -- searchts mcp serve
+# 1) MCP: always-on read_url + web_search + fetch_asset + grab_site + get_status
+# Try / no PATH:
+uvx --from "searchts[mcp]" searchts mcp serve
+# Keep (pipx), then register:
+#   claude mcp add searchts -- searchts mcp serve
+# If the host cannot see the pipx bin: uvx (above) or `pipx which searchts`
+searchts mcp install          # prints the same wiring
 
 # 2) Slash command: type /searchts <url-or-query> in Claude Code
 searchts skill install        # writes ~/.claude/commands/searchts.md

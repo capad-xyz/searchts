@@ -28,4 +28,4 @@
 ## Optional
 
 - [SKILL.md](https://github.com/capad-xyz/searchts/blob/main/searchts/skill/SKILL.md): Integration guide for AI agent frameworks (OpenClaw, Claude Code, etc.)
-- [PyPI Package](https://pypi.org/project/searchts/): `pip install searchts`
+- [PyPI Package](https://pypi.org/project/searchts/): `pipx install "searchts[mcp]"` (keep); `uvx --from "searchts[mcp]" searchts <verb>` (try)

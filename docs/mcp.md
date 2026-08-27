@@ -7,16 +7,26 @@ first-class tools — no shelling out to the CLI. It speaks stdio (JSON-RPC) and
 
 ## Install & wire up
 
+Keep the CLI (pipx, MCP extra included):
+
 ```bash
-pip install "searchts[mcp]"
+pipx install "searchts[mcp]"
 searchts mcp install          # prints the exact wiring for your host
 ```
 
-For Claude Code that is:
+Try / no install / host cannot see the pipx bin:
+
+```bash
+uvx --from "searchts[mcp]" searchts mcp serve
+```
+
+For Claude Code after pipx:
 
 ```bash
 claude mcp add searchts -- searchts mcp serve
 ```
+
+If the agent host cannot see pipx's bin directory, use the `uvx` one-liner above, or point `command` at `pipx which searchts`. `pip install "searchts[mcp]"` is venv / packaging only.
 
 For Cursor / Claude Desktop, add to your MCP config (see also `config/mcporter.json`):
 
