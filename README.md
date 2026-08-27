@@ -143,11 +143,17 @@ for hit in search("open source vector db", max_results=5):
 
 ## Does it actually work?
 
-Rather than take our word for it, searchts ships a reproducible **smoke** benchmark: it runs the unlocker over a small public page set and reports how many it read — keyless — and which tier carried each. A short body under the unlocker's minimum-content threshold is a fail, not a pass. Hard bot-walls belong in a local case file, not this suite — see [benchmarks/README.md](https://github.com/capad-xyz/searchts/blob/main/benchmarks/README.md).
+Rather than take our word for it, searchts ships a reproducible **two-suite** benchmark: it runs the unlocker over two page sets and reports how many it read — keyless — and which tier carried each.
+
+- **Smoke** — a small public page set (control, open docs, AI-chat share links). A regression canary, *not* evidence about hard bot-walls.
+- **Walled** — real vendors that restrict bots (Reddit, LinkedIn login wall, a Cloudflare/DataDome-class site, X, Booking). A short body under the unlocker's minimum-content threshold is a fail, not a pass; expected walled failures are reported honestly, not papered over with 100%.
+
+These two are reported **separately** on purpose — the smoke number is not "does it work on walls." See [benchmarks/README.md](https://github.com/capad-xyz/searchts/blob/main/benchmarks/README.md).
 
 ```bash
-python -m benchmarks.run              # print a scorecard
-python -m benchmarks.run --out docs/  # write docs/scorecard.md + results.json
+python -m benchmarks.run                       # both suites, print a scorecard
+python -m benchmarks.run --suite walled       # the real walled pass rate only
+python -m benchmarks.run --out docs/          # write docs/scorecard.md + results.json
 ```
 
 Latest run: [docs/scorecard.md](https://github.com/capad-xyz/searchts/blob/main/docs/scorecard.md). Add your own targets — see [benchmarks/README.md](https://github.com/capad-xyz/searchts/blob/main/benchmarks/README.md).

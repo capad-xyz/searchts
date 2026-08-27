@@ -72,7 +72,7 @@
 - [x] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
 - [x] **P3.6** SSRF for **MCP only** (first layer): reject `file://`, `data:`, loopback, link-local, RFC1918, IPv6 ULA (`fc00::/7`), cloud metadata IPs; CLI stays unrestricted. Guard at MCP URL tools only — not the fetch ladder. *#105; hop checks are P3.6b.*
 - [ ] **P3.6b** Redirect / DNS-rebinding (follow-up, **not this sprint**): validate each connected destination and redirect target so `curl_cffi` / urllib / stealth `page.goto` cannot follow a public URL into RFC1918/loopback/metadata. Touches the unlocker ladder; keep CLI unrestricted for humans. Do **not** fold into P3.6. Distinct from **U5** (expand SSRF beyond MCP if HTTP transport ships).
-- [ ] **P3.7** Walled scorecard: public suite of real walls; publish pass *rate*; smoke suite stays separate
+- [x] **P3.7** Walled scorecard: public suite of real walls; publish pass *rate*; smoke suite stays separate ([#P3.7](https://github.com/capad-xyz/searchts/pull/P3.7))
 
 **Unverified measurements (run before over-building)**
 
@@ -288,3 +288,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-26 | **X4** posted: mcp 2.x no longer kills `mcp serve`. |
 | 2026-08-26 | P4.6 search: provider attempt ticks via progress param (stderr), --json silent — #110 |
 | 2026-08-27 | P4.6 media + verb audit: transcribe/grab/get/check-update/watch stderr ticks — #109 |
+| 2026-08-27 | **P3.7** walled scorecard: split smoke (open pages) vs walled (Reddit/LinkedIn/Cloudflare/DataDome/X/Booking) suites; per-suite honest pass rates; `--suite smoke|walled|all`; smoke-only committed numbers in docs/scorecard.md, walled documented as not-yet-measured (run from residential IP). |
