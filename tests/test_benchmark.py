@@ -387,8 +387,10 @@ def test_plain_flag_keeps_raw_markdown_even_on_tty(monkeypatch):
 
 def test_run_case_ticks_stderr(capsys):
     case = Case("reddit-hot", "https://r.test", "reddit", suite="walled")
+    seen = {}
 
     def fake_fetch(url, **kwargs):
+        seen.update(kwargs)
         return FetchResult("curl_cffi", "x" * 5000, 200)
 
     with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
@@ -396,12 +398,15 @@ def test_run_case_ticks_stderr(capsys):
     captured = capsys.readouterr()
     assert "reddit-hot" in captured.err
     assert captured.out == ""
+    assert seen.get("progress") is True
 
 
 def test_run_case_silent_without_progress(capsys):
     case = Case("reddit-hot", "https://r.test", "reddit", suite="walled")
+    seen = {}
 
     def fake_fetch(url, **kwargs):
+        seen.update(kwargs)
         return FetchResult("curl_cffi", "x" * 5000, 200)
 
     with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
@@ -409,12 +414,15 @@ def test_run_case_silent_without_progress(capsys):
     captured = capsys.readouterr()
     assert captured.err == ""
     assert captured.out == ""
+    assert seen.get("progress") is False
 
 
 def test_json_flag_does_not_tick(monkeypatch, capsys):
     monkeypatch.setattr(bench.sys.stdout, "isatty", lambda: True)
+    seen = []
 
     def fake_fetch(url, **kwargs):
+        seen.append(kwargs.get("progress"))
         return FetchResult("curl_cffi", "x" * 5000, 200)
 
     with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
@@ -423,6 +431,7 @@ def test_json_flag_does_not_tick(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert "…" not in captured.err
     assert captured.out.lstrip().startswith("{")
+    assert seen and all(p is False for p in seen)
 
 
 def test_main_uses_rich_when_stdout_is_tty(monkeypatch, capsys):
