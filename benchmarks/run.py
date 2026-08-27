@@ -21,16 +21,15 @@ from typing import IO
 from .cases import Case, load_cases
 
 _SUMMARY_ORDER = ("smoke", "walled")
-_PROGRESS = False
 
 
 def _tick(name: str) -> None:
-    """Best-effort per-case progress tick for interactive TTY runs.
+    """Best-effort per-case progress tick (P4.6 pattern).
 
     Prints ``{name}…`` to stderr and flushes. Swallows ``OSError``/``ValueError``
-    and is a no-op when stderr is missing or progress is disabled.
+    and is a no-op when stderr is missing. Callers decide *whether* to tick.
     """
-    if not _PROGRESS or sys.stderr is None:
+    if sys.stderr is None:
         return
     try:
         print(f"{name}…", file=sys.stderr, flush=True)
@@ -38,11 +37,12 @@ def _tick(name: str) -> None:
         pass
 
 
-def run_case(case: Case) -> dict:
+def run_case(case: Case, *, progress: bool = False) -> dict:
     """Fetch one case through the unlocker; never raises — records the outcome."""
     from searchts import unlocker
 
-    _tick(case.name)
+    if progress:
+        _tick(case.name)
     t0 = time.perf_counter()
     try:
         # use_memory=False so a cached per-domain winner doesn't skew the ladder.
@@ -79,8 +79,8 @@ def run_case(case: Case) -> dict:
         }
 
 
-def run_benchmark(cases: list[Case]) -> list[dict]:
-    return [run_case(c) for c in cases]
+def run_benchmark(cases: list[Case], *, progress: bool = False) -> list[dict]:
+    return [run_case(c, progress=progress) for c in cases]
 
 
 def summarize(results: list[dict]) -> dict:
@@ -216,7 +216,6 @@ def print_scorecard(md: str, *, use_rich: bool, file: IO[str] | None = None) -> 
 
 
 def main(argv: list[str] | None = None) -> int:
-    global _PROGRESS
     ap = argparse.ArgumentParser(
         prog="python -m benchmarks.run",
         description="Measure how often searchts reads the smoke- and walled-suite pages.",
@@ -237,9 +236,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
-    _PROGRESS = (not args.json) and sys.stdout.isatty() and (sys.stderr is not None)
+    # Ticks: stderr only, never stdout. Off for --json and when stdout is piped.
+    progress = (not args.json) and sys.stdout.isatty()
     suite_filter = None if args.suite == "all" else args.suite
-    results = run_benchmark(load_cases(args.cases, suite=suite_filter))
+    results = run_benchmark(
+        load_cases(args.cases, suite=suite_filter), progress=progress
+    )
     summary = summarize(results)
 
     if args.json:

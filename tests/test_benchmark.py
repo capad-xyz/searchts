@@ -361,7 +361,7 @@ def test_print_scorecard_rich_renders_markdown(capsys):
 def test_out_writes_plain_markdown_to_file(tmp_path, monkeypatch):
     """`--out DIR` must always write plain markdown, never Rich markup."""
     monkeypatch.setattr(bench.sys, "stdout", _fake_tty_stdout())
-    monkeypatch.setattr(bench, "run_benchmark", lambda cases: [_smoke_result_row()])
+    monkeypatch.setattr(bench, "run_benchmark", lambda cases, **kwargs: [_smoke_result_row()])
     rc = bench.main(["--out", str(tmp_path)])
     assert rc == 0
     md = (tmp_path / "scorecard.md").read_text(encoding="utf-8")
@@ -376,13 +376,53 @@ def test_plain_flag_keeps_raw_markdown_even_on_tty(monkeypatch):
     """`--plain` must override a TTY stdout so piped-style output is preserved."""
     fake = _CapturingTtyStdout()
     monkeypatch.setattr(bench.sys, "stdout", fake)
-    monkeypatch.setattr(bench, "run_benchmark", lambda cases: [_smoke_result_row()])
+    monkeypatch.setattr(bench, "run_benchmark", lambda cases, **kwargs: [_smoke_result_row()])
     rc = bench.main(["--plain"])
     assert rc == 0
     out = fake.text()
     assert out.startswith("# Unlocker benchmark")
     # Raw markdown markers still present; Rich would have consumed them.
     assert "## Smoke" in out
+
+
+def test_run_case_ticks_stderr(capsys):
+    case = Case("reddit-hot", "https://r.test", "reddit", suite="walled")
+
+    def fake_fetch(url, **kwargs):
+        return FetchResult("curl_cffi", "x" * 5000, 200)
+
+    with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+        bench.run_case(case, progress=True)
+    captured = capsys.readouterr()
+    assert "reddit-hot" in captured.err
+    assert captured.out == ""
+
+
+def test_run_case_silent_without_progress(capsys):
+    case = Case("reddit-hot", "https://r.test", "reddit", suite="walled")
+
+    def fake_fetch(url, **kwargs):
+        return FetchResult("curl_cffi", "x" * 5000, 200)
+
+    with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+        bench.run_case(case, progress=False)
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+
+
+def test_json_flag_does_not_tick(monkeypatch, capsys):
+    monkeypatch.setattr(bench.sys.stdout, "isatty", lambda: True)
+
+    def fake_fetch(url, **kwargs):
+        return FetchResult("curl_cffi", "x" * 5000, 200)
+
+    with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+        rc = bench.main(["--json", "--suite", "smoke"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "…" not in captured.err
+    assert captured.out.lstrip().startswith("{")
 
 
 def test_main_uses_rich_when_stdout_is_tty(monkeypatch, capsys):
@@ -395,7 +435,7 @@ def test_main_uses_rich_when_stdout_is_tty(monkeypatch, capsys):
         Console(file=out).print(Markdown(md))
 
     monkeypatch.setattr(bench.sys, "stdout", _fake_tty_stdout())
-    monkeypatch.setattr(bench, "run_benchmark", lambda cases: [_smoke_result_row()])
+    monkeypatch.setattr(bench, "run_benchmark", lambda cases, **kwargs: [_smoke_result_row()])
     monkeypatch.setattr(bench, "print_scorecard", fake_print)
     rc = bench.main([])
     assert rc == 0
