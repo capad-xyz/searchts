@@ -6,6 +6,7 @@ touching the network. Cases are tagged `smoke` vs `walled` and the runner can be
 filtered with `load_cases(suite=)` and `python -m benchmarks.run --suite`.
 """
 
+from io import StringIO
 from unittest.mock import patch
 
 import pytest
@@ -280,3 +281,165 @@ def test_walled_run_all_fail_records_zero_rate():
     assert s["by_suite"]["walled"]["total"] == 2
     assert s["by_suite"]["walled"]["pass_rate"] == 0.0
     assert all(not r["ok"] for r in results)
+
+
+# ── TTY / Rich rendering ─────────────────────────────────────────────────────
+
+
+def _smoke_result_row():
+    return {
+        "name": "ok",
+        "url": "https://ok.test",
+        "category": "control",
+        "suite": "smoke",
+        "ok": True,
+        "backend": "curl_cffi",
+        "status": 200,
+        "chars": 5000,
+        "seconds": 0.1,
+        "error": None,
+    }
+
+
+def _fake_tty_stdout():
+    """A minimal file-like stand-in whose isatty() is True; not connected to capsys."""
+    return type(
+        "FakeTtyStdout",
+        (),
+        {
+            "isatty": staticmethod(lambda: True),
+            "write": staticmethod(lambda s: None),
+            "flush": staticmethod(lambda: None),
+        },
+    )()
+
+
+class _CapturingTtyStdout:
+    """File-like whose isatty() is True and whose write() is captured for asserts.
+
+    Lets us assert that --plain emits raw markdown even on a TTY: capsys
+    would not see the writes (it captures the real sys.stdout, not this
+    object), so we capture here and inspect the buffer.
+    """
+
+    def __init__(self):
+        self.buf = []
+
+    def isatty(self):
+        return True
+
+    def write(self, s):
+        self.buf.append(s)
+
+    def flush(self):
+        pass
+
+    def text(self):
+        return "".join(self.buf)
+
+
+def test_print_scorecard_plain_emits_raw_markdown(capsys):
+    md = bench.render_markdown([_smoke_result_row()], bench.summarize([_smoke_result_row()]))
+    bench.print_scorecard(md, use_rich=False)
+    out = capsys.readouterr().out
+    # Raw markdown: percent literal is `**100%**` and headings are `## Smoke`.
+    assert out.startswith("# Unlocker benchmark")
+    assert "**100%**" in out
+    assert "## Smoke" in out
+
+
+def test_print_scorecard_rich_renders_markdown(capsys):
+    md = bench.render_markdown([_smoke_result_row()], bench.summarize([_smoke_result_row()]))
+    bench.print_scorecard(md, use_rich=True)
+    out = capsys.readouterr().out
+    assert out
+    assert "100%" in out
+    # Heading is rendered rather than echoed verbatim.
+    assert "## Smoke" not in out
+
+
+def test_out_writes_plain_markdown_to_file(tmp_path, monkeypatch):
+    """`--out DIR` must always write plain markdown, never Rich markup."""
+    monkeypatch.setattr(bench.sys, "stdout", _fake_tty_stdout())
+    monkeypatch.setattr(bench, "run_benchmark", lambda cases, **kwargs: [_smoke_result_row()])
+    rc = bench.main(["--out", str(tmp_path)])
+    assert rc == 0
+    md = (tmp_path / "scorecard.md").read_text(encoding="utf-8")
+    assert md.startswith("# Unlocker")
+    # rich would have replaced `**100%**` with ANSI styling, not present in file
+    assert "**100%**" in md or "0%" in md
+    # No ANSI escapes / Rich markup leaked into the file
+    assert "\x1b[" not in md
+
+
+def test_plain_flag_keeps_raw_markdown_even_on_tty(monkeypatch):
+    """`--plain` must override a TTY stdout so piped-style output is preserved."""
+    fake = _CapturingTtyStdout()
+    monkeypatch.setattr(bench.sys, "stdout", fake)
+    monkeypatch.setattr(bench, "run_benchmark", lambda cases, **kwargs: [_smoke_result_row()])
+    rc = bench.main(["--plain"])
+    assert rc == 0
+    out = fake.text()
+    assert out.startswith("# Unlocker benchmark")
+    # Raw markdown markers still present; Rich would have consumed them.
+    assert "## Smoke" in out
+
+
+def test_run_case_ticks_stderr(capsys):
+    case = Case("reddit-hot", "https://r.test", "reddit", suite="walled")
+
+    def fake_fetch(url, **kwargs):
+        return FetchResult("curl_cffi", "x" * 5000, 200)
+
+    with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+        bench.run_case(case, progress=True)
+    captured = capsys.readouterr()
+    assert "reddit-hot" in captured.err
+    assert captured.out == ""
+
+
+def test_run_case_silent_without_progress(capsys):
+    case = Case("reddit-hot", "https://r.test", "reddit", suite="walled")
+
+    def fake_fetch(url, **kwargs):
+        return FetchResult("curl_cffi", "x" * 5000, 200)
+
+    with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+        bench.run_case(case, progress=False)
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""
+
+
+def test_json_flag_does_not_tick(monkeypatch, capsys):
+    monkeypatch.setattr(bench.sys.stdout, "isatty", lambda: True)
+
+    def fake_fetch(url, **kwargs):
+        return FetchResult("curl_cffi", "x" * 5000, 200)
+
+    with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+        rc = bench.main(["--json", "--suite", "smoke"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "…" not in captured.err
+    assert captured.out.lstrip().startswith("{")
+
+
+def test_main_uses_rich_when_stdout_is_tty(monkeypatch, capsys):
+    """When stdout reports a TTY and --plain is not set, Rich should be used."""
+    out = StringIO()
+
+    def fake_print(md, *args, **kwargs):
+        from rich.console import Console
+        from rich.markdown import Markdown
+        Console(file=out).print(Markdown(md))
+
+    monkeypatch.setattr(bench.sys, "stdout", _fake_tty_stdout())
+    monkeypatch.setattr(bench, "run_benchmark", lambda cases, **kwargs: [_smoke_result_row()])
+    monkeypatch.setattr(bench, "print_scorecard", fake_print)
+    rc = bench.main([])
+    assert rc == 0
+    rendered = out.getvalue()
+    assert rendered
+    assert "100%" in rendered
+    assert "## Smoke" not in rendered

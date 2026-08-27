@@ -1,6 +1,7 @@
 """Run the unlocker benchmark and print a scorecard.
 
     python -m benchmarks.run [--json] [--out DIR] [--cases FILE] [--suite SUITE]
+                             [--plain]
 
 The scoring/rendering helpers take plain dicts so they can be unit-tested without
 touching the network (see tests/test_benchmark.py).
@@ -10,20 +11,38 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import time
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import IO
 
 from .cases import Case, load_cases
 
 _SUMMARY_ORDER = ("smoke", "walled")
 
 
-def run_case(case: Case) -> dict:
+def _tick(name: str) -> None:
+    """Best-effort per-case progress tick (P4.6 pattern).
+
+    Prints ``{name}…`` to stderr and flushes. Swallows ``OSError``/``ValueError``
+    and is a no-op when stderr is missing. Callers decide *whether* to tick.
+    """
+    if sys.stderr is None:
+        return
+    try:
+        print(f"{name}…", file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
+
+
+def run_case(case: Case, *, progress: bool = False) -> dict:
     """Fetch one case through the unlocker; never raises — records the outcome."""
     from searchts import unlocker
 
+    if progress:
+        _tick(case.name)
     t0 = time.perf_counter()
     try:
         # use_memory=False so a cached per-domain winner doesn't skew the ladder.
@@ -60,8 +79,8 @@ def run_case(case: Case) -> dict:
         }
 
 
-def run_benchmark(cases: list[Case]) -> list[dict]:
-    return [run_case(c) for c in cases]
+def run_benchmark(cases: list[Case], *, progress: bool = False) -> list[dict]:
+    return [run_case(c, progress=progress) for c in cases]
 
 
 def summarize(results: list[dict]) -> dict:
@@ -178,6 +197,24 @@ def render_markdown(results: list[dict], summary: dict) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def print_scorecard(md: str, *, use_rich: bool, file: IO[str] | None = None) -> None:
+    """Print the scorecard to ``file`` (default: current stdout).
+
+    When ``use_rich`` is true, render Markdown via Rich so tables wrap and
+    percentages are not the literal string ``**100%**``. Otherwise print the
+    raw markdown (the format used by ``--out`` and by piped callers).
+    """
+    out = file if file is not None else sys.stdout
+    if not use_rich:
+        print(md, end="", file=out)
+        return
+    # Rich is an optional dep but already a hard requirement of searchts.
+    from rich.console import Console
+    from rich.markdown import Markdown
+
+    Console(file=out).print(Markdown(md))
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m benchmarks.run",
@@ -192,16 +229,27 @@ def main(argv: list[str] | None = None) -> int:
         help="which suite to run (default: all — writes both sections)",
     )
     ap.add_argument("--json", action="store_true", help="print raw JSON instead of the scorecard")
+    ap.add_argument(
+        "--plain",
+        action="store_true",
+        help="print raw markdown (no Rich rendering); implied when stdout is not a TTY",
+    )
     args = ap.parse_args(argv)
 
+    # Ticks: stderr only, never stdout. Off for --json and when stdout is piped.
+    progress = (not args.json) and sys.stdout.isatty()
     suite_filter = None if args.suite == "all" else args.suite
-    results = run_benchmark(load_cases(args.cases, suite=suite_filter))
+    results = run_benchmark(
+        load_cases(args.cases, suite=suite_filter), progress=progress
+    )
     summary = summarize(results)
 
     if args.json:
         print(json.dumps({"summary": summary, "results": results}, indent=2))
     else:
-        print(render_markdown(results, summary))
+        md = render_markdown(results, summary)
+        use_rich = (not args.plain) and sys.stdout.isatty()
+        print_scorecard(md, use_rich=use_rich)
 
     if args.out:
         out = Path(args.out)

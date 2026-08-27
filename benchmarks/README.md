@@ -23,7 +23,12 @@ python -m benchmarks.run --suite smoke         # smoke only
 python -m benchmarks.run --suite walled       # walled only
 python -m benchmarks.run --out results/       # write scorecard.md + results.json (both suites)
 python -m benchmarks.run --suite walled --out results/  # measure the walled suite only
+python -m benchmarks.run --plain              # force raw markdown on a TTY
 ```
+
+On a TTY the final scorecard is rendered with Rich (tables, not literal `**100%**`).
+While cases run, stderr gets one `{name}…` tick each (P4.6). Piped stdout, `--json`,
+and `--out DIR` stay plain Markdown/JSON — never Rich markup in files.
 
 For the full ladder, install the stealth-browser tier:
 
