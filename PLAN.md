@@ -99,6 +99,7 @@
     - `check-update`: one `checking for updates…` tick before the GitHub round-trip
     - `watch`: `checking channels…` + `checking for updates…` ticks
     - `install` / `setup` / `configure` / `skill` / `mcp` / `uninstall`: already chatty (print statements) — no ticks needed
+  - [ ] `python -m benchmarks.run`: same rule — per-case stderr ticks while the suite runs; TTY prints via Rich; `--out` / pipes stay plain Markdown. P4.6 applies to new long runners, not only `searchts` verbs.
   - Do **not** route through loguru (suppressed without `-v`). Plain stderr is correct.
 
 ### Communications
@@ -147,6 +148,7 @@ P0 Honesty + channel delete-theater
 4. **Only real config** — every documented knob is read by code; env beats YAML.
 5. **MCP is thin wrappers** — no second implementation of fetch/search/assets.
 6. **No connector framework** — share extractors remain the only fail-open extension pattern.
+7. **Long surfaces talk** — any new CLI or runner that can sit for more than a second inherits P4.6: stderr ticks while work runs; TTY output fit for a terminal; files/pipes stay machine-plain. Do not ship another silent `benchmarks.run`.
 
 ### Code shrink targets
 
@@ -289,3 +291,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-26 | P4.6 search: provider attempt ticks via progress param (stderr), --json silent — #110 |
 | 2026-08-27 | P4.6 media + verb audit: transcribe/grab/get/check-update/watch stderr ticks — #109 |
 | 2026-08-27 | **P3.7** walled scorecard: split smoke (open pages) vs walled (Reddit/LinkedIn/Cloudflare/DataDome/X/Booking) suites; per-suite honest pass rates; `--suite smoke` / `walled` / `all`; smoke-only committed numbers in docs/scorecard.md, walled documented as not-yet-measured (run from residential IP). |
+| 2026-08-27 | P4.6 applies to new long runners (incl. `benchmarks.run`): ticks + TTY-fit output; `--out` stays plain MD. |
