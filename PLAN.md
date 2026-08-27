@@ -293,3 +293,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-27 | **P3.7** walled scorecard: split smoke (open pages) vs walled (Reddit/LinkedIn/Cloudflare/DataDome/X/Booking) suites; per-suite honest pass rates; `--suite smoke` / `walled` / `all`; smoke-only committed numbers in docs/scorecard.md, walled documented as not-yet-measured (run from residential IP). |
 | 2026-08-27 | P4.6 applies to new long runners (incl. `benchmarks.run`): ticks + TTY-fit output; `--out` stays plain MD. — #112 |
 | 2026-08-27 | bench runner: TTY Rich scorecard, per-case stderr ticks, `--out`/pipes/`--json` plain. — #113 |
+| 2026-08-27 | `benchmarks.run_case` forwards `progress=` into `unlocker.fetch` so ladder ticks during a long case; `--json` stays quiet. |

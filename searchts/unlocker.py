@@ -678,7 +678,7 @@ def _finalize(result: FetchResult, scrub: bool) -> FetchResult:
 def fetch(url: str, backends: Optional[List[str]] = None,
           min_chars: int = _MIN_CHARS, use_memory: bool = True,
           allow_human: bool = False, scrub: bool = False,
-          allow_thin: bool = False, progress: bool = False) -> FetchResult:
+          allow_thin: bool = False, progress: Optional[bool] = None) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -705,11 +705,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         spans are additionally redacted from the text. Default False (report,
         don't alter visible content).
     progress:
-        When True, print one stderr line per ladder rung (``trying curl_cffi…``)
-        so long CLI fetches are not silent. Off by default so MCP/library
-        callers stay quiet. Also on when ``SEARCHTS_PROGRESS=1``.
+        True: stderr ticks per ladder rung. False: never (CLI ``--json``).
+        None: follow ``SEARCHTS_PROGRESS=1``. MCP/library omit the arg.
     """
-    if not progress:
+    if progress is None:
         progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
             "1", "true", "True", "yes",
         )

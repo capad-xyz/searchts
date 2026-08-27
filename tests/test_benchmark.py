@@ -387,8 +387,10 @@ def test_plain_flag_keeps_raw_markdown_even_on_tty(monkeypatch):
 
 def test_run_case_ticks_stderr(capsys):
     case = Case("reddit-hot", "https://r.test", "reddit", suite="walled")
+    seen = {}
 
     def fake_fetch(url, **kwargs):
+        seen.update(kwargs)
         return FetchResult("curl_cffi", "x" * 5000, 200)
 
     with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
@@ -396,12 +398,15 @@ def test_run_case_ticks_stderr(capsys):
     captured = capsys.readouterr()
     assert "reddit-hot" in captured.err
     assert captured.out == ""
+    assert seen.get("progress") is True
 
 
 def test_run_case_silent_without_progress(capsys):
     case = Case("reddit-hot", "https://r.test", "reddit", suite="walled")
+    seen = {}
 
     def fake_fetch(url, **kwargs):
+        seen.update(kwargs)
         return FetchResult("curl_cffi", "x" * 5000, 200)
 
     with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
@@ -409,12 +414,33 @@ def test_run_case_silent_without_progress(capsys):
     captured = capsys.readouterr()
     assert captured.err == ""
     assert captured.out == ""
+    assert seen.get("progress") is False
 
 
 def test_json_flag_does_not_tick(monkeypatch, capsys):
     monkeypatch.setattr(bench.sys.stdout, "isatty", lambda: True)
+    seen = []
 
     def fake_fetch(url, **kwargs):
+        seen.append(kwargs.get("progress"))
+        return FetchResult("curl_cffi", "x" * 5000, 200)
+
+    with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+        rc = bench.main(["--json", "--suite", "smoke"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "…" not in captured.err
+    assert captured.out.lstrip().startswith("{")
+    assert seen and all(p is False for p in seen)
+
+
+def test_json_flag_overrides_progress_env(monkeypatch, capsys):
+    """--json must stay quiet even when SEARCHTS_PROGRESS=1."""
+    monkeypatch.setenv("SEARCHTS_PROGRESS", "1")
+    monkeypatch.setattr(bench.sys.stdout, "isatty", lambda: True)
+
+    def fake_fetch(url, **kwargs):
+        assert kwargs.get("progress") is False
         return FetchResult("curl_cffi", "x" * 5000, 200)
 
     with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
