@@ -226,3 +226,72 @@ def test_search_clean_results_have_no_warnings(only_registry):
 def test_searchresult_positional_construction_still_works():
     r = SearchResult("t", "https://u", "s", "src")
     assert r.warnings == []
+
+
+# ── progress ticks ────────────────────────────────────────────────────────────
+
+def test_search_quiet_by_default(only_registry, monkeypatch, capsys):
+    monkeypatch.delenv("SEARCHTS_PROGRESS", raising=False)
+    only_registry["p1"] = _provider([_r("T", "https://s/t", "", "p1")])
+
+    search("q", providers=["p1"])
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_search_ticks_on_stderr(only_registry, monkeypatch, capsys):
+    monkeypatch.delenv("SEARCHTS_PROGRESS", raising=False)
+    only_registry["p1"] = _provider([_r("T", "https://s/t", "", "p1")])
+    only_registry["p2"] = _provider([_r("U", "https://s/u", "", "p2")])
+
+    search("q", providers=["p1", "p2"], progress=True)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "searching p1…\nsearching p2…\n"
+
+
+def test_search_progress_false_silent_even_with_env(only_registry, monkeypatch, capsys):
+    monkeypatch.setenv("SEARCHTS_PROGRESS", "1")
+    only_registry["p1"] = _provider([_r("T", "https://s/t", "", "p1")])
+
+    search("q", providers=["p1"], progress=False)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_search_progress_env_var(only_registry, monkeypatch, capsys):
+    monkeypatch.setenv("SEARCHTS_PROGRESS", "1")
+    only_registry["p1"] = _provider([_r("T", "https://s/t", "", "p1")])
+
+    search("q", providers=["p1"])
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "searching p1…" in captured.err
+
+
+def test_search_ticks_unknown_provider(only_registry, monkeypatch, capsys):
+    monkeypatch.delenv("SEARCHTS_PROGRESS", raising=False)
+    only_registry["p1"] = _provider([_r("T", "https://s/t", "", "p1")])
+
+    search("q", providers=["nope", "p1"], progress=True)
+
+    captured = capsys.readouterr()
+    assert captured.err == "searching nope…\nsearching p1…\n"
+
+
+def test_search_default_no_stdout_pollution(only_registry, monkeypatch, capsys):
+    monkeypatch.delenv("SEARCHTS_PROGRESS", raising=False)
+    only_registry["p1"] = _provider([_r("T", "https://s/t", "", "p1")])
+
+    out = search("q", providers=["p1"], progress=True)
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "searching p1…\n"
+    assert len(out) == 1

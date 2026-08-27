@@ -230,10 +230,11 @@ class TestCLI:
         from searchts.search import SearchResult
         seen = {}
 
-        def fake_search(query, max_results=10, providers=None):
+        def fake_search(query, max_results=10, providers=None, progress=None):
             seen["query"] = query
             seen["max_results"] = max_results
             seen["providers"] = providers
+            seen["progress"] = progress
             return [SearchResult("T", "https://x.test/1", "", "duckduckgo")]
 
         with patch("searchts.search.search", side_effect=fake_search):
@@ -242,6 +243,7 @@ class TestCLI:
                 main()
         assert seen["max_results"] == 3
         assert seen["providers"] == ["duckduckgo", "brave", "exa"]
+        assert seen["progress"] is True
 
     def test_search_command_failure_exits_nonzero(self, capsys):
         from searchts.search import SearchError
