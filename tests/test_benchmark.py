@@ -8,6 +8,8 @@ filtered with `load_cases(suite=)` and `python -m benchmarks.run --suite`.
 
 from unittest.mock import patch
 
+import pytest
+
 from benchmarks import run as bench
 from benchmarks.cases import Case, load_cases
 from searchts.unlocker import FetchResult, UnlockerError
@@ -188,6 +190,26 @@ def test_load_cases_suite_filter():
     assert walled and all(c.suite == "walled" for c in walled)
     # no overlap
     assert not (set(c.name for c in smoke) & set(c.name for c in walled))
+
+
+def test_load_cases_suite_all_equals_default():
+    all_cases = load_cases(suite="all")
+    default = load_cases()
+    assert {c.name for c in all_cases} == {c.name for c in default}
+    assert any(c.suite == "smoke" for c in all_cases)
+    assert any(c.suite == "walled" for c in all_cases)
+
+
+def test_load_cases_invalid_suite_raises():
+    with pytest.raises(ValueError):
+        load_cases(suite="bogus")
+    for ok in (None, "smoke", "walled", "all"):
+        load_cases(suite=ok)
+
+
+def test_case_rejects_unknown_suite():
+    with pytest.raises(ValueError):
+        Case("x", "https://x.test", "open", suite="staging")
 
 
 def test_thin_content_is_not_a_pass():

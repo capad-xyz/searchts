@@ -41,8 +41,8 @@ canary, run it periodically yourself (or from a self-hosted runner on a resident
 and watch the pass rate.
 
 The walled suite is honest about real vendor resistance: a low rate (even 0% on a given
-day/connection) reflects the wall, not a bug. Measure it from a residential IP with
-`--suite walled`; do not treat its failures as regressions.
+day/connection) reflects the wall, not necessarily a bug. Compare runs from the
+same connection and look at the per-case rows to understand any changes.
 
 ## Interpret the scorecard
 

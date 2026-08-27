@@ -61,8 +61,9 @@ To measure it for real, run from a residential IP (a datacenter IP would
 understate the rate):
 
 ```bash
-python -m benchmarks.run --suite walled --out docs/
+python -m benchmarks.run --suite all --out docs/
 ```
 
-That writes the real numbers — including the expected failures — under this
-section. Do not hand-edit a fake walled rate into this file.
+That writes both suite scorecards — including the real walled numbers and the
+expected failures — under this section. Do not hand-edit a fake walled rate into
+this file.

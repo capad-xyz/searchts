@@ -178,7 +178,7 @@ def render_markdown(results: list[dict], summary: dict) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def main(argv=None) -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         prog="python -m benchmarks.run",
         description="Measure how often searchts reads the smoke- and walled-suite pages.",

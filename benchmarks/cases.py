@@ -31,6 +31,12 @@ class Case:
     allow_thin: bool = False
     suite: str = "smoke"
 
+    def __post_init__(self) -> None:
+        if self.suite not in ("smoke", "walled"):
+            raise ValueError(
+                f"Invalid suite: {self.suite!r}. Must be \"smoke\" or \"walled\"."
+            )
+
 
 DEFAULT_CASES: list[Case] = [
     Case(
@@ -163,8 +169,8 @@ DEFAULT_CASES: list[Case] = [
 def load_cases(extra_path: str | None = None, suite: str | None = None) -> list[Case]:
     """Return the default cases plus any from a local JSON file.
 
-    ``suite`` filters the returned cases: ``"smoke"`` or ``"walled"`` returns only
-    that suite, while ``None`` returns both.
+    ``suite`` filters the returned cases: ``"smoke"``, ``"walled"``, or ``"all"``
+    (same as ``None``) returns all cases; invalid values raise ValueError.
 
     Extra cases come from ``extra_path`` when given, otherwise an optional,
     git-ignored ``benchmarks/cases.local.json``. The JSON is a list of objects:
@@ -172,6 +178,8 @@ def load_cases(extra_path: str | None = None, suite: str | None = None) -> list[
     "suite": "walled"}`` (``note``, ``allow_thin`` and ``suite`` optional). Extras
     without a ``suite`` tag default to ``walled``.
     """
+    if suite is not None and suite not in ("smoke", "walled", "all"):
+        raise ValueError(f'Invalid suite: {suite!r}. Must be "smoke", "walled", or "all".')
     cases = list(DEFAULT_CASES)
     path = Path(extra_path) if extra_path else Path(__file__).with_name("cases.local.json")
     if path.exists():
@@ -181,6 +189,6 @@ def load_cases(extra_path: str | None = None, suite: str | None = None) -> list[
             # extras default to the walled suite unless they tag one
             fields.setdefault("suite", "walled")
             cases.append(Case(**fields))
-    if suite is not None:
+    if suite is not None and suite != "all":
         cases = [c for c in cases if c.suite == suite]
     return cases
