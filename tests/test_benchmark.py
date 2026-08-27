@@ -434,6 +434,23 @@ def test_json_flag_does_not_tick(monkeypatch, capsys):
     assert seen and all(p is False for p in seen)
 
 
+def test_json_flag_overrides_progress_env(monkeypatch, capsys):
+    """--json must stay quiet even when SEARCHTS_PROGRESS=1."""
+    monkeypatch.setenv("SEARCHTS_PROGRESS", "1")
+    monkeypatch.setattr(bench.sys.stdout, "isatty", lambda: True)
+
+    def fake_fetch(url, **kwargs):
+        assert kwargs.get("progress") is False
+        return FetchResult("curl_cffi", "x" * 5000, 200)
+
+    with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+        rc = bench.main(["--json", "--suite", "smoke"])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "…" not in captured.err
+    assert captured.out.lstrip().startswith("{")
+
+
 def test_main_uses_rich_when_stdout_is_tty(monkeypatch, capsys):
     """When stdout reports a TTY and --plain is not set, Rich should be used."""
     out = StringIO()
