@@ -139,6 +139,18 @@ def _require(binary: str) -> None:
         raise MissingDependency(f"{binary} not found in PATH")
 
 
+def _tick(progress: bool, msg: str) -> None:
+    # Best-effort only: a closed/broken stderr must never abort a transcription.
+    if not progress:
+        return
+    if sys.stderr is None:
+        return
+    try:
+        print(msg, file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
+
+
 def _ytdlp_module_available() -> bool:
     """Return whether the `yt_dlp` Python module is importable."""
     return importlib.util.find_spec("yt_dlp") is not None
@@ -477,6 +489,7 @@ def transcribe(
     out_dir: Optional[Path] = None,
     config: Optional[Config] = None,
     prefer_subtitles: bool = True,
+    progress: Optional[bool] = None,
 ) -> str:
     """Transcribe a URL or local file path. Returns the joined transcript text.
 
@@ -501,11 +514,16 @@ def transcribe(
     """
     cfg = config or Config()
 
+    if progress is None:
+        progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
+            "1", "true", "True", "yes",
+        )
+
     if out_dir is not None:
         # Caller-owned directory: use it as-is and leave the files in place.
         work_dir = Path(out_dir)
         work_dir.mkdir(parents=True, exist_ok=True)
-        return _run_transcription(source, work_dir, provider, cfg, prefer_subtitles)
+        return _run_transcription(source, work_dir, provider, cfg, prefer_subtitles, progress)
 
     # Default: an ephemeral workspace removed on exit (even on exception), so a
     # downloaded video/audio (and any fetched .vtt) never lingers on disk.
@@ -516,7 +534,7 @@ def transcribe(
     with tempfile.TemporaryDirectory(
         prefix="searchts-transcribe-", ignore_cleanup_errors=True
     ) as tmp:
-        return _run_transcription(source, Path(tmp), provider, cfg, prefer_subtitles)
+        return _run_transcription(source, Path(tmp), provider, cfg, prefer_subtitles, progress)
 
 
 def _validate_backend(order: List[str], cfg: Config) -> None:
@@ -545,6 +563,7 @@ def _run_transcription(
     provider: str,
     cfg: Config,
     prefer_subtitles: bool,
+    progress: bool = False,
 ) -> str:
     """Try subtitles first (URL only), else download audio and transcribe.
 
@@ -556,6 +575,7 @@ def _run_transcription(
     is_local_file = src_path.is_file()
 
     if not is_local_file and prefer_subtitles:
+        _tick(progress, "fetching subtitles…")
         subs = fetch_subtitles(source, work_dir, config=cfg)
         if subs and len(subs.replace(" ", "")) >= MIN_SUBTITLE_CHARS:
             return subs
@@ -568,8 +588,10 @@ def _run_transcription(
     if is_local_file:
         audio = src_path  # a local file the caller owns; never deleted by us
     else:
+        _tick(progress, "downloading audio…")
         audio = download_audio(source, work_dir)
 
+    _tick(progress, "transcribing…")
     compressed = compress_audio(audio, work_dir)
     if compressed.stat().st_size <= SIZE_LIMIT_BYTES:
         chunks = [compressed]

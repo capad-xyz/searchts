@@ -131,7 +131,7 @@ def test_fetch_bytes_raises_with_all_attempts(monkeypatch):
 
 def test_get_asset_writes_bytes(monkeypatch, tmp_path):
     monkeypatch.setattr(assets, "fetch_bytes",
-                        lambda url, timeout=30: assets.AssetResult(b"DATA", "image/png",
+                        lambda url, timeout=30, progress=None: assets.AssetResult(b"DATA", "image/png",
                                                                    "https://x.test/p.png", "curl_cffi"))
     out = assets.get_asset("https://x.test/p.png", str(tmp_path))
     assert out.read_bytes() == b"DATA"
@@ -140,7 +140,7 @@ def test_get_asset_writes_bytes(monkeypatch, tmp_path):
 
 # ── grab ─────────────────────────────────────────────────────────────────────
 
-def _fake_fetch(url, *, backends=None, timeout=30):
+def _fake_fetch(url, *, backends=None, timeout=30, progress=None):
     if "googleapis" in url:
         return assets.AssetResult(b"/* gfont */", "text/css", url, "curl_cffi")
     if url.endswith(".css") or "/style.css" in url:
@@ -188,7 +188,7 @@ import searchts.cli as cli  # noqa: E402
 def test_cli_get_prints_saved_path(monkeypatch, capsys, tmp_path):
     saved = tmp_path / "logo.png"
     saved.write_bytes(b"xxxxx")
-    monkeypatch.setattr("searchts.assets.get_asset", lambda url, out=None: saved)
+    monkeypatch.setattr("searchts.assets.get_asset", lambda url, out=None, progress=True: saved)
     with patch("sys.argv", ["searchts", "get", "https://x.test/logo.png"]):
         cli.main()
     captured = capsys.readouterr()
@@ -197,7 +197,7 @@ def test_cli_get_prints_saved_path(monkeypatch, capsys, tmp_path):
 
 
 def test_cli_get_error_exits_nonzero(monkeypatch):
-    def boom(url, out=None):
+    def boom(url, out=None, progress=True):
         raise assets.AssetError(url, [("curl_cffi", "http-403")])
 
     monkeypatch.setattr("searchts.assets.get_asset", boom)
@@ -235,6 +235,83 @@ def test_cli_grab_json_outputs_manifest(monkeypatch, capsys):
         cli.main()
     data = json.loads(capsys.readouterr().out)
     assert data["title"] == "Demo"
+
+
+# ── progress ticks (P4.6) ────────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def _no_progress_env(monkeypatch):
+    monkeypatch.delenv("SEARCHTS_PROGRESS", raising=False)
+
+
+def test_get_asset_ticks_fetch_and_save(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(assets, "fetch_bytes",
+                        lambda url, timeout=30, progress=None: assets.AssetResult(
+                            b"DATA", "image/png", "https://x.test/p.png", "curl_cffi"))
+    assets.get_asset("https://x.test/p.png", str(tmp_path), progress=True)
+    captured = capsys.readouterr()
+    # stdout stays clean (no pipeable content); ticks go to stderr.
+    assert captured.out == ""
+    assert captured.err == "fetching asset…\nsaving asset…\n"
+
+
+def test_fetch_bytes_ticks_each_rung(monkeypatch, capsys):
+    monkeypatch.setattr(assets, "_fetch_bytes_curl",
+                        lambda url, timeout: (_ for _ in ()).throw(assets.AssetError(url, [("curl_cffi", "blocked")])))
+    monkeypatch.setattr(assets, "_fetch_bytes_stealth",
+                        lambda url, timeout: assets.AssetResult(b"x", "text/html", url, "stealth-browser"))
+    assets.fetch_bytes("https://x.test/", progress=True)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "trying curl_cffi…\ntrying stealth-browser…\n"
+
+
+def test_grab_ticks_fetch_and_assets(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(assets, "fetch_bytes", _fake_fetch)
+    assets.grab("https://demo.test/", str(tmp_path / "g"), progress=True)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    # Both phase ticks must land on stderr (not just "fetching page").
+    assert "fetching page" in captured.err and "downloading assets" in captured.err
+
+
+def test_get_asset_progress_false_is_quiet(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(assets, "fetch_bytes",
+                        lambda url, timeout=30, progress=None: assets.AssetResult(
+                            b"DATA", "image/png", "https://x.test/p.png", "curl_cffi"))
+    assets.get_asset("https://x.test/p.png", str(tmp_path), progress=False)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == ""
+
+
+def test_grab_progress_none_follows_env(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("SEARCHTS_PROGRESS", "1")
+    monkeypatch.setattr(assets, "fetch_bytes", _fake_fetch)
+    assets.grab("https://demo.test/", str(tmp_path / "g"))
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "fetching page" in captured.err
+
+
+def test_cli_get_ticks_through_real_get_asset(monkeypatch, capsys, tmp_path):
+    # Drive the real get_asset (so its ticks run) but stub the network fetch.
+    monkeypatch.setattr(assets, "fetch_bytes",
+                        lambda url, timeout=30, progress=None: assets.AssetResult(
+                            b"xxxxx", "image/png", "https://x.test/logo.png", "curl_cffi"))
+    with patch("sys.argv", ["searchts", "get", "https://x.test/logo.png", "-o", str(tmp_path)]):
+        cli.main()
+    captured = capsys.readouterr()
+    assert (tmp_path / "logo.png").exists()
+    assert "fetching asset" in captured.err and "saving asset" in captured.err
+
+
+def test_cli_grab_nonjson_ticks_on_stderr(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(assets, "fetch_bytes", _fake_fetch)
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out", str(tmp_path / "g")]):
+        cli.main()
+    captured = capsys.readouterr()
+    assert "fetching page" in captured.err and "downloading assets" in captured.err
 
 
 # ── bot-wall detection (AWS WAF), empty-body + jina-html rung ─────────────────

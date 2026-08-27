@@ -699,3 +699,96 @@ class TestSubtitlesFirst:
             str(chunk_file), out_dir=tmp_path / "work", config=fake_config
         )
         assert text == "local file audio"
+
+
+# --- progress ticks (P4.6) --------------------------------------------- #
+
+
+@pytest.fixture(autouse=True)
+def _no_progress_env(monkeypatch):
+    """Keep SEARCHTS_PROGRESS from leaking into progress tests."""
+    monkeypatch.delenv("SEARCHTS_PROGRESS", raising=False)
+
+
+class TestProgressTicks:
+    _CAPTIONS = "these are the existing captions of the video"
+
+    def test_captioned_url_ticks_subtitles_only(self, monkeypatch, fake_config,
+                                                 tmp_path, capsys):
+        # A captioned URL short-circuits after fetching subtitles — only that
+        # one tick should appear (no download/transcribe ticks).
+        monkeypatch.setattr(
+            tr, "fetch_subtitles",
+            lambda url, work_dir, *, config=None: self._CAPTIONS,
+        )
+        tr.transcribe(
+            "https://youtu.be/abc", out_dir=tmp_path / "work",
+            config=fake_config, progress=True,
+        )
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == "fetching subtitles…\n"
+
+    def test_audio_fallback_ticks_all_phases(self, monkeypatch, fake_config,
+                                             tmp_path, capsys):
+        fake_config.set("groq_api_key", "gsk_test")
+        monkeypatch.setattr(
+            tr, "fetch_subtitles", lambda url, work_dir, *, config=None: None
+        )
+        compressed = tmp_path / "compressed.m4a"
+        compressed.write_bytes(b"x" * 1024)
+        monkeypatch.setattr(tr, "download_audio", lambda url, out_dir: tmp_path / "src.m4a")
+        monkeypatch.setattr(tr, "compress_audio", lambda src, out_dir: compressed)
+        monkeypatch.setattr(
+            tr.requests, "post", lambda *a, **k: FakeResponse(200, "t")
+        )
+
+        tr.transcribe(
+            "https://youtu.be/abc", out_dir=tmp_path / "work",
+            config=fake_config, progress=True,
+        )
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == (
+            "fetching subtitles…\ndownloading audio…\ntranscribing…\n"
+        )
+
+    def test_progress_false_is_quiet(self, monkeypatch, fake_config, tmp_path, capsys):
+        monkeypatch.setattr(
+            tr, "fetch_subtitles",
+            lambda url, work_dir, *, config=None: self._CAPTIONS,
+        )
+        tr.transcribe(
+            "https://youtu.be/abc", out_dir=tmp_path / "work",
+            config=fake_config, progress=False,
+        )
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
+    def test_progress_none_follows_env(self, monkeypatch, fake_config, tmp_path, capsys):
+        monkeypatch.setenv("SEARCHTS_PROGRESS", "1")
+        monkeypatch.setattr(
+            tr, "fetch_subtitles",
+            lambda url, work_dir, *, config=None: self._CAPTIONS,
+        )
+        tr.transcribe(
+            "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config,
+        )
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "fetching subtitles…" in captured.err
+
+    def test_progress_none_env_off_is_quiet(self, monkeypatch, fake_config,
+                                            tmp_path, capsys):
+        monkeypatch.delenv("SEARCHTS_PROGRESS", raising=False)
+        monkeypatch.setattr(
+            tr, "fetch_subtitles",
+            lambda url, work_dir, *, config=None: self._CAPTIONS,
+        )
+        tr.transcribe(
+            "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config,
+        )
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
