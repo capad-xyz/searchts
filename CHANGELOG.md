@@ -6,6 +6,7 @@ All notable changes to searchts are documented here. This project follows semant
 
 
 ### Added
+- **docs(install):** pipx keep / uvx try + MCP serve / pip labeled venv-only (F8).
 - **bench(progress):** `run_case` passes `progress=` through to `unlocker.fetch`, so a long case prints ladder ticks (`trying curl_cffi…`) as well as the case name. `--json` still stays quiet.
 - **bench(scorecard):** render the scorecard through Rich on a TTY so tables align and `**100%**` is not a literal string. `--json` and piped stdout stay raw; `--plain` forces raw markdown on a TTY; `--out DIR` always writes plain markdown (no Rich markup) so committed scorecards stay diffable. Per-case stderr ticks show live progress on an interactive TTY and stay silent for `--json` / piped runs.
 - **cli(progress):** phase ticks for the long media verbs so they never look hung (P4.6). `transcribe` prints `fetching subtitles…` → (`downloading audio…`) → `transcribing…`; `get` prints `fetching asset…` → `saving asset…`; `grab` prints `fetching page…` → `downloading assets…`; `fetch_bytes` prints `trying <rung>…` per ladder rung. All go to **stderr** best-effort (never break pipeable stdout / MCP), follow `SEARCHTS_PROGRESS=1`, and stay quiet for `--json` / library / MCP callers. ([#109](https://github.com/capad-xyz/searchts/pull/109))

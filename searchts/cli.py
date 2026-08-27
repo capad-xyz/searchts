@@ -724,8 +724,10 @@ def mcp_install_text(client=None):
         indent=2,
     )
     path_note = (
-        "Note: `searchts` must be on your PATH (e.g. installed with pipx). "
-        "If it isn't, replace `searchts` with the full path to the executable."
+        "Note: `searchts` must be on your PATH (pipx install \"searchts[mcp]\"). "
+        "If the host cannot see the pipx bin, use "
+        "`uvx --from \"searchts[mcp]\" searchts mcp serve` "
+        "or replace `searchts` with the path from `pipx which searchts`."
     )
 
     claude_block = "\n".join([

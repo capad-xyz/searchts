@@ -559,8 +559,10 @@ class TestMcpInstall:
         assert '"searchts"' in text
         assert '"mcp"' in text
         assert '"serve"' in text
-        # PATH note present.
+        # PATH note present: uvx or pipx which when the host cannot see pipx bin.
         assert "PATH" in text
+        assert "uvx --from" in text
+        assert "pipx which searchts" in text
 
     def test_mcp_install_text_claude_only(self):
         text = cli.mcp_install_text("claude")

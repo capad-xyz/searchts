@@ -49,15 +49,17 @@ All searchts files go in dedicated directories — **never in the agent workspac
 ### Step 1: Install the basics
 
 ```bash
-# Recommended: pipx (easiest)
-pipx install https://github.com/capad-xyz/searchts/archive/main.zip
+# Keep: pipx (global isolated CLI)
+pipx install "searchts[mcp]"
 searchts install --env=auto
 
-# If your Python comes from Homebrew, or you hit PEP 668 (externally-managed-environment),
-# install inside a virtual environment:
+# Try without installing:
+uvx --from "searchts[mcp]" searchts <verb>
+
+# venv / packaging only (PEP 668 / Homebrew Python):
 python3 -m venv ~/.searchts-venv
 source ~/.searchts-venv/bin/activate
-pip install https://github.com/capad-xyz/searchts/archive/main.zip
+pip install "searchts[mcp]"
 searchts install --env=auto
 ```
 
@@ -71,7 +73,7 @@ searchts install --env=auto
 > ```powershell
 > py -3 -m venv $env:USERPROFILE\.searchts-venv
 > $env:USERPROFILE\.searchts-venv\Scripts\Activate.ps1
-> python -m pip install https://github.com/capad-xyz/searchts/archive/main.zip
+> python -m pip install "searchts[mcp]"
 > searchts install --env=auto
 > ```
 
