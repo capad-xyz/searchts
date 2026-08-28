@@ -50,7 +50,7 @@
 - [x] **P1.1** Install path writes short memory rule (~8 lines): on 403/429/challenge/thin page → `read_url` / `searchts read`; do not satisfice on a snippet. Targets: Claude Code user memory + Cursor rule if detected. **Prompt before overwrite.** — #86
 - [x] **P1.2** MCP tool descriptions: explicit retry-via-`read_url` language — #88
 - [x] **P1.2b** Skill YAML `description` ≤ 1024 (Agent Skills hosts skip the skill otherwise) — #89
-- [ ] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *zCode evals: skill explicitly off; agents called `read_url` first (reach yes). Leave open until a crisp X2 writeup; not blocked on skill-on doubt.*
+- [x] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *zCode skill-off: agents called `read_url` first. **X2** posted 2026-08-27 (`@aadarsh_io`). Gate closed.*
 - [ ] **P1.4** *(unverified track)* Scripted acceptance harness so #22 is pass/fail, not anecdote
 
 ### P2 — MCP 2.x hygiene (parallel with P1)
@@ -109,15 +109,15 @@
 ### Communications
 
 - [x] **X1** After P0.7: smoke vs walled; thin is not a pass (posted 2026-08-20)
-- [ ] **X2** After P1 demo: 403 → agent calls `read_url` (issue #22). *Not posted. Reach evidence exists (skill-off zCode); needs a crisp postable writeup, not another setup debate.*
+- [x] **X2** After P1 demo: 403 → agent calls `read_url` (issue #22). *Posted 2026-08-27 (`@aadarsh_io`).*
 - [x] **X3** After P3.1+P3.2: one wall before/after. *Posted (`@aadarsh_io`). Honesty framing — do not claim permanent bypass.*
 - [x] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`. *Posted 2026-08-26 (`@aadarsh_io`). Host stdio smoke done.*
 - [ ] Cadence ≤2 posts/week; no chore tweets (pins, dead keys, YAML)
 - [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article drafted in Notion; publish same week as X2/X3.
 - [x] **CI** PRs: lint + typecheck + version-sync + ubuntu 3.12 tests. Full matrix + wheel-gate on `main` only.
 
-- [ ] Article: drafted (Notion, parked). Publish same week as X2 or X3.
-- [ ] **PyPI 0.7.3** when P0+P1.1/1.2/1.2b should be what `pip install` gets (index still 0.7.2).
+- [ ] Article: drafted (Notion, parked). Publish **after PyPI 0.8.0** so install commands in the piece match the index (same week as X2).
+- [ ] **PyPI 0.8.0** via [#78](https://github.com/capad-xyz/searchts/pull/78) **before the article**. Index is still 0.7.2. Do **not** wait for P3.11 / F8b / F11 — those are parked. Revisit: when the article draft is ready to publish.
 
 - [x] **Install story** (docs, not a feature): **keep** = `pipx install "searchts[mcp]"`; **try / MCP** = `uvx --from "searchts[mcp]" searchts …`. `pip` is for venvs only.
 
@@ -306,3 +306,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-28 | Live: LinkedIn `/feed/` is `login-wall` (intended). Reddit stealth `page.content` nav race parked as **P3.11**. DataDome marketing + Booking homepage still yes. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
 | 2026-08-28 | Park rule: skip + still worth it → PLAN id + revisit; else **N**. |
+| 2026-08-28 | **X2** posted 2026-08-27; **P1.3** closed. PyPI 0.8.0 (#78) before article; do not wait on P3.11/F8b/F11. |
