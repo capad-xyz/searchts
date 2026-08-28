@@ -16,6 +16,50 @@ def test_looks_blocked_ok_content():
     assert looks_blocked(200, "x" * 1000) is None
 
 
+def test_looks_blocked_linkedin_login_shell():
+    # Residential scorecard: /feed/ extracted to 734 chars of auth chrome.
+    body = (
+        "Sign in\nNew to LinkedIn?\n"
+        "[Join now](https://www.linkedin.com/signup/cold-join/)\n"
+        "By continuing, you agree to LinkedIn's User Agreement.\n"
+        "or\nSign in\nNew to LinkedIn?\n"
+    )
+    assert looks_blocked(200, body) == "login-wall"
+
+
+def test_looks_blocked_sign_in_to_continue():
+    assert looks_blocked(200, "Please sign in to continue reading this article.") == "login-wall"
+
+
+def test_looks_blocked_ignores_nav_sign_in_on_a_real_page():
+    # Wikipedia / GitHub chrome: a long extract that merely contains "Log in".
+    body = "Log in\n" + ("Web scraping is the process of extracting data. " * 80)
+    assert looks_blocked(200, body) is None
+
+
+def test_looks_blocked_ignores_lone_sign_in_on_a_short_page():
+    assert looks_blocked(200, "Welcome.\nSign in from the menu if you have an account.\n") is None
+
+
+def test_fetch_escalates_on_login_shell(monkeypatch, stub_extract):
+    login = (
+        "Sign in\nNew to LinkedIn?\nJoin now\n"
+        "By continuing you agree to the User Agreement.\n"
+    )
+    _set(monkeypatch, curl=(200, login), jina=(200, "J" * 700), stealth=(200, login))
+    r = fetch("https://www.linkedin.com/feed/", use_memory=False)
+    assert r.backend == "Jina Reader"
+    assert r.text == "J" * 700
+
+
+def test_fetch_login_shell_all_rungs_fails(monkeypatch, stub_extract):
+    login = "Sign in\nNew to LinkedIn?\nJoin now\n" + ("x" * 200)
+    _set(monkeypatch, curl=(200, login), jina=(200, login), stealth=(200, login))
+    with pytest.raises(UnlockerError) as ei:
+        fetch("https://www.linkedin.com/feed/", use_memory=False)
+    assert any(reason == "login-wall" for _, reason in ei.value.attempts)
+
+
 def test_looks_blocked_http_error():
     assert looks_blocked(403, "whatever") == "http-403"
     assert looks_blocked(503, "") == "http-503"
