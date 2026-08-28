@@ -4,6 +4,8 @@
 **Identity:** free, open-source, keyless web layer for agents — won by reliability and being easy to reach for, not by feature count.  
 **Status:** Decisions locked (see §0). Work ordered P0 → P1∥P2 → P3 → P4 → Later.
 
+**Parked work:** If we skip something on purpose and it is still worth doing, it gets a PLAN id (`P*` / `F*` / `U*` / `N*`) and a **revisit** (week / trigger). Chat is not the record. If it is not worth doing, put it in **N** (never) instead of “we’ll remember.”
+
 **Hard non-goals:** plugin/connector framework, paid-proxy defaults, hosted SaaS, keyed backends as defaults, channel-based `read_url` routing, HTTP MCP until local stdio is trusted, MCP resources/prompts before tools are trusted.
 
 ---
@@ -215,7 +217,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 
 ## 4. Footnote — unverified tracks & future plans
 
-*Not committed to a sprint. Do not schedule until the matching measurement or P0–P3 pressure says so.*
+*Not committed to a sprint. Do not schedule until the matching measurement or P0–P3 pressure says so. Every skip that is still worth doing lives here with a revisit; “not this week” without an id is a bug.*
 
 ### U — Unverified tracks
 
@@ -303,3 +305,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-28 | **P3.7b** login-wall: Sign in/Join now shells fail; LinkedIn `/feed/` login chrome is not a pass. |
 | 2026-08-28 | Live: LinkedIn `/feed/` is `login-wall` (intended). Reddit stealth `page.content` nav race parked as **P3.11**. DataDome marketing + Booking homepage still yes. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
+| 2026-08-28 | Park rule: skip + still worth it → PLAN id + revisit; else **N**. |
