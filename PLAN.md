@@ -163,6 +163,7 @@ P0 Honesty + channel delete-theater
 | Dead config / dotenv | Delete or wire; one precedence rule | P0.3–P0.4 |
 | `cli.py` (~1949 lines) | Extract per verb only when editing that verb | P4.5 |
 | Share extractors | Keep fail-open; document as extension point only | Footnote F5 |
+| Known-host extractors (Reddit JSON, etc.) | Same fail-open *ring* as shares, not a router | **F5b** — after P3.11 |
 
 ### MCP 2.x path (no mechanical `on_*` port)
 
@@ -236,6 +237,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F3** Optional content cache for repeat URLs
 - **F4** Sitemap / small multi-page crawl (bounded)
 - **F5** Document share-extractors as the official fail-open extension point (one file pattern) — **not** a generic plugin system
+- [ ] **F5b** Known-host extractors as another **ladder ring** (same pattern as shares): URL matches a public document (e.g. Reddit `*.json`) → try dedicated parse → **fail open** to curl/Jina/stealth. Not `if host==reddit: skip unlocker` (**N4/N5**). Login shells stay `login-wall`. Revisit **after P3.11**. Not this sprint.
 - **F6** Claude/marketplace plugin polish beyond P4.2 minimum
 - **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. Public/hosted MCP URL is still N2 — add only if we explicitly break that non-goal. Not in P2.1–P2.3.
 - [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills` — Codex will not see the skill until we add that path (measure demand first).
@@ -243,6 +245,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - [ ] **F11** Windows: `pip install -e .` fails while `searchts.exe` is running (MCP `serve` per IDE holds the shim — kill PIDs or `--force-reinstall`). **Do not** add `--single-instance` / a machine-wide mutex (breaks one stdio server per host). Next week at most: RUNBOOK note + `claude mcp list` / Cursor MCP json. Not a feature.
 - **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships.
 - **F10** **WebMCP** (site-exposed tools in the browser / ChatGPT Sites). Complementary surface to local MCP, not a replacement. Explore only after core reach + honesty are solid; any product/revenue layer (hosted API, team unlocker, site tools) is a **later** decision and must not dilute the free local CLI. No sprint this phase.
+- [ ] **F12** Wall playbook (not a bypass sprint): **P3.11** (stealth `page.content` retry) → **F1** (persistent profile) → **`--human` / F7** (session, extras only). Never **N1** (paid residential as default) or **N3** (keyed unlocker as default). Login/challenge stays fail-loud. Revisit **after PyPI 0.8.0 + article**.
 
 ### N — Not planned (explicit)
 
@@ -307,3 +310,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
 | 2026-08-28 | Park rule: skip + still worth it → PLAN id + revisit; else **N**. |
 | 2026-08-28 | **X2** posted 2026-08-27; **P1.3** closed. PyPI 0.8.0 (#78) before article; do not wait on P3.11/F8b/F11. |
+| 2026-08-29 | **F5b** known-host extractors (fail-open ring, after P3.11). **F12** wall playbook (P3.11 → F1 → human/F7; never N1). After 0.8 + article. |
