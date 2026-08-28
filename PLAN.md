@@ -238,6 +238,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. Public/hosted MCP URL is still N2 — add only if we explicitly break that non-goal. Not in P2.1–P2.3.
 - [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills` — Codex will not see the skill until we add that path (measure demand first).
 - [ ] **F8b** Install-copy leftovers (not first-install): `llms.txt` still says `pip install searchts`; `docs/update.md` is zip/`pip` first; extra-missing hints (`MCP_MISSING_MESSAGE`, `video.md` `[local-transcribe]`) may add `pipx inject` as a second line. Do **not** rewrite contributor `pip install -e`. Not this sprint.
+- [ ] **F11** Windows: `pip install -e .` fails while `searchts.exe` is running (MCP `serve` per IDE holds the shim — kill PIDs or `--force-reinstall`). **Do not** add `--single-instance` / a machine-wide mutex (breaks one stdio server per host). Next week at most: RUNBOOK note + `claude mcp list` / Cursor MCP json. Not a feature.
 - **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships.
 - **F10** **WebMCP** (site-exposed tools in the browser / ChatGPT Sites). Complementary surface to local MCP, not a replacement. Explore only after core reach + honesty are solid; any product/revenue layer (hosted API, team unlocker, site tools) is a **later** decision and must not dilute the free local CLI. No sprint this phase.
 
@@ -301,3 +302,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-27 | **F8b** parked: llms.txt + update.md + extra-missing hints. Not F8. |
 | 2026-08-28 | **P3.7b** login-wall: Sign in/Join now shells fail; LinkedIn `/feed/` login chrome is not a pass. |
 | 2026-08-28 | Live: LinkedIn `/feed/` is `login-wall` (intended). Reddit stealth `page.content` nav race parked as **P3.11**. DataDome marketing + Booking homepage still yes. |
+| 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
