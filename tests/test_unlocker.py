@@ -24,21 +24,39 @@ def test_looks_blocked_linkedin_login_shell():
         "By continuing, you agree to LinkedIn's User Agreement.\n"
         "or\nSign in\nNew to LinkedIn?\n"
     )
-    assert looks_blocked(200, body) == "login-wall"
+    assert looks_blocked(200, body, login_wall=True) == "login-wall"
 
 
 def test_looks_blocked_sign_in_to_continue():
-    assert looks_blocked(200, "Please sign in to continue reading this article.") == "login-wall"
+    assert looks_blocked(200, "Please sign in to continue reading this article.", login_wall=True) == "login-wall"
 
 
 def test_looks_blocked_ignores_nav_sign_in_on_a_real_page():
     # Wikipedia / GitHub chrome: a long extract that merely contains "Log in".
     body = "Log in\n" + ("Web scraping is the process of extracting data. " * 80)
-    assert looks_blocked(200, body) is None
+    assert looks_blocked(200, body, login_wall=True) is None
+
+
+def test_looks_blocked_raw_html_skips_login_wall():
+    # A real page can embed "sign in to continue" in a header modal. Raw HTML
+    # must not trip login-wall; the extract check is the gate.
+    html = "<script>sign in to continue</script>" + ("<p>article</p>" * 80)
+    assert looks_blocked(200, html) is None
+    assert looks_blocked(200, html, login_wall=True) == "login-wall"
+
+
+def test_fetch_real_article_despite_sign_in_modal_in_html(monkeypatch):
+    html = "<script>Please sign in to continue</script>" + ("<p>body</p>" * 20)
+    article = "Web scraping is the process of extracting data from websites. " * 40
+    monkeypatch.setattr(unlocker, "html_to_text", lambda body, url=None: article)
+    _set(monkeypatch, curl=(200, html))
+    r = fetch("https://site.test/article", use_memory=False)
+    assert r.backend == "curl_cffi"
+    assert "scraping" in r.text
 
 
 def test_looks_blocked_ignores_lone_sign_in_on_a_short_page():
-    assert looks_blocked(200, "Welcome.\nSign in from the menu if you have an account.\n") is None
+    assert looks_blocked(200, "Welcome.\nSign in from the menu if you have an account.\n", login_wall=True) is None
 
 
 def test_fetch_escalates_on_login_shell(monkeypatch, stub_extract):

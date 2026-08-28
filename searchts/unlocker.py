@@ -430,13 +430,16 @@ def looks_blocked(
     status: Optional[int],
     text: str,
     headers: Optional[Mapping[str, str]] = None,
+    *,
+    login_wall: bool = False,
 ) -> Optional[str]:
     """Return a short reason if the response is a hard block/challenge page, else None.
 
-    HTTP errors (including vendor codes like 999), known challenge phrases,
-    login-wall shells, and explicit challenge headers count as blocked.
-    Thin-but-real pages are not a block; ``fetch`` escalates, then fails
-    unless ``allow_thin`` is set.
+    HTTP errors (including vendor codes like 999), known challenge phrases, and
+    explicit challenge headers count as blocked. Login-wall phrases are scored
+    only when ``login_wall=True`` (extracted text / Jina markdown) so a real
+    page with a sign-in modal in the raw HTML is not rejected. Thin-but-real
+    pages are not a block; ``fetch`` escalates, then fails unless ``allow_thin``.
     """
     if status is None:
         return "no-response"
@@ -454,7 +457,7 @@ def looks_blocked(
     for phrase in _BLOCK_PHRASES:
         if phrase in head:
             return "challenge"
-    if _looks_login_wall(text):
+    if login_wall and _looks_login_wall(text):
         return "login-wall"
     return None
 
@@ -850,9 +853,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 continue
 
             text = text or ""
-            # Raw HTML often hides login copy past the first 8k (scripts first).
-            # The extract is what we would return — score that, not the shell.
-            extract_reason = looks_blocked(200, text)
+            # Login-wall on the extract only (raw HTML often has a sign-in modal).
+            extract_reason = looks_blocked(200, text, login_wall=True)
             if extract_reason:
                 attempts.append((backend, extract_reason))
                 _tick(f"  {backend}: {extract_reason}")
@@ -918,7 +920,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             text = html_to_text(html, url)
             if (
                 text
-                and looks_blocked(200, text) is None
+                and looks_blocked(200, text, login_wall=True) is None
                 and (best is None or len(text) > len(best.text))
             ):
                 human = FetchResult(
