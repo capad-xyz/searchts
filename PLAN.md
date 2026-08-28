@@ -73,7 +73,8 @@
 - [x] **P3.6** SSRF for **MCP only** (first layer): reject `file://`, `data:`, loopback, link-local, RFC1918, IPv6 ULA (`fc00::/7`), cloud metadata IPs; CLI stays unrestricted. Guard at MCP URL tools only — not the fetch ladder. *#105; hop checks are P3.6b.*
 - [ ] **P3.6b** Redirect / DNS-rebinding (follow-up, **not this sprint**): validate each connected destination and redirect target so `curl_cffi` / urllib / stealth `page.goto` cannot follow a public URL into RFC1918/loopback/metadata. Touches the unlocker ladder; keep CLI unrestricted for humans. Do **not** fold into P3.6. Distinct from **U5** (expand SSRF beyond MCP if HTTP transport ships).
 - [x] **P3.7** Walled scorecard: public suite of real walls; publish pass *rate*; smoke suite stays separate ([#111](https://github.com/capad-xyz/searchts/pull/111))
-- [x] **P3.7b** Login-shell honesty: HTTP 200 Sign in / Join now extracts (LinkedIn feed login chrome) fail as `login-wall`, not a scorecard pass. Not a ladder upgrade.
+- [x] **P3.7b** Login-shell honesty: HTTP 200 Sign in / Join now extracts (LinkedIn feed login chrome) fail as `login-wall`, not a scorecard pass. Not a ladder upgrade. *Live 2026-08-28: `/feed/` → `curl_cffi: login-wall`; Jina 403; stealth `login-wall`.*
+- [ ] **P3.11** Stealth `page.content()` navigation race (**not this sprint**): Reddit hot → curl `challenge`, Jina 403, stealth `Error: Page.content: Unable to retrieve content because the page is navigating`. That's **our** Playwright call during a redirect, not "beat Reddit." Retry/wait-for-load only. Do not fold into a bypass sprint.
 
 **Unverified measurements (run before over-building)**
 
@@ -299,3 +300,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-27 | **F8** install story (docs): pipx keep / uvx try+MCP / pip venv-only. PATH note: uvx or `pipx which searchts`. |
 | 2026-08-27 | **F8b** parked: llms.txt + update.md + extra-missing hints. Not F8. |
 | 2026-08-28 | **P3.7b** login-wall: Sign in/Join now shells fail; LinkedIn `/feed/` login chrome is not a pass. |
+| 2026-08-28 | Live: LinkedIn `/feed/` is `login-wall` (intended). Reddit stealth `page.content` nav race parked as **P3.11**. DataDome marketing + Booking homepage still yes. |
