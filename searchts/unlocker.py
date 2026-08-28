@@ -97,6 +97,20 @@ _BLOCK_PHRASES = (
     "log in, or continue without an account",
 )
 
+#: Login *shells* (HTTP 200, often longer than ``_MIN_CHARS`` after extract).
+#: Distinctive wall copy only — never a lone "sign in" in page chrome
+#: (Wikipedia / GitHub nav would false-positive).
+_LOGIN_WALL_PHRASES = (
+    "new to linkedin",
+    "sign in to linkedin",
+    "sign in to continue",
+    "log in to continue",
+    "please sign in to continue",
+    "please log in to continue",
+    "you must be logged in",
+    "you must be signed in",
+)
+
 _MIN_CHARS = 500
 
 
@@ -416,12 +430,16 @@ def looks_blocked(
     status: Optional[int],
     text: str,
     headers: Optional[Mapping[str, str]] = None,
+    *,
+    login_wall: bool = False,
 ) -> Optional[str]:
     """Return a short reason if the response is a hard block/challenge page, else None.
 
     HTTP errors (including vendor codes like 999), known challenge phrases, and
-    explicit challenge headers count as blocked. Thin-but-real pages are not a
-    block; ``fetch`` escalates, then fails unless ``allow_thin`` is set.
+    explicit challenge headers count as blocked. Login-wall phrases are scored
+    only when ``login_wall=True`` (extracted text / Jina markdown) so a real
+    page with a sign-in modal in the raw HTML is not rejected. Thin-but-real
+    pages are not a block; ``fetch`` escalates, then fails unless ``allow_thin``.
     """
     if status is None:
         return "no-response"
@@ -439,7 +457,37 @@ def looks_blocked(
     for phrase in _BLOCK_PHRASES:
         if phrase in head:
             return "challenge"
+    if login_wall and _looks_login_wall(text):
+        return "login-wall"
     return None
+
+
+def _looks_login_wall(text: str) -> bool:
+    """True when *text* is an auth shell, not the page the URL named.
+
+    LinkedIn ``/feed/`` (and similar) extract to 500–900 chars of Sign in /
+    Join now — above ``_MIN_CHARS``, so thin-gate would miss them. Bare
+    "sign in" in a long article or site chrome must not trip this.
+    """
+    raw = text or ""
+    head = raw[:8192].lower()
+    if not head:
+        return False
+    for phrase in _LOGIN_WALL_PHRASES:
+        if phrase in head:
+            return True
+    if len(raw.strip()) >= 1500:
+        return False
+    t = raw.lower()
+    has_auth = "sign in" in t or "log in" in t
+    has_signup = (
+        "join now" in t
+        or "create an account" in t
+        or "new to " in t
+        or "don't have an account" in t
+        or "do not have an account" in t
+    )
+    return has_auth and has_signup
 
 
 def html_to_text(html: str, url: Optional[str] = None) -> str:
@@ -805,6 +853,16 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 continue
 
             text = text or ""
+            # Login-wall on the extract only (raw HTML often has a sign-in modal).
+            extract_reason = looks_blocked(200, text, login_wall=True)
+            if extract_reason:
+                attempts.append((backend, extract_reason))
+                _tick(f"  {backend}: {extract_reason}")
+                if backend == remembered:
+                    unpin(domain)
+                    remembered = None
+                continue
+
             if len(text) >= min_chars:
                 if memory_on and domain:
                     remember(domain, backend)  # record the winner for next time
@@ -860,7 +918,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             status, html, final_url = None, "", url
         if looks_blocked(status, html) is None:
             text = html_to_text(html, url)
-            if text and (best is None or len(text) > len(best.text)):
+            if (
+                text
+                and looks_blocked(200, text, login_wall=True) is None
+                and (best is None or len(text) > len(best.text))
+            ):
                 human = FetchResult(
                     backend="human-browser", text=text, status=status,
                     final_url=final_url or url,
