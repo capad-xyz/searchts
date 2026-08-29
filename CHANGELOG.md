@@ -2,6 +2,41 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.8.0](https://github.com/capad-xyz/searchts/compare/v0.7.2...v0.8.0) (2026-08-28)
+
+
+### Added
+
+* **bench:** P3.7 walled scorecard with honest per-suite pass rates ([#111](https://github.com/capad-xyz/searchts/issues/111)) ([b13ca30](https://github.com/capad-xyz/searchts/commit/b13ca3015088676bdd1677ff2dc5f1660f958139))
+* **bench:** TTY Rich scorecard with per-case stderr ticks ([#113](https://github.com/capad-xyz/searchts/issues/113)) ([7517c4b](https://github.com/capad-xyz/searchts/commit/7517c4b482cb1386c9f0bba91a96a32125ff3ac4))
+* **cli:** doctor progress ticks ([#103](https://github.com/capad-xyz/searchts/issues/103)) ([c28daab](https://github.com/capad-xyz/searchts/commit/c28daabd2a6f6010f5586fe563fb5e1b48e8b1bc))
+* **cli:** P4.6 phase ticks for transcribe/grab/get ([#109](https://github.com/capad-xyz/searchts/issues/109)) ([adabfc8](https://github.com/capad-xyz/searchts/commit/adabfc8d874d6ef8fb84d124afc519a0cbfa1ac1))
+* **cli:** P4.6 search progress ticks ([#110](https://github.com/capad-xyz/searchts/issues/110)) ([3c36dca](https://github.com/capad-xyz/searchts/commit/3c36dcaffeb3e5962ed9d6e5a602cb1ab5f9ac01))
+* **cli:** progress ticks on read + mcp serve banner ([#100](https://github.com/capad-xyz/searchts/issues/100)) ([5ab2c81](https://github.com/capad-xyz/searchts/commit/5ab2c81c52e94f69c69677e3c7357a4094de21fe))
+* **install:** write user-scope reach rule for Claude and Cursor ([#86](https://github.com/capad-xyz/searchts/issues/86)) ([76ce119](https://github.com/capad-xyz/searchts/commit/76ce119fc4d6f144fa6b92cdd056e383d2a2f3ba))
+* **mcp:** MCPServer on mcp 2.x (P2.3) ([#98](https://github.com/capad-xyz/searchts/issues/98)) ([afbe15a](https://github.com/capad-xyz/searchts/commit/afbe15a716efb7ec8b2b229dd9e5101319853306))
+* **mcp:** tell agents to retry walled hits via read_url ([#88](https://github.com/capad-xyz/searchts/issues/88)) ([1c03d0e](https://github.com/capad-xyz/searchts/commit/1c03d0ee519087a10da37939434ac2e56db55ffd))
+
+
+### Fixed
+
+* **bench:** ladder ticks during a long case ([#114](https://github.com/capad-xyz/searchts/issues/114)) ([e80c0c3](https://github.com/capad-xyz/searchts/commit/e80c0c3ff1a69235b46d13cfaa4b2f3f3aef91a4))
+* **benchmark:** thin content is not a pass; label smoke suite ([#79](https://github.com/capad-xyz/searchts/issues/79)) ([9dc6af4](https://github.com/capad-xyz/searchts/commit/9dc6af401f824384311c202475ec6b68b57d6ba0))
+* **channels:** drop routing theater; doctor is a probe ([#85](https://github.com/capad-xyz/searchts/issues/85)) ([e5e32b1](https://github.com/capad-xyz/searchts/commit/e5e32b139ae30a5721da6e27386af3f112811db7))
+* **config:** drop dead knobs; load .env without override ([#81](https://github.com/capad-xyz/searchts/issues/81)) ([3b4f333](https://github.com/capad-xyz/searchts/commit/3b4f33361c8f34159346b79c576015621200495d))
+* **config:** environment variables beat YAML ([#82](https://github.com/capad-xyz/searchts/issues/82)) ([02463b9](https://github.com/capad-xyz/searchts/commit/02463b997b92644d22b9d680edeea3cf92bd9f3c))
+* **deps:** pin curl_cffi, trafilatura, and ddgs ([#83](https://github.com/capad-xyz/searchts/issues/83)) ([c365dbc](https://github.com/capad-xyz/searchts/commit/c365dbcb0407885680b1c4f7a2fe23b594de29fb))
+* **doctor:** honest stealth probe; stop skill install side effect ([#74](https://github.com/capad-xyz/searchts/issues/74)) ([102a94c](https://github.com/capad-xyz/searchts/commit/102a94cf1a3f4e0fd22edc179742145f429907a9))
+* **mcp:** SSRF guards on MCP URL tools ([#105](https://github.com/capad-xyz/searchts/issues/105)) ([545ea35](https://github.com/capad-xyz/searchts/commit/545ea35c9961bcd5a19dfa94aa91a26d7e966538))
+* **release:** fail if RELEASE_PLEASE_TOKEN is missing ([#84](https://github.com/capad-xyz/searchts/issues/84)) ([0fdeed0](https://github.com/capad-xyz/searchts/commit/0fdeed00a987ab776576d5d92c023b0e315d386c))
+* **skill:** keep SKILL.md description under 1024 chars ([#89](https://github.com/capad-xyz/searchts/issues/89)) ([403ac8d](https://github.com/capad-xyz/searchts/commit/403ac8db55493fadb9307e56d851a0a90f62996a))
+* **unlocker:** domain memory TTL and unpin on failure ([#102](https://github.com/capad-xyz/searchts/issues/102)) ([f565ee0](https://github.com/capad-xyz/searchts/commit/f565ee006a04dd0fcb9b908e9ddbca056d27acf2))
+* **unlocker:** drop hardcoded Chrome 126 UA ([#104](https://github.com/capad-xyz/searchts/issues/104)) ([08515f0](https://github.com/capad-xyz/searchts/commit/08515f03409d037f9bbfab7c981f45e4353872e8))
+* **unlocker:** fail loud on thin and challenge pages ([#93](https://github.com/capad-xyz/searchts/issues/93)) ([89fbb5e](https://github.com/capad-xyz/searchts/commit/89fbb5e01468be43e8bd1a8ff39943c2797f7e56))
+* **unlocker:** login shells are not a pass ([#116](https://github.com/capad-xyz/searchts/issues/116)) ([fcac810](https://github.com/capad-xyz/searchts/commit/fcac8106547d2d730b07fd21360591302acf4788))
+* **unlocker:** P3.5 Jina opt-out (default on) ([#107](https://github.com/capad-xyz/searchts/issues/107)) ([2013a4b](https://github.com/capad-xyz/searchts/commit/2013a4ba0e071984f1d3bdfdfd0f1ab345c2b357))
+* **unlocker:** Playwright off asyncio for MCP (P3.10) ([#96](https://github.com/capad-xyz/searchts/issues/96)) ([2809ac7](https://github.com/capad-xyz/searchts/commit/2809ac76b6d1baef358225dff23778fc9453a254))
+
 ## [Unreleased]
 
 
