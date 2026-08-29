@@ -116,8 +116,8 @@
 - [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article drafted in Notion; publish same week as X2/X3.
 - [x] **CI** PRs: lint + typecheck + version-sync + ubuntu 3.12 tests. Full matrix + wheel-gate on `main` only.
 
-- [ ] Article: drafted (Notion, parked). Publish **after PyPI 0.8.0** so install commands in the piece match the index (same week as X2).
-- [ ] **PyPI 0.8.0** via [#78](https://github.com/capad-xyz/searchts/pull/78) **before the article**. Index is still 0.7.2. Do **not** wait for P3.11 / F8b / F11 — those are parked. Revisit: when the article draft is ready to publish.
+- [ ] Article: drafted (Notion). **0.8.0 is on PyPI (2026-08-29).** Publish after one `uvx` confirm. Do not republish X1 as the lede.
+- [x] **PyPI 0.8.0** [#78](https://github.com/capad-xyz/searchts/pull/78) merged 2026-08-29; [pypi.org/project/searchts/0.8.0](https://pypi.org/project/searchts/0.8.0/).
 
 - [x] **Install story** (docs, not a feature): **keep** = `pipx install "searchts[mcp]"`; **try / MCP** = `uvx --from "searchts[mcp]" searchts …`. `pip` is for venvs only.
 
@@ -311,3 +311,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-28 | Park rule: skip + still worth it → PLAN id + revisit; else **N**. |
 | 2026-08-28 | **X2** posted 2026-08-27; **P1.3** closed. PyPI 0.8.0 (#78) before article; do not wait on P3.11/F8b/F11. |
 | 2026-08-29 | **F5b** known-host extractors (fail-open ring, after P3.11). **F12** wall playbook (P3.11 → F1 → human/F7; never N1). After 0.8 + article. |
+| 2026-08-29 | **PyPI 0.8.0** (#78). Article draft filled in Notion; publish after uvx confirm. |
