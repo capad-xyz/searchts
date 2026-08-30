@@ -112,6 +112,7 @@
 - [x] **X2** After P1 demo: 403 → agent calls `read_url` (issue #22). *Posted 2026-08-27 (`@aadarsh_io`).*
 - [x] **X3** After P3.1+P3.2: one wall before/after. *Posted (`@aadarsh_io`). Honesty framing — do not claim permanent bypass.*
 - [x] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`. *Posted 2026-08-26 (`@aadarsh_io`). Host stdio smoke done.*
+- [x] **X5** 0.8.0 on PyPI. *Posted 2026-08-30 (`@aadarsh_io`). Used `example.com` in the uvx line — that URL is thin (`_MIN_CHARS`); a copypaste looks like a broken install. Do not unpost. Next demo URL = Wikipedia. F8b/F13 later.*
 - [ ] Cadence ≤2 posts/week; no chore tweets (pins, dead keys, YAML)
 - [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article drafted in Notion; publish same week as X2/X3.
 - [x] **CI** PRs: lint + typecheck + version-sync + ubuntu 3.12 tests. Full matrix + wheel-gate on `main` only.
@@ -241,11 +242,12 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F6** Claude/marketplace plugin polish beyond P4.2 minimum
 - **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. Public/hosted MCP URL is still N2 — add only if we explicitly break that non-goal. Not in P2.1–P2.3.
 - [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills` — Codex will not see the skill until we add that path (measure demand first).
-- [ ] **F8b** Install-copy leftovers (not first-install): `llms.txt` still says `pip install searchts`; `docs/update.md` is zip/`pip` first; extra-missing hints (`MCP_MISSING_MESSAGE`, `video.md` `[local-transcribe]`) may add `pipx inject` as a second line. Do **not** rewrite contributor `pip install -e`. Not this sprint.
+- [ ] **F8b** Install-copy leftovers (not first-install): `llms.txt` still says `pip install searchts`; `docs/update.md` + `check-update` `_UPDATE_INSTRUCTIONS` still zip/`pip` first (should be `pipx upgrade searchts` / `pip install -U "searchts[mcp]"` / uvx = already latest). Extra-missing hints may add `pipx inject`. Do **not** rewrite contributor `pip install -e`. Same PR as **F13** when we touch it. Revisit **after article**.
 - [ ] **F11** Windows: `pip install -e .` fails while `searchts.exe` is running (MCP `serve` per IDE holds the shim — kill PIDs or `--force-reinstall`). **Do not** add `--single-instance` / a machine-wide mutex (breaks one stdio server per host). Next week at most: RUNBOOK note + `claude mcp list` / Cursor MCP json. Not a feature.
 - **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships.
 - **F10** **WebMCP** (site-exposed tools in the browser / ChatGPT Sites). Complementary surface to local MCP, not a replacement. Explore only after core reach + honesty are solid; any product/revenue layer (hosted API, team unlocker, site tools) is a **later** decision and must not dilute the free local CLI. No sprint this phase.
 - [ ] **F12** Wall playbook (not a bypass sprint): **P3.11** (stealth `page.content` retry) → **F1** (persistent profile) → **`--human` / F7** (session, extras only). Never **N1** (paid residential as default) or **N3** (keyed unlocker as default). Login/challenge stays fail-loud. Revisit **after PyPI 0.8.0 + article**.
+- [ ] **F13** Optional update nudge (**not 0.8.1**): cached ~24h GitHub check, **stderr only**, skip `mcp serve` / pipes, `SEARCHTS_NO_UPDATE_CHECK=1`. Same PR as **F8b**. Revisit **after article**.
 
 ### N — Not planned (explicit)
 
@@ -312,3 +314,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-28 | **X2** posted 2026-08-27; **P1.3** closed. PyPI 0.8.0 (#78) before article; do not wait on P3.11/F8b/F11. |
 | 2026-08-29 | **F5b** known-host extractors (fail-open ring, after P3.11). **F12** wall playbook (P3.11 → F1 → human/F7; never N1). After 0.8 + article. |
 | 2026-08-29 | **PyPI 0.8.0** (#78). Article draft filled in Notion; publish after uvx confirm. |
+| 2026-08-30 | **X5** posted. **F13** parked (nudge after article, same PR as F8b). Demo URL `example.com` is thin — next time Wikipedia. |
