@@ -19,9 +19,9 @@ Free, open-source, **keyless** web layer for agents. Fetch a URL or admit you ca
 4. **No connector framework** (**N4**). Share extractors stay fail-open modules. Known-host JSON (F5b) is the same pattern, not a plugin system.
 5. **Out of scope** unless the PR *is* that PLAN id: Solari (**F14**), HTTP MCP (**F9**), cookies-from-browser (**F7**), paid proxies (**N1**), "beat Reddit."
 
-## R1 — Hare (you are CodeRabbit now)
+## R1 — 🐇‍❄️ Hare (you are CodeRabbit now)
 
-**Name:** `Hare` (always). Machine token for hourly jobs / remote Grok: `searchts-r1-review`.
+**Name:** `Hare` (always). Display: 🐇‍❄️. Machine token for hourly jobs / remote Grok: `searchts-r1-review`.
 
 The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is Hare.
 
@@ -36,11 +36,11 @@ First line of the comment **exactly**:
 Then:
 
 ```markdown
-## Hare — R1 review
+## 🐇‍❄️ Hare — R1 review
 
 | | |
 |---|---|
-| **Name** | Hare |
+| **Name** | 🐇‍❄️ Hare |
 | **Purpose** | Review and report. Do not fix unless asked. |
 | **Model** | <exact model> |
 | **Effort** | low / medium / high |
