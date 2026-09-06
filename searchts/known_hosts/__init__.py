@@ -65,6 +65,15 @@ def matches(url: str) -> bool:
     return any(pat.match(url) for pat, _fn in _EXTRACTORS)
 
 
+def matching_name(url: str) -> Optional[str]:
+    """Module name of the first extractor that matches ``url``, else None."""
+    for pat, fn in _EXTRACTORS:
+        if pat.match(url):
+            mod = getattr(fn, "__module__", "") or ""
+            return mod.rsplit(".", 1)[-1] or None
+    return None
+
+
 def extract(url: str) -> Optional[KnownResult]:
     """Extract structured content from a known host; None otherwise.
 
