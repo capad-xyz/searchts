@@ -233,7 +233,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 
 ### R — Review (when CodeRabbit is dark)
 
-- [x] **R1** Implementer ≠ reviewer. A second cheap-scout (or Grok if scouts wrote it) reviews PRs. Real vs skip table lives in [`AGENTS.md`](AGENTS.md) — **not** a skill. Real = wrong behavior, fail-loud lie, ticks on stdout, MCP break, test that can't fail, scope creep. Skip = docstring %, Rich vs stderr (P4.6 is plain stderr), test `-> None`, style. Revisit: whenever CodeRabbit is rate-limited.
+- [x] **R1** Implementer ≠ reviewer. Second agent is **Hare**. Posts a GitHub PR comment (not only local chat) starting with `<!-- searchts-r1-review -->`, then Name / Purpose / Model / Effort + real-vs-skip table. Spec in [`AGENTS.md`](AGENTS.md). Revisit: whenever CodeRabbit is rate-limited.
 
 ### F — Future (ROADMAP-aligned, after core is solid)
 
@@ -316,6 +316,7 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-28 | Live: LinkedIn `/feed/` is `login-wall` (intended). Reddit stealth `page.content` nav race parked as **P3.11**. DataDome marketing + Booking homepage still yes. |
 | 2026-09-06 | **P3.11**: stealth waits for load / retries `page.content()` on navigating; fail loud, no thin HTML. Does not claim Reddit now reads. |
 | 2026-09-06 | **R1** + `AGENTS.md`: writer ≠ reviewer when CodeRabbit is dark. Not a skill. |
+| 2026-09-06 | **Hare**: R1 reviews are GitHub PR comments with `<!-- searchts-r1-review -->` (Name / Purpose / Model / Effort). Hourly matcher: that token. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
 | 2026-08-28 | Park rule: skip + still worth it → PLAN id + revisit; else **N**. |
 | 2026-08-28 | **X2** posted 2026-08-27; **P1.3** closed. PyPI 0.8.0 (#78) before article; do not wait on P3.11/F8b/F11. |
