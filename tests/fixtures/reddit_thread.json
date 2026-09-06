@@ -1,0 +1,84 @@
+[
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t3",
+          "data": {
+            "subreddit": "python",
+            "author": "example_user",
+            "title": "How do list comprehensions work in Python?",
+            "selftext": "I'm learning Python and I see code like `[x*2 for x in range(5)]` everywhere. Can someone explain what this does?\n\n```python\nresult = [x*2 for x in range(5)]\nprint(result)  # what prints here?\n```",
+            "score": 42,
+            "permalink": "/r/python/comments/abc123/how_do_list_comprehensions_work_in_python/",
+            "id": "abc123",
+            "subreddit_name_prefixed": "r/python",
+            "name": "t3_abc123",
+            "created_utc": 1704067200.0,
+            "url": "https://www.reddit.com/r/python/comments/abc123/how_do_list_comprehensions_work_in_python/"
+          }
+        }
+      ],
+      "after": null,
+      "before": null
+    }
+  },
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t1",
+          "data": {
+            "author": "helpful_reply",
+            "body": "List comprehensions are a concise way to create lists.\n\n```python\n# This:\nresult = [x*2 for x in range(5)]\n# Is equivalent to:\nresult = []\nfor x in range(5):\n    result.append(x*2)\n# Both give: [0, 2, 4, 6, 8]\n```",
+            "score": 15,
+            "permalink": "/r/python/comments/abc123/how_do_list_comprehensions_work_in_python/dgh999/",
+            "id": "dgh999",
+            "link_id": "t3_abc123",
+            "parent_id": "t3_abc123",
+            "created_utc": 1704070800.0,
+            "subreddit": "python",
+            "is_submitter": false,
+            "name": "t1_dgh999"
+          }
+        },
+        {
+          "kind": "t1",
+          "data": {
+            "author": "another_coder",
+            "body": "Great question! You might also want to look at dict comprehensions and generator expressions. They follow the same pattern but for different data structures.",
+            "score": 8,
+            "permalink": "/r/python/comments/abc123/how_do_list_comprehensions_work_in_python/eij111/",
+            "id": "eij111",
+            "link_id": "t3_abc123",
+            "parent_id": "t3_abc123",
+            "created_utc": 1704074400.0,
+            "subreddit": "python",
+            "is_submitter": false,
+            "name": "t1_eij111"
+          }
+        },
+        {
+          "kind": "t1",
+          "data": {
+            "author": "[deleted]",
+            "body": "Check the official tutorial: https://docs.python.org/3/tutorial/datastructures.html#list-comprehensions",
+            "score": 22,
+            "permalink": "/r/python/comments/abc123/how_do_list_comprehensions_work_in_python/fkl222/",
+            "id": "fkl222",
+            "link_id": "t3_abc123",
+            "parent_id": "t3_abc123",
+            "created_utc": 1704078000.0,
+            "subreddit": "python",
+            "is_submitter": false,
+            "name": "t1_fkl222"
+          }
+        }
+      ],
+      "after": null,
+      "before": null
+    }
+  }
+]

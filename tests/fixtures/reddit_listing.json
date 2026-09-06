@@ -1,0 +1,25 @@
+{
+  "kind": "Listing",
+  "data": {
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "subreddit": "python",
+          "author": "example_user",
+          "title": "How do list comprehensions work in Python?",
+          "selftext": "I'm learning Python and I see code like `[x*2 for x in range(5)]` everywhere. Can someone explain what this does?\n\n```python\nresult = [x*2 for x in range(5)]\nprint(result)  # what prints here?\n```",
+          "score": 42,
+          "permalink": "/r/python/comments/abc123/how_do_list_comprehensions_work_in_python/",
+          "id": "abc123",
+          "subreddit_name_prefixed": "r/python",
+          "name": "t3_abc123",
+          "created_utc": 1704067200.0,
+          "url": "https://www.reddit.com/r/python/comments/abc123/how_do_list_comprehensions_work_in_python/"
+        }
+      }
+    ],
+    "after": null,
+    "before": null
+  }
+}
