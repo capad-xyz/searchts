@@ -233,7 +233,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 
 ### R — Review (when CodeRabbit is dark)
 
-- [x] **R1** Implementer ≠ reviewer. Second agent is **🐇‍❄️ Hare** — a **cheap-scout**, not the **orchestrator** (whoever is running the loop: dispatch / leftover finish / merge — not a vendor). Writer model ≠ Hare model. Orchestrator holds merge; orchestrator-as-Hare only if every cheap path is dead (say so in the comment). Posts a GitHub PR comment (not only local chat) starting with `<!-- searchts-r1-review -->`, then Name / Purpose / Model / Effort + real-vs-skip table + Intent hold/ship. Spec in [`AGENTS.md`](AGENTS.md). Revisit: whenever CodeRabbit is rate-limited.
+- [x] **R1** Implementer ≠ reviewer. Second agent is **🐇‍❄️ Hare** — a **cheap-scout**, not the **orchestrator** (whoever is running the loop: dispatch / leftover finish / merge — not a vendor). Writer model ≠ Hare model. Orchestrator holds merge; orchestrator-as-Hare only if every cheap path is dead (say so in the **review body**). Submits a GitHub **review**: body starts with `<!-- searchts-r1-review -->` + table + Intent hold/ship; **inline comments = real rows only** (line must exist on `gh pr diff`). Skip rows stay in the table. Spec in [`AGENTS.md`](AGENTS.md). Revisit: whenever CodeRabbit is rate-limited.
 
 ### F — Future (ROADMAP-aligned, after core is solid)
 
@@ -318,6 +318,7 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-06 | **R1** + `AGENTS.md`: writer ≠ reviewer when CodeRabbit is dark. Not a skill. |
 | 2026-09-06 | **Hare**: R1 reviews are GitHub PR comments with `<!-- searchts-r1-review -->` (Name / Purpose / Model / Effort). Hourly matcher: that token. Display: 🐇‍❄️. |
 | 2026-09-06 | **Hare ≠ orchestrator.** Cheap-scout reviews. Orchestrator merge-only unless cheap path is dead. Role, not a vendor — Grok/Claude/Codex can be either. #132 Hare comment was the orchestrator — that was the miss. |
+| 2026-09-06 | **Hare inline:** GitHub **review** (body = token + table). Diff bubbles = **real** rows only; line must exist on `gh pr diff`. Skip = table only. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
 | 2026-08-28 | Park rule: skip + still worth it → PLAN id + revisit; else **N**. |
 | 2026-08-28 | **X2** posted 2026-08-27; **P1.3** closed. PyPI 0.8.0 (#78) before article; do not wait on P3.11/F8b/F11. |

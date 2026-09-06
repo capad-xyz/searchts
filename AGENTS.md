@@ -29,17 +29,21 @@ The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is 
 
 **Who is Hare:** a **cheap-scout** (free catalog id on this host), **not** the orchestrator. Writer model ≠ Hare model. If the orchestrator also touched the PR (leftover finish after a scout died), they still are not Hare — spawn a different cheap id.
 
-**Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The GitHub comment must then say that under **Model** / **Purpose** (`cheap-scout unavailable: …`).
+**Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The **review body** must then say that under **Model** / **Purpose** (`cheap-scout unavailable: …`).
 
-Hare **must** post a comment on the GitHub PR (`gh pr comment` / review API). Local chat is not enough — the orchestrator chat and the hourly matcher only see GitHub.
+Hare **must** submit a GitHub **review** on the PR head SHA (`gh api …/pulls/{n}/reviews` or the review API). Local chat is not enough. An issue comment alone is not enough.
 
-First line of the comment **exactly**:
+1. **Review body** (Conversation tab + hourly matcher). First line **exactly**:
 
 ```
 <!-- searchts-r1-review -->
 ```
 
-Then:
+Then the table below. **Intent:** hold / ship. If hold, one sentence vs PLAN.
+
+2. **Inline on the diff — `real` rows only.** Each real row is also `{path, line, side: RIGHT, body}` on a line that exists in `gh pr diff` for that SHA. Invented lines 422. If the line is not in the patch, table only.
+
+3. **Skip rows** stay in the table. Do not bubble the diff with nits.
 
 ```markdown
 ## 🐇‍❄️ Hare — R1 review
