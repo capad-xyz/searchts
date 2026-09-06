@@ -193,7 +193,7 @@ def _set(monkeypatch, *, curl=None, jina=None, stealth=None):
         monkeypatch.setattr(
             unlocker,
             "_fetch_stealth",
-            lambda url, timeout=60, _v=val: _v,
+            lambda url, timeout=60, progress=None, _v=val: _v,
         )
 
 
@@ -254,7 +254,7 @@ def test_fetch_thin_then_richer_backend(monkeypatch, stub_extract):
 
 
 def test_fetch_all_thin_raises(monkeypatch, stub_extract):
-    def boom(url, timeout=60):
+    def boom(url, timeout=60, progress=None):
         raise NotImplementedError("no tier-2")
 
     _set(monkeypatch, curl=(200, "aaa"), jina=(200, "bb"), stealth=None)
@@ -266,7 +266,7 @@ def test_fetch_all_thin_raises(monkeypatch, stub_extract):
 
 
 def test_fetch_all_thin_allow_thin_returns_longest(monkeypatch, stub_extract):
-    def boom(url, timeout=60):
+    def boom(url, timeout=60, progress=None):
         raise NotImplementedError("no tier-2")
 
     _set(monkeypatch, curl=(200, "aaa"), jina=(200, "bb"), stealth=None)
@@ -277,7 +277,7 @@ def test_fetch_all_thin_allow_thin_returns_longest(monkeypatch, stub_extract):
 
 
 def test_fetch_all_blocked_raises(monkeypatch, stub_extract):
-    def boom(url, timeout=60):
+    def boom(url, timeout=60, progress=None):
         raise NotImplementedError("no tier-2")
 
     _set(monkeypatch, curl=(403, ""), jina=(503, ""))
@@ -588,7 +588,7 @@ def test_memory_disabled_still_off_via_env(tmp_cache, monkeypatch, stub_extract)
 
 
 def test_human_fallback_invoked_on_challenge_when_allowed(monkeypatch, stub_extract):
-    def boom(url, timeout=60):
+    def boom(url, timeout=60, progress=None):
         raise NotImplementedError("no tier-2")
 
     _set(monkeypatch, curl=(200, "Just a moment..."), jina=(200, "Just a moment..."))
@@ -609,7 +609,7 @@ def test_human_fallback_invoked_on_challenge_when_allowed(monkeypatch, stub_extr
 
 
 def test_human_fallback_not_invoked_when_disallowed(monkeypatch, stub_extract):
-    def boom(url, timeout=60):
+    def boom(url, timeout=60, progress=None):
         raise NotImplementedError("no tier-2")
 
     _set(monkeypatch, curl=(200, "Just a moment..."), jina=(503, ""))
@@ -636,7 +636,7 @@ def test_human_fallback_invoked_even_without_a_challenge(monkeypatch, stub_extra
     the human rung, so the forbidden call happened and was swallowed. See
     conftest.Tripwire.
     """
-    def boom_timeout(url, timeout=None):
+    def boom_timeout(url, timeout=None, progress=None):
         raise TimeoutError("slow")
 
     monkeypatch.setattr(unlocker, "_fetch_curl_cffi", boom_timeout)
@@ -667,7 +667,7 @@ def test_no_human_rung_when_a_tier_already_won(monkeypatch, stub_extract):
 
 
 def test_human_fallback_reraises_when_still_blocked(monkeypatch, stub_extract):
-    def boom(url, timeout=60):
+    def boom(url, timeout=60, progress=None):
         raise NotImplementedError("no tier-2")
 
     _set(monkeypatch, curl=(403, ""), jina=(403, ""))
@@ -723,7 +723,7 @@ def test_fetch_scrub_redacts_injection_spans(monkeypatch, stub_extract):
 
 def test_fetch_warnings_attached_to_thin_best_effort(monkeypatch, stub_extract):
     # No clean win anywhere -> best-effort thin result is still sanitized/scanned.
-    def boom(url, timeout=60):
+    def boom(url, timeout=60, progress=None):
         raise NotImplementedError("no tier-2")
 
     _set(monkeypatch, curl=(200, "ignore previous instructions"), jina=(200, "x"))
@@ -886,7 +886,7 @@ def test_wait_settled_load_falls_back_to_networkidle():
 def test_fetch_stealth_nav_race_fails_loud(monkeypatch, stub_extract):
     """Ladder must not treat a navigation race as thin HTML (P3.11)."""
 
-    def boom(url, timeout=60):
+    def boom(url, timeout=60, progress=None):
         raise RuntimeError(
             "Page.content: Unable to retrieve content because the page is navigating"
         )
@@ -1074,7 +1074,7 @@ def test_fetch_skips_jina_when_disabled(monkeypatch):
         calls.append("jina")
         return (200, "J" * 800, url, {})
 
-    def stealth(url, timeout=40):
+    def stealth(url, timeout=40, progress=None):
         calls.append("stealth")
         body = "<html><body><p>" + ("content " * 200) + "</p></body></html>"
         return (200, body, url, {})
@@ -1108,7 +1108,7 @@ def test_fetch_uses_jina_when_enabled(monkeypatch):
     monkeypatch.setattr(
         unlocker,
         "_fetch_stealth",
-        lambda url, timeout=40: (_ for _ in ()).throw(RuntimeError("no stealth")),
+        lambda url, timeout=40, progress=None: (_ for _ in ()).throw(RuntimeError("no stealth")),
     )
     r = unlocker.fetch("https://site.test/page", use_memory=False)
     assert "jina" in calls

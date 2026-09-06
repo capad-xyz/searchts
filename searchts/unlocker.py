@@ -928,7 +928,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     continue
                 text = body  # Jina already returns markdown
             elif backend == "stealth-browser":
-                status, body, final_url, headers = _fetch_stealth(url)
+                status, body, final_url, headers = _fetch_stealth(
+                    url, progress=progress
+                )
                 reason = looks_blocked(status, body, headers)
                 if reason:
                     attempts.append((backend, reason))
