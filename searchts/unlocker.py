@@ -881,6 +881,21 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             scrub,
         )
 
+    # Tier-0.5: known-host public-API endpoints (e.g. Reddit .json).
+    # A fail-open ring — on miss/exception the normal ladder runs unchanged.
+    # No domain-memory pinning for reddit.com (volatile per request).
+    try:
+        from searchts import known_hosts as _known_hosts
+        if _known_hosts.matches(url):
+            kh = _known_hosts.extract(url)
+            if kh is not None and kh.markdown:
+                return _finalize(
+                    FetchResult(f"known-host:{kh.provider}", kh.markdown, 200, final_url=url),
+                    scrub,
+                )
+    except Exception:  # noqa: BLE001 - ring must never break the ladder
+        pass
+
     order = list(backends if backends is not None else DEFAULT_BACKENDS)
     if not jina_enabled():
         order = [b for b in order if b != "Jina Reader"]
