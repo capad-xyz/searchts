@@ -41,11 +41,22 @@ Hare posts **two** GitHub surfaces (CodeRabbit-shaped). Local chat is not enough
 
 Then the table below. **Intent:** hold / ship. If hold, one sentence vs PLAN. Hourly matcher + orchestrator chat look here.
 
-2. **Inline on Files changed — real *and* skip.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. First line of each bubble: **`real`** or **`skip`**. Invented lines 422 → table only.
+2. **Inline on Files changed — real *and* skip.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines 422 → table only.
 
-3. **Skip never holds merge.** Intent = **hold** only if there is a **real** row. Skip is CodeRabbit 2/10: on the line, ship anyway.
+   Every bubble body starts **exactly** like this (so it does not read as the PR author talking):
+
+```
+<!-- searchts-r1-review -->
+🐇❄ Hare · automated R1 · not the PR author
+**skip** — <one sentence>
+```
+
+   Use `**real**` instead of `**skip**` when it is real. No scores. No first person.
+
+3. **Skip never holds merge.** Nits stay on the line. Applying a minority of them is expected. Intent = **hold** only if there is a **real** row.
 
 The review may have an empty body if the issue comment already carries the table. Do not skip (1). Zero rows → no bubbles (nothing to pin).
+
 
 
 
