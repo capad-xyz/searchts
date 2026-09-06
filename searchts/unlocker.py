@@ -539,7 +539,95 @@ def _fetch_jina(url: str, timeout: int = 40) -> Tuple[int, str, str, Dict[str, s
         return resp.status, resp.read().decode("utf-8", "replace"), url, headers
 
 
-def _await_hydration(page, html: str, budget_ms: int = 8000, step_ms: int = 500) -> str:
+_NAV_RACE = "the page is navigating"
+_NAV_CONTENT_RETRIES = 4
+_NAV_CONTENT_WAIT_MS = 400
+_SETTLE_LOAD_MS = 8000
+_SETTLE_NETWORKIDLE_MS = 3000
+
+
+def _is_nav_race(exc: BaseException) -> bool:
+    return _NAV_RACE in str(exc).lower()
+
+
+def _stderr_tick(msg: str, progress: bool) -> None:
+    if not progress:
+        return
+    try:
+        print(msg, file=sys.stderr, flush=True)
+    except (OSError, ValueError):
+        pass
+
+
+def _progress_wanted(progress: Optional[bool] = None) -> bool:
+    if progress is None:
+        return os.environ.get("SEARCHTS_PROGRESS", "") in (
+            "1", "true", "True", "yes",
+        )
+    return bool(progress)
+
+
+def _wait_settled_load(
+    page, timeout_ms: int = _SETTLE_LOAD_MS, progress: bool = False
+) -> None:
+    """Wait for a settled load before ``page.content()`` (P3.11).
+
+    ``goto(..., wait_until="domcontentloaded")`` can still be mid-redirect.
+    Prefer ``load``; try a short ``networkidle`` if ``load`` times out. Idle
+    wait is bounded — live sockets never settle, and that is not a hang.
+    """
+    load_ms = max(1000, int(timeout_ms))
+    _stderr_tick("waiting for page to settle…", progress)
+    try:
+        page.wait_for_load_state("load", timeout=load_ms)
+        return
+    except Exception:  # noqa: BLE001 - timeout / missing API in tests
+        pass
+    try:
+        page.wait_for_load_state(
+            "networkidle", timeout=min(_SETTLE_NETWORKIDLE_MS, load_ms)
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _page_content(
+    page,
+    retries: int = _NAV_CONTENT_RETRIES,
+    wait_ms: int = _NAV_CONTENT_WAIT_MS,
+    progress: bool = False,
+) -> str:
+    """``page.content()`` with retries on Playwright's mid-navigation error.
+
+    After retries, raise — do not return the HTML from a half-navigated
+    document (that reads as thin and looks like a win).
+    """
+    last: Optional[BaseException] = None
+    total_wait = max(0, retries - 1) * wait_ms
+    if total_wait >= 1000:
+        _stderr_tick("waiting for navigation to finish…", progress)
+    for i in range(max(1, retries)):
+        try:
+            return page.content()
+        except Exception as e:  # noqa: BLE001
+            if not _is_nav_race(e):
+                raise
+            last = e
+            if i >= retries - 1:
+                break
+            page.wait_for_timeout(wait_ms)
+    raise RuntimeError(
+        "Page.content: Unable to retrieve content because the page is navigating"
+    ) from last
+
+
+def _await_hydration(
+    page,
+    html: str,
+    budget_ms: int = 8000,
+    step_ms: int = 500,
+    progress: bool = False,
+) -> str:
     """Poll until the rendered HTML stops growing; return the fullest seen.
 
     A JS app is still an empty shell at ``domcontentloaded``, so reading
@@ -549,15 +637,18 @@ def _await_hydration(page, html: str, budget_ms: int = 8000, step_ms: int = 500)
     connection (streaming, websockets, analytics beacons).
 
     Stops as soon as two consecutive reads agree, so an already-rendered page
-    costs one extra step rather than the whole budget.
+    costs one extra step rather than the whole budget. A persistent
+    navigation race fails loud instead of returning the last partial HTML.
     """
     waited = 0
     while waited < budget_ms:
         page.wait_for_timeout(step_ms)
         waited += step_ms
         try:
-            current = page.content()
-        except Exception:  # noqa: BLE001 - page may navigate mid-read
+            current = _page_content(page, progress=progress)
+        except Exception as e:  # noqa: BLE001
+            if _is_nav_race(e):
+                raise
             break
         if len(current) <= len(html):
             break  # stopped growing: hydrated, or static all along
@@ -582,7 +673,7 @@ def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:
 
 
 def _fetch_stealth(
-    url: str, timeout: int = 60
+    url: str, timeout: int = 60, progress: Optional[bool] = None
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     """Tier-2: render with an undetected headless Chromium (patchright).
 
@@ -597,11 +688,11 @@ def _fetch_stealth(
 
     Safe under MCP/FastMCP: see ``_call_sync_browser``.
     """
-    return _call_sync_browser(_fetch_stealth_impl, url, timeout)
+    return _call_sync_browser(_fetch_stealth_impl, url, timeout, progress)
 
 
 def _fetch_stealth_impl(
-    url: str, timeout: int = 60
+    url: str, timeout: int = 60, progress: Optional[bool] = None
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     try:
         from patchright.sync_api import sync_playwright
@@ -623,18 +714,21 @@ def _fetch_stealth_impl(
             resp = page.goto(url, wait_until="domcontentloaded", timeout=ms)
             init_status = resp.status if resp else None
             headers = _normalize_headers(resp.all_headers()) if resp else {}
+            want_tick = _progress_wanted(progress)
+            # Redirects after DCL: wait for load before the first content().
+            _wait_settled_load(
+                page, timeout_ms=min(_SETTLE_LOAD_MS, ms), progress=want_tick
+            )
+            html = _page_content(page, progress=want_tick)
             # Let a JS app hydrate before judging the page; otherwise an SPA
             # comes back as a near-empty shell and reads as "thin".
-            html = _await_hydration(page, page.content())
+            html = _await_hydration(page, html, progress=want_tick)
             # Wait (bounded) for a managed JS challenge to auto-resolve.
             waited = 0
             while waited < 15000 and looks_blocked(200, html) == "challenge":
                 page.wait_for_timeout(1500)
                 waited += 1500
-                try:
-                    html = page.content()
-                except Exception:  # noqa: BLE001 - page may navigate mid-read
-                    break
+                html = _page_content(page, progress=want_tick)
             # If the challenge cleared, the real status is 200 regardless of the
             # initial challenge response; otherwise keep the original status.
             status = 200 if looks_blocked(200, html) is None else init_status
@@ -834,7 +928,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     continue
                 text = body  # Jina already returns markdown
             elif backend == "stealth-browser":
-                status, body, final_url, headers = _fetch_stealth(url)
+                status, body, final_url, headers = _fetch_stealth(
+                    url, progress=progress
+                )
                 reason = looks_blocked(status, body, headers)
                 if reason:
                     attempts.append((backend, reason))
