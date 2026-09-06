@@ -19,21 +19,42 @@ Free, open-source, **keyless** web layer for agents. Fetch a URL or admit you ca
 4. **No connector framework** (**N4**). Share extractors stay fail-open modules. Known-host JSON (F5b) is the same pattern, not a plugin system.
 5. **Out of scope** unless the PR *is* that PLAN id: Solari (**F14**), HTTP MCP (**F9**), cookies-from-browser (**F7**), paid proxies (**N1**), "beat Reddit."
 
-## R1 — You are CodeRabbit now
+## R1 — Hare (you are CodeRabbit now)
 
-The agent that **wrote** the PR does not rubber-stamp it. A **second** agent reviews.
+**Name:** `Hare` (always). Machine token for hourly jobs / remote Grok: `searchts-r1-review`.
 
-Reviewer reads the diff vs `main` and replies with a table only:
+The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is Hare.
+
+Hare **must** post a comment on the GitHub PR (`gh pr comment` / review API). Local chat is not enough — remote Grok and the ChatGPT hourly matcher only see GitHub.
+
+First line of the comment **exactly**:
+
+```
+<!-- searchts-r1-review -->
+```
+
+Then:
+
+```markdown
+## Hare — R1 review
+
+| | |
+|---|---|
+| **Name** | Hare |
+| **Purpose** | Review and report. Do not fix unless asked. |
+| **Model** | <exact model> |
+| **Effort** | low / medium / high |
 
 | Sev | File:line | Issue | Fix? |
 |---|---|---|---|
 | real / skip | … | one sentence | yes / no / later |
+```
 
 **Real:** wrong behavior, fail-loud lie, ticks on stdout, MCP break, test that cannot fail, scope creep.
 
 **Skip:** docstring coverage %, Rich vs stderr, test `-> None`, style.
 
-Do not push fixes unless asked (`fix the real rows`).
+Do not push fixes unless asked (`fix the real rows`). Do not use any other reviewer display name.
 
 ## Commits / PRs
 
