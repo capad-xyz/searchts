@@ -31,6 +31,8 @@ The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is 
 
 **Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The **PR comment** must then say that under **Model** / **Purpose** (`cheap-scout unavailable: …`).
 
+**Trigger (until R1c):** a remote push does **not** run Hare. The agent that opened/pushed the PR posts a Conversation comment whose first line is `<!-- searchts-r1-needed -->` (PR URL + “spawn Hare”). Hourly matcher / human then runs a **different cheap-scout**. Merge bar: `<!-- searchts-r1-review -->` exists. **R1b/R1c/F15** are parked — see PLAN.md.
+
 Hare posts **two** GitHub surfaces (CodeRabbit-shaped). Local chat is not enough.
 
 1. **PR conversation comment** (`gh pr comment`). First line **exactly**:
