@@ -29,17 +29,24 @@ The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is 
 
 **Who is Hare:** a **cheap-scout** (free catalog id on this host), **not** the orchestrator. Writer model ≠ Hare model. If the orchestrator also touched the PR (leftover finish after a scout died), they still are not Hare — spawn a different cheap id.
 
-**Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The GitHub comment must then say that under **Model** / **Purpose** (`cheap-scout unavailable: …`).
+**Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The **PR comment** must then say that under **Model** / **Purpose** (`cheap-scout unavailable: …`).
 
-Hare **must** post a comment on the GitHub PR (`gh pr comment` / review API). Local chat is not enough — the orchestrator chat and the hourly matcher only see GitHub.
+Hare posts **two** GitHub surfaces (CodeRabbit-shaped). Local chat is not enough.
 
-First line of the comment **exactly**:
+1. **PR conversation comment** (`gh pr comment`). First line **exactly**:
 
 ```
 <!-- searchts-r1-review -->
 ```
 
-Then:
+Then the table below. **Intent:** hold / ship. If hold, one sentence vs PLAN. Hourly matcher + orchestrator chat look here.
+
+2. **Inline on Files changed — `real` rows only.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. That is the “Add a comment on line …” bubble. Invented lines 422. If the line is not in the patch, table only.
+
+3. **Skip rows** stay in the table. Do not open a bubble for nits.
+
+The review may have an empty body if the issue comment already carries the table. Do not skip (1).
+
 
 ```markdown
 ## 🐇‍❄️ Hare — R1 review
