@@ -1,0 +1,44 @@
+{
+  "kind": "Listing",
+  "data": {
+    "children": [
+      {
+        "kind": "t2",
+        "data": {
+          "name": "t2_spez",
+          "id": "spez",
+          "author": "spez",
+          "title": "u/spez",
+          "icon_img": "https://styles.redditmedia.com/t5_2qh6i/profile/reddit-default.png",
+          "subreddit": {
+            "link_karma": 12345,
+            "comment_karma": 67890,
+            "subscribers": 1000000
+          },
+          "created_utc": 1201234567.0,
+          "has_verified_email": false,
+          "is_employee": false,
+          "is_mod": true,
+          "awardee_karma": 500,
+          "awarder_karma": 200,
+          "link_karma": 12345,
+          "comment_karma": 67890,
+          "total_karma": 80000,
+          "accept_followers": true,
+          "hide_from_robots": false,
+          "pref_geopopular": "local",
+          "pref_show_presence": true,
+          "show_preview": true,
+          "subreddit": {
+            "display_name": "announcements",
+            "title": "Announcements",
+            "url": "/r/announcements/",
+            "icon_img": "https://styles.redditmedia.com/t5_2qh6i/community-icon_64.png"
+          }
+        }
+      }
+    ],
+    "after": null,
+    "before": null
+  }
+}
