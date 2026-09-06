@@ -25,6 +25,10 @@ Free, open-source, **keyless** web layer for agents. Fetch a URL or admit you ca
 
 The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is Hare.
 
+**Who is Hare:** a **cheap-scout** (free catalog id on this host), **not** the orchestrator (Grok). Writer model ≠ Hare model. If the orchestrator also touched the PR (leftover finish after a scout died), they still are not Hare — spawn a different cheap id.
+
+**Grok holds merge.** Grok is Hare only when every cheap path is dead (429 / 500 / no credits). The GitHub comment must then say that under **Model** / **Purpose** (`cheap-scout unavailable: …`).
+
 Hare **must** post a comment on the GitHub PR (`gh pr comment` / review API). Local chat is not enough — remote Grok and the ChatGPT hourly matcher only see GitHub.
 
 First line of the comment **exactly**:
