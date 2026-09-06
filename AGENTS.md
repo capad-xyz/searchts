@@ -31,6 +31,8 @@ The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is 
 
 **Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The **PR comment** must then say that under **Model** / **Purpose** (`cheap-scout unavailable: …`).
 
+**Trigger (until R1c):** a remote push does **not** run Hare. The agent that opened/pushed the PR posts a Conversation comment whose first line is `<!-- searchts-r1-needed -->` (PR URL + “spawn Hare”). Hourly matcher / human then runs a **different cheap-scout**. Merge bar: `<!-- searchts-r1-review -->` exists. **R1b/R1c/F15** are parked — see PLAN.md.
+
 Hare posts **two** GitHub surfaces (CodeRabbit-shaped). Local chat is not enough.
 
 1. **PR conversation comment** (`gh pr comment`). First line **exactly**:
@@ -41,11 +43,23 @@ Hare posts **two** GitHub surfaces (CodeRabbit-shaped). Local chat is not enough
 
 Then the table below. **Intent:** hold / ship. If hold, one sentence vs PLAN. Hourly matcher + orchestrator chat look here.
 
-2. **Inline on Files changed — `real` rows only.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. That is the “Add a comment on line …” bubble. Invented lines 422. If the line is not in the patch, table only.
+2. **Inline on Files changed — real *and* skip.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines 422 → table only.
 
-3. **Skip rows** stay in the table. Do not open a bubble for nits.
+   Every bubble body starts **exactly** like this (so it does not read as the PR author talking):
 
-The review may have an empty body if the issue comment already carries the table. Do not skip (1).
+```
+<!-- searchts-r1-review -->
+🐇❄ Hare · automated R1 · not the PR author
+**skip** — <one sentence>
+```
+
+   Use `**real**` instead of `**skip**` when it is real. No scores. No first person.
+
+3. **Skip never holds merge.** Nits stay on the line. Applying a minority of them is expected. Intent = **hold** only if there is a **real** row.
+
+The review may have an empty body if the issue comment already carries the table. Do not skip (1). Zero rows → no bubbles (nothing to pin).
+
+
 
 
 ```markdown

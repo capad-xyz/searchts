@@ -233,7 +233,9 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 
 ### R — Review (when CodeRabbit is dark)
 
-- [x] **R1** Implementer ≠ reviewer. Second agent is **🐇‍❄️ Hare** — a **cheap-scout**, not the **orchestrator** (whoever is running the loop: dispatch / leftover finish / merge — not a vendor). Writer model ≠ Hare model. Orchestrator holds merge; orchestrator-as-Hare only if every cheap path is dead (say so in the **PR comment**). Two surfaces: (1) `gh pr comment` body starts with `<!-- searchts-r1-review -->` + table + Intent hold/ship; (2) **Files-changed bubbles** = **real** rows only (line must exist on `gh pr diff`). Skip rows stay in the table. Spec in [`AGENTS.md`](AGENTS.md). Revisit: whenever CodeRabbit is rate-limited.
+- [x] **R1** Implementer ≠ reviewer. Second agent is **🐇‍❄️ Hare** — a **cheap-scout**, not the **orchestrator** (whoever is running the loop: dispatch / leftover finish / merge — not a vendor). Writer model ≠ Hare model. Orchestrator holds merge; orchestrator-as-Hare only if every cheap path is dead (say so in the **PR comment**). Two surfaces: (1) `gh pr comment` body starts with `<!-- searchts-r1-review -->` + table + Intent hold/ship; (2) **Files-changed bubbles** = **real and skip** (line must exist on `gh pr diff`). Each bubble is labeled Hare/automated, not the PR author. Skip never holds merge. Spec in [`AGENTS.md`](AGENTS.md). Revisit: whenever CodeRabbit is rate-limited.
+- [ ] **R1b** GitHub App **identity only** — reviews show as `hare[bot]`, not `capad-xyz`. One install: `capad-xyz/searchts`. Not a review product. Revisit when the Author badge actually matters in public/screenshots.
+- [ ] **R1c** Auto-Hare on `opened` / `synchronize`. Today Hare only runs if a human pastes a prompt to a local scout — remote orchestrator push does not trigger it. **Interim:** orchestrator posts `<!-- searchts-r1-needed -->` on the PR; hourly matcher / human spawns Hare. **Later:** Action nag, local watcher, or **R1b** webhook. Do not run the orchestrator as Hare. Revisit with **R1b**.
 
 ### F — Future (ROADMAP-aligned, after core is solid)
 
@@ -253,6 +255,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - [ ] **F12** Wall playbook (not a bypass sprint): **P3.11** (stealth `page.content` retry) → **F1** (persistent profile) → **`--human` / F7** (session, extras only). Never **N1** (paid residential as default) or **N3** (keyed unlocker as default). Login/challenge stays fail-loud. Revisit **after PyPI 0.8.0 + article**.
 - [ ] **F13** Optional update nudge (**not 0.8.1**): cached ~24h GitHub check, **stderr only**, skip `mcp serve` / pipes, `SEARCHTS_NO_UPDATE_CHECK=1`. Same PR as **F8b**. Revisit **after article**.
 - [ ] **F14** Opt-in Solari (cloud Playwright) **only when local `[browser]`/patchright is missing**. `SOLARI_API_KEY`. Never default (**N3**). 2026-09-02 cookbook: Reddit/LinkedIn still walls (proxy+captcha+hydration). Artifact: https://github.com/capad-xyz/solari-cookbook/tree/main/examples/agent-read . Revisit **if Harry replies** or **after article**. Keep-gate = would pay Starter to skip patchright, not Reddit green.
+- [ ] **F15** Hare as a **review product** (other repos install an App, billed, CodeRabbit-shaped). **Different intent from searchts.** Do not mix sprints, tokens, or PLAN order with the unlocker. Revisit only as its own thread.
 
 ### N — Not planned (explicit)
 
@@ -318,7 +321,7 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-06 | **R1** + `AGENTS.md`: writer ≠ reviewer when CodeRabbit is dark. Not a skill. |
 | 2026-09-06 | **Hare**: R1 reviews are GitHub PR comments with `<!-- searchts-r1-review -->` (Name / Purpose / Model / Effort). Hourly matcher: that token. Display: 🐇‍❄️. |
 | 2026-09-06 | **Hare ≠ orchestrator.** Cheap-scout reviews. Orchestrator merge-only unless cheap path is dead. Role, not a vendor — Grok/Claude/Codex can be either. #132 Hare comment was the orchestrator — that was the miss. |
-| 2026-09-06 | **Hare inline:** (1) PR **comment** = token + table. (2) Files-changed **bubbles** = **real** rows only (`gh pr diff`). Skip = table only. |
+| 2026-09-07 | **R1b** parked: GitHub App identity (`hare[bot]`) for this repo only. **R1c** parked: auto-Hare on PR; interim `<!-- searchts-r1-needed -->`. **F15** parked: Hare-as-review-product, different intent, own thread. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
 | 2026-08-28 | Park rule: skip + still worth it → PLAN id + revisit; else **N**. |
 | 2026-08-28 | **X2** posted 2026-08-27; **P1.3** closed. PyPI 0.8.0 (#78) before article; do not wait on P3.11/F8b/F11. |
