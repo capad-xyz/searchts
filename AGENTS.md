@@ -41,11 +41,12 @@ Hare posts **two** GitHub surfaces (CodeRabbit-shaped). Local chat is not enough
 
 Then the table below. **Intent:** hold / ship. If hold, one sentence vs PLAN. Hourly matcher + orchestrator chat look here.
 
-2. **Inline on Files changed — `real` rows only.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. That is the “Add a comment on line …” bubble. Invented lines 422. If the line is not in the patch, table only.
+2. **Inline on Files changed — real *and* skip.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. First line of each bubble: **`real`** or **`skip`**. Invented lines 422 → table only.
 
-3. **Skip rows** stay in the table. Do not open a bubble for nits.
+3. **Skip never holds merge.** Intent = **hold** only if there is a **real** row. Skip is CodeRabbit 2/10: on the line, ship anyway.
 
-The review may have an empty body if the issue comment already carries the table. Do not skip (1).
+The review may have an empty body if the issue comment already carries the table. Do not skip (1). Zero rows → no bubbles (nothing to pin).
+
 
 
 ```markdown
