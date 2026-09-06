@@ -523,3 +523,99 @@ def test_fetch_ring_returns_none_falls_through_to_ladder(monkeypatch):
     )
     assert calls == ["curl_cffi"]
     assert "page content" in res.text
+
+
+def test_known_host_hit_ticks_stderr(monkeypatch, capsys):
+    fixture = _load("reddit_thread.json")
+    raw = json.dumps(fixture)
+    import searchts.known_hosts.reddit as reddit_mod
+    monkeypatch.setattr(reddit_mod, "_fetch", lambda u, timeout=30: raw)
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("ladder")),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_jina",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("ladder")),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_stealth",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("ladder")),
+    )
+    unlocker.fetch(
+        "https://www.reddit.com/r/python/comments/abc123/title/.json",
+        use_memory=False,
+        progress=True,
+    )
+    captured = capsys.readouterr()
+    assert "trying known-host:reddit" in captured.err
+    assert "known-host:reddit: ok" in captured.err
+    assert captured.out == ""
+
+
+def test_known_host_miss_ticks_then_ladder(monkeypatch, capsys):
+    import searchts.known_hosts.reddit as reddit_mod
+    monkeypatch.setattr(
+        reddit_mod,
+        "_fetch",
+        lambda u, timeout=30: json.dumps({"error": 403, "message": "blocked"}),
+    )
+
+    def spy_curl(url, timeout=30):
+        return 200, "<html><body>" + "page content " * 100 + "</body></html>", url, {}
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", spy_curl)
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_jina",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("jina")),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_stealth",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("stealth")),
+    )
+    unlocker.fetch(
+        "https://www.reddit.com/r/python/hot/",
+        backends=["curl_cffi"],
+        use_memory=False,
+        progress=True,
+    )
+    captured = capsys.readouterr()
+    assert "trying known-host:reddit" in captured.err
+    assert "known-host:reddit: miss" in captured.err
+    assert "trying curl_cffi" in captured.err
+    assert captured.out == ""
+
+
+def test_known_host_progress_false_is_quiet(monkeypatch, capsys):
+    fixture = _load("reddit_thread.json")
+    raw = json.dumps(fixture)
+    import searchts.known_hosts.reddit as reddit_mod
+    monkeypatch.setattr(reddit_mod, "_fetch", lambda u, timeout=30: raw)
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("ladder")),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_jina",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("ladder")),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_stealth",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("ladder")),
+    )
+    unlocker.fetch(
+        "https://www.reddit.com/r/python/comments/abc123/title/.json",
+        use_memory=False,
+        progress=False,
+    )
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    assert captured.out == ""

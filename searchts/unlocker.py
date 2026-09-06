@@ -887,12 +887,23 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     try:
         from searchts import known_hosts as _known_hosts
         if _known_hosts.matches(url):
+            kh_name = _known_hosts.matching_name(url) or "known-host"
+            _tick(f"trying known-host:{kh_name}…")
             kh = _known_hosts.extract(url)
             if kh is not None and kh.markdown:
+                _tick(
+                    f"  known-host:{kh.provider}: ok ({len(kh.markdown)} chars)"
+                )
                 return _finalize(
-                    FetchResult(f"known-host:{kh.provider}", kh.markdown, 200, final_url=url),
+                    FetchResult(
+                        f"known-host:{kh.provider}",
+                        kh.markdown,
+                        200,
+                        final_url=url,
+                    ),
                     scrub,
                 )
+            _tick(f"  known-host:{kh_name}: miss")
     except Exception:  # noqa: BLE001 - ring must never break the ladder
         pass
 
