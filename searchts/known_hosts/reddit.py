@@ -1,24 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Reddit `.json` endpoint extractor — known-host ring (F5b).
+"""Reddit public-document extractor — known-host ring (F5b).
 
-Recognized URL shapes::
+The caller passes a **page**, not an API URL (same as share extractors).
+HTML listing/thread URLs (www / old / no-www, hot/new/top/rising,
+``comments/<id>/…``) are rewritten to the public ``.json`` document, fetched,
+parsed, then fail-open to curl/Jina/stealth on any miss.
 
-    https://www.reddit.com/r/<sub>/comments/<id>/<slug>/.json
-    https://old.reddit.com/r/<sub>/comments/<id>/<slug>/.json
-    https://old.reddit.com/r/<sub>/comments/.json                (listing)
-    https://www.reddit.com/r/<sub>/.json                        (listing)
-    https://www.reddit.com/user/<user>/.json                    (user/about)
-
-The public `.json` endpoints return machine-readable Reddit data without a login
-session. They are blocked by Reddit's bot-detection at the TLS/JA3 layer (403
-or a safety-interstitial HTML page) for anonymous requests. A Chrome-impersonated
-fetch clears the bot-filter and returns structured JSON. On a successful parse
-the response is rendered to clean markdown (title, OP body, top-level comments
-with author + score + permalink). Any failure — 403 interstitial, malformed JSON,
-missing fields — returns None so the ladder runs unchanged.
-
-This is a known-host RING, not a login-bypass. A logged-in Reddit session (OpenCLI /
-rdt-cli) still uses the RedditChannel. No domain-memory pinning for reddit.com.
+Also matches already-JSON shapes: ``/r/sub.json``, ``/r/sub/hot.json``,
+``/r/sub/comments/<id>.json``, and ``/.json``.
 """
 
 from __future__ import annotations
@@ -30,34 +19,45 @@ from typing import Any, Dict, List, Optional
 
 from searchts.known_hosts import KnownResult
 
-# Reddit JSON API URL shapes (compiled, matched against the normalized URL).
-# Recognized:
-#   /r/<sub>/comments/<id>[/<slug>]/.json   (thread; id+slug optional)
-#   /r/<sub>/comments/.json                  (comment listing for a sub)
-#   /r/<sub>/.json                           (subreddit listing)
-#   /user/<user>/.json                       (user about)
-#
-# One pattern, single named group `subreddit` (set on every /r/<sub>/... URL)
-# and a single named group `user` (set on /user/<u>/ URLs). `user` is None on
-# /r/... URLs and `subreddit` is None on /user/ URLs — no second named group.
+# HTML pages and JSON documents. Host: www / old / bare reddit.com.
+# Listing: /r/<sub>[/hot|/new|/top|/rising]
+# Thread:  /r/<sub>/comments[/<id>[/<slug>]]
+# User:    /user/<user>
+# JSON may be ``.json`` on the last segment or ``/.json``.
 
 PATTERN = re.compile(
-    r"^https://(?:www\.reddit\.com|old\.reddit\.com)/"
+    r"^https://(?:www\.|old\.)?reddit\.com/"
     r"(?:"
-    # Thread / comments: /r/<sub>/comments[/<id>[/<slug>]]/.json
-    r"r/(?P<subreddit>[A-Za-z0-9_-]+)/comments"
-    r"(?:/[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)?)?"
-    r"/\.json"
+    r"r/(?P<subreddit>[A-Za-z0-9_]+)"
+    r"(?:"
+    r"\.json"
+    r"|/\.json"
+    r"|/(?:hot|new|top|rising)(?:\.json|/\.json)?"
+    r"|/comments(?:/(?P<post_id>[A-Za-z0-9]+)(?:/(?P<slug>[A-Za-z0-9_-]+))?)?(?:\.json|/\.json)?"
+    r")?"
+    r"/?"
     r"|"
-    # Subreddit listing: /r/<sub>/.json
-    r"r/(?P<subreddit_listing>[A-Za-z0-9_-]+)/\.json"
-    r"|"
-    # User about: /user/<user>/.json
-    r"user/(?P<user>[A-Za-z0-9_-]+)/\.json"
+    r"user/(?P<user>[A-Za-z0-9_-]+)(?:\.json|/\.json)?"
+    r"/?"
     r")"
     r"(?:\?.*)?$",
     re.IGNORECASE,
 )
+
+
+def _to_json_url(url: str) -> str:
+    """Map a Reddit page URL to the public ``.json`` document.
+
+    ``/r/foo/hot/`` → ``/r/foo/hot.json``. Already-``.json`` paths are unchanged.
+    """
+    parts = urllib.parse.urlsplit(url)
+    path = parts.path or "/"
+    if path.endswith(".json"):
+        return url
+    path = path.rstrip("/") + ".json"
+    return urllib.parse.urlunsplit(
+        (parts.scheme, parts.netloc, path, parts.query, "")
+    )
 
 #: Max top-level comments to include in rendered output.
 _MAX_COMMENTS = 30
@@ -283,7 +283,7 @@ def extract_known(url: str, match: "re.Match[str]") -> Optional[KnownResult]:
     missing expected structure, empty body. The ladder runs in all these cases.
     """
     try:
-        raw = _fetch(url)
+        raw = _fetch(_to_json_url(url))
     except Exception:  # noqa: BLE001 - network failure → ladder
         return None
 
@@ -300,7 +300,7 @@ def extract_known(url: str, match: "re.Match[str]") -> Optional[KnownResult]:
             return None
         # Dict listing (e.g. subreddit or user about from fixtures / some API paths).
         # Determine which from the URL groups.
-        subreddit = match.group("subreddit") or match.group("subreddit_listing")
+        subreddit = match.group("subreddit")
         user = match.group("user")
         if subreddit:
             children = _listing_children(data)
@@ -342,7 +342,7 @@ def extract_known(url: str, match: "re.Match[str]") -> Optional[KnownResult]:
         kind0 = data[0].get("kind") if isinstance(data[0], dict) else None
         if kind0 in ("Listing", "Link", "t5", "t2"):
             children = _listing_children(data[0])
-            subreddit = match.group("subreddit") or match.group("subreddit_listing")
+            subreddit = match.group("subreddit")
             user = match.group("user")
             if subreddit:
                 md = _render_subreddit(children)

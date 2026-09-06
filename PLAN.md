@@ -242,7 +242,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F3** Optional content cache for repeat URLs
 - **F4** Sitemap / small multi-page crawl (bounded)
 - **F5** Document share-extractors as the official fail-open extension point (one file pattern) — **not** a generic plugin system
-- [x] **F5b** Known-host extractors as another **ladder ring** (same pattern as shares): URL matches a public document (e.g. Reddit `*.json`) → try dedicated parse → **fail open** to curl/Jina/stealth. Not `if host==reddit: skip unlocker` (**N4/N5**). Login shells stay `login-wall`. **P3.11 is on main** — this is the next product code after `AGENTS.md`/R1.
+- [x] **F5b** Known-host extractors as another **ladder ring** (same pattern as shares): caller passes a **page** (e.g. `reddit.com/r/foo/hot/`) → try the public `.json` document → **fail open** to curl/Jina/stealth. Not `if host==reddit: skip unlocker` (**N4/N5**). Login shells stay `login-wall`.
 - **F6** Claude/marketplace plugin polish beyond P4.2 minimum
 - [ ] **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. **Consumer:** Grok / Claude custom connector (Name + `https://…/mcp`) — a phone cannot use stdio. Public/hosted MCP URL is still **N2**. Auth + SSRF (**U5** / **P3.6b**) come with the URL. Revisit **after article**, then localhost smoke, *then* hosted. Not in P2.1–P2.3.
 - [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills` — Codex will not see the skill until we add that path (measure demand first).
@@ -325,3 +325,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-30 | **X5** posted. **F13** parked (nudge after article, same PR as F8b). Demo URL `example.com` is thin — next time Wikipedia. |
 | 2026-09-02 | **F9** consumer: Grok/Claude custom connector URL. **F14** Solari battery parked (cookbook only). |
 | 2026-09-06 | **F5b**: known-host extractors ring (Reddit .json) — fail-open, no domain-memory pinning, no login-wall special-case; fixtures + tests; `known_hosts/` package mirrors `share_extractors/` |
+| 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |

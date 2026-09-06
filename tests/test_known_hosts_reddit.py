@@ -55,15 +55,35 @@ def test_matches_with_query_string():
     )
 
 
-def test_matches_rejects_non_json_url():
-    assert not matches("https://www.reddit.com/r/python/comments/abc123/some_title/")
-    assert not matches("https://www.reddit.com/r/python/")
-    assert not matches("https://www.reddit.com/user/spez/")
+def test_matches_html_listing_and_thread():
+    assert matches("https://www.reddit.com/r/python/")
+    assert matches("https://www.reddit.com/r/python")
+    assert matches("https://old.reddit.com/r/python/hot/")
+    assert matches("https://reddit.com/r/python/new")
+    assert matches("https://www.reddit.com/r/python/top/")
+    assert matches("https://www.reddit.com/r/python/rising/")
+    assert matches("https://www.reddit.com/r/python/comments/abc123/some_title/")
+    assert matches("https://old.reddit.com/r/python/comments/abc123/")
+    assert matches("https://reddit.com/user/spez/")
+
+
+def test_matches_json_without_slash_before_ext():
+    assert matches("https://www.reddit.com/r/python.json")
+    assert matches("https://www.reddit.com/r/python/hot.json")
+    assert matches("https://www.reddit.com/r/python/comments/abc123.json")
+    assert matches("https://www.reddit.com/r/python/comments/abc123/title.json")
 
 
 def test_matches_rejects_other_domains():
     assert not matches("https://example.com/.json")
     assert not matches("https://www.nytimes.com/r/python/.json")
+    assert not matches("https://example.com/r/python/hot/")
+
+
+def test_matches_rejects_non_listing_reddit_paths():
+    assert not matches("https://www.reddit.com/login")
+    assert not matches("https://www.reddit.com/r/python/wiki/")
+    assert not matches("https://www.reddit.com/r/python/about/")
 
 
 def test_pattern_subreddit_capture_set_on_thread_url():
@@ -393,25 +413,68 @@ def test_fetch_uses_known_host_ring_for_json_url(monkeypatch):
     assert "list comprehensions" in res.text.lower()
 
 
-def test_fetch_falls_through_to_ladder_for_non_json_reddit_url(monkeypatch):
-    """A Reddit HTML URL (no .json) walks the ladder unchanged."""
-    calls = []
+def test_fetch_html_listing_hits_ring(monkeypatch):
+    """Caller passes a page (not an API URL). Ring rewrites to .json."""
+    fixture = _load("reddit_listing.json")
+    raw = json.dumps(fixture)
+    seen = []
 
-    def spy_curl(url, timeout=30):
-        calls.append(("curl_cffi", url))
-        return 200, "<html><body>" + "real reddit page " * 100 + "</body></html>", url, {}
+    def fake_fetch(url, timeout=30):
+        seen.append(url)
+        return raw
 
-    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", spy_curl)
-    monkeypatch.setattr(unlocker, "_fetch_jina", lambda url, timeout=40: (_ for _ in ()).throw(Tripwire("jina called")))
-    monkeypatch.setattr(unlocker, "_fetch_stealth", lambda url, **k: (_ for _ in ()).throw(Tripwire("stealth called")))
+    import searchts.known_hosts.reddit as reddit_mod
+    monkeypatch.setattr(reddit_mod, "_fetch", fake_fetch)
+
+    def boom(*a, **k):
+        raise Tripwire("ladder called despite HTML listing ring hit")
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", boom)
+    monkeypatch.setattr(unlocker, "_fetch_jina", boom)
+    monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
 
     res = unlocker.fetch(
-        "https://www.reddit.com/r/python/comments/abc123/some_title/",
-        backends=["curl_cffi"],
+        "https://www.reddit.com/r/python/hot/",
         use_memory=False,
     )
-    assert calls == [("curl_cffi", "https://www.reddit.com/r/python/comments/abc123/some_title/")]
-    assert "real reddit page" in res.text
+    assert res.backend == "known-host:reddit"
+    assert seen
+    assert seen[0].endswith("hot.json") or "hot.json" in seen[0]
+    assert "list comprehensions" in res.text.lower()
+
+
+def test_fetch_html_thread_hits_ring(monkeypatch):
+    fixture = _load("reddit_thread.json")
+    raw = json.dumps(fixture)
+
+    import searchts.known_hosts.reddit as reddit_mod
+    monkeypatch.setattr(reddit_mod, "_fetch", lambda u, timeout=30: raw)
+
+    def boom(*a, **k):
+        raise Tripwire("ladder called despite HTML thread ring hit")
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", boom)
+    monkeypatch.setattr(unlocker, "_fetch_jina", boom)
+    monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
+
+    res = unlocker.fetch(
+        "https://old.reddit.com/r/python/comments/abc123/how_list_comps_work/",
+        use_memory=False,
+    )
+    assert res.backend == "known-host:reddit"
+    assert "list comprehensions" in res.text.lower()
+
+
+def test_to_json_url_listing_and_thread():
+    assert reddit._to_json_url("https://www.reddit.com/r/foo/hot/") == (
+        "https://www.reddit.com/r/foo/hot.json"
+    )
+    assert reddit._to_json_url(
+        "https://reddit.com/r/foo/comments/abc/slug/"
+    ) == "https://reddit.com/r/foo/comments/abc/slug.json"
+    assert reddit._to_json_url("https://www.reddit.com/r/foo.json").endswith(
+        "/r/foo.json"
+    )
 
 
 def test_fetch_skips_ring_for_unknown_url(monkeypatch):
