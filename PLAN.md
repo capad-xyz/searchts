@@ -4,7 +4,7 @@
 **Identity:** free, open-source, keyless web layer for agents — won by reliability and being easy to reach for, not by feature count.  
 **Status:** Decisions locked (see §0). Work ordered P0 → P1∥P2 → P3 → P4 → Later.
 
-**Parked work:** If we skip something on purpose and it is still worth doing, it gets a PLAN id (`P*` / `F*` / `U*` / `N*`) and a **revisit** (week / trigger). Chat is not the record. If it is not worth doing, put it in **N** (never) instead of “we’ll remember.”
+**Parked work:** If we skip something on purpose and it is still worth doing, it gets a PLAN id (`P*` / `F*` / `U*` / `N*` / `R*`) and a **revisit** (week / trigger). Chat is not the record. If it is not worth doing, put it in **N** (never) instead of “we’ll remember.”
 
 **Hard non-goals:** plugin/connector framework, paid-proxy defaults, hosted SaaS, keyed backends as defaults, channel-based `read_url` routing, HTTP MCP until local stdio is trusted, MCP resources/prompts before tools are trusted.
 
@@ -231,6 +231,10 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **U6 — Thin-content × agents:** after P3.2, re-check whether models retry correctly.
 - **U7 — Demand signals:** MCP `transcribe`, plugin installs, directory traffic — drive P4 priority, not vibes.
 
+### R — Review (when CodeRabbit is dark)
+
+- [x] **R1** Implementer ≠ reviewer. A second cheap-scout (or Grok if scouts wrote it) reviews PRs. Real vs skip table lives in [`AGENTS.md`](AGENTS.md) — **not** a skill. Real = wrong behavior, fail-loud lie, ticks on stdout, MCP break, test that can't fail, scope creep. Skip = docstring %, Rich vs stderr (P4.6 is plain stderr), test `-> None`, style. Revisit: whenever CodeRabbit is rate-limited.
+
 ### F — Future (ROADMAP-aligned, after core is solid)
 
 - **F1** Persistent stealth browser profile across reads
@@ -238,7 +242,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F3** Optional content cache for repeat URLs
 - **F4** Sitemap / small multi-page crawl (bounded)
 - **F5** Document share-extractors as the official fail-open extension point (one file pattern) — **not** a generic plugin system
-- [ ] **F5b** Known-host extractors as another **ladder ring** (same pattern as shares): URL matches a public document (e.g. Reddit `*.json`) → try dedicated parse → **fail open** to curl/Jina/stealth. Not `if host==reddit: skip unlocker` (**N4/N5**). Login shells stay `login-wall`. Revisit **after P3.11**. Not this sprint.
+- [ ] **F5b** Known-host extractors as another **ladder ring** (same pattern as shares): URL matches a public document (e.g. Reddit `*.json`) → try dedicated parse → **fail open** to curl/Jina/stealth. Not `if host==reddit: skip unlocker` (**N4/N5**). Login shells stay `login-wall`. **P3.11 is on main** — this is the next product code after `AGENTS.md`/R1.
 - **F6** Claude/marketplace plugin polish beyond P4.2 minimum
 - [ ] **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. **Consumer:** Grok / Claude custom connector (Name + `https://…/mcp`) — a phone cannot use stdio. Public/hosted MCP URL is still **N2**. Auth + SSRF (**U5** / **P3.6b**) come with the URL. Revisit **after article**, then localhost smoke, *then* hosted. Not in P2.1–P2.3.
 - [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills` — Codex will not see the skill until we add that path (measure demand first).
@@ -311,6 +315,7 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-28 | **P3.7b** login-wall: Sign in/Join now shells fail; LinkedIn `/feed/` login chrome is not a pass. |
 | 2026-08-28 | Live: LinkedIn `/feed/` is `login-wall` (intended). Reddit stealth `page.content` nav race parked as **P3.11**. DataDome marketing + Booking homepage still yes. |
 | 2026-09-06 | **P3.11**: stealth waits for load / retries `page.content()` on navigating; fail loud, no thin HTML. Does not claim Reddit now reads. |
+| 2026-09-06 | **R1** + `AGENTS.md`: writer ≠ reviewer when CodeRabbit is dark. Not a skill. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
 | 2026-08-28 | Park rule: skip + still worth it → PLAN id + revisit; else **N**. |
 | 2026-08-28 | **X2** posted 2026-08-27; **P1.3** closed. PyPI 0.8.0 (#78) before article; do not wait on P3.11/F8b/F11. |
