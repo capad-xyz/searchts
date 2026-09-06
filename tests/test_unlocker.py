@@ -795,6 +795,11 @@ def test_looks_blocked_ignores_cdn_challenge_near_misses(case, body):
 # ── SPA hydration (regression: stealth returned the pre-hydration shell) ──────
 
 
+_NAV_ERR = RuntimeError(
+    "Error: Page.content: Unable to retrieve content because the page is navigating"
+)
+
+
 class _FakePage:
     """Minimal page double: yields a scripted sequence of content() reads.
 
@@ -802,12 +807,21 @@ class _FakePage:
     handed the first `page.content()` result by its caller.
     """
 
-    def __init__(self, frames):
+    def __init__(self, frames, load_raises=None):
         self._frames = frames
         self._i = 0
+        self.load_states = []
+        self.timeouts = []
+        self._load_raises = load_raises or {}
 
     def wait_for_timeout(self, ms):
-        pass
+        self.timeouts.append(ms)
+
+    def wait_for_load_state(self, state, timeout=None):
+        self.load_states.append((state, timeout))
+        exc = self._load_raises.get(state)
+        if exc is not None:
+            raise exc
 
     def content(self):
         frame = self._frames[min(self._i, len(self._frames) - 1)]
@@ -830,10 +844,60 @@ def test_await_hydration_returns_immediately_for_static_page():
     assert out == "S" * 900
 
 
-def test_await_hydration_survives_a_page_that_navigates_mid_read():
+def test_await_hydration_survives_unrelated_content_error():
     page = _FakePage([RuntimeError("navigated")])
     out = unlocker._await_hydration(page, "partial", budget_ms=2000, step_ms=500)
     assert out == "partial"
+
+
+def test_await_hydration_raises_on_persistent_nav_race():
+    page = _FakePage([_NAV_ERR])
+    with pytest.raises(RuntimeError, match="the page is navigating"):
+        unlocker._await_hydration(page, "partial", budget_ms=2000, step_ms=500)
+
+
+def test_page_content_retries_then_ok():
+    page = _FakePage([_NAV_ERR, _NAV_ERR, "<html>" + ("x" * 80) + "</html>"])
+    out = unlocker._page_content(page, retries=4, wait_ms=10)
+    assert "x" * 80 in out
+    assert page.timeouts == [10, 10]
+
+
+def test_page_content_exhausted_raises_not_thin():
+    page = _FakePage([_NAV_ERR])
+    with pytest.raises(RuntimeError, match="the page is navigating"):
+        unlocker._page_content(page, retries=3, wait_ms=10)
+    assert page._i >= 3
+
+
+def test_wait_settled_load_prefers_load():
+    page = _FakePage(["ok"])
+    unlocker._wait_settled_load(page, timeout_ms=5000, progress=False)
+    assert page.load_states[0][0] == "load"
+    assert all(s != "networkidle" for s, _ in page.load_states)
+
+
+def test_wait_settled_load_falls_back_to_networkidle():
+    page = _FakePage(["ok"], load_raises={"load": TimeoutError("load")})
+    unlocker._wait_settled_load(page, timeout_ms=5000, progress=False)
+    assert [s for s, _ in page.load_states] == ["load", "networkidle"]
+
+
+def test_fetch_stealth_nav_race_fails_loud(monkeypatch, stub_extract):
+    """Ladder must not treat a navigation race as thin HTML (P3.11)."""
+
+    def boom(url, timeout=60):
+        raise RuntimeError(
+            "Page.content: Unable to retrieve content because the page is navigating"
+        )
+
+    _set(monkeypatch, curl=(403, "challenge"), jina=(403, "no"))
+    monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
+    with pytest.raises(UnlockerError) as ei:
+        fetch("https://www.reddit.com/hot", use_memory=False)
+    why = " ".join(reason for _, reason in ei.value.attempts)
+    assert "navigating" in why
+    assert "thin-" not in why
 
 
 def test_await_hydration_is_bounded_by_budget():
@@ -968,7 +1032,7 @@ def test_fetch_stealth_wrapper_uses_impl(monkeypatch):
     monkeypatch.setattr(
         unlocker,
         "_fetch_stealth_impl",
-        lambda url, timeout=60: (200, "<html>ok</html>", url, {"x": "1"}),
+        lambda url, timeout=60, progress=None: (200, "<html>ok</html>", url, {"x": "1"}),
     )
     status, body, final, headers = unlocker._fetch_stealth("https://x.test")
     assert status == 200
