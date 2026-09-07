@@ -322,6 +322,7 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-06 | **Hare**: R1 reviews are GitHub PR comments with `<!-- searchts-r1-review -->` (Name / Purpose / Model / Effort). Hourly matcher: that token. Display: 🐇‍❄️. |
 | 2026-09-06 | **Hare ≠ orchestrator.** Cheap-scout reviews. Orchestrator merge-only unless cheap path is dead. Role, not a vendor — Grok/Claude/Codex can be either. #132 Hare comment was the orchestrator — that was the miss. |
 | 2026-09-07 | **R1b** parked: GitHub App identity (`hare[bot]`) for this repo only. **R1c** parked: auto-Hare on PR; interim `<!-- searchts-r1-needed -->`. **F15** parked: Hare-as-review-product, different intent, own thread. |
+| 2026-09-07 | **`python -m searchts`:** add `searchts/__main__.py`. Last night PATH was pipx 0.8.0; `-m searchts` had no `__main__`. `python -m searchts.cli` still works. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
 | 2026-08-28 | Park rule: skip + still worth it → PLAN id + revisit; else **N**. |
 | 2026-08-28 | **X2** posted 2026-08-27; **P1.3** closed. PyPI 0.8.0 (#78) before article; do not wait on P3.11/F8b/F11. |
