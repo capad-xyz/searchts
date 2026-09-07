@@ -96,7 +96,7 @@ pip install "searchts[mcp]"
 ## Quickstart
 
 ```bash
-searchts read https://example.com          # fetch any page as clean Markdown
+searchts read https://en.wikipedia.org/wiki/Ada_Lovelace   # fetch a page as clean Markdown
 searchts search "open source vector db"    # multi-provider web search (keyless by default)
 searchts transcribe https://youtu.be/...   # transcript of a YouTube/TikTok/Instagram/Reddit video
 searchts grab https://example.com          # download a page's assets + extract palette/fonts
@@ -120,12 +120,12 @@ Two ways, both one command:
 
 ```bash
 # 1) MCP: always-on read_url + web_search + fetch_asset + grab_site + get_status
-# Try / no PATH:
-uvx --from "searchts[mcp]" searchts mcp serve
-# Keep (pipx), then register:
+# Try / no install / Claude cannot see PATH:
+claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
+# Keep (after pipx install "searchts[mcp]"):
 #   claude mcp add searchts -- searchts mcp serve
-# If the host cannot see the pipx bin: uvx (above) or `pipx which searchts`
-searchts mcp install          # prints the same wiring
+# Desktop / Cursor JSON: `searchts mcp install`  (or uvx the same serve command)
+# First read: Wikipedia — example.com is thinner than _MIN_CHARS and looks like a failed install.
 
 # 2) Slash command: type /searchts <url-or-query> in Claude Code
 searchts skill install        # writes ~/.claude/commands/searchts.md
