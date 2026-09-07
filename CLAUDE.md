@@ -28,8 +28,9 @@ Version: see pyproject.toml (kept in sync with searchts/__init__.py and server.j
 - `ruff check searchts tests` — Lint (CI gates on this)
 - `mypy searchts` — Type check (CI gates on this)
 - `bash test.sh` — Full integration test (creates venv, installs, runs doctor + channel tests)
-- `python -m searchts.cli doctor` — Run diagnostics
-- `python -m searchts.cli install --env=auto` — Auto-configure
+- `python -m searchts doctor` — Run diagnostics (same CLI as the `searchts` script; use `-m` when PATH is a different install)
+- `python -m searchts install --env=auto` — Auto-configure
+- `python -m searchts.cli …` — still works
 
 Do NOT run `ruff format` — the tree is deliberately not format-clean and it would
 rewrite most files.
