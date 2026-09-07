@@ -4,7 +4,7 @@
 **Identity:** free, open-source, keyless web layer for agents — won by reliability and being easy to reach for, not by feature count.  
 **Status:** Decisions locked (see §0). Work ordered P0 → P1∥P2 → P3 → P4 → Later.
 
-**Parked work:** If we skip something on purpose and it is still worth doing, it gets a PLAN id (`P*` / `F*` / `U*` / `N*` / `R*`) and a **revisit** (week / trigger). Chat is not the record. If it is not worth doing, put it in **N** (never) instead of “we’ll remember.”
+**Parked work:** If we skip something on purpose and it is still worth doing, it gets a PLAN id (`P*` / `F*` / `U*` / `N*` / `R*`) and a **revisit** (week / trigger). Chat is not the record. If it is not worth doing, put it in **N** (never) instead of “we’ll remember.” **Roles:** [`NAMES.md`](NAMES.md).
 
 **Hard non-goals:** plugin/connector framework, paid-proxy defaults, hosted SaaS, keyed backends as defaults, channel-based `read_url` routing, HTTP MCP until local stdio is trusted, MCP resources/prompts before tools are trusted.
 
@@ -323,7 +323,7 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-06 | **R1** + `AGENTS.md`: writer ≠ reviewer when CodeRabbit is dark. Not a skill. |
 | 2026-09-06 | **Hare**: R1 reviews are GitHub PR comments with `<!-- searchts-r1-review -->` (Name / Purpose / Model / Effort). Hourly matcher: that token. Display: 🐇‍❄️. |
 | 2026-09-06 | **Hare ≠ orchestrator.** Cheap-scout reviews. Orchestrator merge-only unless cheap path is dead. Role, not a vendor — Grok/Claude/Codex can be either. #132 Hare comment was the orchestrator — that was the miss. |
-| 2026-09-07 | **R1c** parked (move later): Action doorbell + **Zen/Nous free**; secret in GitHub; 429 → nag. **Boring first** (fires every push, no paste). **Appealing after** (R1b badge / copy). F15 only after boring holds. |
+| 2026-09-07 | **NAMES.md** — orchestrator (remote/local), Hare, cheap-scout. Local spawn is still a step; R1c only covers remote push. |
 | 2026-09-07 | **`python -m searchts`:** add `searchts/__main__.py`. Last night PATH was pipx 0.8.0; `-m searchts` had no `__main__`. `python -m searchts.cli` still works. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
 | 2026-08-28 | Park rule: skip + still worth it → PLAN id + revisit; else **N**. |

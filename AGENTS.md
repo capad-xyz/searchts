@@ -6,6 +6,7 @@ This is **not** a skill. Skills (`SKILL.md`) are how to *use* searchts (`read_ur
 
 - Product / order of work: [`PLAN.md`](PLAN.md)
 - Commands and Python conventions: [`CLAUDE.md`](CLAUDE.md)
+- Who is who: [`NAMES.md`](NAMES.md)
 
 ## Identity
 
