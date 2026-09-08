@@ -243,7 +243,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 
 ### F — Future (ROADMAP-aligned, after core is solid)
 
-- **F1** Persistent stealth browser profile across reads. **Revisit:** **F12** step 2.
+- **F1** Persistent stealth browser profile across reads. **Revisit:** **F12** step 2. → **DONE 2026-09-09** (F1a). `launch_persistent_context` with `~/.searchts/browser-profile`; `SEARCHTS_NO_BROWSER_PROFILE=1` opt-out; same dir for stealth + `--human`.
 - **F2** First-class PDF / document URL reading. **Revisit:** when a real PDF URL is a support pain.
 - **F3** Optional content cache for repeat URLs. **Revisit:** if the same URL is fetched in a loop and it hurts.
 - **F4** Sitemap / small multi-page crawl (bounded). **Revisit:** demand, not a crawler product.
@@ -340,4 +340,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-08-30 | **X5** posted. **F13** parked (nudge after article, same PR as F8b). Demo URL `example.com` is thin — next time Wikipedia. |
 | 2026-09-02 | **F9** consumer: Grok/Claude custom connector URL. **F14** Solari battery parked (cookbook only). |
 | 2026-09-06 | **F5b**: known-host extractors ring (Reddit .json) — fail-open, no domain-memory pinning, no login-wall special-case; fixtures + tests; `known_hosts/` package mirrors `share_extractors/` |
+| 2026-09-09 | **F1a**: persistent stealth/human browser profile — `launch_persistent_context` with `~/.searchts/browser-profile`; `SEARCHTS_NO_BROWSER_PROFILE=1` opt-out; same dir for stealth + `--human`; tests mock patchright |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |

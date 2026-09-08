@@ -2,6 +2,9 @@
 """Unit tests for the escalating open-source unlocker (no network)."""
 
 import json
+import sys
+import types
+from pathlib import Path
 
 import pytest
 from conftest import Tripwire, tripwire
@@ -1113,3 +1116,217 @@ def test_fetch_uses_jina_when_enabled(monkeypatch):
     r = unlocker.fetch("https://site.test/page", use_memory=False)
     assert "jina" in calls
     assert r.backend == "Jina Reader"
+
+
+# ── F1: persistent browser profile ──────────────────────────────────
+
+
+def test_profile_path_returns_default_dir(monkeypatch):
+    """Default: _profile_path() returns ~/.searchts/browser-profile."""
+    monkeypatch.delenv("SEARCHTS_NO_BROWSER_PROFILE", raising=False)
+    path = unlocker._profile_path()
+    assert path.name == "browser-profile"
+    assert path.exists()
+
+
+def test_profile_path_opt_out_uses_tempdir(monkeypatch, tmp_path):
+    """SEARCHTS_NO_BROWSER_PROFILE=1 uses a throwaway dir."""
+    monkeypatch.setenv("SEARCHTS_NO_BROWSER_PROFILE", "1")
+    path = unlocker._profile_path()
+    assert path.name.startswith("searchts-browser-")
+
+
+def test_profile_path_creates_dir(monkeypatch, tmp_path):
+    """_profile_path() creates the profile directory if missing."""
+    monkeypatch.delenv("SEARCHTS_NO_BROWSER_PROFILE", raising=False)
+    # Point to a non-existent dir under tmp_path
+    custom = tmp_path / "browser-profile"
+    monkeypatch.setattr(unlocker, "_BROWSER_PROFILE_DIR", custom)
+    path = unlocker._profile_path()
+    assert path == custom
+    assert custom.exists()
+
+
+def test_use_persistent_profile_default(monkeypatch):
+    """_use_persistent_profile() is True by default."""
+    monkeypatch.delenv("SEARCHTS_NO_BROWSER_PROFILE", raising=False)
+    assert unlocker._use_persistent_profile() is True
+
+
+def test_use_persistent_profile_opt_out(monkeypatch):
+    """SEARCHTS_NO_BROWSER_PROFILE=1 disables the persistent profile."""
+    monkeypatch.setenv("SEARCHTS_NO_BROWSER_PROFILE", "1")
+    assert unlocker._use_persistent_profile() is False
+
+
+def test_stealth_uses_persistent_profile(monkeypatch, stub_extract):
+    """_fetch_stealth_impl passes the profile dir to launch_persistent_context."""
+    monkeypatch.delenv("SEARCHTS_NO_BROWSER_PROFILE", raising=False)
+    monkeypatch.setattr(unlocker, "_profile_path", lambda: Path("/tmp/test-profile"))
+
+    # Inject fake patchright.sync_api so the import in
+    # _fetch_stealth_impl succeeds without patchright being installed.
+    fake_patchright = types.ModuleType("patchright")
+    fake_sync_api = types.ModuleType("patchright.sync_api")
+    fake_patchright.sync_api = fake_sync_api
+    monkeypatch.setitem(sys.modules, "patchright", fake_patchright)
+    monkeypatch.setitem(sys.modules, "patchright.sync_api", fake_sync_api)
+
+    launch_calls = []
+
+    class FakePage:
+        def goto(self, url, **kw):
+            class FakeResp:
+                status = 200
+                def all_headers(self):
+                    return {}
+            return FakeResp()
+        def content(self):
+            return "<html>" + ("x" * 900) + "</html>"
+        @property
+        def url(self):
+            return "https://site.test"
+        def wait_for_timeout(self, ms):
+            pass
+        def wait_for_load_state(self, state, timeout=None):
+            pass
+
+    class FakeBrowser:
+        def new_page(self):
+            return FakePage()
+        def close(self):
+            pass
+
+    class FakeChromium:
+        def launch_persistent_context(self, *args, **kwargs):
+            launch_calls.append({"args": args, "kwargs": kwargs})
+            return FakeBrowser()
+
+    class FakePlaywright:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            pass
+        chromium = FakeChromium()
+
+    setattr(fake_sync_api, "sync_playwright", lambda: FakePlaywright())
+
+    unlocker._fetch_stealth_impl("https://site.test", timeout=60)
+    assert len(launch_calls) == 1
+    assert str(Path(launch_calls[0]["args"][0])) == str(Path("/tmp/test-profile"))
+    assert launch_calls[0]["kwargs"]["headless"] is True
+
+
+def test_stealth_opt_out_uses_chromium_launch(monkeypatch, stub_extract):
+    """SEARCHTS_NO_BROWSER_PROFILE=1 falls back to chromium.launch."""
+    monkeypatch.setenv("SEARCHTS_NO_BROWSER_PROFILE", "1")
+    monkeypatch.setattr(unlocker, "_use_persistent_profile", lambda: False)
+
+    # Inject fake patchright.sync_api so the import in
+    # _fetch_stealth_impl succeeds without patchright being installed.
+    fake_patchright = types.ModuleType("patchright")
+    fake_sync_api = types.ModuleType("patchright.sync_api")
+    fake_patchright.sync_api = fake_sync_api
+    monkeypatch.setitem(sys.modules, "patchright", fake_patchright)
+    monkeypatch.setitem(sys.modules, "patchright.sync_api", fake_sync_api)
+
+    launch_calls = []
+
+    class FakePage:
+        def goto(self, url, **kw):
+            class FakeResp:
+                status = 200
+                def all_headers(self):
+                    return {}
+            return FakeResp()
+        def content(self):
+            return "<html>" + ("x" * 900) + "</html>"
+        @property
+        def url(self):
+            return "https://site.test"
+        def wait_for_timeout(self, ms):
+            pass
+        def wait_for_load_state(self, state, timeout=None):
+            pass
+
+    class FakeBrowser:
+        def new_context(self, **kw):
+            return type("", (), {"new_page": lambda self: FakePage()})()
+        def close(self):
+            pass
+
+    class FakeChromium:
+        def launch(self, *args, **kwargs):
+            launch_calls.append({"args": args, "kwargs": kwargs})
+            return FakeBrowser()
+
+    class FakePlaywright:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            pass
+        chromium = FakeChromium()
+
+    setattr(fake_sync_api, "sync_playwright", lambda: FakePlaywright())
+
+    unlocker._fetch_stealth_impl("https://site.test", timeout=60)
+    assert len(launch_calls) == 1
+    assert launch_calls[0]["kwargs"]["headless"] is True
+
+
+def test_human_uses_persistent_profile(monkeypatch, stub_extract):
+    """_fetch_human_impl passes the profile dir to launch_persistent_context."""
+    monkeypatch.delenv("SEARCHTS_NO_BROWSER_PROFILE", raising=False)
+    monkeypatch.setattr(unlocker, "_profile_path", lambda: Path("/tmp/test-human-profile"))
+
+    # Inject fake patchright.sync_api so the import in
+    # _fetch_human_impl succeeds without patchright being installed.
+    fake_patchright = types.ModuleType("patchright")
+    fake_sync_api = types.ModuleType("patchright.sync_api")
+    fake_patchright.sync_api = fake_sync_api
+    monkeypatch.setitem(sys.modules, "patchright", fake_patchright)
+    monkeypatch.setitem(sys.modules, "patchright.sync_api", fake_sync_api)
+
+    launch_calls = []
+
+    class FakePage:
+        def goto(self, url, **kw):
+            class FakeResp:
+                status = 200
+                def all_headers(self):
+                    return {}
+            return FakeResp()
+        def content(self):
+            return "<html>" + ("x" * 900) + "</html>"
+        @property
+        def url(self):
+            return "https://site.test"
+        def wait_for_timeout(self, ms):
+            pass
+        def wait_for_load_state(self, state, timeout=None):
+            pass
+
+    class FakeBrowser:
+        def new_page(self):
+            return FakePage()
+        def close(self):
+            pass
+
+    class FakeChromium:
+        def launch_persistent_context(self, *args, **kwargs):
+            launch_calls.append({"args": args, "kwargs": kwargs})
+            return FakeBrowser()
+
+    class FakePlaywright:
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            pass
+        chromium = FakeChromium()
+
+    setattr(fake_sync_api, "sync_playwright", lambda: FakePlaywright())
+
+    unlocker._fetch_human_impl("https://site.test", timeout=180)
+    assert len(launch_calls) == 1
+    assert str(Path(launch_calls[0]["args"][0])) == str(Path("/tmp/test-human-profile"))
+    assert launch_calls[0]["kwargs"]["headless"] is False
