@@ -21,6 +21,7 @@ When in doubt, this file wins over chat. Roles, not vendors.
 | **R1b** | `hare[bot]` badge. After R1c is boring |
 | **R1c** | Action doorbell on push. Zen/Nous free. 429 → needed. *Boring first* |
 | **R1d** | Same run: new summary comment + resolve threads whose finding is gone. #141 hole |
+| **F8c** | Leftover 2025 copy in install.md / CLAUDE.md / guides. After #141 |
 | **F15** | Hare as a product for other repos. Own glossary. Not ocx/cheap-scout |
 
 **Local extra step:** after workers, local orchestrator still spawns Hare by hand (in-session). That is the layer. **R1c** only removes it for **remote** pushes (laptop closed). Do not make local Grok pretend it is CI.
