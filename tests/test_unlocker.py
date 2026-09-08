@@ -2,6 +2,8 @@
 """Unit tests for the escalating open-source unlocker (no network)."""
 
 import json
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -1159,10 +1161,16 @@ def test_use_persistent_profile_opt_out(monkeypatch):
 
 def test_stealth_uses_persistent_profile(monkeypatch, stub_extract):
     """_fetch_stealth_impl passes the profile dir to launch_persistent_context."""
-    import patchright.sync_api
-
     monkeypatch.delenv("SEARCHTS_NO_BROWSER_PROFILE", raising=False)
     monkeypatch.setattr(unlocker, "_profile_path", lambda: Path("/tmp/test-profile"))
+
+    # Inject fake patchright.sync_api so the import in
+    # _fetch_stealth_impl succeeds without patchright being installed.
+    fake_patchright = types.ModuleType("patchright")
+    fake_sync_api = types.ModuleType("patchright.sync_api")
+    fake_patchright.sync_api = fake_sync_api
+    monkeypatch.setitem(sys.modules, "patchright", fake_patchright)
+    monkeypatch.setitem(sys.modules, "patchright.sync_api", fake_sync_api)
 
     launch_calls = []
 
@@ -1201,11 +1209,7 @@ def test_stealth_uses_persistent_profile(monkeypatch, stub_extract):
             pass
         chromium = FakeChromium()
 
-    monkeypatch.setattr(
-        patchright.sync_api,
-        "sync_playwright",
-        lambda: FakePlaywright(),
-    )
+    setattr(fake_sync_api, "sync_playwright", lambda: FakePlaywright())
 
     unlocker._fetch_stealth_impl("https://site.test", timeout=60)
     assert len(launch_calls) == 1
@@ -1215,10 +1219,16 @@ def test_stealth_uses_persistent_profile(monkeypatch, stub_extract):
 
 def test_stealth_opt_out_uses_chromium_launch(monkeypatch, stub_extract):
     """SEARCHTS_NO_BROWSER_PROFILE=1 falls back to chromium.launch."""
-    import patchright.sync_api
-
     monkeypatch.setenv("SEARCHTS_NO_BROWSER_PROFILE", "1")
     monkeypatch.setattr(unlocker, "_use_persistent_profile", lambda: False)
+
+    # Inject fake patchright.sync_api so the import in
+    # _fetch_stealth_impl succeeds without patchright being installed.
+    fake_patchright = types.ModuleType("patchright")
+    fake_sync_api = types.ModuleType("patchright.sync_api")
+    fake_patchright.sync_api = fake_sync_api
+    monkeypatch.setitem(sys.modules, "patchright", fake_patchright)
+    monkeypatch.setitem(sys.modules, "patchright.sync_api", fake_sync_api)
 
     launch_calls = []
 
@@ -1257,11 +1267,7 @@ def test_stealth_opt_out_uses_chromium_launch(monkeypatch, stub_extract):
             pass
         chromium = FakeChromium()
 
-    monkeypatch.setattr(
-        patchright.sync_api,
-        "sync_playwright",
-        lambda: FakePlaywright(),
-    )
+    setattr(fake_sync_api, "sync_playwright", lambda: FakePlaywright())
 
     unlocker._fetch_stealth_impl("https://site.test", timeout=60)
     assert len(launch_calls) == 1
@@ -1270,10 +1276,16 @@ def test_stealth_opt_out_uses_chromium_launch(monkeypatch, stub_extract):
 
 def test_human_uses_persistent_profile(monkeypatch, stub_extract):
     """_fetch_human_impl passes the profile dir to launch_persistent_context."""
-    import patchright.sync_api
-
     monkeypatch.delenv("SEARCHTS_NO_BROWSER_PROFILE", raising=False)
     monkeypatch.setattr(unlocker, "_profile_path", lambda: Path("/tmp/test-human-profile"))
+
+    # Inject fake patchright.sync_api so the import in
+    # _fetch_human_impl succeeds without patchright being installed.
+    fake_patchright = types.ModuleType("patchright")
+    fake_sync_api = types.ModuleType("patchright.sync_api")
+    fake_patchright.sync_api = fake_sync_api
+    monkeypatch.setitem(sys.modules, "patchright", fake_patchright)
+    monkeypatch.setitem(sys.modules, "patchright.sync_api", fake_sync_api)
 
     launch_calls = []
 
@@ -1312,11 +1324,7 @@ def test_human_uses_persistent_profile(monkeypatch, stub_extract):
             pass
         chromium = FakeChromium()
 
-    monkeypatch.setattr(
-        patchright.sync_api,
-        "sync_playwright",
-        lambda: FakePlaywright(),
-    )
+    setattr(fake_sync_api, "sync_playwright", lambda: FakePlaywright())
 
     unlocker._fetch_human_impl("https://site.test", timeout=180)
     assert len(launch_calls) == 1
