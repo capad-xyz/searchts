@@ -51,7 +51,7 @@
 - [x] **P1.2** MCP tool descriptions: explicit retry-via-`read_url` language — #88
 - [x] **P1.2b** Skill YAML `description` ≤ 1024 (Agent Skills hosts skip the skill otherwise) — #89
 - [x] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *zCode skill-off: agents called `read_url` first. **X2** posted 2026-08-27 (`@aadarsh_io`). Gate closed.*
-- [ ] **P1.4** *(unverified track)* Scripted acceptance harness so #22 is pass/fail, not anecdote
+- [ ] **P1.4** *(unverified track)* Scripted acceptance harness so #22 is pass/fail, not anecdote. **Revisit:** after two more wild sessions, or if X2-style demos start lying.
 
 ### P2 — MCP 2.x hygiene (parallel with P1)
 
@@ -60,7 +60,7 @@
 - [x] **P2.1** Rewrite `mcp_server.py` → FastMCP + `@tool` on existing five module-level functions; delete hand-written schema + `if name ==` switch; keep `"Error: …"` string contract; stay on `mcp>=1,<2` — #94
 - [x] **P2.2** CI job: clean install `mcp>=2,<3`, build server, list tools (red until P2.3) — #97
 - [x] **P2.3** Rename FastMCP → MCPServer; lift extra to `mcp>=2,<3`; pin in `constraints.txt` — #98. *Host stdio smoke done; **X4** posted 2026-08-26.*
-- [ ] **P2.4** Do **not** add `transcribe`, HTTP/SSE, or resources in these PRs
+- [x] **P2.4** Do **not** add `transcribe`, HTTP/SSE, or resources *in the MCP 2.x PRs*. Those are **P4.1** / **F9** / **N6**. Not an open P2 task.
 
 ### P3 — Unlocker quality (core product)
 
@@ -73,23 +73,23 @@
 - [x] **P3.4** UA: remove hardcoded Chrome 126; single `_UA_REAL` in unlocker, imported elsewhere; updated to current stable Chrome 152
 - [x] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
 - [x] **P3.6** SSRF for **MCP only** (first layer): reject `file://`, `data:`, loopback, link-local, RFC1918, IPv6 ULA (`fc00::/7`), cloud metadata IPs; CLI stays unrestricted. Guard at MCP URL tools only — not the fetch ladder. *#105; hop checks are P3.6b.*
-- [ ] **P3.6b** Redirect / DNS-rebinding (follow-up, **not this sprint**): validate each connected destination and redirect target so `curl_cffi` / urllib / stealth `page.goto` cannot follow a public URL into RFC1918/loopback/metadata. Touches the unlocker ladder; keep CLI unrestricted for humans. Do **not** fold into P3.6. Distinct from **U5** (expand SSRF beyond MCP if HTTP transport ships).
+- [ ] **P3.6b** Redirect / DNS-rebinding (follow-up, **not this sprint**): validate each connected destination and redirect target so `curl_cffi` / urllib / stealth `page.goto` cannot follow a public URL into RFC1918/loopback/metadata. Touches the unlocker ladder; keep CLI unrestricted for humans. Do **not** fold into P3.6. Distinct from **U5**. **Revisit:** when **F9** localhost HTTP is real, or if someone files an SSRF issue.
 - [x] **P3.7** Walled scorecard: public suite of real walls; publish pass *rate*; smoke suite stays separate ([#111](https://github.com/capad-xyz/searchts/pull/111))
 - [x] **P3.7b** Login-shell honesty: HTTP 200 Sign in / Join now extracts (LinkedIn feed login chrome) fail as `login-wall`, not a scorecard pass. Not a ladder upgrade. *Live 2026-08-28: `/feed/` → `curl_cffi: login-wall`; Jina 403; stealth `login-wall`.*
 - [x] **P3.11** Stealth `page.content()` navigation race: wait for settled load, retry `content()` on Playwright's "page is navigating", then fail loud (`UnlockerError`). Not a Reddit bypass — the race is our call during a redirect.
 
 **Unverified measurements (run before over-building)**
 
-- [ ] **P3.8** UA A/B (126 vs current) on a fixed URL set — only keep complexity if delta is real
-- [ ] **P3.9** Log domain-memory hit/fail for a period of real use — validate TTL design
+- [ ] **P3.8** UA A/B (126 vs current) on a fixed URL set — only keep complexity if delta is real. **Revisit:** with **F12**, or skip forever if P3.4 is enough (**U2**).
+- [ ] **P3.9** Log domain-memory hit/fail for a period of real use — validate TTL design. **Revisit:** after a month of real `read`s, or never if TTL is cheap enough (**U3**).
 
 ### P4 — Surface parity (after P1–P3)
 
-- [ ] **P4.1** MCP `transcribe` tool (same Error-string contract as other tools)
-- [ ] **P4.2** Claude plugin packaging (`plugin.json` + skill + MCP) — distribution of P1, not a new architecture
-- [ ] **P4.3** CI job with `[browser]` extra (skip if no Chromium)
-- [ ] **P4.4** Docker: `slim` (current default) + `browser` tag
-- [ ] **P4.5** Split `cli.py` only when a verb is being changed (`commands/read.py` etc.) — no big-bang rewrite
+- [ ] **P4.1** MCP `transcribe` tool (same Error-string contract as other tools). **Revisit:** **U7** demand, not vibes.
+- [ ] **P4.2** Claude plugin packaging (`plugin.json` + skill + MCP) — distribution of P1, not a new architecture. **Revisit:** **U7** / marketplace traffic.
+- [ ] **P4.3** CI job with `[browser]` extra (skip if no Chromium). **Revisit:** when stealth tests flake in CI for lack of Chromium.
+- [ ] **P4.4** Docker: `slim` (current default) + `browser` tag. **Revisit:** if someone actually runs the image.
+- [ ] **P4.5** Split `cli.py` only when a verb is being changed (`commands/read.py` etc.) — no big-bang rewrite. **Revisit:** next verb edit that hurts.
 - [x] **P4.6** **CLI UX feedback** — long verbs must not look hung. Pattern from #100: stderr ticks, best-effort, never break pipeable stdout / MCP protocol.
   - [x] `read` ladder progress + `mcp serve` banner (#100)
   - [x] `doctor`: per-channel progress (`checking web…`, `checking github…`) while probes run
@@ -114,10 +114,10 @@
 - [x] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`. *Posted 2026-08-26 (`@aadarsh_io`). Host stdio smoke done.*
 - [x] **X5** 0.8.0 on PyPI. *Posted 2026-08-30 (`@aadarsh_io`). Used `example.com` in the uvx line — that URL is thin (`_MIN_CHARS`); a copypaste looks like a broken install. Do not unpost. Next demo URL = Wikipedia. F8b/F13 later.*
 - [ ] Cadence ≤2 posts/week; no chore tweets (pins, dead keys, YAML)
-- [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article drafted in Notion; publish same week as X2/X3.
+- [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article live: https://x.com/i/article/2090756751675342848 (also linked 2026-09-06).
 - [x] **CI** PRs: lint + typecheck + version-sync + ubuntu 3.12 tests. Full matrix + wheel-gate on `main` only.
 
-- [ ] Article: drafted (Notion). **0.8.0 is on PyPI (2026-08-29).** Publish after one `uvx` confirm. Do not republish X1 as the lede.
+- [x] Article: [X Article](https://x.com/i/article/2090756751675342848). PLAN had lagged (“drafted”). Demo URL = Wikipedia.
 - [x] **PyPI 0.8.0** [#78](https://github.com/capad-xyz/searchts/pull/78) merged 2026-08-29; [pypi.org/project/searchts/0.8.0](https://pypi.org/project/searchts/0.8.0/).
 
 - [x] **Install story** (docs, not a feature): **keep** = `pipx install "searchts[mcp]"`; **try / MCP** = `uvx --from "searchts[mcp]" searchts …`. `pip` is for venvs only.
@@ -234,30 +234,33 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 ### R — Review (when CodeRabbit is dark)
 
 - [x] **R1** Implementer ≠ reviewer. Second agent is **🐇‍❄️ Hare** — a **cheap-scout**, not the **orchestrator** (whoever is running the loop: dispatch / leftover finish / merge — not a vendor). Writer model ≠ Hare model. Orchestrator holds merge; orchestrator-as-Hare only if every cheap path is dead (say so in the **PR comment**). Two surfaces: (1) `gh pr comment` body starts with `<!-- searchts-r1-review -->` + table + Intent hold/ship; (2) **Files-changed bubbles** = **real and skip** (line must exist on `gh pr diff`). Each bubble is labeled Hare/automated, not the PR author. Skip never holds merge. Spec in [`AGENTS.md`](AGENTS.md). Revisit: whenever CodeRabbit is rate-limited.
+- [ ] **R1c** Auto-Hare on `opened` / `synchronize`. **Interim (now):** orchestrator posts `<!-- searchts-r1-needed -->`; human/hourly spawns a local cheap-scout (any free model via **ocx**, name that id). **When we build:** GitHub Action = doorbell. Brain = **same free Zen / Nous API as cheap-scouts** (key in GitHub secrets, not the repo). 429 / ToS flake → `searchts-r1-needed` fallback. Writer ≠ Hare (CI model ≠ orchestrator). Skip never holds. **Not** a paid MiniMax bill at searchts volume. **Not R1b** (badge). **Not F15**. Do not run the orchestrator as Hare.
+  - **Boring first:** it fires on every push, posts the two surfaces, nags on 429. No landing page, no `hare[bot]`. Done when a week of PRs get a review without anyone pasting a prompt.
+  - **R1d (same Action, not a second product):** CodeRabbit-shaped *refresh*. Each Hare run on a new SHA: (1) **new** Conversation comment with `<!-- searchts-r1-review -->` (matcher = **latest** token, do not edit the 6h-old table in place); (2) **resolve** threads whose finding is gone (hunk outdated *and* the issue is not in the new diff); (3) new bubbles only for what is still true; (4) do not delete history. Skip threads may stay. **#141** proved the hole: inject **real** stayed in the first comment after the line was deleted.
+  - **Revisit / build:** when a GitHub secret **name** exists (do not paste the key in chat). Until then: `searchts-r1-needed` + local ocx cheap-scout. **R1d is not a hand job on #141** — next Hare run (or the Action) does refresh; merging #141 with a stale 6h table is allowed.
+  - **Appealing after boring:** **R1b** if the Author badge still bothers. **F15** only after boring holds *and* we want a second product.
 - [ ] **R1b** GitHub App **identity only** — reviews show as `hare[bot]`, not `capad-xyz`. One install: `capad-xyz/searchts`. Not a review product. Revisit when the Author badge actually matters in public/screenshots.
-- [ ] **R1c** Auto-Hare on `opened` / `synchronize`. **Interim (now):** orchestrator posts `<!-- searchts-r1-needed -->`; human/hourly spawns a local cheap-scout. **When we build:** GitHub Action = doorbell. Brain = **same free Zen / Nous API as cheap-scouts** (key in GitHub secrets, not the repo). 429 / ToS flake → `searchts-r1-needed` fallback. Writer ≠ Hare (CI model ≠ orchestrator). Skip never holds. **Not** a paid MiniMax bill at searchts volume. **Not R1b** (badge). **Not F15** (other people’s repos — free cap dies). Do not run the orchestrator as Hare.
-  - **Boring first:** it fires on every push, posts the two surfaces, nags on 429. No landing page, no `hare[bot]`, no “we built CodeRabbit.” Done when a week of PRs get a review without anyone pasting a prompt.
-  - **Appealing after boring:** then **R1b** (badge) if the Author line still bothers; nicer Hare copy; maybe a screenshot in the article. **F15** only if boring has been true for a while *and* we want a second product. Section can move later.
 
 ### F — Future (ROADMAP-aligned, after core is solid)
 
-- **F1** Persistent stealth browser profile across reads
-- **F2** First-class PDF / document URL reading
-- **F3** Optional content cache for repeat URLs
-- **F4** Sitemap / small multi-page crawl (bounded)
-- **F5** Document share-extractors as the official fail-open extension point (one file pattern) — **not** a generic plugin system
+- **F1** Persistent stealth browser profile across reads. **Revisit:** **F12** step 2.
+- **F2** First-class PDF / document URL reading. **Revisit:** when a real PDF URL is a support pain.
+- **F3** Optional content cache for repeat URLs. **Revisit:** if the same URL is fetched in a loop and it hurts.
+- **F4** Sitemap / small multi-page crawl (bounded). **Revisit:** demand, not a crawler product.
+- **F5** Document share-extractors as the official fail-open extension point (one file pattern) — **not** a generic plugin system. **Revisit:** when adding the next share host.
+- **F6** Claude/marketplace plugin polish beyond P4.2 minimum. **Revisit:** with **P4.2**.
+- **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships. **Revisit:** **F12** step 3.
+- **F10** **WebMCP** (site-exposed tools in the browser / ChatGPT Sites). Complementary surface to local MCP, not a replacement. **Revisit:** after core reach + honesty; revenue/hosted is later and must not dilute the free CLI.
 - [x] **F5b** Known-host extractors as another **ladder ring** (same pattern as shares): caller passes a **page** (e.g. `reddit.com/r/foo/hot/`) → try the public `.json` document → **fail open** to curl/Jina/stealth. Not `if host==reddit: skip unlocker` (**N4/N5**). Login shells stay `login-wall`.
-- **F6** Claude/marketplace plugin polish beyond P4.2 minimum
-- [ ] **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. **Consumer:** Grok / Claude custom connector (Name + `https://…/mcp`) — a phone cannot use stdio. Public/hosted MCP URL is still **N2**. Auth + SSRF (**U5** / **P3.6b**) come with the URL. Revisit **after article**, then localhost smoke, *then* hosted. Not in P2.1–P2.3.
-- [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills` — Codex will not see the skill until we add that path (measure demand first).
-- [ ] **F8b** Install-copy leftovers (not first-install): `llms.txt` still says `pip install searchts`; `docs/update.md` + `check-update` `_UPDATE_INSTRUCTIONS` still zip/`pip` first (should be `pipx upgrade searchts` / `pip install -U "searchts[mcp]"` / uvx = already latest). Extra-missing hints may add `pipx inject`. Do **not** rewrite contributor `pip install -e`. Same PR as **F13** when we touch it. Revisit **after article**.
-- [ ] **F11** Windows: `pip install -e .` fails while `searchts.exe` is running (MCP `serve` per IDE holds the shim — kill PIDs or `--force-reinstall`). **Do not** add `--single-instance` / a machine-wide mutex (breaks one stdio server per host). Next week at most: RUNBOOK note + `claude mcp list` / Cursor MCP json. Not a feature.
-- **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships.
-- **F10** **WebMCP** (site-exposed tools in the browser / ChatGPT Sites). Complementary surface to local MCP, not a replacement. Explore only after core reach + honesty are solid; any product/revenue layer (hosted API, team unlocker, site tools) is a **later** decision and must not dilute the free local CLI. No sprint this phase.
-- [ ] **F12** Wall playbook (not a bypass sprint): **P3.11** (stealth `page.content` retry) → **F1** (persistent profile) → **`--human` / F7** (session, extras only). Never **N1** (paid residential as default) or **N3** (keyed unlocker as default). Login/challenge stays fail-loud. Revisit **after PyPI 0.8.0 + article**.
-- [ ] **F13** Optional update nudge (**not 0.8.1**): cached ~24h GitHub check, **stderr only**, skip `mcp serve` / pipes, `SEARCHTS_NO_UPDATE_CHECK=1`. Same PR as **F8b**. Revisit **after article**.
-- [ ] **F14** Opt-in Solari (cloud Playwright) **only when local `[browser]`/patchright is missing**. `SOLARI_API_KEY`. Never default (**N3**). 2026-09-02 cookbook: Reddit/LinkedIn still walls (proxy+captcha+hydration). Artifact: https://github.com/capad-xyz/solari-cookbook/tree/main/examples/agent-read . Revisit **if Harry replies** or **after article**. Keep-gate = would pay Starter to skip patchright, not Reddit green.
-- [ ] **F15** Hare as a **review product** (other repos install an App, billed, CodeRabbit-shaped). **Different intent from searchts.** Do not mix sprints, tokens, or PLAN order with the unlocker. Revisit only as its own thread.
+- [ ] **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. **Consumer:** Grok / Claude custom connector (Name + `https://…/mcp`) — a phone cannot use stdio. Public/hosted MCP URL is still **N2**. Auth + SSRF (**U5** / **P3.6b**) come with the URL. **Article is live** (2026-09-06). **Revisit:** localhost smoke next, *then* hosted. Not in P2.1–P2.3.
+- [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills`. **Revisit Codex path:** measure demand first (no id until someone asks).
+- [x] **F8b** Install-copy leftovers: `llms.txt` / `docs/update.md` / `check-update` `_UPDATE_INSTRUCTIONS` match F8. No `main.zip`, no `search-twitter`, doctor is read-only. Did **not** rewrite contributor `pip install -e`. Extra-missing `pipx inject` skipped (hints still `pip install "searchts[extra]"` for venvs). **Revisit inject:** if pipx users miss the mcp extra.
+- [ ] **F8c** Remaining 2025 copy **not** in F8b: `docs/install.md`, `CLAUDE.md` (twitter-cli / `install --env=auto`), `searchts/guides/setup-*.md`. Same honesty as F8b, not a feature. **Revisit:** next docs PR after **#141** merges. Do not block F8b.
+- [ ] **F11** Windows: `pip install -e .` fails while `searchts.exe` is running (MCP `serve` per IDE holds the shim — kill PIDs or `--force-reinstall`). **Do not** add `--single-instance` / a machine-wide mutex (breaks one stdio server per host). **Revisit:** RUNBOOK note (the Aug 28 “next week” slipped). Not a feature.
+- [ ] **F12** Wall playbook (not a bypass sprint): **P3.11** (stealth `page.content` retry) → **F1** (persistent profile) → **`--human` / F7** (session, extras only). Never **N1** or **N3**. Login/challenge stays fail-loud. **0.8.0 + article are both live.** **Revisit:** next *product* sprint after **#141** (not a Reddit-green 0.8.1).
+- [ ] **F13** Optional update nudge (**not 0.8.1**): cached ~24h GitHub check, **stderr only**, skip `mcp serve` / pipes, `SEARCHTS_NO_UPDATE_CHECK=1`. Not bundled with F8b. **Revisit:** when we want the nudge.
+- [ ] **F14** Opt-in Solari (cloud Playwright) **only when local `[browser]`/patchright is missing**. `SOLARI_API_KEY`. Never default (**N3**). 2026-09-02 cookbook: Reddit/LinkedIn still walls. Artifact: https://github.com/capad-xyz/solari-cookbook/tree/main/examples/agent-read . **Article is live.** **Revisit:** if Harry replies, or keep-gate = would pay Starter to skip patchright (not Reddit green).
+- [ ] **F15** Hare as a **review product** (other repos install an App, billed, CodeRabbit-shaped). **Different intent from searchts.** Own thread, own glossary: Model = provider + API model, not ocx / cheap-scout / this chat. R1d ships here too or the product looks like #141. Do not mix sprints or tokens with the unlocker. **Revisit:** only as its own thread, after R1c has been boring.
 
 ### N — Not planned (explicit)
 
@@ -267,6 +270,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **N4** Generic plugin/connector architecture for platforms
 - **N5** Routing `github.com` / Twitter through upstream CLIs inside `read_url`
 - **N6** MCP resources/prompts before tools are trusted and reachable
+- **N7** Cut **0.8.1** (or any release) claiming Reddit/LinkedIn now read. Honesty, not a trophy.
 
 ---
 
@@ -324,6 +328,8 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-06 | **Hare**: R1 reviews are GitHub PR comments with `<!-- searchts-r1-review -->` (Name / Purpose / Model / Effort). Hourly matcher: that token. Display: 🐇‍❄️. |
 | 2026-09-06 | **Hare ≠ orchestrator.** Cheap-scout reviews. Orchestrator merge-only unless cheap path is dead. Role, not a vendor — Grok/Claude/Codex can be either. #132 Hare comment was the orchestrator — that was the miss. |
 | 2026-09-07 | **NAMES.md** — orchestrator (remote/local), Hare, cheap-scout. Local spawn is still a step; R1c only covers remote push. |
+| 2026-09-08 | **F8b** copy: llms.txt + update.md + `_UPDATE_INSTRUCTIONS` match F8. Article was already live. F13 not in this PR. Dropped wrong `pipx inject searchts mcp` comment. |
+| 2026-09-08 | Park audit: every open P/F/U/R has a **revisit**. Article-fired: F9/F12/F14. **F8c** leftover install.md/guides. R1c waits on secret *name*. R1d not hand-done on #141. **N7** no Reddit 0.8.1. |
 | 2026-09-07 | **README** demo URL = Wikipedia (X5 leftover). `claude mcp add` try-path = uvx. example.com stays for grab/get only. |
 | 2026-09-07 | **`python -m searchts`:** add `searchts/__main__.py`. Last night PATH was pipx 0.8.0; `-m searchts` had no `__main__`. `python -m searchts.cli` still works. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |

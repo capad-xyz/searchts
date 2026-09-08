@@ -507,6 +507,13 @@ class TestCheckUpdateRetry:
         assert "checking for updates" in captured.err
 
 
+    def test_update_instructions_are_pipx_first(self):
+        text = cli._UPDATE_INSTRUCTIONS
+        assert "pipx upgrade searchts" in text
+        assert "main.zip" not in text
+        assert "pip install -U" in text
+
+
 class TestVersionCompare:
     def test_newer_remote_triggers_update(self):
         assert cli._is_newer_version("1.5.0", "1.4.2") is True
