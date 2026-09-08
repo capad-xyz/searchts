@@ -30,7 +30,7 @@ The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is 
 
 **Who is Hare:** a **cheap-scout** (free catalog id on this host), **not** the orchestrator. Writer model ≠ Hare model. If the orchestrator also touched the PR (leftover finish after a scout died), they still are not Hare — spawn a different cheap id.
 
-**Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The **PR comment** must then say that under **Model**. Example: `Grok explore sub-agent (remote orchestrator spawn; local OpenCode unavailable)`. Never write `local ocx` as the model. A sub-agent in this chat is still **remote**, not the laptop.
+**Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The **PR comment** must then say that under **Model**. Example: `Grok explore sub-agent (remote; ocx not running)`. Name the spawn: `MiniMax via ocx` when local. A sub-agent in this chat is still **remote**. **ocx** is the laptop router (see [`NAMES.md`](NAMES.md)), not OpenCode.
 
 **Voice:** Emojis ok (CodeRabbit-shaped). **No em dashes** (U+2014). Use a colon, semicolon, or ASCII hyphen.
 
