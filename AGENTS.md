@@ -62,7 +62,9 @@ Then the table below. **Intent:** hold / ship. If hold, one sentence vs PLAN. Ho
 
    Use `**real**` instead of `**skip**` when it is real. No scores. No first person. No em dashes.
 
-3. **Skip never holds merge.** Nits stay on the line. Applying a minority of them is expected. Intent = **hold** only if there is a **real** row.
+3. **Skip never holds merge.** Nits stay on the line. Applying a minority of them is expected. Intent = **hold** only if there is a **real** row **or** a required check is red / still pending.
+
+5. **Checks before Intent (#145):** `gh pr checks` (or the Checks tab). Red `ci / test` (or any required job) = **real**, Intent **hold**. Do not re-run pytest yourself; that is CI. Pending = wait or hold. Skipped `test-full` / `wheel-gate` on a PR is by design. **F15:** this is product behavior (Check Runs API), not a paste. Consumers must not see ship on a red X.
 
 4. **Later SHA of the same PR (R1d):** post a **new** Conversation comment (`<!-- searchts-r1-review -->`). Matcher = **latest** token. Do not edit the old table in place. Resolve threads whose finding is gone (outdated *and* not in the new diff). New bubbles only for what is still true. Do not delete old comments.
 
