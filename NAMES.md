@@ -20,6 +20,7 @@ When in doubt, this file wins over chat. Roles, not vendors.
 | **R1** | Writer ≠ Hare. Two GitHub surfaces. Spec in [`AGENTS.md`](AGENTS.md) |
 | **R1b** | `hare[bot]` badge. After R1c is boring |
 | **R1c** | Action doorbell on push. Zen/Nous free. 429 → needed. *Boring first* |
-| **F15** | Hare as a product for other repos. Not R1c. Own thread |
+| **R1d** | Same run: new summary comment + resolve threads whose finding is gone. #141 hole |
+| **F15** | Hare as a product for other repos. Own glossary. Not ocx/cheap-scout |
 
 **Local extra step:** after workers, local orchestrator still spawns Hare by hand (in-session). That is the layer. **R1c** only removes it for **remote** pushes (laptop closed). Do not make local Grok pretend it is CI.

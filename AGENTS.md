@@ -60,6 +60,8 @@ Then the table below. **Intent:** hold / ship. If hold, one sentence vs PLAN. Ho
 
 3. **Skip never holds merge.** Nits stay on the line. Applying a minority of them is expected. Intent = **hold** only if there is a **real** row.
 
+4. **Later SHA of the same PR (R1d):** post a **new** Conversation comment (`<!-- searchts-r1-review -->`). Matcher = **latest** token. Do not edit the old table in place. Resolve threads whose finding is gone (outdated *and* not in the new diff). New bubbles only for what is still true. Do not delete old comments.
+
 The review may have an empty body if the issue comment already carries the table. Do not skip (1). Zero rows → no bubbles (nothing to pin).
 
 
