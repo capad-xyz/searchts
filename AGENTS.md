@@ -50,6 +50,8 @@ Then the table below. **Intent:** hold / ship. If hold, one sentence vs PLAN. Ho
 
 2. **Inline on Files changed: real *and* skip.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines 422 -> table only.
 
+   **How (do not invent `position`):** `POST /repos/{owner}/{repo}/pulls/{n}/reviews` with `commit_id` = head SHA and `comments: [{path, line, side: "RIGHT", body}]`. `line` is the **new-file** line number (the `+N` in the hunk header, then count `+` / context lines). Never `position`. Never count deleted `-` lines. 422 = that line is not in the diff; skip the bubble, keep the table row.
+
    Every bubble body starts **exactly** like this (so it does not read as the PR author talking):
 
 ```
