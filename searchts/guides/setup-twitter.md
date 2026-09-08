@@ -1,84 +1,9 @@
-# Twitter advanced features setup guide (twitter-cli)
+# Twitter / X
 
-Basic Twitter reading works for free via Jina Reader, no configuration needed.
+**Not a `read` channel.** `searchts read https://x.com/…` is the unlocker ladder. Login walls fail loud. That is success of honesty.
 
-Advanced features need twitter-cli (@public-clis/twitter-cli):
+Doctor may probe `twitter-cli` / `bird` on PATH. That is optional. Do not `pipx install twitter-cli` or paste cookies so searchts can "search Twitter." There is no `searchts search-twitter`. There is no `searchts install --env=auto --channels=twitter`.
 
-- Search tweets (`twitter search`)
-- Read full tweets and conversation threads (`twitter tweet`, `twitter thread`)
-- User timeline (`twitter timeline`)
-- Long-post reading (`twitter article`)
+Cookie / session reuse for extras is **F7** (opt-in, never silent, never inside `read_url`). Not this guide.
 
-twitter-cli is a free open-source tool (installed via pipx), but it needs your Twitter account cookie.
-
-## Quick setup
-
-1. Check whether twitter-cli is installed:
-
-```bash
-which twitter && echo "installed" || echo "not installed"
-```
-
-2. Install twitter-cli:
-
-```bash
-pipx install twitter-cli
-```
-
-3. Test that it is configured:
-
-```bash
-twitter search "test" -n 1
-```
-
-## Get the Cookie (Cookie-Editor method, recommended)
-
-1. Install the [Cookie-Editor](https://cookie-editor.com/) browser extension
-2. Log in to x.com
-3. Click the Cookie-Editor icon -> Export -> copy all
-4. Run the configure command:
-
-```bash
-searchts configure twitter-cookies "the pasted cookie JSON"
-```
-
-This automatically extracts `auth_token` and `ct0` and writes them to environment variables.
-
-## Set the Cookie manually
-
-If you already know `auth_token` and `ct0`:
-
-1. Install twitter-cli (if not installed): `pipx install twitter-cli`
-
-2. Set the environment variables:
-
-```bash
-export AUTH_TOKEN="your auth_token"
-export CT0="your ct0"
-```
-
-3. Test:
-
-```bash
-twitter search "test" -n 1
-```
-
-## Proxy configuration
-
-> twitter-cli supports setting a proxy via environment variables:
-
-```bash
-export HTTP_PROXY="http://user:pass@host:port"
-export HTTPS_PROXY="http://user:pass@host:port"
-twitter search "test" -n 1
-```
-
-You can also use a global proxy tool:
-
-```bash
-proxychains twitter search "test" -n 1
-```
-
-## Fallback: bird CLI
-
-If you have already installed the [bird CLI](https://www.npmjs.com/package/@steipete/bird) (`npm install -g @steipete/bird`), it also works fine. searchts detects and uses an installed bird automatically. The two are similar in function; twitter-cli is the current recommended option.
+Install the package: [docs/install.md](../../docs/install.md)
