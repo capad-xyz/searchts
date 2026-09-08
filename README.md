@@ -40,6 +40,8 @@ AI agents constantly need to read web pages, but the naive way they fetch is tri
 
 If no tier comes back with real content, an optional human-in-the-loop step opens a real browser so you can clear the page once and continue. That covers interactive CAPTCHAs and soft walls alike: a login page served as HTTP 200 is not a challenge, but it is still a page only a human gets past. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
 
+**Walls (F12 playbook, not a bypass):** fail loud on login/challenge/thin. Do not cut a release that claims Reddit/LinkedIn now read (**N7**). Order: stealth already retries `page.content` after a navigation race (**P3.11**) → next is a persistent Chromium profile so clearance can survive across reads (**F1**, not shipped) → then `--human` / device session for extras only (**F7**, never silent, never inside `read_url`). Never paid residential as default (**N1**). Never a keyed commercial unlocker as default (**N3**).
+
 ## AI-chat share links
 
 Share links from AI chat apps are a special kind of hard: the conversation never appears in the page HTML as extractable text, so generic readers (and most AI agents' built-in fetch) return an empty shell or a fragment cut off mid-chat. `searchts read` recognizes these URLs and decodes each provider's own data channel instead, returning the **complete conversation** as role-labeled Markdown — keyless, no login:
