@@ -15,9 +15,10 @@ agent first-party web superpowers via three commands:
   grabber: download a page's images/icons/css/fonts (or one asset file) through the same
   escalating unlock ladder, and extract a color palette + the fonts in use.
 Surfaces: CLI, MCP server (tools: read_url, web_search, fetch_asset, grab_site), and a /searchts Claude Code skill.
-Keyless and free by default. OPTIONAL: separately-installed platform CLIs (gh, twitter-cli,
-opencli, mcporter) let it also reach GitHub/Twitter/Reddit/LinkedIn, and `searchts doctor`
-reports them — but those are optional add-ons, not the core.
+Keyless and free by default. OPTIONAL: separately-installed platform CLIs (`gh`,
+`twitter-cli`, `opencli`, `mcporter`) are **doctor PATH probes**, not how `read`
+works. `searchts doctor` reports them. Do not install cookies so searchts can
+"see Twitter."
 Repo: github.com/capad-xyz/searchts | License: MIT
 Version: see pyproject.toml (kept in sync with searchts/__init__.py and server.json).
 
@@ -29,7 +30,6 @@ Version: see pyproject.toml (kept in sync with searchts/__init__.py and server.j
 - `mypy searchts` — Type check (CI gates on this)
 - `bash test.sh` — Full integration test (creates venv, installs, runs doctor + channel tests)
 - `python -m searchts doctor` — Run diagnostics (same CLI as the `searchts` script; use `-m` when PATH is a different install)
-- `python -m searchts install --env=auto` — Auto-configure
 - `python -m searchts.cli …` — still works
 
 Do NOT run `ruff format` — the tree is deliberately not format-clean and it would
@@ -77,4 +77,5 @@ rewrite most files.
 - Always new branch for changes, PR to main, never push to main directly
 - Run `ruff check searchts tests`, `mypy searchts` and `pytest tests/ -v` before
   committing — CI gates on all three
-- Cookie-based auth (Twitter): use Cookie-Editor export method only, no QR scan
+- Cookie / session reuse is **F7** (extras only, never silent, never inside
+  `read_url`). Do not treat Cookie-Editor Twitter as the product.
