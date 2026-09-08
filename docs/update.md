@@ -25,8 +25,6 @@ command -v searchts || true
 
 ```bash
 pipx upgrade searchts
-# extras in the pipx venv:
-#   pipx inject searchts mcp
 ```
 
 **venv / packaging:**

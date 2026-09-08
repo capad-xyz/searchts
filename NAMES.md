@@ -5,8 +5,8 @@ When in doubt, this file wins over chat. Roles, not vendors.
 | Call it | Is | Is not |
 |---|---|---|
 | **Orchestrator** | Whoever is running the loop this turn (dispatch, leftover finish, merge) | A model vendor. Grok / Claude / Codex can *be* it |
-| **Remote orchestrator** | This chat / Grok Build opening PRs from the cloud | Local ocx. Cannot spawn cheap-scouts |
-| **Local orchestrator** | Grok (or whoever) on the laptop, with ocx | Hare. After workers, it **spawns** Hare |
+| **Remote orchestrator** | This chat / Grok Build opening PRs from the cloud | Laptop OpenCode. Cannot start ocx. A *sub-agent in this chat* is still remote. |
+| **Local orchestrator** | Grok (or whoever) on the laptop, with OpenCode (ocx) | Hare. After workers, it **spawns** Hare |
 | **Worker / cheap-scout** | Free-catalog agent that *writes* the diff | The merge bar |
 | **Hare** (🐇‍❄) | Cheap-scout that *reviews* (`searchts-r1-review`) | The orchestrator. Writer model ≠ Hare model |
 | **searchts-r1-needed** | Nag: Hare has not run on this SHA | A review |

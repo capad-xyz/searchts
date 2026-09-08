@@ -30,7 +30,9 @@ The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is 
 
 **Who is Hare:** a **cheap-scout** (free catalog id on this host), **not** the orchestrator. Writer model ≠ Hare model. If the orchestrator also touched the PR (leftover finish after a scout died), they still are not Hare — spawn a different cheap id.
 
-**Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The **PR comment** must then say that under **Model** / **Purpose** (`cheap-scout unavailable: …`).
+**Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The **PR comment** must then say that under **Model**. Example: `Grok explore sub-agent (remote orchestrator spawn; local OpenCode unavailable)`. Never write `local ocx` as the model. A sub-agent in this chat is still **remote**, not the laptop.
+
+**Voice:** Emojis ok (CodeRabbit-shaped). **No em dashes** (U+2014). Use a colon, semicolon, or ASCII hyphen.
 
 **Trigger (until R1c):** a remote push does **not** run Hare. The agent that opened/pushed the PR posts a Conversation comment whose first line is `<!-- searchts-r1-needed -->` (PR URL + “spawn Hare”). Hourly matcher / human then runs a **different cheap-scout**. Merge bar: `<!-- searchts-r1-review -->` exists. **R1b/R1c/F15** parked — PLAN.md. R1c when built: Action + Zen/Nous free; 429 → this nag.
 
@@ -44,17 +46,17 @@ Hare posts **two** GitHub surfaces (CodeRabbit-shaped). Local chat is not enough
 
 Then the table below. **Intent:** hold / ship. If hold, one sentence vs PLAN. Hourly matcher + orchestrator chat look here.
 
-2. **Inline on Files changed — real *and* skip.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines 422 → table only.
+2. **Inline on Files changed: real *and* skip.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines 422 -> table only.
 
    Every bubble body starts **exactly** like this (so it does not read as the PR author talking):
 
 ```
 <!-- searchts-r1-review -->
 🐇❄ Hare · automated R1 · not the PR author
-**skip** — <one sentence>
+**skip**: <one sentence>
 ```
 
-   Use `**real**` instead of `**skip**` when it is real. No scores. No first person.
+   Use `**real**` instead of `**skip**` when it is real. No scores. No first person. No em dashes.
 
 3. **Skip never holds merge.** Nits stay on the line. Applying a minority of them is expected. Intent = **hold** only if there is a **real** row.
 
@@ -64,13 +66,13 @@ The review may have an empty body if the issue comment already carries the table
 
 
 ```markdown
-## 🐇‍❄️ Hare — R1 review
+## 🐇‍❄️ Hare · R1 review
 
 | | |
 |---|---|
 | **Name** | 🐇‍❄️ Hare |
 | **Purpose** | Review and report. Do not fix unless asked. |
-| **Model** | <exact model> |
+| **Model** | <exact spawn, e.g. MiniMax via ocx / Grok explore sub-agent (remote)> |
 | **Effort** | low / medium / high |
 | **Intent** | hold / ship |
 

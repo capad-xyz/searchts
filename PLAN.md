@@ -324,7 +324,8 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-06 | **Hare**: R1 reviews are GitHub PR comments with `<!-- searchts-r1-review -->` (Name / Purpose / Model / Effort). Hourly matcher: that token. Display: 🐇‍❄️. |
 | 2026-09-06 | **Hare ≠ orchestrator.** Cheap-scout reviews. Orchestrator merge-only unless cheap path is dead. Role, not a vendor — Grok/Claude/Codex can be either. #132 Hare comment was the orchestrator — that was the miss. |
 | 2026-09-07 | **NAMES.md** — orchestrator (remote/local), Hare, cheap-scout. Local spawn is still a step; R1c only covers remote push. |
-| 2026-09-08 | **F8b** copy: llms.txt + update.md + `_UPDATE_INSTRUCTIONS` match F8. Article was already live. F13 not in this PR. |
+| 2026-09-08 | **F8b** copy: llms.txt + update.md + `_UPDATE_INSTRUCTIONS` match F8. Article was already live. F13 not in this PR. Dropped wrong `pipx inject searchts mcp` comment. |
+| 2026-09-08 | **Hare voice:** no em dashes in review copy. **Model** = exact spawn. A Grok Build sub-agent is remote, not laptop OpenCode. |
 | 2026-09-07 | **README** demo URL = Wikipedia (X5 leftover). `claude mcp add` try-path = uvx. example.com stays for grab/get only. |
 | 2026-09-07 | **`python -m searchts`:** add `searchts/__main__.py`. Last night PATH was pipx 0.8.0; `-m searchts` had no `__main__`. `python -m searchts.cli` still works. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |
