@@ -1,45 +1,45 @@
 # Troubleshooting
 
-## Twitter/X: twitter-cli connection fails
+Copy for an agent:
 
-**Symptom:** `twitter search` or other commands return an error
-
-**Cause:** twitter-cli needs the AUTH_TOKEN and CT0 environment variables to access the Twitter API. If your network requires a proxy to reach x.com, you must configure a proxy.
-
-**Solutions:**
-
-### Option 1: Set proxy environment variables
-
-```bash
-export HTTP_PROXY="http://user:pass@host:port"
-export HTTPS_PROXY="http://user:pass@host:port"
-twitter search "test" -n 1
+```
+Searchts is acting up: https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/troubleshooting.md
 ```
 
-### Option 2: Use a global proxy tool
+One read path: `unlocker.fetch`. Fail loud on thin pages, challenges, and login walls. **Do not** install twitter-cli, rdt-cli, or cookies so `read` can "see Twitter." There is no `searchts search-twitter`. Doctor is read-only.
 
-Let a proxy tool take over all network traffic so twitter-cli's requests also go through the proxy:
+## Looks like a broken install
 
-```bash
-# macOS - ClashX / Surge with "enhanced mode" enabled
-# Linux - proxychains or tun2socks
-proxychains twitter search "test" -n 1
-```
-
-### Option 3: Skip twitter-cli, use Exa search instead
-
-When twitter-cli is unavailable, you can search Twitter content directly with Exa:
+**`example.com` is thin.** Use Wikipedia:
 
 ```bash
-mcporter call 'exa.web_search_exa(query: "site:x.com your search terms", numResults: 5)'
+searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace
 ```
 
-### Option 4: Check authentication
+**Reddit / LinkedIn / X often fail loud.** That is honesty, not a broken pip. Do not claim 0.8.1 unlocked them (**N7**).
+
+**`externally-managed-environment` (PEP 668):** do not `pip install` onto Homebrew / system Python. Keep = `pipx install "searchts[mcp]"`. Try = `uvx --from "searchts[mcp]" searchts …`.
+
+**Windows: file lock on `searchts.exe`.** MCP `serve` is holding the shim. Stop those PIDs, then reinstall (`pipx install --force`, or `pip install --force-reinstall -e .`). Do not add a machine-wide mutex (**F11**).
+
+**uvx "won't upgrade":** each run is latest PyPI. Nothing to upgrade.
+
+## Doctor warnings
+
+Optional CLIs on PATH (`gh`, `twitter-cli`, …) are probes. They are not how `read` works. Doctor does not install skills. Skill: `searchts skill install`.
+
+## MCP / Claude
+
+Host cannot see PATH:
 
 ```bash
-twitter check
+claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 ```
 
-> If it returns "Missing credentials", you need to set the AUTH_TOKEN and CT0 environment variables.
->
-> **Fallback:** If you have installed the bird CLI (`npm install -g @steipete/bird`), it also works. searchts auto-detects installed tools.
+`mcp serve` is quiet on stdout on purpose (protocol). Banner is stderr.
+
+## Update
+
+See [docs/update.md](update.md). Keep: `pipx upgrade searchts`. venv: `pip install -U "searchts[mcp]"`.
+
+Install: [docs/install.md](install.md)

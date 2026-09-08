@@ -297,8 +297,8 @@ python -m benchmarks.run
 
 ## Common startup failures
 
-`docs/troubleshooting.md` only covers twitter-cli proxies and documents none of
-these. Symptoms below are literal strings from the source unless marked
+`docs/troubleshooting.md` is the agent-facing honesty page (install / fail-loud / MCP).
+Symptoms below are literal strings from the source unless marked
 otherwise; file references are where the string is produced.
 
 | Symptom (literal) | Cause | Fix |
@@ -484,10 +484,7 @@ There is no web deploy target. `searchts` ships as a Python package.
   installs only `-e ".[dev]"` - no patchright, no faster-whisper, no ffmpeg. A
   green CI run says nothing about the stealth-browser or audio-transcription
   code paths.
-- **`docs/troubleshooting.md` is stale.** All of it is twitter-cli proxy advice
-  and an `mcporter call exa...` recipe that the CLI itself now de-recommends. It
-  documents none of the core `read` / `search` / `transcribe` / `grab` failures.
-  This runbook's failures table is the replacement.
+- **`docs/troubleshooting.md`** is agent-facing (fail-loud, pipx/uvx, F11). This runbook's failures table is still the contributor replacement for literal CLI strings.
 - **`docs/install.md` never mentions the extras.** No ffmpeg, whisper,
   patchright, chromium, `[browser]`, `[mcp]` or `[local-transcribe]` anywhere in
   `docs/`. Its "Directory Rules" table also assumes `/tmp/`, which is Unix-only.
