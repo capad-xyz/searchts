@@ -1822,10 +1822,11 @@ def _github_get_with_retry(url, timeout=10, retries=3, sleeper=time.sleep):
 #: Full update = package + upstream tools + skill. The one-liner walks an
 #: agent through all three (docs/update.md); bare pip only updates the package.
 _UPDATE_INSTRUCTIONS = (
-    "How to update (recommended -- copy this line to your AI agent to fully update the package + upstream tools + skill):\n"
-    "  Update searchts for me: https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md\n"
-    "Update the package only (without upstream tools and skill):\n"
-    "  pip install --upgrade https://github.com/capad-xyz/searchts/archive/main.zip"
+    "How to update (copy this to an agent):\n"
+    "  Update searchts: https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md\n"
+    "Keep (pipx):  pipx upgrade searchts\n"
+    "venv:         pip install -U \"searchts[mcp]\"\n"
+    "uvx:          already latest PyPI — nothing to upgrade"
 )
 
 

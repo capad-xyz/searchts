@@ -114,10 +114,10 @@
 - [x] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`. *Posted 2026-08-26 (`@aadarsh_io`). Host stdio smoke done.*
 - [x] **X5** 0.8.0 on PyPI. *Posted 2026-08-30 (`@aadarsh_io`). Used `example.com` in the uvx line — that URL is thin (`_MIN_CHARS`); a copypaste looks like a broken install. Do not unpost. Next demo URL = Wikipedia. F8b/F13 later.*
 - [ ] Cadence ≤2 posts/week; no chore tweets (pins, dead keys, YAML)
-- [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article drafted in Notion; publish same week as X2/X3.
+- [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article live: https://x.com/i/article/2090756751675342848 (also linked 2026-09-06).
 - [x] **CI** PRs: lint + typecheck + version-sync + ubuntu 3.12 tests. Full matrix + wheel-gate on `main` only.
 
-- [ ] Article: drafted (Notion). **0.8.0 is on PyPI (2026-08-29).** Publish after one `uvx` confirm. Do not republish X1 as the lede.
+- [x] Article: [X Article](https://x.com/i/article/2090756751675342848). PLAN had lagged (“drafted”). Demo URL = Wikipedia.
 - [x] **PyPI 0.8.0** [#78](https://github.com/capad-xyz/searchts/pull/78) merged 2026-08-29; [pypi.org/project/searchts/0.8.0](https://pypi.org/project/searchts/0.8.0/).
 
 - [x] **Install story** (docs, not a feature): **keep** = `pipx install "searchts[mcp]"`; **try / MCP** = `uvx --from "searchts[mcp]" searchts …`. `pip` is for venvs only.
@@ -250,12 +250,12 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F6** Claude/marketplace plugin polish beyond P4.2 minimum
 - [ ] **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. **Consumer:** Grok / Claude custom connector (Name + `https://…/mcp`) — a phone cannot use stdio. Public/hosted MCP URL is still **N2**. Auth + SSRF (**U5** / **P3.6b**) come with the URL. Revisit **after article**, then localhost smoke, *then* hosted. Not in P2.1–P2.3.
 - [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills` — Codex will not see the skill until we add that path (measure demand first).
-- [ ] **F8b** Install-copy leftovers (not first-install): `llms.txt` still says `pip install searchts`; `docs/update.md` + `check-update` `_UPDATE_INSTRUCTIONS` still zip/`pip` first (should be `pipx upgrade searchts` / `pip install -U "searchts[mcp]"` / uvx = already latest). Extra-missing hints may add `pipx inject`. Do **not** rewrite contributor `pip install -e`. Same PR as **F13** when we touch it. Revisit **after article**.
+- [x] **F8b** Install-copy leftovers: `llms.txt` / `docs/update.md` / `check-update` `_UPDATE_INSTRUCTIONS` match F8 (pipx upgrade / venv `pip -U` / uvx = latest). No `main.zip`, no `search-twitter`, doctor is read-only. Did **not** rewrite contributor `pip install -e`. Extra-missing `pipx inject` skipped (hints still `pip install "searchts[extra]"` for venvs). **F13** is a separate PR.
 - [ ] **F11** Windows: `pip install -e .` fails while `searchts.exe` is running (MCP `serve` per IDE holds the shim — kill PIDs or `--force-reinstall`). **Do not** add `--single-instance` / a machine-wide mutex (breaks one stdio server per host). Next week at most: RUNBOOK note + `claude mcp list` / Cursor MCP json. Not a feature.
 - **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships.
 - **F10** **WebMCP** (site-exposed tools in the browser / ChatGPT Sites). Complementary surface to local MCP, not a replacement. Explore only after core reach + honesty are solid; any product/revenue layer (hosted API, team unlocker, site tools) is a **later** decision and must not dilute the free local CLI. No sprint this phase.
 - [ ] **F12** Wall playbook (not a bypass sprint): **P3.11** (stealth `page.content` retry) → **F1** (persistent profile) → **`--human` / F7** (session, extras only). Never **N1** (paid residential as default) or **N3** (keyed unlocker as default). Login/challenge stays fail-loud. Revisit **after PyPI 0.8.0 + article**.
-- [ ] **F13** Optional update nudge (**not 0.8.1**): cached ~24h GitHub check, **stderr only**, skip `mcp serve` / pipes, `SEARCHTS_NO_UPDATE_CHECK=1`. Same PR as **F8b**. Revisit **after article**.
+- [ ] **F13** Optional update nudge (**not 0.8.1**): cached ~24h GitHub check, **stderr only**, skip `mcp serve` / pipes, `SEARCHTS_NO_UPDATE_CHECK=1`. Not bundled with F8b. Revisit when we want the nudge, not because copy was stale.
 - [ ] **F14** Opt-in Solari (cloud Playwright) **only when local `[browser]`/patchright is missing**. `SOLARI_API_KEY`. Never default (**N3**). 2026-09-02 cookbook: Reddit/LinkedIn still walls (proxy+captcha+hydration). Artifact: https://github.com/capad-xyz/solari-cookbook/tree/main/examples/agent-read . Revisit **if Harry replies** or **after article**. Keep-gate = would pay Starter to skip patchright, not Reddit green.
 - [ ] **F15** Hare as a **review product** (other repos install an App, billed, CodeRabbit-shaped). **Different intent from searchts.** Do not mix sprints, tokens, or PLAN order with the unlocker. Revisit only as its own thread.
 
@@ -324,6 +324,7 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-06 | **Hare**: R1 reviews are GitHub PR comments with `<!-- searchts-r1-review -->` (Name / Purpose / Model / Effort). Hourly matcher: that token. Display: 🐇‍❄️. |
 | 2026-09-06 | **Hare ≠ orchestrator.** Cheap-scout reviews. Orchestrator merge-only unless cheap path is dead. Role, not a vendor — Grok/Claude/Codex can be either. #132 Hare comment was the orchestrator — that was the miss. |
 | 2026-09-07 | **NAMES.md** — orchestrator (remote/local), Hare, cheap-scout. Local spawn is still a step; R1c only covers remote push. |
+| 2026-09-08 | **F8b** copy: llms.txt + update.md + `_UPDATE_INSTRUCTIONS` match F8. Article was already live. F13 not in this PR. |
 | 2026-09-07 | **README** demo URL = Wikipedia (X5 leftover). `claude mcp add` try-path = uvx. example.com stays for grab/get only. |
 | 2026-09-07 | **`python -m searchts`:** add `searchts/__main__.py`. Last night PATH was pipx 0.8.0; `-m searchts` had no `__main__`. `python -m searchts.cli` still works. |
 | 2026-08-28 | **F11** parked: Windows editable install vs live `searchts.exe`; no `--single-instance` mutex. |

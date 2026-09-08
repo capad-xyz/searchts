@@ -1,92 +1,68 @@
 # searchts — Update Guide
 
-## For Humans
-
-Copy this to your AI Agent:
+Copy for an agent:
 
 ```
-Update searchts: https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md
+Update searchts using https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md
 ```
 
 ---
 
-## For AI Agents
+## For AI agents
 
-### Workspace Rules
+**Do not** `pip install` onto system Python. **Do not** unzip `main.zip` as the default. **Do not** uninstall the user's tools.
 
-**Never create files, clone repos, or run commands in the agent workspace.** Use `/tmp/` for temporary work and `~/.searchts/` for persistent data.
-
-### Goal
-
-Update searchts to the latest version, refresh upstream tools, migrate from retired backends, and verify everything works. The user should not need to do anything manually (except things only a human can do, like clicking a browser-extension install button).
-
-### Step 1: Check current version
+### 1. How they installed
 
 ```bash
-searchts check-update
+searchts --version
+command -v searchts || true
 ```
 
-If it says "Already on the latest version", skip to Step 4 (verify). Otherwise continue.
+### 2. Update the package
 
-### Step 2: Update the searchts package
+**Keep (pipx):**
 
 ```bash
-pip install --upgrade https://github.com/capad-xyz/searchts/archive/main.zip
+pipx upgrade searchts
+# extras in the pipx venv:
+#   pipx inject searchts mcp
 ```
 
-> If pip complains about `externally-managed-environment` (PEP 668), the user
-> originally installed via pipx or a venv — use the matching command:
-> `pipx install --force https://github.com/capad-xyz/searchts/archive/main.zip`
-> or activate `~/.searchts-venv` first.
-
-### Step 3: Refresh upstream tools
-
-Run these to keep installed tools current. **Only upgrade what is already
-installed — do not install new tools the user never asked for.**
+**venv / packaging:**
 
 ```bash
-# Python-based CLIs the user already has (upgrade keeps signatures fresh)
-which twitter >/dev/null 2>&1 && { pipx upgrade twitter-cli 2>/dev/null || uv tool upgrade twitter-cli 2>/dev/null; }
-which yt-dlp  >/dev/null 2>&1 && { pipx upgrade yt-dlp 2>/dev/null || uv tool upgrade yt-dlp 2>/dev/null || pip install -U yt-dlp 2>/dev/null; }
-
-# rdt-cli is pinned to a git source (PyPI lags upstream) — same pin as the code's _RDT_GIT_SOURCE
-which rdt >/dev/null 2>&1 && pipx install --force 'git+https://github.com/public-clis/rdt-cli.git@5e4fb3720d5c174e976cd425ccc3b879d52cac66' 2>/dev/null
-
-# npm-based
-which mcporter >/dev/null 2>&1 && npm update -g mcporter 2>/dev/null
+pip install -U "searchts[mcp]"
 ```
 
-### Step 4: Coexistence (DO NOT uninstall old tools)
+**Try (uvx):** already the latest PyPI each run. Nothing to upgrade.
 
-**Never uninstall tools the user already has.** Retired backends keep
-working as fallbacks where they still function. searchts routes around
-them automatically — removal is the user's call, not yours.
+If `searchts.exe` / `mcp serve` is running (Windows), stop it first or pipx will hit a file lock (**F11**).
 
-### Step 5: Verify
+### 3. Skill (optional)
+
+Doctor does **not** install skills.
 
 ```bash
-searchts version
+searchts skill install
+```
+
+### 4. Verify
+
+```bash
+searchts --version
 searchts doctor
 ```
 
-Running `searchts doctor` (text mode) also auto-syncs the bundled skill
-(SKILL.md + references) into every detected agent skill directory — no
-separate skill-update step is needed.
+First read after update: Wikipedia, not `example.com`.
 
-Check the doctor output:
+```bash
+searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace
+```
 
-- Every channel shows ok / [!] with a clear message
-- If a previously-working channel now shows [X]/error, the message contains
-  the exact fix (e.g. a venv-reinstall prescription) — run it, then re-check
-- `--json` gives the same data machine-readably (`active_backend` per channel)
+### 5. Tell the user
 
-### Step 6: Report to user
-
-Tell the user:
-
-1. What version they're on now (`searchts version`)
-2. How many channels are available, and which backend each platform is using (from doctor)
-3. Anything that needs their action (e.g. Twitter cookie import)
-4. What changed in this update (release notes shown by `check-update`)
-
-Done.
+1. Version (`searchts --version`)
+2. How they install (pipx / venv / uvx)
+3. Doctor warnings only — optional CLIs on PATH, not “searchts reads Twitter”
+4. `check-update` notes if any
