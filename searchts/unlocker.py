@@ -545,6 +545,29 @@ _NAV_CONTENT_WAIT_MS = 400
 _SETTLE_LOAD_MS = 8000
 _SETTLE_NETWORKIDLE_MS = 3000
 
+#: Persistent browser profile directory (searchts-owned). Same dir for
+#: stealth and --human. Opt out via SEARCHTS_NO_BROWSER_PROFILE=1.
+_BROWSER_PROFILE_DIR = Path.home() / ".searchts" / "browser-profile"
+
+
+def _profile_path() -> Path:
+    """Resolve the persistent browser profile path.
+
+    Returns ``_BROWSER_PROFILE_DIR`` when the profile feature is enabled
+    (default), or a throwaway temporary dir when ``SEARCHTS_NO_BROWSER_PROFILE=1``
+    opts out. Creates the directory if missing.
+    """
+    if os.environ.get("SEARCHTS_NO_BROWSER_PROFILE", "") in ("1", "true", "yes"):
+        import tempfile
+        return Path(tempfile.mkdtemp(prefix="searchts-browser-"))
+    _BROWSER_PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    return _BROWSER_PROFILE_DIR
+
+
+def _use_persistent_profile() -> bool:
+    """True when the persistent profile feature is enabled (default)."""
+    return os.environ.get("SEARCHTS_NO_BROWSER_PROFILE", "") not in ("1", "true", "yes")
+
 
 def _is_nav_race(exc: BaseException) -> bool:
     return _NAV_RACE in str(exc).lower()
@@ -704,13 +727,25 @@ def _fetch_stealth_impl(
 
     ms = int(timeout * 1000)
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        try:
-            ctx = browser.new_context(
+        persistent = _use_persistent_profile()
+        if persistent:
+            profile_dir = _profile_path()
+            browser = p.chromium.launch_persistent_context(
+                str(profile_dir), headless=True,
                 user_agent=_UA_REAL, locale="en-US",
                 viewport={"width": 1280, "height": 800},
             )
-            page = ctx.new_page()
+        else:
+            browser = p.chromium.launch(headless=True)
+        try:
+            if persistent:
+                page = browser.new_page()
+            else:
+                ctx = browser.new_context(
+                    user_agent=_UA_REAL, locale="en-US",
+                    viewport={"width": 1280, "height": 800},
+                )
+                page = ctx.new_page()
             resp = page.goto(url, wait_until="domcontentloaded", timeout=ms)
             init_status = resp.status if resp else None
             headers = _normalize_headers(resp.all_headers()) if resp else {}
@@ -772,13 +807,25 @@ def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str,
 
     deadline_ms = int(timeout * 1000)
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
-        try:
-            ctx = browser.new_context(
+        persistent = _use_persistent_profile()
+        if persistent:
+            profile_dir = _profile_path()
+            browser = p.chromium.launch_persistent_context(
+                str(profile_dir), headless=False,
                 user_agent=_UA_REAL, locale="en-US",
                 viewport={"width": 1280, "height": 800},
             )
-            page = ctx.new_page()
+        else:
+            browser = p.chromium.launch(headless=False)
+        try:
+            if persistent:
+                page = browser.new_page()
+            else:
+                ctx = browser.new_context(
+                    user_agent=_UA_REAL, locale="en-US",
+                    viewport={"width": 1280, "height": 800},
+                )
+                page = ctx.new_page()
             resp = page.goto(url, wait_until="domcontentloaded", timeout=min(60000, deadline_ms))
             init_status = resp.status if resp else None
             html = _await_hydration(page, page.content())
