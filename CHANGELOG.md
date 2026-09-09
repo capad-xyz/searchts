@@ -2,6 +2,21 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.9.0](https://github.com/capad-xyz/searchts/compare/v0.8.0...v0.9.0) (2026-09-09)
+
+
+### Added
+
+* **cli:** python -m searchts (add __main__.py) ([#137](https://github.com/capad-xyz/searchts/issues/137)) ([7e510ac](https://github.com/capad-xyz/searchts/commit/7e510acec5e0064c2587563b4e213b0c1ff10e8a))
+* **unlocker:** fail-open Reddit JSON ring (F5b) ([d8179fc](https://github.com/capad-xyz/searchts/commit/d8179fc98a8568a1f82858ec968b313d756a74d1))
+* **unlocker:** P4.6 stderr ticks for known-host ring ([687e933](https://github.com/capad-xyz/searchts/commit/687e933049611d988db8f9a37260c9a2f8fc2752))
+* **unlocker:** persistent stealth/human browser profile ([#145](https://github.com/capad-xyz/searchts/issues/145)) ([3b77a4f](https://github.com/capad-xyz/searchts/commit/3b77a4f2ef5ccb8e5b86d0890878d05461b1c1af))
+
+
+### Fixed
+
+* **stealth:** wait out page.content navigation race (P3.11) ([#127](https://github.com/capad-xyz/searchts/issues/127)) ([3b3f0e9](https://github.com/capad-xyz/searchts/commit/3b3f0e95f79ef004c39f302d80ae15d91a33ad14))
+
 ## [0.8.0](https://github.com/capad-xyz/searchts/compare/v0.7.2...v0.8.0) (2026-08-28)
 
 
