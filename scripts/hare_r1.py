@@ -367,8 +367,8 @@ def run() -> int:
     sha = _env("HEAD_SHA")
     nous_key = _env("SEARCHTS_HARE_API_KEY_NOUS")
     or_key = _env("SEARCHTS_HARE_API_KEY_OR")
-    nous_model = _env("HARE_NOUS_MODEL", "Hermes-4.3-36B")
-    or_model = _env("HARE_OR_MODEL", "z-ai/glm-4.5-air:free")
+    nous_model = _env("HARE_NOUS_MODEL", "poolside/laguna-s-2.1")
+    or_model = _env("HARE_OR_MODEL", "nvidia/nemotron-3.5-lightning:free")
     if not token or not repo_full or not pr:
         print("missing GITHUB_TOKEN / GITHUB_REPOSITORY / PR_NUMBER")
         return 0
@@ -413,6 +413,7 @@ def run() -> int:
         providers.append(("openrouter", OR_BASE, or_key, or_model))
 
     last_err = "no provider"
+    errs: list[str] = []
     parsed: dict[str, Any] | None = None
     used = ""
     for name, base, key, model in providers[:2]:
@@ -424,12 +425,12 @@ def run() -> int:
             used = f"{name}:{model}"
             break
         except Exception as e:
-            last_err = f"{name}:{model}: {e}"
+            errs.append(f"{name}:{model}: {e}")
             parsed = None
             continue
 
     if parsed is None:
-        post_needed(owner, repo, n, token, last_err)
+        post_needed(owner, repo, n, token, " | ".join(errs) or last_err)
         return 0
 
     findings = list(parsed.get("findings") or [])

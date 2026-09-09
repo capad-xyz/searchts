@@ -42,6 +42,6 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SEARCHTS_HARE_API_KEY_NOUS: ${{ secrets.SEARCHTS_HARE_API_KEY_NOUS }}
           SEARCHTS_HARE_API_KEY_OR: ${{ secrets.SEARCHTS_HARE_API_KEY_OR }}
-          HARE_NOUS_MODEL: Hermes-4.3-36B
-          HARE_OR_MODEL: z-ai/glm-4.5-air:free
+          HARE_NOUS_MODEL: poolside/laguna-s-2.1
+          HARE_OR_MODEL: nvidia/nemotron-3.5-lightning:free
         run: python scripts/hare_r1.py
