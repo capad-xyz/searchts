@@ -60,14 +60,27 @@ def test_parse_plus_lines_counts_new_file_side() -> None:
 
 def test_filter_drops_lines_not_in_diff() -> None:
     plus = {"foo.py": {10}}
-    findings = [
-        {"sev": "real", "path": "foo.py", "line": 10, "issue": "bad"},
-        {"sev": "real", "path": "foo.py", "line": 99, "issue": "ghost"},
-        {"sev": "skip", "path": "nope.py", "line": 1, "issue": "nope"},
-    ]
+    findings = hare_r1.normalize_findings(
+        [
+            {"sev": "real", "path": "foo.py", "line": 10, "issue": "bad"},
+            {"sev": "real", "path": "foo.py", "line": 99, "issue": "ghost"},
+            {"sev": "skip", "path": "nope.py", "line": 1, "issue": "nope"},
+        ]
+    )
     kept = hare_r1.filter_bubbles(findings, plus)
     assert len(kept) == 1
     assert kept[0]["line"] == 10
+
+
+def test_ghost_real_stays_in_table_and_holds() -> None:
+    findings = hare_r1.normalize_findings(
+        [{"sev": "real", "path": "foo.py", "line": 99, "issue": "ghost"}]
+    )
+    assert hare_r1.filter_bubbles(findings, {"foo.py": {10}}) == []
+    assert hare_r1.intent_for("ok", findings) == "hold"
+    body = hare_r1.render_comment("nous:x", "low", "hold", findings, "ok", [])
+    assert "foo.py:99" in body
+    assert "| **Intent** | hold |" in body
 
 
 def test_extract_json_from_fence() -> None:

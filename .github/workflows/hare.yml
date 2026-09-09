@@ -23,11 +23,22 @@ jobs:
     # Always green: a dead brain posts searchts-r1-needed instead of failing CI.
     continue-on-error: true
     steps:
-      - name: Checkout
+      # Runner script from main once this file exists there. This PR bootstraps
+      # from HEAD only if the file is missing on base (chicken-egg).
+      - name: Checkout trusted base
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Bootstrap hare script from PR if not on base
+        if: hashFiles('scripts/hare_r1.py') == ''
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+          sparse-checkout: scripts/hare_r1.py
+          sparse-checkout-cone-mode: false
 
       - name: Setup Python
         uses: actions/setup-python@v7

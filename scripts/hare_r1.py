@@ -143,6 +143,24 @@ def extract_json(text: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def normalize_findings(findings: list[Any]) -> list[dict[str, Any]]:
+    """Keep every model row, including lines that cannot take a bubble."""
+    out: list[dict[str, Any]] = []
+    for f in findings:
+        if not isinstance(f, dict):
+            continue
+        path = str(f.get("path") or "").lstrip("./")
+        try:
+            line: int | None = int(f["line"]) if f.get("line") is not None else None
+        except (TypeError, ValueError):
+            line = None
+        sev = str(f.get("sev") or "skip").lower()
+        if sev not in {"real", "skip"}:
+            sev = "skip"
+        out.append({**f, "path": path, "line": line, "sev": sev})
+    return out
+
+
 def intent_for(check_state: str, findings: list[dict[str, Any]]) -> str:
     if check_state in {"fail", "pending"}:
         return "hold"
@@ -156,17 +174,11 @@ def filter_bubbles(
 ) -> list[dict[str, Any]]:
     kept: list[dict[str, Any]] = []
     for f in findings:
-        path = str(f.get("path") or "").lstrip("./")
-        try:
-            line = int(f.get("line"))
-        except (TypeError, ValueError):
+        path = str(f.get("path") or "")
+        line = f.get("line")
+        if not isinstance(line, int) or path not in plus or line not in plus[path]:
             continue
-        if path not in plus or line not in plus[path]:
-            continue
-        sev = str(f.get("sev") or "skip").lower()
-        if sev not in {"real", "skip"}:
-            sev = "skip"
-        kept.append({**f, "path": path, "line": line, "sev": sev})
+        kept.append(f)
         if len(kept) >= MAX_BUBBLES:
             break
     return kept
@@ -182,7 +194,7 @@ def render_comment(
 ) -> str:
     rows = []
     for f in findings:
-        loc = f"{f.get('path')}:{f.get('line')}"
+        loc = f"{f.get('path')}:{f.get('line')}" if f.get("line") is not None else str(f.get("path") or "-")
         issue = _no_em(str(f.get("issue") or "").strip() or "see bubble")
         fix = str(f.get("fix") or "later")
         rows.append(f"| {f.get('sev')} | {loc} | {issue} | {fix} |")
@@ -433,15 +445,13 @@ def run() -> int:
         post_needed(owner, repo, n, token, " | ".join(errs) or last_err)
         return 0
 
-    findings = list(parsed.get("findings") or [])
-    if not isinstance(findings, list):
-        findings = []
+    findings = normalize_findings(list(parsed.get("findings") or []) if isinstance(parsed.get("findings"), list) else [])
     effort = str(parsed.get("effort") or "low")
     if effort not in {"low", "medium", "high"}:
         effort = "low"
     bubbles = filter_bubbles(findings, plus)
-    intent = intent_for(check_state, bubbles)
-    comment = render_comment(used, effort, intent, bubbles, check_state, check_notes)
+    intent = intent_for(check_state, findings)
+    comment = render_comment(used, effort, intent, findings, check_state, check_notes)
     if TOKEN not in comment:
         post_needed(owner, repo, n, token, "rendered comment missing token")
         return 0
