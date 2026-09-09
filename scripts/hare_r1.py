@@ -16,7 +16,7 @@ TOKEN = "<!-- searchts-r1-review -->"
 NEEDED = "<!-- searchts-r1-needed -->"
 BUBBLE_HEAD = "<!-- searchts-r1-review -->\n🐇❄ Hare · automated R1 · not the PR author"
 SKIP_CHECKS = frozenset({"test-full", "wheel-gate"})
-HARE_JOB_MARKERS = ("hare", "r1c")
+HARE_JOB_MARKERS = frozenset({"hare", "r1"})
 MAX_DIFF = 90_000
 MAX_BUBBLES = 20
 CHECK_WAIT_S = 480
@@ -62,19 +62,27 @@ def github_api(
         raise RuntimeError(f"GitHub {method} {path} {e.code}: {err[:500]}") from e
 
 
+def _is_hare_job(name: str) -> bool:
+    low = name.lower()
+    short = low.split("/")[-1].strip()
+    first = low.split("/")[0].strip()
+    return short in HARE_JOB_MARKERS or first in HARE_JOB_MARKERS
+
+
 def classify_checks(runs: list[dict[str, Any]]) -> tuple[str, list[str]]:
     """Return (ok|pending|fail, notes). Skip-by-design names never fail."""
     notes: list[str] = []
     pending = False
     failed = False
+    seen = 0
     for run in runs:
         name = str(run.get("name") or "")
-        low = name.lower()
         short = name.split("/")[-1].strip().lower()
-        if any(m in low for m in HARE_JOB_MARKERS):
+        if _is_hare_job(name):
             continue
         if short in SKIP_CHECKS or name.lower() in SKIP_CHECKS:
             continue
+        seen += 1
         status = str(run.get("status") or "")
         conclusion = str(run.get("conclusion") or "")
         if status != "completed":
@@ -86,7 +94,9 @@ def classify_checks(runs: list[dict[str, Any]]) -> tuple[str, list[str]]:
             notes.append(f"{name}: {conclusion}")
     if failed:
         return "fail", notes
-    if pending:
+    if pending or seen == 0:
+        if seen == 0:
+            notes.append("no non-Hare checks yet")
         return "pending", notes
     return "ok", notes
 
@@ -96,29 +106,45 @@ def parse_plus_lines(diff: str) -> dict[str, set[int]]:
     out: dict[str, set[int]] = {}
     path: str | None = None
     new_line = 0
+    in_hunk = False
     for raw in diff.splitlines():
-        if raw.startswith("+++ b/"):
-            path = raw[6:]
-            out.setdefault(path, set())
+        if raw.startswith("diff --git "):
+            path = None
+            in_hunk = False
+            new_line = 0
             continue
         if raw.startswith("+++ "):
-            path = raw[4:].lstrip("b/")
+            rest = raw[4:]
+            if rest.startswith("b/"):
+                rest = rest[2:]
+            path = rest
             out.setdefault(path, set())
+            in_hunk = False
+            continue
+        if (
+            raw.startswith("--- ")
+            or raw.startswith("index ")
+            or raw.startswith("new file mode")
+            or raw.startswith("deleted file mode")
+            or raw.startswith("similarity index")
+            or raw.startswith("rename ")
+        ):
             continue
         if raw.startswith("@@"):
             m = re.search(r"\+(\d+)", raw)
             new_line = int(m.group(1)) if m else 0
+            in_hunk = True
             continue
-        if path is None:
+        if path is None or not in_hunk:
             continue
         if raw.startswith("+") and not raw.startswith("+++"):
             out[path].add(new_line)
             new_line += 1
         elif raw.startswith("-") and not raw.startswith("---"):
             continue
+        elif raw.startswith("\\"):
+            continue
         else:
-            if raw.startswith("\\"):
-                continue
             out[path].add(new_line)
             new_line += 1
     return out
@@ -149,7 +175,7 @@ def normalize_findings(findings: list[Any]) -> list[dict[str, Any]]:
     for f in findings:
         if not isinstance(f, dict):
             continue
-        path = str(f.get("path") or "").lstrip("./")
+        path = str(f.get("path") or "").strip().removeprefix("./")
         try:
             line: int | None = int(f["line"]) if f.get("line") is not None else None
         except (TypeError, ValueError):
@@ -250,6 +276,7 @@ def chat_complete(base: str, key: str, model: str, messages: list[dict[str, str]
     )
     req.add_header("Authorization", f"Bearer {key}")
     req.add_header("Content-Type", "application/json")
+    req.add_header("User-Agent", "searchts-hare/1")
     req.add_header("HTTP-Referer", "https://github.com/capad-xyz/searchts")
     req.add_header("X-Title", "searchts-hare")
     try:
@@ -380,7 +407,7 @@ def run() -> int:
     nous_key = _env("SEARCHTS_HARE_API_KEY_NOUS")
     or_key = _env("SEARCHTS_HARE_API_KEY_OR")
     nous_model = _env("HARE_NOUS_MODEL", "poolside/laguna-s-2.1")
-    or_model = _env("HARE_OR_MODEL", "nvidia/nemotron-3.5-lightning:free")
+    or_model = _env("HARE_OR_MODEL", "poolside/laguna-s-2.1:free")
     if not token or not repo_full or not pr:
         print("missing GITHUB_TOKEN / GITHUB_REPOSITORY / PR_NUMBER")
         return 0

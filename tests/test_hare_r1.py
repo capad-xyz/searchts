@@ -28,10 +28,47 @@ def test_classify_red_test_is_fail() -> None:
     assert any("test" in n for n in notes)
 
 
-def test_classify_pending() -> None:
-    runs = [{"name": "ci / test", "status": "in_progress", "conclusion": None}]
-    state, _ = hare_r1.classify_checks(runs)
+def test_classify_empty_is_pending() -> None:
+    state, notes = hare_r1.classify_checks([])
     assert state == "pending"
+    assert notes
+
+
+def test_classify_does_not_eat_share_named_jobs() -> None:
+    runs = [
+        {"name": "ci / share-extractors", "status": "completed", "conclusion": "failure"},
+        {"name": "hare / r1", "status": "in_progress", "conclusion": None},
+    ]
+    state, notes = hare_r1.classify_checks(runs)
+    assert state == "fail"
+    assert any("share-extractors" in n for n in notes)
+
+
+def test_parse_plus_lines_stops_at_next_file_header() -> None:
+    diff = """\
+diff --git a/foo.py b/foo.py
+--- a/foo.py
++++ b/foo.py
+@@ -1,1 +1,2 @@
+ keep
++new
+diff --git a/bar.py b/bar.py
+index 1111111..2222222 100644
+--- a/bar.py
++++ b/bar.py
+@@ -1,1 +1,1 @@
+ only
+"""
+    plus = hare_r1.parse_plus_lines(diff)
+    assert plus["foo.py"] == {1, 2}
+    assert plus["bar.py"] == {1}
+
+
+def test_normalize_keeps_dotfile_paths() -> None:
+    out = hare_r1.normalize_findings(
+        [{"sev": "real", "path": "./.github/workflows/hare.yml", "line": 21}]
+    )
+    assert out[0]["path"] == ".github/workflows/hare.yml"
 
 
 def test_intent_hold_on_red_even_without_findings() -> None:

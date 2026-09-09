@@ -54,5 +54,5 @@ jobs:
           SEARCHTS_HARE_API_KEY_NOUS: ${{ secrets.SEARCHTS_HARE_API_KEY_NOUS }}
           SEARCHTS_HARE_API_KEY_OR: ${{ secrets.SEARCHTS_HARE_API_KEY_OR }}
           HARE_NOUS_MODEL: poolside/laguna-s-2.1
-          HARE_OR_MODEL: nvidia/nemotron-3.5-lightning:free
+          HARE_OR_MODEL: poolside/laguna-s-2.1:free
         run: python scripts/hare_r1.py
