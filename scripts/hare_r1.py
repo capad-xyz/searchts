@@ -24,6 +24,7 @@ CHECK_POLL_S = 20
 
 NOUS_BASE = "https://inference-api.nousresearch.com/v1"
 OR_BASE = "https://openrouter.ai/api/v1"
+ZEN_BASE = "https://opencode.ai/zen/v1"
 
 
 def _env(name: str, default: str = "") -> str:
@@ -406,15 +407,17 @@ def run() -> int:
     sha = _env("HEAD_SHA")
     nous_key = _env("SEARCHTS_HARE_API_KEY_NOUS")
     or_key = _env("SEARCHTS_HARE_API_KEY_OR")
+    zen_key = _env("SEARCHTS_HARE_API_KEY_ZEN")
     nous_model = _env("HARE_NOUS_MODEL", "poolside/laguna-s-2.1")
-    or_model = _env("HARE_OR_MODEL", "poolside/laguna-s-2.1:free")
+    or_model = _env("HARE_OR_MODEL", "inclusionai/ling-3.0-flash-fin:free")
+    zen_model = _env("HARE_ZEN_MODEL", "ling-3.0-flash-fin-free")
     if not token or not repo_full or not pr:
         print("missing GITHUB_TOKEN / GITHUB_REPOSITORY / PR_NUMBER")
         return 0
     owner, repo = repo_full.split("/", 1)
     n = int(pr)
 
-    if not nous_key and not or_key:
+    if not nous_key and not or_key and not zen_key:
         post_needed(owner, repo, n, token, "no Hare API secrets on this run (forks have none).")
         return 0
 
@@ -450,12 +453,14 @@ def run() -> int:
         providers.append(("nous", NOUS_BASE, nous_key, nous_model))
     if or_key:
         providers.append(("openrouter", OR_BASE, or_key, or_model))
+    if zen_key:
+        providers.append(("zen", ZEN_BASE, zen_key, zen_model))
 
     last_err = "no provider"
     errs: list[str] = []
     parsed: dict[str, Any] | None = None
     used = ""
-    for name, base, key, model in providers[:2]:
+    for name, base, key, model in providers:
         try:
             raw = chat_complete(base, key, model, messages)
             parsed = extract_json(raw)

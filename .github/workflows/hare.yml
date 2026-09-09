@@ -53,6 +53,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SEARCHTS_HARE_API_KEY_NOUS: ${{ secrets.SEARCHTS_HARE_API_KEY_NOUS }}
           SEARCHTS_HARE_API_KEY_OR: ${{ secrets.SEARCHTS_HARE_API_KEY_OR }}
+          SEARCHTS_HARE_API_KEY_ZEN: ${{ secrets.SEARCHTS_HARE_API_KEY_ZEN }}
           HARE_NOUS_MODEL: poolside/laguna-s-2.1
-          HARE_OR_MODEL: poolside/laguna-s-2.1:free
+          HARE_OR_MODEL: inclusionai/ling-3.0-flash-fin:free
+          HARE_ZEN_MODEL: ling-3.0-flash-fin-free
         run: python scripts/hare_r1.py
