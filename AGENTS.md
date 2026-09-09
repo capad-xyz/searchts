@@ -36,7 +36,7 @@ The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is 
 
 **Spawn prompt (this is the whole paste):** `spawn hare` + PR URL + PLAN id / intent. Hare **reads this file**. Do not re-paste Voice, two surfaces, or skip-never-holds unless the scout skipped AGENTS.md.
 
-**Trigger (until R1c):** a remote push does **not** run Hare. The agent that opened/pushed the PR posts a Conversation comment whose first line is `<!-- searchts-r1-needed -->` (PR URL + “spawn Hare”). Hourly matcher / human then runs a **different cheap-scout**. Merge bar: `<!-- searchts-r1-review -->` exists. **R1b/R1c/F15** parked — PLAN.md. R1c when built: Action + Zen/Nous free; 429 → this nag.
+**Trigger (until R1c):** a remote push does **not** run Hare. The agent that opened/pushed the PR posts a Conversation comment whose first line is `<!-- searchts-r1-needed -->` (PR URL + “spawn Hare”). Hourly matcher / human then runs a **different cheap-scout**. Merge bar: `<!-- searchts-r1-review -->` exists. **R1b/R1c/F15** parked — PLAN.md. R1c when built: Action + ordered free models; fail (429 / 5xx / timeout / empty token) → **one** other model → then this nag. Do not post a fake review.
 
 Hare posts **two** GitHub surfaces (CodeRabbit-shaped). Local chat is not enough.
 
