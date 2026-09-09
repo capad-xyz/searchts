@@ -416,7 +416,41 @@ def run() -> int:
         return 0
     owner, repo = repo_full.split("/", 1)
     n = int(pr)
+    try:
+        return _hare_once(
+            owner,
+            repo,
+            n,
+            token,
+            sha,
+            nous_key,
+            or_key,
+            zen_key,
+            nous_model,
+            or_model,
+            zen_model,
+        )
+    except Exception as e:
+        try:
+            post_needed(owner, repo, n, token, f"crash: {type(e).__name__}: {e}")
+        except Exception as post_err:
+            print(f"hare crash and nag failed: {e}; {post_err}")
+        return 0
 
+
+def _hare_once(
+    owner: str,
+    repo: str,
+    n: int,
+    token: str,
+    sha: str,
+    nous_key: str,
+    or_key: str,
+    zen_key: str,
+    nous_model: str,
+    or_model: str,
+    zen_model: str,
+) -> int:
     if not nous_key and not or_key and not zen_key:
         post_needed(owner, repo, n, token, "no Hare API secrets on this run (forks have none).")
         return 0

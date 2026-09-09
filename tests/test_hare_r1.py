@@ -138,3 +138,22 @@ def test_bubble_labeled_not_author() -> None:
     assert body.startswith(hare_r1.TOKEN)
     assert "not the PR author" in body
     assert "**skip**" in body
+
+
+def test_run_nags_on_crash(monkeypatch: object) -> None:
+    posted: list[str] = []
+
+    def fake_needed(owner: str, repo: str, n: int, token: str, why: str) -> None:
+        posted.append(why)
+
+    def boom(*_a: object, **_k: object) -> int:
+        raise RuntimeError("boom")
+
+    monkeypatch.setenv("GITHUB_TOKEN", "t")  # type: ignore[attr-defined]
+    monkeypatch.setenv("GITHUB_REPOSITORY", "capad-xyz/searchts")  # type: ignore[attr-defined]
+    monkeypatch.setenv("PR_NUMBER", "147")  # type: ignore[attr-defined]
+    monkeypatch.setattr(hare_r1, "post_needed", fake_needed)
+    monkeypatch.setattr(hare_r1, "_hare_once", boom)
+    assert hare_r1.run() == 0
+    assert posted and posted[0].startswith("crash:")
+    assert "boom" in posted[0]
