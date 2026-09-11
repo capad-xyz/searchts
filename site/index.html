@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>searchts — keyless web access for AI agents</title>
+<meta name="description" content="The missing layer between AI and the web. Open-source escalating unlocker: read bot-walled pages as Markdown, search keylessly, transcribe videos, grab assets. No API keys, your own IP.">
+<meta property="og:title" content="searchts — keyless web access for AI agents">
+<meta property="og:description" content="Read bot-walled pages as Markdown, search keylessly, transcribe videos, grab assets. MIT, no API keys.">
+<meta property="og:url" content="https://searchts.capad.fyi">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%94%93%3C/text%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #2d333b;
+    --text: #e6edf3; --muted: #9198a1; --accent: #58a6ff; --accent2: #3fb950;
+    --code-bg: #010409;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ffffff; --panel: #f6f8fa; --border: #d1d9e0;
+      --text: #1f2328; --muted: #59636e; --accent: #0969da; --accent2: #1a7f37;
+      --code-bg: #f6f8fa;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  code, pre { font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace; }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 0 1.25rem; }
+  header { padding: 4.5rem 0 2.5rem; text-align: center; }
+  h1 { font-size: 2.6rem; letter-spacing: -0.02em; }
+  h1 .dot { color: var(--accent); }
+  .tagline { font-size: 1.25rem; color: var(--muted); margin: 0.75rem auto 0; max-width: 620px; }
+  .badges { margin-top: 1.25rem; display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+  .badges a {
+    color: var(--text); text-decoration: none; font-size: 0.85rem;
+    border: 1px solid var(--border); border-radius: 999px; padding: 0.3rem 0.9rem;
+    background: var(--panel); transition: border-color 0.15s;
+  }
+  .badges a:hover { border-color: var(--accent); }
+  .video-frame {
+    margin: 2.5rem auto 0; border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; background: var(--code-bg); max-width: 820px;
+  }
+  video { display: block; width: 100%; height: auto; }
+  section { padding: 2.5rem 0; }
+  h2 { font-size: 1.5rem; margin-bottom: 1.25rem; letter-spacing: -0.01em; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; overflow-x: auto; font-size: 0.9rem; line-height: 1.7;
+  }
+  pre .c { color: var(--muted); }
+  pre .g { color: var(--accent2); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1.25rem;
+  }
+  .card h3 { font-size: 1rem; margin-bottom: 0.4rem; }
+  .card h3 code { color: var(--accent); font-size: 0.95rem; }
+  .card p { color: var(--muted); font-size: 0.9rem; }
+  .ladder { color: var(--muted); font-size: 0.95rem; margin-top: 0.75rem; }
+  .ladder strong { color: var(--text); }
+  footer {
+    border-top: 1px solid var(--border); margin-top: 2rem; padding: 2rem 0 3rem;
+    color: var(--muted); font-size: 0.9rem; text-align: center;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  @media (max-width: 600px) { h1 { font-size: 2rem; } .tagline { font-size: 1.05rem; } }
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <h1>searchts<span class="dot">.</span></h1>
+  <p class="tagline">The missing layer between AI and the web. Read bot-walled pages as clean Markdown, search, transcribe, and grab assets — <strong>keyless, free, on your own IP</strong>.</p>
+  <div class="badges">
+    <a href="https://github.com/capad-xyz/searchts">GitHub</a>
+    <a href="https://pypi.org/project/searchts/">PyPI</a>
+    <a href="https://registry.modelcontextprotocol.io/?search=searchts">MCP Registry</a>
+    <a href="https://github.com/capad-xyz/searchts/blob/main/LICENSE">MIT License</a>
+  </div>
+  <div class="video-frame">
+    <video src="demo.mp4" autoplay loop muted playsinline></video>
+  </div>
+</header>
+
+<main class="wrap">
+  <section>
+    <h2>Install</h2>
+    <pre><span class="c"># CLI + library</span>
+pip install searchts
+
+<span class="c"># or run without installing</span>
+uvx searchts read https://example.com</pre>
+  </section>
+
+  <section>
+    <h2>Four verbs</h2>
+    <pre><span class="g">searchts read</span> https://example.com          <span class="c"># any page as clean Markdown, through most bot-walls</span>
+<span class="g">searchts search</span> "open source vector db"    <span class="c"># multi-provider web search, no API key</span>
+<span class="g">searchts transcribe</span> https://youtu.be/...   <span class="c"># YouTube/TikTok/Instagram/Reddit transcripts</span>
+<span class="g">searchts grab</span> https://example.com          <span class="c"># images/icons/css/fonts + color palette</span></pre>
+    <div class="grid" style="margin-top:1rem">
+      <div class="card">
+        <h3><code>read</code> — escalating unlocker</h3>
+        <p>Browser-fingerprint fetch → Jina Reader → stealth browser. Escalates only as far as needed and returns Markdown with a source receipt.</p>
+      </div>
+      <div class="card">
+        <h3><code>search</code> — keyless search</h3>
+        <p>DuckDuckGo by default with reciprocal-rank fusion; optional SearXNG, Exa, Brave, and Tavily providers.</p>
+      </div>
+      <div class="card">
+        <h3><code>transcribe</code> — subtitles first</h3>
+        <p>Existing captions via yt-dlp need no key at all; falls back to hosted or local Whisper.</p>
+      </div>
+      <div class="card">
+        <h3><code>grab</code> — assets &amp; design</h3>
+        <p>Download a page's assets through the same unlock ladder and extract its color palette and fonts.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Give it to your agent (MCP)</h2>
+    <pre><span class="c"># Claude Code</span>
+claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve</pre>
+    <p class="ladder">Tools exposed: <strong>read_url</strong>, <strong>web_search</strong>, <strong>fetch_asset</strong>, <strong>grab_site</strong>. Also available as a <a href="https://github.com/capad-xyz/searchts/tree/main/searchts/skill" style="color:var(--accent)">Claude Code skill</a>.</p>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    MIT-licensed and open source. Built by <a href="https://capad.fyi">capad</a>.
+    If searchts saved you an API key, <a href="https://github.com/capad-xyz/searchts">star it on GitHub</a>.
+  </div>
+</footer>
+
+</body>
+</html>
