@@ -2,7 +2,8 @@
 
 searchts ships a small [Model Context Protocol](https://modelcontextprotocol.io) server, so any
 MCP-capable agent (Claude Code, Claude Desktop, Cursor, …) gets searchts's web tools as always-on,
-first-class tools — no shelling out to the CLI. It speaks stdio (JSON-RPC) and calls the exact same
+first-class tools — no shelling out to the CLI. The default transport is stdio (JSON-RPC). Loopback
+HTTP is optional (`--http`). Both call the exact same
 `searchts.unlocker` / `searchts.search` / `searchts.assets` code as the CLI, so behaviour is identical.
 
 ## Install & wire up
@@ -45,6 +46,21 @@ For Cursor / Claude Desktop, add to your MCP config (see also `config/mcporter.j
   }
 }
 ```
+
+## Loopback HTTP (F9)
+
+Hosts that cannot spawn stdio (Grok / Claude custom connector, a phone talking to your laptop) use Streamable HTTP on **loopback only**:
+
+```bash
+searchts mcp serve --http
+# URL: http://127.0.0.1:8765/mcp
+```
+
+Legacy SSE: `searchts mcp serve --sse` → `http://127.0.0.1:8765/sse`. Prefer `--http`.
+
+`--host` must be `127.0.0.1`, `localhost`, or `::1`. `0.0.0.0` and LAN addresses are refused. There is **no public/hosted MCP URL**.
+
+Custom connectors that require HTTPS still need a tunnel you run yourself; searchts will not ship one.
 
 ## Tools
 

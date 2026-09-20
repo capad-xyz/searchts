@@ -286,18 +286,58 @@ async def _run_stdio():
     await server.run_stdio_async()
 
 
-def serve():
-    """Clean entrypoint: run the stdio MCP server (the CLI's `mcp serve` calls this).
+#: Bind names F9 allows. Anything else is a hosted URL (N2) and we refuse.
+_LOOPBACK_BIND = frozenset({"127.0.0.1", "localhost", "::1"})
 
-    Raises MCPNotInstalledError (with an actionable pip hint) when the optional
-    `mcp` package is absent, so the caller can surface it without hanging on a
-    transport that never came up.
+
+def assert_loopback_bind(host: str) -> str:
+    """Return `host` if it is loopback, else raise ValueError.
+
+    Public / LAN / 0.0.0.0 binds are hosted MCP (N2). Localhost smoke only.
+    """
+    raw = (host or "").strip()
+    key = raw.lower()
+    if key.startswith("[") and key.endswith("]"):
+        key = key[1:-1]
+    if key not in _LOOPBACK_BIND:
+        raise ValueError(
+            f"HTTP MCP binds loopback only (got {host!r}). "
+            "Public/hosted MCP is not shipped."
+        )
+    return raw or "127.0.0.1"
+
+
+async def _run_http(transport: str, host: str, port: int) -> None:
+    """Streamable HTTP (`/mcp`) or legacy SSE (`/sse`) on loopback."""
+    host = assert_loopback_bind(host)
+    server = create_server()
+    if transport == "sse":
+        await server.run_sse_async(host=host, port=port)
+        return
+    if transport == "http":
+        await server.run_streamable_http_async(
+            host=host, port=port, streamable_http_path="/mcp"
+        )
+        return
+    raise ValueError(f"unknown HTTP transport {transport!r}")
+
+
+def serve(transport: str = "stdio", host: str = "127.0.0.1", port: int = 8765):
+    """Run the MCP server. Default is stdio (hosts spawn us).
+
+    ``transport='http'`` / ``'sse'`` bind loopback only (F9). Raises
+    MCPNotInstalledError when the optional ``mcp`` package is absent.
     """
     if not HAS_MCP:
         raise MCPNotInstalledError(MCP_MISSING_MESSAGE)
     from searchts.config import load_dotenv_if_available
     load_dotenv_if_available()
-    asyncio.run(_run_stdio())
+    if transport == "stdio":
+        asyncio.run(_run_stdio())
+        return
+    if transport not in {"http", "sse"}:
+        raise ValueError(f"unknown MCP transport {transport!r}")
+    asyncio.run(_run_http(transport, host, int(port)))
 
 
 async def main():
