@@ -1,6 +1,6 @@
 name: hare
 
-# R1c doorbell. Not a required check. Secrets exist only on same-repo PRs.
+# R1c doorbell + R1b identity. Not a required check. Secrets exist only on same-repo PRs.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -45,9 +45,20 @@ jobs:
         with:
           python-version: "3.12"
 
+      # R1b: comments as searchts-hare[bot]. Mint fails (bad PEM / not installed) → GITHUB_TOKEN.
+      - name: Mint searchts-hare[bot] token
+        id: hare-app
+        continue-on-error: true
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.HARE_APP_ID }}
+          private-key: ${{ secrets.HARE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: searchts
+
       - name: Hare R1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.hare-app.outputs.token || secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}

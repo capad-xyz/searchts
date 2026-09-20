@@ -244,7 +244,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
   - **Quick vs deep (have / should have) — discuss later, do not build on 147.** CodeRabbit = incremental (new commits only) + `@coderabbitai review` when auto is paused. Hare **is deep-only** (full diff every SHA). Incremental / mention-review is an F15 add-on. **Do not** copy "skip already-reviewed commits" into R1c (that is #141).
   - **Revisit:** tick `[x]` after a week of PRs without a paste. Wrong Nous model id = edit `HARE_NOUS_MODEL` (portal slug). **R1d** is in this Action.
   - **Appealing after boring:** **R1b** if the Author badge still bothers. **F15** only after boring holds *and* we want a second product.
-- [ ] **R1b** GitHub App **identity only** — reviews show as `hare[bot]`, not `capad-xyz`. One install: `capad-xyz/searchts`. Not a review product. Revisit when the Author badge actually matters in public/screenshots.
+- [x] **R1b** GitHub App **identity only** — reviews show as `searchts-hare[bot]` (not `github-actions[bot]` / not `capad-xyz`). App: `searchts-hare`. One install: `capad-xyz/searchts`. Workflow mints an install token; if mint fails, fall back to `GITHUB_TOKEN`. Not a review product. Secrets: `HARE_APP_ID` (numeric App ID, required by create-github-app-token@v2), `HARE_APP_PRIVATE_KEY` (full PEM, `BEGIN` not `START`). `HARE_APP_CLIENT_ID` unused until an action version that accepts `client-id`. Logo is the App avatar, not in git.
 
 ### F — Future (ROADMAP-aligned, after core is solid)
 
