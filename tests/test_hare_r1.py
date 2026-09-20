@@ -157,3 +157,39 @@ def test_run_nags_on_crash(monkeypatch: object) -> None:
     assert hare_r1.run() == 0
     assert posted and posted[0].startswith("crash:")
     assert "boom" in posted[0]
+
+
+def test_short_fail_hides_provider_json() -> None:
+    raw = (
+        'nous:poolside/laguna-s-2.1: LLM 401 https://x poolside/laguna-s-2.1: '
+        '{"status":401,"message":"Your API key is invalid, blocked or out of funds."}'
+    )
+    assert hare_r1._short_fail(raw) == "nous: key invalid or empty"
+    rate = (
+        "openrouter:inclusionai/ling-3.0-flash-fin:free: LLM 429 "
+        '{"error":{"message":"temporarily rate-limited upstream"}}'
+    )
+    assert hare_r1._short_fail(rate) == "openrouter: rate limited"
+    zen = (
+        "zen:ling-3.0-flash-fin-free: LLM 403 "
+        '{"type":"FreeTierError","message":"OpenCode\'s free tier can only be used from within OpenCode"}'
+    )
+    assert hare_r1._short_fail(zen) == "zen: free tier is TUI-only"
+
+
+def test_needed_body_is_graceful_and_offers_retry() -> None:
+    why = (
+        "nous:x: LLM 401 {\"status\":401} | "
+        "openrouter:y: LLM 429 rate-limited | "
+        "zen:z: LLM 403 FreeTierError within OpenCode"
+    )
+    body = hare_r1.needed_body(why)
+    assert body.startswith(hare_r1.NEEDED)
+    assert "/hare" in body
+    assert "not a review" in body.lower()
+    assert "Run workflow" in body
+    assert '{"status"' not in body
+    assert "key invalid or empty" in body
+    assert "rate limited" in body
+    assert "TUI-only" in body
+    assert "\u2014" not in body

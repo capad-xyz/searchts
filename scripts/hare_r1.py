@@ -335,17 +335,49 @@ def wait_checks(owner: str, repo: str, sha: str, token: str) -> list[dict[str, A
         time.sleep(CHECK_POLL_S)
 
 
+def _short_fail(part: str) -> str:
+    """One human line. Never dump provider JSON."""
+    p = part.strip()
+    low = p.lower()
+    name = p.split(":", 1)[0] if ":" in p else "hare"
+    if p.startswith("crash:"):
+        return p[:160]
+    if "no hare api secrets" in low:
+        return "no API secrets on this run"
+    if "401" in p or "invalid" in low or "out of funds" in low:
+        return f"{name}: key invalid or empty"
+    if "429" in p or "rate-limited" in low or "rate limited" in low:
+        return f"{name}: rate limited"
+    if "freetier" in low or "within opencode" in low:
+        return f"{name}: free tier is TUI-only"
+    if "404" in p or "unavailable" in low:
+        return f"{name}: model not available"
+    short = p.split("{", 1)[0].strip().rstrip(":")
+    return (short or name)[:160]
+
+
+def needed_body(why: str) -> str:
+    """Graceful nag. Raw errors stay behind a details fold. Offer /hare retry."""
+    parts = [x.strip() for x in why.split(" | ") if x.strip()] or [why.strip()]
+    hops = "\n".join(f"- {_short_fail(x)}" for x in parts)
+    return _no_em(
+        f"{NEEDED}\n\n"
+        "Hare could not finish this pass. The review hops were busy or blocked. "
+        "This is not a review.\n\n"
+        "Reply **`/hare`** to retry. Or Actions → hare → Run workflow "
+        "(optional OpenRouter model override).\n\n"
+        "<details>\n<summary>What failed</summary>\n\n"
+        f"{hops}\n\n"
+        "</details>\n"
+    )
+
+
 def post_needed(owner: str, repo: str, n: int, token: str, why: str) -> None:
     github_api(
         "POST",
         f"/repos/{owner}/{repo}/issues/{n}/comments",
         token,
-        {
-            "body": (
-                f"{NEEDED}\n\nHare R1c could not finish: {_no_em(why)}\n\n"
-                "Spawn hare locally (ocx cheap-scout). Do not treat this as a review."
-            )
-        },
+        {"body": needed_body(why)},
     )
 
 
