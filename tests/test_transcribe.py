@@ -119,6 +119,24 @@ class TestYtdlpCmd:
             "chrome:Default",
         ]
 
+    def test_unknown_browser_does_not_fall_through_subtitles(self, tmp_path, capsys):
+        with pytest.raises(tr.TranscribeError, match="unknown browser"):
+            tr.transcribe(
+                "https://youtu.be/x",
+                cookies_from_browser="notabrowser",
+                out_dir=tmp_path,
+            )
+        err = capsys.readouterr().err
+        assert "cookies from notabrowser" not in err
+
+    def test_fetch_subtitles_unknown_browser_raises(self, tmp_path):
+        with pytest.raises(tr.TranscribeError, match="unknown browser"):
+            tr.fetch_subtitles(
+                "https://youtu.be/x",
+                tmp_path,
+                cookies_from_browser="notabrowser",
+            )
+
 
 # --- transcribe_chunk: provider routing -------------------------------- #
 

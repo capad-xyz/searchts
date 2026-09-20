@@ -287,11 +287,12 @@ def fetch_subtitles(
         return None
 
     template = work_dir / "%(id)s"
+    cookie_args = cookies_from_browser_args(cookies_from_browser)
     try:
         _run(
             [
                 *_ytdlp_cmd(),
-                *cookies_from_browser_args(cookies_from_browser),
+                *cookie_args,
                 "--write-sub",
                 "--write-auto-sub",
                 "--sub-lang",
@@ -558,7 +559,9 @@ def transcribe(
         )
 
     if cookies_from_browser:
-        # F7: never silent. Opt-in only; unlocker/read never sees this.
+        # Validate before any "using cookies" line and before subtitle fallback
+        # swallows TranscribeError (unknown browser must fail loud).
+        cookies_from_browser_args(cookies_from_browser)
         print(
             f"searchts transcribe: cookies from {cookies_from_browser} "
             "(opt-in; not used by read)",

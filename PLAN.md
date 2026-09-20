@@ -263,6 +263,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - [x] **F8b** Install-copy leftovers: `llms.txt` / `docs/update.md` / `check-update` `_UPDATE_INSTRUCTIONS` match F8. No `main.zip`, no `search-twitter`, doctor is read-only. Did **not** rewrite contributor `pip install -e`. Extra-missing `pipx inject` skipped (hints still `pip install "searchts[extra]"` for venvs). **Revisit inject:** if pipx users miss the mcp extra.
 - [x] **F8c** Remaining 2025 copy: `docs/install.md`, `CLAUDE.md`, `searchts/guides/setup-*.md`, **`docs/troubleshooting.md`**. Same honesty as F8b.
 - [ ] **F11** Windows: `pip install -e .` fails while `searchts.exe` is running (MCP `serve` per IDE holds the shim — kill PIDs or `--force-reinstall`). **Do not** add `--single-instance` / a machine-wide mutex (breaks one stdio server per host). **Revisit:** RUNBOOK note (the Aug 28 “next week” slipped). Not a feature.
+- [ ] **F17** Subtitle-first: `--sub-lang en.*,en` can 429 on `en-de` and discard a good `en.vtt` (Tess 2026-09-20, #151). **Revisit:** next transcribe week. Not F7.
 - [x] **F12** Wall playbook (docs): **P3.11** (done) → **F1** (persistent profile, code next) → **`--human` / F7** (extras only). Never **N1** / **N3** / **N7**. README unlocker section. Not a Reddit-green 0.8.1.
 - [ ] **F13** Optional update nudge (**not 0.8.1**): cached ~24h GitHub check, **stderr only**, skip `mcp serve` / pipes, `SEARCHTS_NO_UPDATE_CHECK=1`. Not bundled with F8b. **Revisit:** when we want the nudge.
 - [ ] **F14** Opt-in Solari (cloud Playwright) **only when local `[browser]`/patchright is missing**. `SOLARI_API_KEY`. Never default (**N3**). 2026-09-02 cookbook: Reddit/LinkedIn still walls. Artifact: https://github.com/capad-xyz/solari-cookbook/tree/main/examples/agent-read . **Article is live.** **Revisit:** if Harry replies, or keep-gate = would pay Starter to skip patchright (not Reddit green).
@@ -354,4 +355,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-20 | **R1c retry:** `/hare` comment + graceful `searchts-r1-needed`. |
 | 2026-09-20 | **F9** localhost Streamable HTTP / SSE (`mcp serve --http`). Bind loopback only; hosted still **N2**. |
 | 2026-09-20 | **F7** `transcribe --cookies-from-browser`. Opt-in, stderr, never `read`. YAML youtube-cookies still dead. |
+| 2026-09-20 | **F17** parked: subtitle `en.*,en` can 429 `en-de` and drop a good `en.vtt`. Not F7. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |
