@@ -84,7 +84,7 @@ class TestCLI:
         seen = {}
 
         def fake_transcribe(source, *, provider="auto", prefer_subtitles=True,
-                            progress=None):
+                            progress=None, cookies_from_browser=None):
             seen["provider"] = provider
             seen["prefer_subtitles"] = prefer_subtitles
             return "local out"
@@ -101,7 +101,7 @@ class TestCLI:
         seen = {}
 
         def fake_transcribe(source, *, provider="auto", prefer_subtitles=True,
-                            progress=None):
+                            progress=None, cookies_from_browser=None):
             seen["prefer_subtitles"] = prefer_subtitles
             return "audio out"
 
@@ -124,7 +124,7 @@ class TestCLI:
         seen = {}
 
         def fake_transcribe(source, *, provider="auto", prefer_subtitles=True,
-                            progress=None):
+                            progress=None, cookies_from_browser=None):
             seen["progress"] = progress
             return "out"
 
@@ -133,6 +133,32 @@ class TestCLI:
                 main()
         # CLI enables progress ticks (P4.6).
         assert seen["progress"] is True
+
+    def test_transcribe_command_passes_cookies_from_browser(self, capsys):
+        seen = {}
+
+        def fake_transcribe(source, *, provider="auto", prefer_subtitles=True,
+                            progress=None, cookies_from_browser=None):
+            seen["cookies"] = cookies_from_browser
+            return "out"
+
+        with patch("searchts.transcribe.transcribe", side_effect=fake_transcribe):
+            with patch(
+                "sys.argv",
+                ["searchts", "transcribe", "https://youtu.be/x",
+                 "--cookies-from-browser", "chrome"],
+            ):
+                main()
+        assert seen["cookies"] == "chrome"
+
+    def test_read_has_no_cookies_from_browser_flag(self):
+        with pytest.raises(SystemExit):
+            with patch(
+                "sys.argv",
+                ["searchts", "read", "https://example.com",
+                 "--cookies-from-browser", "chrome"],
+            ):
+                main()
 
     def test_unknown_subcommand_suggests_nearest_match(self, capsys):
         with pytest.raises(SystemExit) as exc_info:

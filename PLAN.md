@@ -255,7 +255,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F4** Sitemap / small multi-page crawl (bounded). **Revisit:** demand, not a crawler product.
 - **F5** Document share-extractors as the official fail-open extension point (one file pattern) — **not** a generic plugin system. **Revisit:** when adding the next share host.
 - **F6** Claude/marketplace plugin polish beyond P4.2 minimum. **Revisit:** with **P4.2**.
-- **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships. **Revisit:** **F12** step 3.
+- [x] **F7** Opt-in reuse of sessions already on the machine for **transcribe / extras only**. `searchts transcribe URL --cookies-from-browser chrome` (yt-dlp). Never silent (stderr line). Never inside `read_url` (**N5**). YAML `youtube-cookies` stays unwired. OpenCLI / `gh auth` stay doctor PATH probes. **F12** step 3.
 - **F10** **WebMCP** (site-exposed tools in the browser / ChatGPT Sites). Complementary surface to local MCP, not a replacement. **Revisit:** after core reach + honesty; revenue/hosted is later and must not dilute the free CLI.
 - [x] **F5b** Known-host extractors as another **ladder ring** (same pattern as shares): caller passes a **page** (e.g. `reddit.com/r/foo/hot/`) → try the public `.json` document → **fail open** to curl/Jina/stealth. Not `if host==reddit: skip unlocker` (**N4/N5**). Login shells stay `login-wall`.
 - [x] **F9** Localhost HTTP/SSE: `searchts mcp serve --http` → `http://127.0.0.1:8765/mcp` (Streamable HTTP); `--sse` for the old path. Bind loopback only (`127.0.0.1` / `localhost` / `::1`); refuse `0.0.0.0` / LAN. **Consumer:** Grok / Claude custom connector that cannot spawn stdio. Public/hosted MCP URL is still **N2**. Auth for HTTPS connectors is later; P3.6 SSRF already guards tool URLs. Not in P2.1–P2.3.
@@ -353,4 +353,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-20 | **R1b** `searchts-hare[bot]` identity on main (#148). |
 | 2026-09-20 | **R1c retry:** `/hare` comment + graceful `searchts-r1-needed`. |
 | 2026-09-20 | **F9** localhost Streamable HTTP / SSE (`mcp serve --http`). Bind loopback only; hosted still **N2**. |
+| 2026-09-20 | **F7** `transcribe --cookies-from-browser`. Opt-in, stderr, never `read`. YAML youtube-cookies still dead. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |

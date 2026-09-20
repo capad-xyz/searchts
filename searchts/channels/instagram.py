@@ -13,8 +13,9 @@ from .base import Channel
 
 #: Instagram frequently rate-limits or requires a logged-in session for media.
 _COOKIES_NOTE = (
-    "Instagram is rate-limited and may require a login; if a download fails, pass "
-    "`--cookies-from-browser <browser>` to yt-dlp (e.g. yt-dlp --cookies-from-browser chrome <url>)."
+    "Instagram is rate-limited and may require a login; if a download fails, "
+    "opt in with `searchts transcribe <url> --cookies-from-browser chrome` "
+    "(never used by `searchts read`)."
 )
 
 
