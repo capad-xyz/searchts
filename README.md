@@ -189,7 +189,7 @@ Latest run: [docs/scorecard.md](https://github.com/capad-xyz/searchts/blob/main/
 Search works with no keys (DuckDuckGo). Everything else is optional, via `searchts configure` or a `.env` (see `.env.example`):
 
 - **Search providers**: Exa, Brave, Tavily API keys, or a self-hosted `SEARXNG_URL`, for more and better results.
-- **Transcription**: a Groq or OpenAI (Whisper) key, plus `ffmpeg` and `yt-dlp`.
+- **Transcription**: a Groq or OpenAI (Whisper) key, plus `ffmpeg` and `yt-dlp`. Login-gated video: `searchts transcribe URL --cookies-from-browser chrome` (opt-in; never used by `read`).
 - **GitHub token** for higher rate limits.
 
 Run `searchts doctor` to check what is configured and working.

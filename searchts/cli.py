@@ -223,6 +223,13 @@ def _run():
                            "(captions otherwise come first and need no API key)")
     p_tr.add_argument("-o", "--output", default=None,
                       help="Write transcript to a file instead of stdout")
+    p_tr.add_argument(
+        "--cookies-from-browser",
+        default=None,
+        metavar="BROWSER",
+        help="Opt-in: pass this browser's cookies to yt-dlp (chrome, firefox, edge, …). "
+             "Transcribe only. Never used by searchts read.",
+    )
 
     # ── get / grab (assets + design inspiration) ──
     p_get = sub.add_parser("get", help="Download a single asset (image/PDF/font/file) through the unlocker")
@@ -1293,9 +1300,10 @@ def _cmd_configure(args):
 
     if args.key == "youtube-cookies":
         print(
-            "[!] youtube-cookies is not wired. yt-dlp does not read this key. "
-            "Use yt-dlp --cookies-from-browser yourself, or wait for the later "
-            "opt-in device-session extra (PLAN.md F7)."
+            "[!] youtube-cookies is not wired and is not stored in YAML. "
+            "yt-dlp does not read a searchts key. Opt-in at transcribe time:\n"
+            "  searchts transcribe <url> --cookies-from-browser chrome\n"
+            "Never used by `searchts read` (PLAN.md F7)."
         )
         return
 
@@ -1388,6 +1396,7 @@ def _cmd_transcribe(args):
             prefer_subtitles=args.prefer_subtitles,
             # Progress ticks make long ladder/audio runs visible; stderr only.
             progress=True,
+            cookies_from_browser=getattr(args, "cookies_from_browser", None),
         )
     except TranscribeError as e:
         print(f"[x] {e}")

@@ -12,7 +12,7 @@ dependency installed via ``pip install "searchts[local-transcribe]"``.
 
 Public entry point:
     transcribe(source, *, provider="auto", out_dir=None, config=None,
-               prefer_subtitles=True) -> str
+               prefer_subtitles=True, cookies_from_browser=None) -> str
 
 Designed to be importable from channels (e.g. YouTubeChannel.transcribe).
 """
@@ -166,6 +166,35 @@ def ytdlp_available() -> bool:
     return _ytdlp_module_available() or bool(shutil.which("yt-dlp"))
 
 
+#: Browsers yt-dlp --cookies-from-browser accepts. Profile suffix (`chrome:Default`) is ok.
+_COOKIE_BROWSERS = frozenset({
+    "chrome", "chromium", "firefox", "edge", "brave", "opera", "safari", "vivaldi", "whale",
+})
+
+
+def cookies_from_browser_args(browser: Optional[str]) -> List[str]:
+    """Return yt-dlp argv for an explicit browser, or []. Never infers a browser.
+
+    F7: opt-in only. Callers that omit `browser` must not attach cookies.
+    ``chrome:Default`` / ``chrome+gnomekeyring`` keep the leading name.
+    """
+    if not browser:
+        return []
+    raw = str(browser).strip()
+    if not raw or raw.startswith("-"):
+        raise TranscribeError(
+            f"invalid --cookies-from-browser {browser!r}. "
+            f"Use one of: {', '.join(sorted(_COOKIE_BROWSERS))}"
+        )
+    name = raw.split(":", 1)[0].split("+", 1)[0].lower()
+    if name not in _COOKIE_BROWSERS:
+        raise TranscribeError(
+            f"unknown browser {browser!r}. "
+            f"Use one of: {', '.join(sorted(_COOKIE_BROWSERS))}"
+        )
+    return ["--cookies-from-browser", raw]
+
+
 def _ytdlp_cmd() -> List[str]:
     """Return the command prefix used to invoke yt-dlp.
 
@@ -201,12 +230,18 @@ def _run(cmd: List[str], timeout: int = 600) -> None:
         )
 
 
-def download_audio(url: str, out_dir: Path) -> Path:
+def download_audio(
+    url: str,
+    out_dir: Path,
+    *,
+    cookies_from_browser: Optional[str] = None,
+) -> Path:
     """Download audio with yt-dlp into out_dir; return the resulting file path."""
     template = out_dir / "source.%(ext)s"
     _run(
         [
             *_ytdlp_cmd(),
+            *cookies_from_browser_args(cookies_from_browser),
             "-x",
             "--audio-format",
             "m4a",
@@ -238,6 +273,7 @@ def fetch_subtitles(
     work_dir: Path,
     *,
     config: Optional[Config] = None,
+    cookies_from_browser: Optional[str] = None,
 ) -> Optional[str]:
     """Return a video's existing captions as plain text, or None if absent.
 
@@ -251,10 +287,12 @@ def fetch_subtitles(
         return None
 
     template = work_dir / "%(id)s"
+    cookie_args = cookies_from_browser_args(cookies_from_browser)
     try:
         _run(
             [
                 *_ytdlp_cmd(),
+                *cookie_args,
                 "--write-sub",
                 "--write-auto-sub",
                 "--sub-lang",
@@ -490,6 +528,7 @@ def transcribe(
     config: Optional[Config] = None,
     prefer_subtitles: bool = True,
     progress: Optional[bool] = None,
+    cookies_from_browser: Optional[str] = None,
 ) -> str:
     """Transcribe a URL or local file path. Returns the joined transcript text.
 
@@ -519,11 +558,25 @@ def transcribe(
             "1", "true", "True", "yes",
         )
 
+    if cookies_from_browser:
+        # Validate before any "using cookies" line and before subtitle fallback
+        # swallows TranscribeError (unknown browser must fail loud).
+        cookies_from_browser_args(cookies_from_browser)
+        print(
+            f"searchts transcribe: cookies from {cookies_from_browser} "
+            "(opt-in; not used by read)",
+            file=sys.stderr,
+            flush=True,
+        )
+
     if out_dir is not None:
         # Caller-owned directory: use it as-is and leave the files in place.
         work_dir = Path(out_dir)
         work_dir.mkdir(parents=True, exist_ok=True)
-        return _run_transcription(source, work_dir, provider, cfg, prefer_subtitles, progress)
+        return _run_transcription(
+            source, work_dir, provider, cfg, prefer_subtitles, progress,
+            cookies_from_browser=cookies_from_browser,
+        )
 
     # Default: an ephemeral workspace removed on exit (even on exception), so a
     # downloaded video/audio (and any fetched .vtt) never lingers on disk.
@@ -534,7 +587,10 @@ def transcribe(
     with tempfile.TemporaryDirectory(
         prefix="searchts-transcribe-", ignore_cleanup_errors=True
     ) as tmp:
-        return _run_transcription(source, Path(tmp), provider, cfg, prefer_subtitles, progress)
+        return _run_transcription(
+            source, Path(tmp), provider, cfg, prefer_subtitles, progress,
+            cookies_from_browser=cookies_from_browser,
+        )
 
 
 def _validate_backend(order: List[str], cfg: Config) -> None:
@@ -564,6 +620,7 @@ def _run_transcription(
     cfg: Config,
     prefer_subtitles: bool,
     progress: bool = False,
+    cookies_from_browser: Optional[str] = None,
 ) -> str:
     """Try subtitles first (URL only), else download audio and transcribe.
 
@@ -576,7 +633,10 @@ def _run_transcription(
 
     if not is_local_file and prefer_subtitles:
         _tick(progress, "fetching subtitles…")
-        subs = fetch_subtitles(source, work_dir, config=cfg)
+        sub_kw = {}
+        if cookies_from_browser:
+            sub_kw["cookies_from_browser"] = cookies_from_browser
+        subs = fetch_subtitles(source, work_dir, config=cfg, **sub_kw)
         if subs and len(subs.replace(" ", "")) >= MIN_SUBTITLE_CHARS:
             return subs
 
@@ -589,7 +649,10 @@ def _run_transcription(
         audio = src_path  # a local file the caller owns; never deleted by us
     else:
         _tick(progress, "downloading audio…")
-        audio = download_audio(source, work_dir)
+        dl_kw = {}
+        if cookies_from_browser:
+            dl_kw["cookies_from_browser"] = cookies_from_browser
+        audio = download_audio(source, work_dir, **dl_kw)
 
     _tick(progress, "transcribing…")
     compressed = compress_audio(audio, work_dir)

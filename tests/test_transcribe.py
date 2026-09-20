@@ -95,6 +95,47 @@ class TestYtdlpCmd:
         out = tr.download_audio("https://youtu.be/x", tmp_path)
         assert captured["cmd"][:3] == [sys.executable, "-m", "yt_dlp"]
         assert out.name == "source.m4a"
+        assert "--cookies-from-browser" not in captured["cmd"]
+
+    def test_download_audio_opt_in_cookies(self, monkeypatch, tmp_path):
+        captured = {}
+
+        def fake_run(cmd, timeout=600):
+            captured["cmd"] = cmd
+            (tmp_path / "source.m4a").write_bytes(b"x")
+
+        monkeypatch.setattr(tr, "_run", fake_run)
+        tr.download_audio(
+            "https://youtu.be/x", tmp_path, cookies_from_browser="chrome"
+        )
+        assert captured["cmd"][3:5] == ["--cookies-from-browser", "chrome"]
+
+    def test_cookies_from_browser_args_rejects_unknown(self):
+        with pytest.raises(tr.TranscribeError, match="unknown browser"):
+            tr.cookies_from_browser_args("netscape")
+        assert tr.cookies_from_browser_args(None) == []
+        assert tr.cookies_from_browser_args("chrome:Default") == [
+            "--cookies-from-browser",
+            "chrome:Default",
+        ]
+
+    def test_unknown_browser_does_not_fall_through_subtitles(self, tmp_path, capsys):
+        with pytest.raises(tr.TranscribeError, match="unknown browser"):
+            tr.transcribe(
+                "https://youtu.be/x",
+                cookies_from_browser="notabrowser",
+                out_dir=tmp_path,
+            )
+        err = capsys.readouterr().err
+        assert "cookies from notabrowser" not in err
+
+    def test_fetch_subtitles_unknown_browser_raises(self, tmp_path):
+        with pytest.raises(tr.TranscribeError, match="unknown browser"):
+            tr.fetch_subtitles(
+                "https://youtu.be/x",
+                tmp_path,
+                cookies_from_browser="notabrowser",
+            )
 
 
 # --- transcribe_chunk: provider routing -------------------------------- #
