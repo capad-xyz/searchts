@@ -44,7 +44,7 @@ dependencies = [
 browser = ["patchright>=1.50"]  # tier-2 stealth-browser backend (undetected Playwright)
 cookies = ["browser-cookie3>=0.19"]
 # P2.3: SDK 2.x renamed FastMCP -> MCPServer. Cap below 3.
-mcp = ["mcp[cli]>=2,<3"]  # MCPServer stdio (searchts mcp serve)
+mcp = ["mcp[cli]>=2,<3"]  # MCPServer stdio + localhost HTTP/SSE (searchts mcp serve)
 local-transcribe = ["faster-whisper>=1.0"]  # keyless local Whisper (searchts transcribe --provider local)
 all = ["patchright>=1.50", "mcp[cli]>=2,<3", "browser-cookie3>=0.19", "faster-whisper>=1.0"]
 dev = [

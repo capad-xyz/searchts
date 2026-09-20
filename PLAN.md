@@ -6,7 +6,7 @@
 
 **Parked work:** If we skip something on purpose and it is still worth doing, it gets a PLAN id (`P*` / `F*` / `U*` / `N*` / `R*`) and a **revisit** (week / trigger). Chat is not the record. If it is not worth doing, put it in **N** (never) instead of “we’ll remember.” **Roles:** [`NAMES.md`](NAMES.md).
 
-**Hard non-goals:** plugin/connector framework, paid-proxy defaults, hosted SaaS, keyed backends as defaults, channel-based `read_url` routing, HTTP MCP until local stdio is trusted, MCP resources/prompts before tools are trusted.
+**Hard non-goals:** plugin/connector framework, paid-proxy defaults, hosted SaaS, keyed backends as defaults, channel-based `read_url` routing, **hosted** MCP URL (**N2**; localhost HTTP is **F9**), MCP resources/prompts before tools are trusted.
 
 ---
 
@@ -258,7 +258,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - **F7** Opt-in reuse of sessions already on the machine (yt-dlp `--cookies-from-browser`, OpenCLI Chrome, `gh auth`) for **transcribe / extras only**. Never silent. Never inside `read_url` (see N5). Dead YAML keys stay deleted until this ships. **Revisit:** **F12** step 3.
 - **F10** **WebMCP** (site-exposed tools in the browser / ChatGPT Sites). Complementary surface to local MCP, not a replacement. **Revisit:** after core reach + honesty; revenue/hosted is later and must not dilute the free CLI.
 - [x] **F5b** Known-host extractors as another **ladder ring** (same pattern as shares): caller passes a **page** (e.g. `reddit.com/r/foo/hot/`) → try the public `.json` document → **fail open** to curl/Jina/stealth. Not `if host==reddit: skip unlocker` (**N4/N5**). Login shells stay `login-wall`.
-- [ ] **F9** MCP transport: optional **localhost HTTP/SSE** only after P2 stdio is trusted. **Consumer:** Grok / Claude custom connector (Name + `https://…/mcp`) — a phone cannot use stdio. Public/hosted MCP URL is still **N2**. Auth + SSRF (**U5** / **P3.6b**) come with the URL. **Article is live** (2026-09-06). **Revisit:** localhost smoke next, *then* hosted. Not in P2.1–P2.3.
+- [x] **F9** Localhost HTTP/SSE: `searchts mcp serve --http` → `http://127.0.0.1:8765/mcp` (Streamable HTTP); `--sse` for the old path. Bind loopback only (`127.0.0.1` / `localhost` / `::1`); refuse `0.0.0.0` / LAN. **Consumer:** Grok / Claude custom connector that cannot spawn stdio. Public/hosted MCP URL is still **N2**. Auth for HTTPS connectors is later; P3.6 SSRF already guards tool URLs. Not in P2.1–P2.3.
 - [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills`. **Revisit Codex path:** measure demand first (no id until someone asks).
 - [x] **F8b** Install-copy leftovers: `llms.txt` / `docs/update.md` / `check-update` `_UPDATE_INSTRUCTIONS` match F8. No `main.zip`, no `search-twitter`, doctor is read-only. Did **not** rewrite contributor `pip install -e`. Extra-missing `pipx inject` skipped (hints still `pip install "searchts[extra]"` for venvs). **Revisit inject:** if pipx users miss the mcp extra.
 - [x] **F8c** Remaining 2025 copy: `docs/install.md`, `CLAUDE.md`, `searchts/guides/setup-*.md`, **`docs/troubleshooting.md`**. Same honesty as F8b.
@@ -352,4 +352,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-09 | **F1a**: persistent stealth/human browser profile — `launch_persistent_context` with `~/.searchts/browser-profile`; `SEARCHTS_NO_BROWSER_PROFILE=1` opt-out; same dir for stealth + `--human`; tests mock patchright |
 | 2026-09-20 | **R1b** `searchts-hare[bot]` identity on main (#148). |
 | 2026-09-20 | **R1c retry:** `/hare` comment + graceful `searchts-r1-needed`. |
+| 2026-09-20 | **F9** localhost Streamable HTTP / SSE (`mcp serve --http`). Bind loopback only; hosted still **N2**. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |

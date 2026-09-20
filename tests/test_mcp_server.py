@@ -165,6 +165,31 @@ def test_serve_raises_actionable_error_without_mcp(monkeypatch):
     assert 'pip install "searchts[mcp]"' in str(exc_info.value)
 
 
+def test_assert_loopback_bind_allows_loopback():
+    from searchts.integrations.mcp_server import assert_loopback_bind
+
+    assert assert_loopback_bind("127.0.0.1") == "127.0.0.1"
+    assert assert_loopback_bind("localhost") == "localhost"
+    assert assert_loopback_bind("::1") == "::1"
+    assert assert_loopback_bind("[::1]") == "[::1]"
+
+
+def test_assert_loopback_bind_rejects_public():
+    from searchts.integrations.mcp_server import assert_loopback_bind
+
+    for host in ("0.0.0.0", "192.168.1.1", "example.com", ""):
+        with pytest.raises(ValueError, match="loopback"):
+            assert_loopback_bind(host)
+
+
+def test_serve_http_refuses_non_loopback(monkeypatch):
+    from searchts.integrations import mcp_server
+
+    monkeypatch.setattr(mcp_server, "HAS_MCP", True)
+    with pytest.raises(ValueError, match="loopback"):
+        mcp_server.serve(transport="http", host="0.0.0.0", port=8765)
+
+
 def test_create_server_raises_without_mcp(monkeypatch):
     from searchts.integrations import mcp_server
 

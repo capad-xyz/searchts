@@ -166,7 +166,31 @@ def _run():
     # ── mcp ──
     p_mcp = sub.add_parser("mcp", help="Run or wire up the searchts MCP server")
     mcp_sub = p_mcp.add_subparsers(dest="mcp_command", help="MCP subcommands")
-    mcp_sub.add_parser("serve", help="Run the stdio MCP server (read_url + web_search tools)")
+    p_serve = mcp_sub.add_parser(
+        "serve",
+        help="Run the MCP server (stdio default; --http / --sse = loopback only)",
+    )
+    p_serve.add_argument(
+        "--http",
+        action="store_true",
+        help="Streamable HTTP on loopback (http://127.0.0.1:PORT/mcp). Not a public URL.",
+    )
+    p_serve.add_argument(
+        "--sse",
+        action="store_true",
+        help="Legacy SSE on loopback (http://127.0.0.1:PORT/sse). Prefer --http.",
+    )
+    p_serve.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Bind address for --http/--sse (loopback only; default 127.0.0.1)",
+    )
+    p_serve.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="Port for --http/--sse (default 8765)",
+    )
     p_mcp_install = mcp_sub.add_parser(
         "install", help="Print the exact wiring for an AI agent client (no network)")
     p_mcp_install.add_argument("--client", choices=["claude", "cursor", "json"], default=None,
@@ -729,6 +753,12 @@ def mcp_install_text(client=None):
         "`uvx --from \"searchts[mcp]\" searchts mcp serve` "
         "or replace `searchts` with the path from `pipx which searchts`."
     )
+    http_note = (
+        "Loopback HTTP (phone / custom connector that cannot use stdio):\n"
+        "  searchts mcp serve --http\n"
+        "  URL: http://127.0.0.1:8765/mcp\n"
+        "Binds 127.0.0.1 only. No public/hosted MCP URL."
+    )
 
     claude_block = "\n".join([
         "Claude Code - run this one-liner:",
@@ -740,18 +770,18 @@ def mcp_install_text(client=None):
     ])
 
     if client == "claude":
-        return f"{claude_block}\n\n{path_note}"
+        return f"{claude_block}\n\n{path_note}\n\n{http_note}"
     if client in ("cursor", "json"):
-        return f"{cursor_block}\n\n{path_note}"
+        return f"{cursor_block}\n\n{path_note}\n\n{http_note}"
 
-    return f"{claude_block}\n\n{cursor_block}\n\n{path_note}"
+    return f"{claude_block}\n\n{cursor_block}\n\n{path_note}\n\n{http_note}"
 
 
 def _cmd_mcp(args):
     """Dispatch `searchts mcp serve|install`."""
     mcp_command = getattr(args, "mcp_command", None)
     if mcp_command == "serve":
-        _cmd_mcp_serve()
+        _cmd_mcp_serve(args)
     elif mcp_command == "install":
         print(mcp_install_text(getattr(args, "client", None)))
         from searchts.integrations.agent_wiring import check_agent_wiring
@@ -763,13 +793,13 @@ def _cmd_mcp(args):
                 extra = "" if c["wired"] else f"  (not registered — run: {c['hint']})"
                 print(f"  {mark} {c['client']}{extra}")
     else:
-        print("Usage: searchts mcp serve")
+        print("Usage: searchts mcp serve [--http|--sse] [--host 127.0.0.1] [--port 8765]")
         print("   or: searchts mcp install [--client claude|cursor|json]")
         sys.exit(2)
 
 
-def _cmd_mcp_serve():
-    """Run the stdio MCP server, exiting cleanly if the optional `mcp` pkg is absent."""
+def _cmd_mcp_serve(args=None):
+    """Run the MCP server (stdio default). HTTP/SSE bind loopback only (F9 / N2)."""
     from searchts.integrations import mcp_server
 
     # Fail before the "waiting" banner if the optional mcp package is missing.
@@ -777,18 +807,47 @@ def _cmd_mcp_serve():
         print(mcp_server.MCP_MISSING_MESSAGE, file=sys.stderr)
         sys.exit(1)
 
-    # Stdio MCP has no banner on stdout (that would break the protocol). One
-    # stderr line so a human running `searchts mcp serve` knows it is waiting.
-    print(
-        "searchts MCP server on stdio — waiting for host (Ctrl+C to stop)",
-        file=sys.stderr,
-        flush=True,
-    )
+    want_http = bool(getattr(args, "http", False)) if args is not None else False
+    want_sse = bool(getattr(args, "sse", False)) if args is not None else False
+    if want_http and want_sse:
+        print("Usage: searchts mcp serve --http  OR  --sse  (not both)", file=sys.stderr)
+        sys.exit(2)
+    transport = "stdio"
+    if want_http:
+        transport = "http"
+    elif want_sse:
+        transport = "sse"
+    host = getattr(args, "host", "127.0.0.1") if args is not None else "127.0.0.1"
+    port = int(getattr(args, "port", 8765) if args is not None else 8765)
+
+    if transport == "stdio":
+        # Stdio MCP has no banner on stdout (that would break the protocol).
+        print(
+            "searchts MCP server on stdio — waiting for host (Ctrl+C to stop)",
+            file=sys.stderr,
+            flush=True,
+        )
+    else:
+        try:
+            host = mcp_server.assert_loopback_bind(host)
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(2)
+        path = "/mcp" if transport == "http" else "/sse"
+        print(
+            f"searchts MCP server on http://{host}:{port}{path} — loopback only "
+            "(Ctrl+C to stop). Not a public URL.",
+            file=sys.stderr,
+            flush=True,
+        )
     try:
-        mcp_server.serve()
+        mcp_server.serve(transport=transport, host=host, port=port)
     except mcp_server.MCPNotInstalledError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)
+    except ValueError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(2)
 
 
 def _install_system_deps():

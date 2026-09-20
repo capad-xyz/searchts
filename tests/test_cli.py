@@ -614,11 +614,53 @@ class TestMcpInstall:
 
         called = {}
         monkeypatch.setattr(mcp_server, "HAS_MCP", True)
-        monkeypatch.setattr(mcp_server, "serve", lambda: called.setdefault("ran", True))
+        monkeypatch.setattr(mcp_server, "serve", lambda **k: called.setdefault("ran", True) or called.update(k))
 
         with patch("sys.argv", ["searchts", "mcp", "serve"]):
             main()
         assert called.get("ran") is True
+
+    def test_mcp_serve_http_passes_transport(self, monkeypatch):
+        from searchts.integrations import mcp_server
+
+        seen = {}
+        monkeypatch.setattr(mcp_server, "HAS_MCP", True)
+
+        def fake_serve(**kwargs):
+            seen.update(kwargs)
+
+        monkeypatch.setattr(mcp_server, "serve", fake_serve)
+        with patch("sys.argv", ["searchts", "mcp", "serve", "--http", "--port", "9001"]):
+            main()
+        assert seen.get("transport") == "http"
+        assert seen.get("host") == "127.0.0.1"
+        assert seen.get("port") == 9001
+
+    def test_mcp_serve_http_rejects_public_host(self, capsys, monkeypatch):
+        from searchts.integrations import mcp_server
+
+        monkeypatch.setattr(mcp_server, "HAS_MCP", True)
+        monkeypatch.setattr(mcp_server, "serve", lambda **k: (_ for _ in ()).throw(AssertionError("no")))
+        with pytest.raises(SystemExit) as exc:
+            with patch("sys.argv", ["searchts", "mcp", "serve", "--http", "--host", "0.0.0.0"]):
+                main()
+        assert exc.value.code == 2
+        assert "loopback" in capsys.readouterr().err.lower()
+
+    def test_mcp_serve_http_and_sse_conflict(self, capsys, monkeypatch):
+        from searchts.integrations import mcp_server
+
+        monkeypatch.setattr(mcp_server, "HAS_MCP", True)
+        with pytest.raises(SystemExit) as exc:
+            with patch("sys.argv", ["searchts", "mcp", "serve", "--http", "--sse"]):
+                main()
+        assert exc.value.code == 2
+        assert "not both" in capsys.readouterr().err
+
+    def test_mcp_install_text_mentions_loopback_http(self):
+        text = cli.mcp_install_text()
+        assert "mcp serve --http" in text
+        assert "127.0.0.1:8765/mcp" in text
 
 
 class TestSkillInstallSlashCommand:
