@@ -577,6 +577,9 @@ class TestFetchSubtitles:
         # No *.vtt is produced -> returns None, but the point is the command ran.
         assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) is None
         assert captured["cmd"][:3] == [sys.executable, "-m", "yt_dlp"]
+        assert "--ignore-errors" in captured["cmd"]
+        assert "en.*,en" not in captured["cmd"]
+        assert tr._SUB_LANGS in captured["cmd"]
 
     def test_returns_none_on_yt_dlp_failure(self, monkeypatch, tmp_path):
         def boom(cmd, timeout=600):
@@ -617,6 +620,31 @@ class TestFetchSubtitles:
         monkeypatch.setattr(tr, "_run", fake_run)
         out = tr.fetch_subtitles("https://youtu.be/x", tmp_path)
         assert out == "manual track"
+
+    def test_salvages_en_vtt_when_ytdlp_exits_nonzero(self, monkeypatch, tmp_path):
+        def boom(cmd, timeout=600):
+            (tmp_path / "vid.en.vtt").write_text(
+                "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nsalvaged\n",
+                encoding="utf-8",
+            )
+            raise tr.TranscribeError("yt-dlp failed (exit 1): HTTP Error 429")
+
+        monkeypatch.setattr(tr, "_run", boom)
+        assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) == "salvaged"
+
+    def test_prefers_en_over_en_de(self, monkeypatch, tmp_path):
+        def fake_run(cmd, timeout=600):
+            (tmp_path / "vid.en-de.vtt").write_text(
+                "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\ngerman locale dump\n",
+                encoding="utf-8",
+            )
+            (tmp_path / "vid.en.vtt").write_text(
+                "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nenglish\n",
+                encoding="utf-8",
+            )
+
+        monkeypatch.setattr(tr, "_run", fake_run)
+        assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) == "english"
 
 
 # --- transcribe: subtitles-first --------------------------------------- #
