@@ -14,7 +14,7 @@ agent first-party web superpowers via three commands:
 - `searchts grab <url>` / `searchts get <url>` — on-demand asset + design-inspiration
   grabber: download a page's images/icons/css/fonts (or one asset file) through the same
   escalating unlock ladder, and extract a color palette + the fonts in use.
-Surfaces: CLI, MCP server (tools: read_url, web_search, fetch_asset, grab_site), and a /searchts Claude Code skill.
+Surfaces: CLI, MCP server (tools: read_url, web_search, fetch_asset, grab_site, get_status, transcribe), and a /searchts Claude Code skill.
 Keyless and free by default. OPTIONAL: separately-installed platform CLIs (`gh`,
 `twitter-cli`, `opencli`, `mcporter`) are **doctor PATH probes**, not how `read`
 works. `searchts doctor` reports them. Do not install cookies so searchts can

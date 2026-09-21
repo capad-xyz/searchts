@@ -85,7 +85,7 @@
 
 ### P4 — Surface parity (after P1–P3)
 
-- [ ] **P4.1** MCP `transcribe` tool (same Error-string contract as other tools). **Revisit:** **U7** demand, not vibes.
+- [x] **P4.1** MCP `transcribe` tool (same Error-string contract as other tools). Subtitles-first; SSRF on URL sources; cookies opt-in (F7); `progress=False`.
 - [ ] **P4.2** Claude plugin packaging (`plugin.json` + skill + MCP) — distribution of P1, not a new architecture. **Revisit:** **U7** / marketplace traffic.
 - [ ] **P4.3** CI job with `[browser]` extra (skip if no Chromium). **Revisit:** when stealth tests flake in CI for lack of Chromium.
 - [ ] **P4.4** Docker: `slim` (current default) + `browser` tag. **Revisit:** if someone actually runs the image.
@@ -356,4 +356,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-20 | **F9** localhost Streamable HTTP / SSE (`mcp serve --http`). Bind loopback only; hosted still **N2**. |
 | 2026-09-20 | **F7** `transcribe --cookies-from-browser`. Opt-in, stderr, never `read`. YAML youtube-cookies still dead. |
 | 2026-09-21 | **F17** subtitle salvage: no `en.*`; ignore-errors; keep a written `en.vtt` on 429. |
+| 2026-09-21 | **P4.1** MCP `transcribe` tool. Error string; SSRF on URLs; cookies opt-in. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |

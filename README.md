@@ -121,7 +121,7 @@ Add searchts to your agent in one line - as an MCP server, or as a Claude Code s
 Two ways, both one command:
 
 ```bash
-# 1) MCP: always-on read_url + web_search + fetch_asset + grab_site + get_status
+# 1) MCP: always-on read_url + web_search + fetch_asset + grab_site + get_status + transcribe
 # Try / no install / Claude cannot see PATH:
 claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 # Keep (after pipx install "searchts[mcp]"):
@@ -133,7 +133,7 @@ claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 searchts skill install        # writes ~/.claude/commands/searchts.md
 ```
 
-See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/docs/mcp.md) for all five tools (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`), their inputs and outputs, and when to use each.
+See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/docs/mcp.md) for all six tools (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`), their inputs and outputs, and when to use each.
 
 ## Features
 
@@ -144,7 +144,7 @@ See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/d
 - **Prompt-injection scrubbing**: strips invisible/bidi characters, flags injection indicators, optional redaction, so untrusted page content is safer to feed a model.
 - **Per-domain backend memory**: remembers which tier worked per domain and tries it first (`SEARCHTS_NO_MEMORY=1` to disable).
 - **Jina opt-out**: the JS-render relay is on by default; `SEARCHTS_NO_JINA=1` (or `jina: false` in `~/.searchts` config) skips it so URLs never hit `r.jina.ai`.
-- **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`), and a Python library.
+- **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`), and a Python library.
 
 ## Use as a library
 

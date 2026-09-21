@@ -4,7 +4,7 @@ searchts ships a small [Model Context Protocol](https://modelcontextprotocol.io)
 MCP-capable agent (Claude Code, Claude Desktop, Cursor, …) gets searchts's web tools as always-on,
 first-class tools — no shelling out to the CLI. The default transport is stdio (JSON-RPC). Loopback
 HTTP is optional (`--http`). Both call the exact same
-`searchts.unlocker` / `searchts.search` / `searchts.assets` code as the CLI, so behaviour is identical.
+`searchts.unlocker` / `searchts.search` / `searchts.assets` / `searchts.transcribe` code as the CLI, so behaviour is identical.
 
 ## Install & wire up
 
@@ -71,6 +71,7 @@ Custom connectors that require HTTPS still need a tunnel you run yourself; searc
 | `fetch_asset(url, out_dir="")` | You want one specific file (image, PDF, font, CSS) by its direct URL. | JSON `{path, content_type, bytes}`. Saves into `out_dir`, else the current directory. |
 | `grab_site(url, out_dir="", read=false)` | You want a whole page's design/assets at once — images, icons, css, fonts, a color palette, and the fonts in use. | JSON manifest with local paths. Saves into `out_dir`, else `searchts-grab-<host>`; set `read=true` to also save the page text as `page.md`. |
 | `get_status()` | A call fails, or you want to see what's configured before relying on an optional capability. | A human-readable health report (unlocker tiers, search providers, optional integrations). |
+| `transcribe(source, provider="auto", prefer_subtitles=true, cookies_from_browser="")` | You want spoken words from a video URL or local audio file. Subtitles-first (no key); Whisper only if there are no captions. | Transcript text. `cookies_from_browser` is opt-in (this machine; never `read_url`). |
 
 Every tool returns an `Error: …` **string** instead of raising, so failures stay readable to the agent.
 

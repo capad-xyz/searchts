@@ -13,8 +13,10 @@ Exposes these tools to an agent:
 - fetch_asset: download one asset (image/PDF/font/file) through the unlock ladder.
 - grab_site: grab a page's assets + color palette + fonts (design inspiration).
 - get_status: report which channels/backends are installed and active (doctor).
+- transcribe: subtitles-first transcript of a video URL or local audio file.
 
-Backed by searchts.unlocker, searchts.search, and searchts.assets.
+Backed by searchts.unlocker, searchts.search, searchts.assets, and
+searchts.transcribe.
 """
 
 import asyncio
@@ -62,13 +64,24 @@ WEB_SEARCH_DESCRIPTION = (
     "string when every provider fails."
 )
 
+TRANSCRIBE_DESCRIPTION = (
+    "Transcribe a video URL or a local audio/video file. Subtitles-first: "
+    "existing captions via yt-dlp need no API key; otherwise Whisper "
+    "(Groq/OpenAI if configured, else keyless local faster-whisper). Use "
+    "this when the user wants spoken words, not the page. Do not use "
+    "read_url for a transcript. prefer_subtitles defaults true; set false "
+    "to force audio. cookies_from_browser is opt-in (chrome/firefox/…) and "
+    "uses THIS machine's browser cookies; never used by read_url. Returns "
+    "the transcript text, or an 'Error: ...' string on failure."
+)
+
 
 class MCPNotInstalledError(RuntimeError):
     """Raised when an MCP entrypoint runs without the optional `mcp` package."""
 
 
 def create_server():
-    """Build an MCPServer over the five module-level tool functions.
+    """Build an MCPServer over the six module-level tool functions.
 
     ``mcp>=2,<3`` (P2.3). Tool bodies keep returning ``Error: …`` strings
     instead of raising so hosts surface failures as normal tool results.
@@ -135,6 +148,22 @@ def create_server():
     )
     def grab_site_tool(url: str, out_dir: str = "", read: bool = False) -> str:
         return grab_site(url, out_dir, read)
+
+    @mcp.tool(name="transcribe", description=TRANSCRIBE_DESCRIPTION)
+    async def transcribe_tool(
+        source: str,
+        provider: str = "auto",
+        prefer_subtitles: bool = True,
+        cookies_from_browser: str = "",
+    ) -> str:
+        # yt-dlp / Whisper is blocking; keep the MCP loop free (same as read_url).
+        return await asyncio.to_thread(
+            transcribe_source,
+            source,
+            provider,
+            prefer_subtitles,
+            cookies_from_browser or None,
+        )
 
     return mcp
 
@@ -278,6 +307,41 @@ def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
     except assets.AssetError as e:
         return f"Error: {e}"
     return json.dumps(manifest, ensure_ascii=False, indent=2)
+
+
+def transcribe_source(
+    source: str,
+    provider: str = "auto",
+    prefer_subtitles: bool = True,
+    cookies_from_browser: str | None = None,
+) -> str:
+    """Transcribe a URL or local file. Error-string contract, like read_url.
+
+    SSRF-guards http(s) sources the same as other MCP URL tools. A local path
+    (no ``://``) is allowed. Never enables cookies unless the caller passed
+    ``cookies_from_browser``. Progress ticks stay off (MCP protocol).
+    """
+    from searchts import ssrf
+    from searchts.transcribe import TranscribeError, transcribe
+
+    if not source or not str(source).strip():
+        return "Error: transcribe requires a 'source' argument."
+    source = str(source).strip()
+    if "://" in source:
+        blocked = ssrf.guard_mcp_url(source)
+        if blocked:
+            return blocked
+    cookies = (cookies_from_browser or "").strip() or None
+    try:
+        return transcribe(
+            source,
+            provider=provider or "auto",
+            prefer_subtitles=prefer_subtitles,
+            cookies_from_browser=cookies,
+            progress=False,
+        )
+    except TranscribeError as e:
+        return f"Error: {e}"
 
 
 async def _run_stdio():
