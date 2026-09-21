@@ -36,7 +36,7 @@ The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is 
 
 **Spawn prompt (this is the whole paste):** `spawn hare` + PR URL + PLAN id / intent. Hare **reads this file**. Do not re-paste Voice, two surfaces, or skip-never-holds unless the scout skipped AGENTS.md.
 
-**Trigger (R1c):** GitHub Action `hare / r1` on `opened` / `synchronize` (same-repo PRs). Brain: Nous (`SEARCHTS_HARE_API_KEY_NOUS`) then one OpenRouter retry (`SEARCHTS_HARE_API_KEY_OR`). Fail (429 / 5xx / timeout / empty token) -> nag `<!-- searchts-r1-needed -->`. Do not post a fake review. Intent is computed from Check Runs in the Action (red required job = hold), not by the model. Fork PRs have no secrets: nag. **Until a week of PRs prove it:** still ok to `spawn hare` if the Action nags. Zen stays on the laptop. **R1b/F15** parked.
+**Trigger (R1c):** GitHub Action `hare / r1` on `opened` / `synchronize` (same-repo PRs). Brain: Nous (`SEARCHTS_HARE_API_KEY_NOUS`, Laguna then Step 3.7 Flash) then OpenRouter (`SEARCHTS_HARE_API_KEY_OR`, Laguna S 2.1 → Qwen3.8 27B → Nex-N2.5-Pro) then Zen Ling Fin. Fail (429 / 5xx / timeout / empty token) -> nag `<!-- searchts-r1-needed -->`. Do not post a fake review. Intent is computed from Check Runs in the Action (red required job = hold), not by the model. Fork PRs have no secrets: nag. **Until a week of PRs prove it:** still ok to `spawn hare` if the Action nags. **R1b/F15** parked.
 
 Hare posts **two** GitHub surfaces (CodeRabbit-shaped). Local chat is not enough.
 

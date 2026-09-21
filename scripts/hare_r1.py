@@ -26,9 +26,20 @@ NOUS_BASE = "https://inference-api.nousresearch.com/v1"
 OR_BASE = "https://openrouter.ai/api/v1"
 ZEN_BASE = "https://opencode.ai/zen/v1"
 
+# Fixed list, not a router. Skip: openrouter/free, Lyria, GLM 5.2 (32k, no tools).
+HARE_NOUS_DEFAULT = "poolside/laguna-s-2.1,stepfun/step-3.7-flash"
+HARE_OR_DEFAULT = (
+    "poolside/laguna-s-2.1:free,qwen/qwen3.8-27b:free,nex-agi/nex-n2.5-pro:free"
+)
+HARE_ZEN_DEFAULT = "ling-3.0-flash-fin-free"
+
 
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
+
+
+def _csv_models(name: str, default: str) -> list[str]:
+    return [m.strip() for m in _env(name, default).split(",") if m.strip()]
 
 
 def _no_em(s: str) -> str:
@@ -440,9 +451,9 @@ def run() -> int:
     nous_key = _env("SEARCHTS_HARE_API_KEY_NOUS")
     or_key = _env("SEARCHTS_HARE_API_KEY_OR")
     zen_key = _env("SEARCHTS_HARE_API_KEY_ZEN")
-    nous_model = _env("HARE_NOUS_MODEL", "poolside/laguna-s-2.1")
-    or_model = _env("HARE_OR_MODEL", "inclusionai/ling-3.0-flash-fin:free")
-    zen_model = _env("HARE_ZEN_MODEL", "ling-3.0-flash-fin-free")
+    nous_models = _csv_models("HARE_NOUS_MODEL", HARE_NOUS_DEFAULT)
+    or_models = _csv_models("HARE_OR_MODEL", HARE_OR_DEFAULT)
+    zen_models = _csv_models("HARE_ZEN_MODEL", HARE_ZEN_DEFAULT)
     if not token or not repo_full or not pr:
         print("missing GITHUB_TOKEN / GITHUB_REPOSITORY / PR_NUMBER")
         return 0
@@ -458,9 +469,9 @@ def run() -> int:
             nous_key,
             or_key,
             zen_key,
-            nous_model,
-            or_model,
-            zen_model,
+            nous_models,
+            or_models,
+            zen_models,
         )
     except Exception as e:
         try:
@@ -479,9 +490,9 @@ def _hare_once(
     nous_key: str,
     or_key: str,
     zen_key: str,
-    nous_model: str,
-    or_model: str,
-    zen_model: str,
+    nous_models: list[str],
+    or_models: list[str],
+    zen_models: list[str],
 ) -> int:
     if not nous_key and not or_key and not zen_key:
         post_needed(owner, repo, n, token, "no Hare API secrets on this run (forks have none).")
@@ -516,11 +527,14 @@ def _hare_once(
 
     providers: list[tuple[str, str, str, str]] = []
     if nous_key:
-        providers.append(("nous", NOUS_BASE, nous_key, nous_model))
+        for model in nous_models:
+            providers.append(("nous", NOUS_BASE, nous_key, model))
     if or_key:
-        providers.append(("openrouter", OR_BASE, or_key, or_model))
+        for model in or_models:
+            providers.append(("openrouter", OR_BASE, or_key, model))
     if zen_key:
-        providers.append(("zen", ZEN_BASE, zen_key, zen_model))
+        for model in zen_models:
+            providers.append(("zen", ZEN_BASE, zen_key, model))
 
     last_err = "no provider"
     errs: list[str] = []
