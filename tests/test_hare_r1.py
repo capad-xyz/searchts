@@ -121,7 +121,7 @@ def test_ghost_real_stays_in_table_and_holds() -> None:
     assert hare_r1.intent_for("ok", findings) == "hold"
     body = hare_r1.render_comment("nous:x", "low", "hold", findings, "ok", [])
     assert "foo.py:99" in body
-    assert "| **Intent** | hold |" in body
+    assert "**hold**" in body
 
 
 def test_extract_json_from_fence() -> None:
@@ -134,13 +134,19 @@ def test_comment_has_token_and_no_em_dash() -> None:
     body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [])
     assert body.startswith(hare_r1.TOKEN)
     assert "\u2014" not in body
-    assert "**Intent**" in body
+    assert "**ship**" in body
+    assert "`nous:x`" in body
+    assert "**Name**" not in body
+    assert "**Purpose**" not in body
+    assert "Hare · R1" not in body
+    assert "| **Intent** |" not in body
 
 
-def test_bubble_labeled_not_author() -> None:
+def test_bubble_is_token_plus_label() -> None:
     body = hare_r1.bubble_body("skip", "nit")
     assert body.startswith(hare_r1.TOKEN)
-    assert "not the PR author" in body
+    assert "Hare" not in body
+    assert "not the PR author" not in body
     assert "**skip**" in body
 
 
