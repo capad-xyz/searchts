@@ -241,7 +241,7 @@ jobs:
           tools = asyncio.run(server.list_tools())
           names = sorted(t.name for t in tools)
           print(f"mcp2 server tools: {names}")
-          expected = {"fetch_asset", "get_status", "grab_site", "read_url", "web_search"}
+          expected = {"fetch_asset", "get_status", "grab_site", "read_url", "transcribe", "web_search"}
           assert set(names) == expected, f"tool mismatch: {names} != {expected}"
           print("mcp2 compatibility: OK")
           PY
