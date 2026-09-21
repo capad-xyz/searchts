@@ -34,5 +34,5 @@ transcript), use `searchts read <url>` on the public URL.
 
 | Use case | Recommended tool |
 |-----|---------|
-| Video transcript / captions | `searchts transcribe <url>` |
+| Video transcript / captions | `searchts transcribe <url>` or MCP `transcribe` |
 | Video page text (title, description) | `searchts read <url>` |

@@ -15,11 +15,13 @@ import pytest
 
 from searchts.integrations.mcp_server import (
     READ_URL_DESCRIPTION,
+    TRANSCRIBE_DESCRIPTION,
     WEB_SEARCH_DESCRIPTION,
     fetch_asset,
     get_status,
     grab_site,
     read_url,
+    transcribe_source,
     web_search,
 )
 from searchts.search import SearchError, SearchResult
@@ -203,7 +205,7 @@ def test_create_server_builds_against_the_installed_sdk():
 
     Every other test here calls the tool functions directly or stubs HAS_MCP
     off, so none of them touch the SDK. P2.3 requires create_server() to
-    import MCPServer and list the five tools under mcp 2.x.
+    import MCPServer and list the six tools under mcp 2.x.
     """
     from searchts.integrations import mcp_server
 
@@ -222,6 +224,7 @@ def test_create_server_builds_against_the_installed_sdk():
         "web_search",
         "fetch_asset",
         "grab_site",
+        "transcribe",
     }
 
 
@@ -457,6 +460,89 @@ def test_read_url_allows_public_example(monkeypatch):
     data = json.loads(read_url("https://example.com"))
     assert data["url"] == "https://example.com"
     assert data["text"] == "# Title"
+
+
+def test_transcribe_description_mentions_error_string():
+    assert "Error:" in TRANSCRIBE_DESCRIPTION
+    assert "read_url" in TRANSCRIBE_DESCRIPTION
+
+
+def test_transcribe_source_requires_source():
+    assert transcribe_source("").startswith("Error: transcribe requires")
+
+
+def test_transcribe_source_blocks_ssrf(monkeypatch):
+    called = {"n": 0}
+
+    def boom(*a, **k):
+        called["n"] += 1
+        raise AssertionError("transcribe must not run for SSRF")
+
+    monkeypatch.setattr("searchts.transcribe.transcribe", boom)
+    out = transcribe_source("http://127.0.0.1/video.mp4")
+    assert out.startswith("Error: SSRF guard")
+    assert called["n"] == 0
+
+
+def test_transcribe_source_blocks_file_scheme(monkeypatch):
+    monkeypatch.setattr(
+        "searchts.transcribe.transcribe",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("no")),
+    )
+    out = transcribe_source("file:///etc/passwd")
+    assert out.startswith("Error: SSRF guard")
+
+
+def test_transcribe_source_returns_text(monkeypatch):
+    seen = {}
+
+    def fake(source, *, provider="auto", prefer_subtitles=True,
+             cookies_from_browser=None, progress=None, **k):
+        seen["source"] = source
+        seen["provider"] = provider
+        seen["prefer_subtitles"] = prefer_subtitles
+        seen["cookies"] = cookies_from_browser
+        seen["progress"] = progress
+        return "hello captions"
+
+    monkeypatch.setattr("searchts.transcribe.transcribe", fake)
+    out = transcribe_source(
+        "https://youtu.be/x",
+        provider="local",
+        prefer_subtitles=False,
+        cookies_from_browser="chrome",
+    )
+    assert out == "hello captions"
+    assert seen["provider"] == "local"
+    assert seen["prefer_subtitles"] is False
+    assert seen["cookies"] == "chrome"
+    assert seen["progress"] is False
+
+
+def test_transcribe_source_error_string_on_failure(monkeypatch):
+    from searchts.transcribe import TranscribeError
+
+    def boom(*a, **k):
+        raise TranscribeError("no backend")
+
+    monkeypatch.setattr("searchts.transcribe.transcribe", boom)
+    out = transcribe_source("https://youtu.be/x")
+    assert out == "Error: no backend"
+
+
+def test_transcribe_source_local_path_skips_ssrf(monkeypatch, tmp_path):
+    audio = tmp_path / "clip.m4a"
+    audio.write_bytes(b"x")
+    seen = {}
+
+    def fake(source, **k):
+        seen["source"] = source
+        return "local transcript"
+
+    monkeypatch.setattr("searchts.transcribe.transcribe", fake)
+    out = transcribe_source(str(audio))
+    assert out == "local transcript"
+    assert seen["source"] == str(audio)
 
 
 

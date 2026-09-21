@@ -29,7 +29,7 @@ uvx --from "searchts[mcp]" searchts -v read https://en.wikipedia.org/wiki/Ada_Lo
 - `searchts doctor` — **read-only** health (does not install skills)
 - `searchts mcp serve` / `searchts skill install`
 
-MCP tools: `read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`.
+MCP tools: `read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`.
 
 ## Not this product
 
