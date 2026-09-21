@@ -85,7 +85,7 @@ jobs:
           SEARCHTS_HARE_API_KEY_NOUS: ${{ secrets.SEARCHTS_HARE_API_KEY_NOUS }}
           SEARCHTS_HARE_API_KEY_OR: ${{ secrets.SEARCHTS_HARE_API_KEY_OR }}
           SEARCHTS_HARE_API_KEY_ZEN: ${{ secrets.SEARCHTS_HARE_API_KEY_ZEN }}
-          HARE_NOUS_MODEL: poolside/laguna-s-2.1
-          HARE_OR_MODEL: ${{ github.event.inputs.or_model || 'poolside/laguna-s-2.1:free' }}
+          HARE_NOUS_MODEL: poolside/laguna-s-2.1,stepfun/step-3.7-flash
+          HARE_OR_MODEL: ${{ github.event.inputs.or_model || 'poolside/laguna-s-2.1:free,qwen/qwen3.8-27b:free,nex-agi/nex-n2.5-pro:free' }}
           HARE_ZEN_MODEL: ling-3.0-flash-fin-free
         run: python scripts/hare_r1.py

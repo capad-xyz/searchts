@@ -159,6 +159,15 @@ def test_run_nags_on_crash(monkeypatch: object) -> None:
     assert "boom" in posted[0]
 
 
+def test_csv_models_splits_and_override(monkeypatch: object) -> None:
+    monkeypatch.delenv("HARE_OR_MODEL", raising=False)  # type: ignore[attr-defined]
+    assert hare_r1._csv_models("HARE_OR_MODEL", "a, b ,c") == ["a", "b", "c"]
+    monkeypatch.setenv("HARE_OR_MODEL", "only-one")  # type: ignore[attr-defined]
+    assert hare_r1._csv_models("HARE_OR_MODEL", "a,b") == ["only-one"]
+    assert "qwen/qwen3.8-27b:free" in hare_r1.HARE_OR_DEFAULT.split(",")
+    assert hare_r1.HARE_ZEN_DEFAULT == "ling-3.0-flash-fin-free"
+
+
 def test_short_fail_hides_provider_json() -> None:
     raw = (
         'nous:poolside/laguna-s-2.1: LLM 401 https://x poolside/laguna-s-2.1: '
