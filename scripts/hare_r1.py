@@ -441,7 +441,7 @@ def run() -> int:
     or_key = _env("SEARCHTS_HARE_API_KEY_OR")
     zen_key = _env("SEARCHTS_HARE_API_KEY_ZEN")
     nous_model = _env("HARE_NOUS_MODEL", "poolside/laguna-s-2.1")
-    or_model = _env("HARE_OR_MODEL", "inclusionai/ling-3.0-flash-fin:free")
+    or_model = _env("HARE_OR_MODEL", "poolside/laguna-s-2.1:free")
     zen_model = _env("HARE_ZEN_MODEL", "ling-3.0-flash-fin-free")
     if not token or not repo_full or not pr:
         print("missing GITHUB_TOKEN / GITHUB_REPOSITORY / PR_NUMBER")

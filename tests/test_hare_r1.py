@@ -166,7 +166,7 @@ def test_short_fail_hides_provider_json() -> None:
     )
     assert hare_r1._short_fail(raw) == "nous: key invalid or empty"
     rate = (
-        "openrouter:inclusionai/ling-3.0-flash-fin:free: LLM 429 "
+        "openrouter:poolside/laguna-s-2.1:free: LLM 429 "
         '{"error":{"message":"temporarily rate-limited upstream"}}'
     )
     assert hare_r1._short_fail(rate) == "openrouter: rate limited"
