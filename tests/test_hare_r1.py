@@ -212,3 +212,50 @@ def test_needed_body_is_graceful_and_offers_retry() -> None:
     assert "rate limited" in body
     assert "TUI-only" in body
     assert "\u2014" not in body
+
+
+def test_deliver_review_posts_pr_review(monkeypatch: object) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake(method: str, path: str, token: str, body: object = None, **_k: object) -> dict:
+        calls.append((method, path))
+        return {}
+
+    monkeypatch.setattr(hare_r1, "github_api", fake)
+    out = hare_r1.deliver_review("o", "r", 1, "t", "sha", hare_r1.TOKEN + "\n**ship**", [])
+    assert out == "review"
+    assert calls == [("POST", "/repos/o/r/pulls/1/reviews")]
+
+
+def test_deliver_review_retries_summary_only(monkeypatch: object) -> None:
+    n = {"i": 0}
+
+    def fake(method: str, path: str, token: str, body: object = None, **_k: object) -> dict:
+        n["i"] += 1
+        if n["i"] == 1:
+            raise RuntimeError("422 bad line")
+        assert isinstance(body, dict) and "comments" not in body
+        return {}
+
+    monkeypatch.setattr(hare_r1, "github_api", fake)
+    bubbles = [{"path": "a.py", "line": 1, "side": "RIGHT", "body": "x"}]
+    assert hare_r1.deliver_review("o", "r", 1, "t", "sha", hare_r1.TOKEN, bubbles) == "summary"
+
+
+def test_deliver_review_nags_when_reviews_api_dead(monkeypatch: object) -> None:
+    posted: list[str] = []
+
+    def fake_api(method: str, path: str, token: str, body: object = None, **_k: object) -> dict:
+        if "reviews" in path:
+            raise RuntimeError("503")
+        if isinstance(body, dict):
+            posted.append(str(body.get("body") or ""))
+        return {}
+
+    monkeypatch.setattr(hare_r1, "github_api", fake_api)
+    assert (
+        hare_r1.deliver_review("o", "r", 1, "t", "sha", hare_r1.TOKEN + "\n**ship**", [])
+        == "needed"
+    )
+    assert posted and posted[0].startswith(hare_r1.NEEDED)
+    assert "**ship**" not in posted[0]

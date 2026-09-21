@@ -436,6 +436,43 @@ def resolve_stale_threads(
             continue
 
 
+def deliver_review(
+    owner: str,
+    repo: str,
+    n: int,
+    token: str,
+    sha: str,
+    comment: str,
+    review_comments: list[dict[str, Any]],
+) -> str:
+    """Post one PR Review. Issue comments are nags only. Returns review|summary|needed."""
+    review_body: dict[str, Any] = {
+        "commit_id": sha,
+        "event": "COMMENT",
+        "body": comment,
+    }
+    if review_comments:
+        review_body["comments"] = review_comments
+    path = f"/repos/{owner}/{repo}/pulls/{n}/reviews"
+    try:
+        github_api("POST", path, token, review_body)
+        return "review"
+    except RuntimeError as e:
+        print(f"review post failed, retrying summary-only: {e}")
+        try:
+            github_api(
+                "POST",
+                path,
+                token,
+                {"commit_id": sha, "event": "COMMENT", "body": comment},
+            )
+            return "summary"
+        except RuntimeError as e2:
+            print(f"review summary failed, nagging: {e2}")
+            post_needed(owner, repo, n, token, f"review delivery failed: {e2}")
+            return "needed"
+
+
 def run() -> int:
     token = _env("GITHUB_TOKEN") or _env("GH_TOKEN")
     repo_full = _env("GITHUB_REPOSITORY")
@@ -570,37 +607,10 @@ def _hare_once(
         }
         for f in bubbles
     ]
-    # CodeRabbit-shaped: one Pull Request Review (summary + inlines).
-    # Author is searchts-hare[bot]. Do not also dump a name table as an issue comment.
-    review_body: dict[str, Any] = {
-        "commit_id": sha,
-        "event": "COMMENT",
-        "body": comment,
-    }
-    if review_comments:
-        review_body["comments"] = review_comments
-    try:
-        github_api("POST", f"/repos/{owner}/{repo}/pulls/{n}/reviews", token, review_body)
-    except RuntimeError as e:
-        print(f"review post failed, retrying summary-only: {e}")
-        try:
-            github_api(
-                "POST",
-                f"/repos/{owner}/{repo}/pulls/{n}/reviews",
-                token,
-                {"commit_id": sha, "event": "COMMENT", "body": comment},
-            )
-        except RuntimeError as e2:
-            print(f"review summary failed, falling back to issue comment: {e2}")
-            github_api(
-                "POST",
-                f"/repos/{owner}/{repo}/issues/{n}/comments",
-                token,
-                {"body": comment},
-            )
-
-    resolve_stale_threads(owner, repo, n, token, plus)
-    print(f"hare ok model={used} intent={intent} bubbles={len(review_comments)}")
+    how = deliver_review(owner, repo, n, token, sha, comment, review_comments)
+    if how != "needed":
+        resolve_stale_threads(owner, repo, n, token, plus)
+    print(f"hare ok model={used} intent={intent} bubbles={len(review_comments)} deliver={how}")
     return 0
 
 
