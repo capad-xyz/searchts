@@ -14,7 +14,7 @@ from typing import Any
 
 TOKEN = "<!-- searchts-r1-review -->"
 NEEDED = "<!-- searchts-r1-needed -->"
-BUBBLE_HEAD = "<!-- searchts-r1-review -->\n🐇❄ Hare · automated R1 · not the PR author"
+BUBBLE_HEAD = TOKEN
 SKIP_CHECKS = frozenset({"test-full", "wheel-gate"})
 HARE_JOB_MARKERS = frozenset({"hare", "r1"})
 MAX_DIFF = 90_000
@@ -252,15 +252,7 @@ def render_comment(
     return _no_em(
         f"""{TOKEN}
 
-## 🐇❄ Hare · R1 review
-
-| | |
-|---|---|
-| **Name** | 🐇❄ Hare |
-| **Purpose** | Review and report. Do not fix unless asked. |
-| **Model** | {model} |
-| **Effort** | {effort} |
-| **Intent** | {intent} |
+**{intent}** · `{model}` · effort {effort}
 
 | Sev | File:line | Issue | Fix? |
 |---|---|---|---|
@@ -374,7 +366,7 @@ def needed_body(why: str) -> str:
     hops = "\n".join(f"- {_short_fail(x)}" for x in parts)
     return _no_em(
         f"{NEEDED}\n\n"
-        "Hare could not finish this pass. The review hops were busy or blocked. "
+        "Could not finish this pass. Review hops were busy or blocked. "
         "This is not a review.\n\n"
         "Reply **`/hare`** to retry. Or Actions → hare → Run workflow "
         "(optional OpenRouter model override).\n\n"
@@ -442,6 +434,43 @@ def resolve_stale_threads(
             github_api("POST", "/graphql", token, {"query": mut, "variables": {"id": node["id"]}})
         except RuntimeError:
             continue
+
+
+def deliver_review(
+    owner: str,
+    repo: str,
+    n: int,
+    token: str,
+    sha: str,
+    comment: str,
+    review_comments: list[dict[str, Any]],
+) -> str:
+    """Post one PR Review. Issue comments are nags only. Returns review|summary|needed."""
+    review_body: dict[str, Any] = {
+        "commit_id": sha,
+        "event": "COMMENT",
+        "body": comment,
+    }
+    if review_comments:
+        review_body["comments"] = review_comments
+    path = f"/repos/{owner}/{repo}/pulls/{n}/reviews"
+    try:
+        github_api("POST", path, token, review_body)
+        return "review"
+    except RuntimeError as e:
+        print(f"review post failed, retrying summary-only: {e}")
+        try:
+            github_api(
+                "POST",
+                path,
+                token,
+                {"commit_id": sha, "event": "COMMENT", "body": comment},
+            )
+            return "summary"
+        except RuntimeError as e2:
+            print(f"review summary failed, nagging: {e2}")
+            post_needed(owner, repo, n, token, f"review delivery failed: {e2}")
+            return "needed"
 
 
 def run() -> int:
@@ -569,13 +598,6 @@ def _hare_once(
         post_needed(owner, repo, n, token, "rendered comment missing token")
         return 0
 
-    github_api(
-        "POST",
-        f"/repos/{owner}/{repo}/issues/{n}/comments",
-        token,
-        {"body": comment},
-    )
-
     review_comments = [
         {
             "path": f["path"],
@@ -585,21 +607,10 @@ def _hare_once(
         }
         for f in bubbles
     ]
-    review_body = {
-        "commit_id": sha,
-        "event": "COMMENT",
-        "body": "",
-    }
-    if review_comments:
-        review_body["comments"] = review_comments
-        try:
-            github_api("POST", f"/repos/{owner}/{repo}/pulls/{n}/reviews", token, review_body)
-        except RuntimeError as e:
-            # 422 on a bad line: table already posted. Do not fake bubbles.
-            print(f"review post failed (table stands): {e}")
-
-    resolve_stale_threads(owner, repo, n, token, plus)
-    print(f"hare ok model={used} intent={intent} bubbles={len(review_comments)}")
+    how = deliver_review(owner, repo, n, token, sha, comment, review_comments)
+    if how != "needed":
+        resolve_stale_threads(owner, repo, n, token, plus)
+    print(f"hare ok model={used} intent={intent} bubbles={len(review_comments)} deliver={how}")
     return 0
 
 

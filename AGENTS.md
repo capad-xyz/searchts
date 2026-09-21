@@ -20,80 +20,72 @@ Free, open-source, **keyless** web layer for agents. Fetch a URL or admit you ca
 4. **No connector framework** (**N4**). Share extractors stay fail-open modules. Known-host JSON (F5b) is the same pattern, not a plugin system.
 5. **Out of scope** unless the PR *is* that PLAN id: Solari (**F14**), hosted MCP (**N2**), cookies inside `read_url` (**F7** is transcribe-only), paid proxies (**N1**), "beat Reddit."
 
-## R1 — 🐇‍❄️ Hare (you are CodeRabbit now)
+## R1 — Hare (`searchts-hare[bot]`)
 
-**Name:** `Hare` (always). Display: 🐇‍❄️. Machine token for hourly jobs / orchestrator chat: `searchts-r1-review`.
+GitHub shows the bot. Do not also print **Name** / a Hare heading in the body.
 
-The agent that **wrote** the PR does not rubber-stamp it. A **second** agent is Hare.
+The agent that **wrote** the PR does not rubber-stamp it. Hare is the **R1c Action**, author `searchts-hare[bot]`.
 
-**Orchestrator** = whoever is running the loop (dispatch, leftover finish, merge). Not a vendor name. Grok, Claude, Codex, a local CLI — if they are the orchestrator this turn, they are not Hare.
+**Orchestrator** = whoever is running the loop (dispatch, leftover finish, merge). Not a vendor name. If they are the orchestrator this turn, they are not Hare.
 
-**Who is Hare:** a **cheap-scout** (free catalog id on this host), **not** the orchestrator. Writer model ≠ Hare model. If the orchestrator also touched the PR (leftover finish after a scout died), they still are not Hare — spawn a different cheap id.
+**Who is Hare:** the Action (`scripts/hare_r1.py`). Not the orchestrator. Not a laptop cheap-scout. Writer model ≠ Hare model.
 
-**Orchestrator holds merge.** The orchestrator is Hare only when every cheap path is dead (429 / 500 / no credits). The **PR comment** must then say that under **Model**. Local: whatever free cheap-scout local Grok spawned via ocx (name that id, not a vendor mascot). Remote: `Grok explore sub-agent (remote; ocx not running)`. A sub-agent in this chat is still **remote**. **ocx** is the laptop router (see [`NAMES.md`](NAMES.md)), not OpenCode.
+**Orchestrator holds merge.** Do not run a review in-session as the user.
 
-**Voice:** Emojis ok (CodeRabbit-shaped). **No em dashes** (U+2014). Use a colon, semicolon, or ASCII hyphen.
+**Voice:** Emojis ok. **No em dashes** (U+2014). Use a colon, semicolon, or ASCII hyphen.
 
-**Spawn prompt (this is the whole paste):** `spawn hare` + PR URL + PLAN id / intent. Hare **reads this file**. Do not re-paste Voice, two surfaces, or skip-never-holds unless the scout skipped AGENTS.md.
+**Spawn (local or remote): this is the whole paste.** Comment `/hare` on the PR. The Action runs as `searchts-hare[bot]`. Do **not** `gh pr comment` a fake review as yourself. Do **not** spawn a cheap-scout named Hare.
 
-**Trigger (R1c):** GitHub Action `hare / r1` on `opened` / `synchronize` (same-repo PRs). Brain: Nous (`SEARCHTS_HARE_API_KEY_NOUS`, Laguna then Step 3.7 Flash) then OpenRouter (`SEARCHTS_HARE_API_KEY_OR`, Laguna S 2.1 → Qwen3.8 27B → Nex-N2.5-Pro) then Zen Ling Fin. Fail (429 / 5xx / timeout / empty token) -> nag `<!-- searchts-r1-needed -->`. Do not post a fake review. Intent is computed from Check Runs in the Action (red required job = hold), not by the model. Fork PRs have no secrets: nag. **Until a week of PRs prove it:** still ok to `spawn hare` if the Action nags. **R1b/F15** parked.
+```
+gh pr comment <n> --body '/hare'
+```
 
-Hare posts **two** GitHub surfaces (CodeRabbit-shaped). Local chat is not enough.
+**Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: Nous then OpenRouter then Zen. Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs have no secrets: nag.
 
-1. **PR conversation comment** (`gh pr comment`). First line **exactly**:
+Hare posts **one GitHub Review** (CodeRabbit / Macroscope shaped). Author is the bot. Local chat is not enough.
+
+1. **PR review** (`POST .../pulls/{n}/reviews`, event `COMMENT`). Body starts **exactly**:
 
 ```
 <!-- searchts-r1-review -->
 ```
 
-Then the table below. **Intent:** hold / ship. If hold, one sentence vs PLAN. Hourly matcher + orchestrator chat look here.
+Then `**ship|hold** · \`model\` · effort low|medium|high` and the findings table. Shows on the Reviews tab as `searchts-hare[bot] reviewed`.
 
-2. **Inline on Files changed: real *and* skip.** Submit a review on the head SHA whose `comments[]` are `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines 422 -> table only.
+2. **Inline on Files changed: real *and* skip.** Same review's `comments[]` = `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines 422: table only, no bubble.
 
-   **How (do not invent `position`):** `POST /repos/{owner}/{repo}/pulls/{n}/reviews` with `commit_id` = head SHA and `comments: [{path, line, side: "RIGHT", body}]`. `line` is the **new-file** line number (the `+N` in the hunk header, then count `+` / context lines). Never `position`. Never count deleted `-` lines. 422 = that line is not in the diff; skip the bubble, keep the table row.
-
-   Every bubble body starts **exactly** like this (so it does not read as the PR author talking):
+   Bubble body starts **exactly**:
 
 ```
 <!-- searchts-r1-review -->
-🐇❄ Hare · automated R1 · not the PR author
 **skip**: <one sentence>
 ```
 
-   Use `**real**` instead of `**skip**` when it is real. No scores. No first person. No em dashes.
+   Use `**real**` instead of `**skip**` when it is real. No scores. No first person. No em dashes. No name line. The bot avatar is the identity.
 
-3. **Skip never holds merge.** Nits stay on the line. Applying a minority of them is expected. Intent = **hold** only if there is a **real** row **or** a required check is red / still pending.
+3. **Skip never holds merge.** Nits stay on the line. Intent = **hold** only if there is a **real** row **or** a required check is red / still pending.
 
-5. **Checks before Intent (#145):** `gh pr checks` (or the Checks tab). Red `ci / test` (or any required job) = **real**, Intent **hold**. Do not re-run pytest yourself; that is CI. Pending = wait or hold. Skipped `test-full` / `wheel-gate` on a PR is by design. **F15:** this is product behavior (Check Runs API), not a paste. Consumers must not see ship on a red X.
+5. **Checks before Intent (#145):** `gh pr checks`. Red `ci / test` (or any required job) = **real**, Intent **hold**. Pending = wait or hold. Skipped `test-full` / `wheel-gate` on a PR is by design.
 
-4. **Later SHA of the same PR (R1d):** post a **new** Conversation comment (`<!-- searchts-r1-review -->`). Matcher = **latest** token. Do not edit the old table in place. Resolve threads whose finding is gone (outdated *and* not in the new diff). New bubbles only for what is still true. Do not delete old comments.
+4. **Later SHA of the same PR (R1d):** post a **new Review**. Matcher = **latest** token. Do not edit the old table in place. Resolve threads whose finding is gone (outdated *and* not in the new diff). New bubbles only for what is still true. Do not delete old comments.
 
-The review may have an empty body if the issue comment already carries the table. Do not skip (1). Zero rows → no bubbles (nothing to pin).
-
-
-
+Zero rows → review body still posts (no inlines).
 
 ```markdown
-## 🐇‍❄️ Hare · R1 review
+<!-- searchts-r1-review -->
 
-| | |
-|---|---|
-| **Name** | 🐇‍❄️ Hare |
-| **Purpose** | Review and report. Do not fix unless asked. |
-| **Model** | <exact spawn: cheap-scout id via ocx / Grok explore sub-agent (remote)> |
-| **Effort** | low / medium / high |
-| **Intent** | hold / ship |
+**ship** · `nous:poolside/laguna-s-2.1` · effort low
 
 | Sev | File:line | Issue | Fix? |
 |---|---|---|---|
 | real / skip | … | one sentence | yes / no / later |
 ```
 
-**Real:** wrong behavior, fail-loud lie, ticks on stdout, MCP break, test that cannot fail, scope creep, **PLAN-id intent miss** (the PR did the narrow prompt, not the product).
+**Real:** wrong behavior, fail-loud lie, ticks on stdout, MCP break, test that cannot fail, scope creep, **PLAN-id intent miss**.
 
-**Skip:** docstring coverage %, Rich vs stderr, test `-> None`, style. Already-fixed pre-push bugs are not a review.
+**Skip:** docstring coverage %, Rich vs stderr, test `-> None`, style.
 
-Do not push fixes unless asked (`fix the real rows`). Do not use any other reviewer display name.
+Do not push fixes unless asked. Do not review as any other GitHub user.
 
 ## Commits / PRs
 
