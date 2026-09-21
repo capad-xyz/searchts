@@ -6,6 +6,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import hare_r1  # noqa: E402
 
 
+def test_llm_timeout_is_one_minute() -> None:
+    assert hare_r1.LLM_TIMEOUT_SEC == 60
+
+
 def test_classify_skips_full_matrix_and_hare_job() -> None:
     runs = [
         {"name": "ci / test-full", "status": "completed", "conclusion": "skipped"},
