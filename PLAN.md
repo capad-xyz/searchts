@@ -113,6 +113,7 @@
 - [x] **X3** After P3.1+P3.2: one wall before/after. *Posted (`@aadarsh_io`). Honesty framing — do not claim permanent bypass.*
 - [x] **X4** After P2.3: mcp 2.x no longer kills `mcp serve`. *Posted 2026-08-26 (`@aadarsh_io`). Host stdio smoke done.*
 - [x] **X5** 0.8.0 on PyPI. *Posted 2026-08-30 (`@aadarsh_io`). Used `example.com` in the uvx line — that URL is thin (`_MIN_CHARS`); a copypaste looks like a broken install. Do not unpost. Next demo URL = Wikipedia. F8b/F13 later.*
+- [x] **X6** 0.9.0 on PyPI. *Posted 2026-09-21 (`@aadarsh_io`). Wikipedia demo URL. HTTP MCP + transcribe.*
 - [ ] Cadence ≤2 posts/week; no chore tweets (pins, dead keys, YAML)
 - [x] **X1** posted 2026-08-20 (`@aadarsh_io`). Article live: https://x.com/i/article/2090756751675342848 (also linked 2026-09-06).
 - [x] **CI** PRs: lint + typecheck + version-sync + ubuntu 3.12 tests. Full matrix + wheel-gate on `main` only.
@@ -265,7 +266,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - [ ] **F11** Windows: `pip install -e .` fails while `searchts.exe` is running (MCP `serve` per IDE holds the shim — kill PIDs or `--force-reinstall`). **Do not** add `--single-instance` / a machine-wide mutex (breaks one stdio server per host). **Revisit:** RUNBOOK note (the Aug 28 “next week” slipped). Not a feature.
 - [x] **F17** Subtitle-first: `--sub-lang en,en-US,en-GB,en-orig` (not `en.*`); `--ignore-errors`; salvage a written `.vtt` if yt-dlp still exits nonzero. **Tess 2026-09-20 / #151.**
 - [x] **F12** Wall playbook (docs): **P3.11** (done) → **F1** (persistent profile, code next) → **`--human` / F7** (extras only). Never **N1** / **N3** / **N7**. README unlocker section. Not a Reddit-green 0.8.1.
-- [ ] **F13** Optional update nudge (**not 0.8.1**): cached ~24h GitHub check, **stderr only**, skip `mcp serve` / pipes, `SEARCHTS_NO_UPDATE_CHECK=1`. Not bundled with F8b. **Revisit:** when we want the nudge.
+- [x] **F13** Optional update nudge: cached ~24h GitHub check, **stderr only**, skip `mcp serve` / pipes / `check-update`, `SEARCHTS_NO_UPDATE_CHECK=1`. Not bundled with F8b.
 - [ ] **F14** Opt-in Solari (cloud Playwright) **only when local `[browser]`/patchright is missing**. `SOLARI_API_KEY`. Never default (**N3**). 2026-09-02 cookbook: Reddit/LinkedIn still walls. Artifact: https://github.com/capad-xyz/solari-cookbook/tree/main/examples/agent-read . **Article is live.** **Revisit:** if Harry replies, or keep-gate = would pay Starter to skip patchright (not Reddit green).
 - [ ] **F15** Hare as a **review product** (other repos install an App, billed, CodeRabbit-shaped). **Different intent from searchts.** Own thread, own glossary: Model = provider + API model, not ocx / cheap-scout / this chat. R1d refresh **and** Checks-before-Intent (Check Runs API; never ship a red required job) or the product looks like #145. Do not mix sprints or tokens with the unlocker. **Revisit:** only as its own thread, after R1c has been boring. **Should-have (later):** incremental/"quick" vs full/"deep"; `@mention` doorbell like `@coderabbitai review`; paid failover across providers. Not R1c.
 - [ ] **F16** Disposable remote workspace: GitHub Actions (or similar) as a **harness box** (shell, git, network) without shipping an agent. Different product from Hare and from searchts. **Revisit:** after F15 is a real question, not a side quest.
@@ -358,4 +359,6 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-21 | **F17** subtitle salvage: no `en.*`; ignore-errors; keep a written `en.vtt` on 429. |
 | 2026-09-21 | **P4.1** MCP `transcribe` tool. Error string; SSRF on URLs; cookies opt-in. |
 | 2026-09-21 | **R1c hops:** Nous Laguna → Step 3.7 Flash; OR Laguna → Qwen3.8 27B → Nex-N2.5-Pro; Zen Ling Fin last hop. |
+| 2026-09-21 | **0.9.0** tagged + PyPI. **X6** posted (`@aadarsh_io`). Wikipedia demo URL. |
+| 2026-09-21 | **F13** stderr update nudge, 24h cache, skip mcp serve / pipes. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |

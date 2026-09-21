@@ -64,3 +64,6 @@ searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace
 2. How they install (pipx / venv / uvx)
 3. Doctor warnings only — optional CLIs on PATH, not “searchts reads Twitter”
 4. `check-update` notes if any
+5. Optional: a one-line stderr nudge on interactive commands when a newer
+   GitHub release exists (F13). Hidden by `SEARCHTS_NO_UPDATE_CHECK=1`.
+   Never on `mcp serve` or pipes.
