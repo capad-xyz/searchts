@@ -300,6 +300,13 @@ def _run():
     elif args.command == "grab":
         _cmd_grab(args)
 
+    from searchts.update_nudge import maybe_nudge
+
+    maybe_nudge(
+        command=args.command,
+        mcp_subcommand=getattr(args, "mcp_command", None),
+    )
+
 
 def main():
     """Console entry point.
