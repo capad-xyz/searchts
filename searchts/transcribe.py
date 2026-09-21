@@ -267,6 +267,45 @@ MIN_SUBTITLE_CHARS = 20
 #: Inline cue tags such as <c>, <00:00:01.000>, </c> emitted in auto-captions.
 _VTT_TAG_RE = re.compile(r"<[^>]+>")
 
+#: Exact English tracks we ask yt-dlp for. `en.*` also matches `en-de` (and
+#: other locale dumps); one 429 then aborted the whole job and dropped a good
+#: `en.vtt` (F17 / Tess 2026-09-20).
+_SUB_LANGS = "en,en-US,en-GB,en-orig"
+_PREFERRED_SUB_LANGS = ("en", "en-us", "en-gb", "en-orig")
+
+
+def _vtt_is_auto(path: Path) -> bool:
+    n = path.name.lower()
+    return "auto" in n or ".a." in n
+
+
+def _vtt_lang_key(path: Path) -> str:
+    """`vid.en.vtt` -> `en`; `vid.en-US.vtt` -> `en-us`; `vid.en-auto.vtt` -> `en-auto`."""
+    name = path.name
+    if name.lower().endswith(".vtt"):
+        name = name[:-4]
+    parts = name.split(".")
+    return parts[-1].lower() if len(parts) >= 2 else name.lower()
+
+
+def _choose_vtt(work_dir: Path) -> Optional[Path]:
+    """Pick the best written .vtt. Manual + exact `en` beats `en-de` / auto."""
+    vtts = list(work_dir.glob("*.vtt"))
+    if not vtts:
+        return None
+
+    def rank(path: Path):
+        lang = _vtt_lang_key(path)
+        if lang in _PREFERRED_SUB_LANGS:
+            pref = _PREFERRED_SUB_LANGS.index(lang)
+        elif lang.startswith("en"):
+            pref = 50
+        else:
+            pref = 90
+        return (1 if _vtt_is_auto(path) else 0, pref, path.name)
+
+    return sorted(vtts, key=rank)[0]
+
 
 def fetch_subtitles(
     url: str,
@@ -277,11 +316,10 @@ def fetch_subtitles(
 ) -> Optional[str]:
     """Return a video's existing captions as plain text, or None if absent.
 
-    Uses yt-dlp to grab any English subtitle track (manual or auto-generated)
-    without downloading the video — no API key, no audio, no Whisper model. A
-    nonzero yt-dlp exit (no subtitles, private video, network error, ...) is
-    treated as "no subtitles" and returns None rather than raising, so the
-    caller can fall back to the audio pipeline.
+    Uses yt-dlp to grab English captions (manual or auto-generated) without
+    downloading the video — no API key, no audio, no Whisper model. A
+    nonzero yt-dlp exit is not fatal: if a `.vtt` was already written (one
+    language 429'd after another succeeded), we still return that track.
     """
     if not ytdlp_available():
         return None
@@ -293,10 +331,11 @@ def fetch_subtitles(
             [
                 *_ytdlp_cmd(),
                 *cookie_args,
+                "--ignore-errors",
                 "--write-sub",
                 "--write-auto-sub",
                 "--sub-lang",
-                "en.*,en",
+                _SUB_LANGS,
                 "--sub-format",
                 "vtt",
                 "--skip-download",
@@ -308,22 +347,12 @@ def fetch_subtitles(
             timeout=120,
         )
     except TranscribeError:
-        # No subtitles / private / network hiccup — not fatal, fall back.
+        # Private / no subs / one lang 429'd. Fall through and salvage any .vtt.
+        pass
+
+    chosen = _choose_vtt(work_dir)
+    if chosen is None:
         return None
-
-    vtts = sorted(work_dir.glob("*.vtt"))
-    if not vtts:
-        return None
-
-    # Prefer a manually-authored track over an auto-generated one. yt-dlp names
-    # auto-captions with markers like ".en-auto." / ".a.en." / ".auto.", so a
-    # track lacking those is treated as manual and wins.
-    def _is_auto(path: Path) -> bool:
-        n = path.name.lower()
-        return "auto" in n or ".a." in n
-
-    manual = [p for p in vtts if not _is_auto(p)]
-    chosen = manual[0] if manual else vtts[0]
 
     try:
         raw = chosen.read_text(encoding="utf-8", errors="replace")
