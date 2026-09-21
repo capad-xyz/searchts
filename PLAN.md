@@ -363,4 +363,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-21 | **F13** stderr update nudge, 24h cache, skip mcp serve / pipes. |
 | 2026-09-21 | **R1c cap:** LLM hop 60s; job 10 min backstop. |
 | 2026-09-22 | **R1b/c:** review posts as GitHub Review (no name table). Local spawn = `/hare`. |
+| 2026-09-22 | **R1c:** concurrency key includes `event_name` so CodeRabbit comments do not cancel the PR review. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |
