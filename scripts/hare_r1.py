@@ -25,6 +25,7 @@ CHECK_POLL_S = 20
 NOUS_BASE = "https://inference-api.nousresearch.com/v1"
 OR_BASE = "https://openrouter.ai/api/v1"
 ZEN_BASE = "https://opencode.ai/zen/v1"
+LLM_TIMEOUT_SEC = 60
 
 # Fixed list, not a router. Skip: openrouter/free, Lyria, GLM 5.2 (32k, no tools).
 HARE_NOUS_DEFAULT = "poolside/laguna-s-2.1,stepfun/step-3.7-flash"
@@ -292,7 +293,7 @@ def chat_complete(base: str, key: str, model: str, messages: list[dict[str, str]
     req.add_header("HTTP-Referer", "https://github.com/capad-xyz/searchts")
     req.add_header("X-Title", "searchts-hare")
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        with urllib.request.urlopen(req, timeout=LLM_TIMEOUT_SEC) as resp:
             payload = json.loads(resp.read())
     except urllib.error.HTTPError as e:
         err = e.read().decode("utf-8", errors="replace")

@@ -42,6 +42,7 @@ jobs:
        github.event.comment.user.login != 'github-actions[bot]') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # Always green: a dead brain posts searchts-r1-needed instead of failing CI.
     continue-on-error: true
     steps:
