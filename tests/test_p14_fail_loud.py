@@ -10,6 +10,7 @@ from searchts.unlocker import UnlockerError, fetch, normalize
 def test_normalize_bare_host_still_https():
     assert normalize("example.com") == "https://example.com"
     assert normalize("http://x.test") == "http://x.test"
+    assert normalize("example.com:8080") == "https://example.com:8080"
 
 
 def test_normalize_refuses_file_and_data():
@@ -29,6 +30,21 @@ def test_fetch_refuses_localhost_without_network():
     with pytest.raises(UnlockerError) as ei:
         fetch("http://127.0.0.1/")
     assert "ssrf" in str(ei.value).lower() or "loopback" in str(ei.value).lower()
+
+
+def test_fetch_refuses_hostname_that_resolves_to_loopback(monkeypatch):
+    import socket
+
+    monkeypatch.setattr(
+        "searchts.ssrf.socket.getaddrinfo",
+        lambda *a, **k: [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0)),
+        ],
+    )
+    with pytest.raises(UnlockerError) as ei:
+        fetch("http://innocent.example.net/")
+    msg = str(ei.value).lower()
+    assert "127.0.0.1" in msg or "loopback" in msg
 
 
 def test_youtube_junk_watch_id_is_rejected():

@@ -142,22 +142,41 @@ class UnlockerError(Exception):
         return f"all backends failed for {self.url} -> {rungs}"
 
 
-def normalize(url: str) -> str:
-    """Return an http(s) URL. Bare hosts get ``https://``. Never rewrite other schemes.
+_BLOCKED_SCHEMES = (
+    "file:",
+    "data:",
+    "javascript:",
+    "ftp:",
+    "gopher:",
+    "about:",
+    "mailto:",
+)
 
-    ``file://`` / ``data:`` used to become ``https://file://…`` and then fetch.
-    That was a silent lie (P1.4). Raises ValueError instead.
+
+def normalize(url: str) -> str:
+    """Return an http(s) URL. Bare hosts (and ``host:port``) get ``https://``.
+
+    Never rewrite other schemes: ``file://`` / ``data:`` used to become
+    ``https://file://…`` and then fetch. That was a silent lie (P1.4).
+    Raises ValueError instead.
+
+    ``urllib.parse`` treats ``example.com:8080`` as scheme ``example.com``.
+    Only a real ``://`` (or a blocked prefix like ``data:``) is a scheme.
     """
     raw = (url or "").strip()
     if not raw:
         raise ValueError("empty url")
-    parsed = urllib.parse.urlparse(raw)
-    scheme = (parsed.scheme or "").lower()
-    if scheme and scheme not in ("http", "https"):
+    lower = raw.lower()
+    if lower.startswith(_BLOCKED_SCHEMES):
+        scheme = lower.split(":", 1)[0]
         raise ValueError(f"scheme '{scheme}://' is not allowed")
-    if not scheme:
-        return "https://" + raw
-    return raw
+    if "://" in raw:
+        parsed = urllib.parse.urlparse(raw)
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in ("http", "https"):
+            raise ValueError(f"scheme '{scheme}://' is not allowed")
+        return raw
+    return "https://" + raw
 
 
 # ── per-domain backend memory (Feature C) ────────────────────────────────────
@@ -929,7 +948,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         raise UnlockerError(url, [("normalize", str(e))]) from e
 
     from searchts.ssrf import guard_mcp_url
-    blocked = guard_mcp_url(url, resolve_dns=False)
+    blocked = guard_mcp_url(url, resolve_dns=True)
     if blocked:
         why = blocked[7:] if blocked.startswith("Error: ") else blocked
         raise UnlockerError(url, [("ssrf", why)])
