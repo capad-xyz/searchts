@@ -259,3 +259,22 @@ def test_deliver_review_nags_when_reviews_api_dead(monkeypatch: object) -> None:
     )
     assert posted and posted[0].startswith(hare_r1.NEEDED)
     assert "**ship**" not in posted[0]
+
+
+def test_already_reviewed_same_sha(monkeypatch: object) -> None:
+    def fake(method: str, path: str, token: str, body: object = None, **_k: object) -> object:
+        assert "reviews" in path
+        return [
+            {"commit_id": "aaa", "body": hare_r1.TOKEN + "\n**ship**"},
+            {"commit_id": "bbb", "body": "unrelated"},
+        ]
+
+    monkeypatch.setattr(hare_r1, "github_api", fake)
+    assert hare_r1.already_reviewed("o", "r", 1, "t", "aaa") is True
+    assert hare_r1.already_reviewed("o", "r", 1, "t", "bbb") is False
+    assert hare_r1.already_reviewed("o", "r", 1, "t", "ccc") is False
+
+
+def test_already_reviewed_ignores_empty_sha(monkeypatch: object) -> None:
+    monkeypatch.setattr(hare_r1, "github_api", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no net")))
+    assert hare_r1.already_reviewed("o", "r", 1, "t", "") is False
