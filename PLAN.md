@@ -51,7 +51,7 @@
 - [x] **P1.2** MCP tool descriptions: explicit retry-via-`read_url` language — #88
 - [x] **P1.2b** Skill YAML `description` ≤ 1024 (Agent Skills hosts skip the skill otherwise) — #89
 - [x] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *zCode skill-off: agents called `read_url` first. **X2** posted 2026-08-27 (`@aadarsh_io`). Gate closed.*
-- [ ] **P1.4** *(unverified track)* Scripted acceptance harness so #22 is pass/fail, not anecdote. **Revisit:** after two more wild sessions, or if X2-style demos start lying.
+- [ ] **P1.4** 0.9.0 hammer catalog (Tess 2026-09-23). 42 live cases: [`docs/hammer-0.9.0.md`](docs/hammer-0.9.0.md). **No stubs that freeze lies.** Next PR = fail-loud on the five silent/wrong successes (YouTube junk id, empty transcript, doctor Jina, `file://`/`data:` rewrite, CLI loopback). Honest walls stay. #22 agent harness still later.
 
 ### P2 — MCP 2.x hygiene (parallel with P1)
 
@@ -364,4 +364,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-21 | **R1c cap:** LLM hop 60s; job 10 min backstop. |
 | 2026-09-22 | **R1b/c:** review posts as GitHub Review (no name table). Local spawn = `/hare`. |
 | 2026-09-22 | **R1c:** concurrency key includes `event_name` so CodeRabbit comments do not cancel the PR review. |
+| 2026-09-23 | **P1.4** 0.9.0 hammer catalog (Tess). Next PR = fail-loud top 5. No stubs. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |
