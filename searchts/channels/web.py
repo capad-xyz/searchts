@@ -2,8 +2,8 @@
 """Web — any URL via an escalating open-source unlocker.
 
 Ladder (see searchts.unlocker): curl_cffi -> Jina Reader -> stealth-browser.
-curl_cffi + Jina are always available; stealth-browser needs the optional
-``searchts[browser]`` extra (patchright + Chromium).
+curl_cffi is always importable; Jina is probed live (403 ≠ available).
+stealth-browser needs the optional ``searchts[browser]`` extra.
 """
 
 from .. import unlocker
@@ -25,6 +25,28 @@ def _stealth_installed() -> bool:
     return True
 
 
+def _jina_probe() -> tuple[str, str]:
+    """Live probe of r.jina.ai. Returns (ok|off|blocked, detail).
+
+    Doctor used to print "Jina Reader available" without a request. A 403
+    means the rung is not available (P1.4).
+    """
+    if not unlocker.jina_enabled():
+        return "off", "disabled"
+    try:
+        import requests
+        r = requests.get(
+            "https://r.jina.ai/https://example.com/",
+            timeout=8,
+            headers={"User-Agent": "searchts-doctor"},
+        )
+    except Exception as e:  # noqa: BLE001
+        return "blocked", f"probe failed ({type(e).__name__})"
+    if r.status_code == 200:
+        return "ok", "ok"
+    return "blocked", f"http-{r.status_code}"
+
+
 class WebChannel(Channel):
     name = "web"
     description = "Any web page"
@@ -33,17 +55,33 @@ class WebChannel(Channel):
     tier = 0
 
     def check(self, config=None):
-        # Always report the keyless rungs; probe only whether stealth is installed.
         self.active_backend = self.backends[0]
-        if _stealth_installed():
+        jina_state, jina_detail = _jina_probe()
+        stealth = _stealth_installed()
+        jina_bit = (
+            "Jina Reader"
+            if jina_state == "ok"
+            else f"Jina Reader not available ({jina_detail})"
+        )
+        if stealth and jina_state == "ok":
             return (
                 "ok",
                 "Escalating fetch unlocker: curl_cffi -> Jina Reader -> stealth-browser",
             )
+        if stealth:
+            return (
+                "warn",
+                f"Escalating fetch unlocker: curl_cffi -> {jina_bit}; stealth-browser installed",
+            )
+        extra = ""
+        if jina_state == "ok":
+            extra = "Jina Reader available; "
+        else:
+            extra = f"{jina_bit}; "
         return (
             "warn",
-            "Escalating fetch unlocker: curl_cffi -> Jina Reader available; "
-            "stealth-browser not installed "
+            "Escalating fetch unlocker: curl_cffi -> "
+            f"{extra}stealth-browser not installed "
             "(pip install 'searchts[browser]' && patchright install chromium)",
         )
 

@@ -143,9 +143,21 @@ class UnlockerError(Exception):
 
 
 def normalize(url: str) -> str:
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-    return url
+    """Return an http(s) URL. Bare hosts get ``https://``. Never rewrite other schemes.
+
+    ``file://`` / ``data:`` used to become ``https://file://…`` and then fetch.
+    That was a silent lie (P1.4). Raises ValueError instead.
+    """
+    raw = (url or "").strip()
+    if not raw:
+        raise ValueError("empty url")
+    parsed = urllib.parse.urlparse(raw)
+    scheme = (parsed.scheme or "").lower()
+    if scheme and scheme not in ("http", "https"):
+        raise ValueError(f"scheme '{scheme}://' is not allowed")
+    if not scheme:
+        return "https://" + raw
+    return raw
 
 
 # ── per-domain backend memory (Feature C) ────────────────────────────────────
@@ -911,7 +923,16 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         except (OSError, ValueError):
             pass
 
-    url = normalize(url)
+    try:
+        url = normalize(url)
+    except ValueError as e:
+        raise UnlockerError(url, [("normalize", str(e))]) from e
+
+    from searchts.ssrf import guard_mcp_url
+    blocked = guard_mcp_url(url, resolve_dns=False)
+    if blocked:
+        why = blocked[7:] if blocked.startswith("Error: ") else blocked
+        raise UnlockerError(url, [("ssrf", why)])
 
     # Tier-0: AI-chat share links (chatgpt.com/share, claude.ai/share, poe.com/s)
     # carry their conversation in provider-specific data channels that generic

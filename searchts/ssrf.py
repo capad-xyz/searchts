@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
-"""SSRF guard for the MCP URL tools.
-
-Imported ONLY from ``searchts/integrations/mcp_server.py``. The CLI and the
-library ``unlocker.fetch`` stay unrestricted so a human can still read local
-files and LAN hosts; this guard is the boundary an *agent* drives through MCP.
+"""SSRF guard for fetch (CLI, library, MCP).
 
 ``guard_mcp_url`` returns an ``"Error: ..."`` string when the URL must be
 rejected and ``None`` when it is allowed. MCP tool handlers return that error
-string directly (never raise), preserving the existing Error-string contract.
+string directly (never raise). ``unlocker.fetch`` raises UnlockerError.
 
 Rejected:
 - anything that is not http/https (``file://``, ``data:``, ``ftp://``, ...)

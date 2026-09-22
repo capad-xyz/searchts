@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.parse
 from pathlib import Path
 from typing import List, Optional
 
@@ -263,6 +264,52 @@ def download_audio(
 #: instead of falling back to audio transcription. A handful of stray chars from
 #: a near-empty caption file should not pre-empt Whisper.
 MIN_SUBTITLE_CHARS = 20
+
+_YT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+_YT_PATH_KINDS = frozenset({"shorts", "embed", "live", "v"})
+
+
+def assert_youtube_id_exact(url: str) -> None:
+    """Refuse YouTube URLs whose video id is not exactly 11 characters.
+
+    yt-dlp truncates ``v=dQw4w9WgXcQ_private_fake`` to the real video. That
+    is a silent wrong-transcript (P1.4). Non-YouTube URLs are ignored.
+    """
+    try:
+        parts = urllib.parse.urlparse(url)
+    except Exception:
+        return
+    host = (parts.hostname or "").lower().rstrip(".")
+    if host.startswith("www."):
+        host = host[4:]
+    if host == "youtu.be":
+        vid = parts.path.lstrip("/").split("/")[0]
+        if vid and not _YT_ID_RE.fullmatch(vid):
+            raise TranscribeError(
+                f"YouTube id is not exactly 11 characters ({vid!r}); "
+                "refusing to transcribe a truncated or junk id"
+            )
+        return
+    if host != "youtube.com" and not host.endswith(".youtube.com"):
+        return
+    qs = urllib.parse.parse_qs(parts.query)
+    if "v" in qs:
+        vid = qs["v"][0]
+        if not _YT_ID_RE.fullmatch(vid):
+            raise TranscribeError(
+                f"YouTube id is not exactly 11 characters ({vid!r}); "
+                "refusing to transcribe a truncated or junk id"
+            )
+        return
+    segs = [s for s in parts.path.split("/") if s]
+    if len(segs) >= 2 and segs[0] in _YT_PATH_KINDS:
+        vid = segs[1]
+        if not _YT_ID_RE.fullmatch(vid):
+            raise TranscribeError(
+                f"YouTube id is not exactly 11 characters ({vid!r}); "
+                "refusing to transcribe a truncated or junk id"
+            )
+
 
 #: Inline cue tags such as <c>, <00:00:01.000>, </c> emitted in auto-captions.
 _VTT_TAG_RE = re.compile(r"<[^>]+>")
@@ -582,6 +629,9 @@ def transcribe(
     """
     cfg = config or Config()
 
+    if not Path(source).is_file():
+        assert_youtube_id_exact(source)
+
     if progress is None:
         progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
             "1", "true", "True", "yes",
@@ -694,7 +744,10 @@ def _run_transcription(
     for chunk in chunks:
         text = _transcribe_with_fallback(chunk, order, cfg)
         pieces.append(text.strip())
-    return "\n".join(p for p in pieces if p)
+    joined = "\n".join(p for p in pieces if p)
+    if not joined.strip():
+        raise TranscribeError("empty transcript")
+    return joined
 
 
 def _transcribe_with_fallback(chunk: Path, order: List[str], config: Config) -> str:
