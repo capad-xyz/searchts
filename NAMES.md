@@ -25,5 +25,6 @@ When in doubt, this file wins over chat. Roles, not vendors.
 | **R1d** | Same run: new Review + resolve threads whose finding is gone. #141 hole |
 | **F15** | Hare as a product. Quick vs deep / mention doorbell live here, not in R1c |
 | **F16** | Disposable remote harness box. Not Hare. Not searchts |
+| **F18** | Paid searchts. Hosted `read` first. Walls stay N1 until a pass is real |
 
 **Local spawn:** `gh pr comment <n> --body '/hare'`. The Action is the bot. Do not paste a review as yourself. Do not mint the App token on the laptop.
