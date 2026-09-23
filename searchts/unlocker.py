@@ -552,7 +552,10 @@ def _normalize_headers(headers: Mapping[str, object]) -> Dict[str, str]:
 
 def _fetch_curl_cffi(url: str, timeout: int = 30) -> Tuple[int, str, str, Dict[str, str]]:
     from curl_cffi import requests as cr
+
+    from searchts.ssrf import curl_safe_redirects
     r = cr.get(url, impersonate="chrome", timeout=timeout,
+               allow_redirects=curl_safe_redirects(),
                headers={"Accept-Language": "en-US,en;q=0.9"})
     final = str(getattr(r, "url", None) or url)
     return r.status_code, r.text, final, _normalize_headers(dict(r.headers.items()))
@@ -777,6 +780,8 @@ def _fetch_stealth_impl(
                     viewport={"width": 1280, "height": 800},
                 )
                 page = ctx.new_page()
+            from searchts.ssrf import guard_browser_page
+            guard_browser_page(page, url)
             resp = page.goto(url, wait_until="domcontentloaded", timeout=ms)
             init_status = resp.status if resp else None
             headers = _normalize_headers(resp.all_headers()) if resp else {}
@@ -857,6 +862,8 @@ def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str,
                     viewport={"width": 1280, "height": 800},
                 )
                 page = ctx.new_page()
+            from searchts.ssrf import guard_browser_page
+            guard_browser_page(page, url)
             resp = page.goto(url, wait_until="domcontentloaded", timeout=min(60000, deadline_ms))
             init_status = resp.status if resp else None
             html = _await_hydration(page, page.content())
@@ -947,7 +954,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     except ValueError as e:
         raise UnlockerError(url, [("normalize", str(e))]) from e
 
-    from searchts.ssrf import guard_mcp_url
+    from searchts.ssrf import guard_mcp_url, private_hop
     blocked = guard_mcp_url(url, resolve_dns=True)
     if blocked:
         why = blocked[7:] if blocked.startswith("Error: ") else blocked
@@ -1020,17 +1027,30 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             headers: Dict[str, str] = {}
             if backend == "curl_cffi":
                 status, body, final_url, headers = _fetch_curl_cffi(url)
-                reason = looks_blocked(status, body, headers)
-                if reason:
-                    attempts.append((backend, reason))
-                    _tick(f"  {backend}: {reason}")
-                    if backend == remembered:
-                        unpin(domain)
-                        remembered = None
-                    continue
-                text = html_to_text(body, url)
             elif backend == "Jina Reader":
                 status, body, final_url, headers = _fetch_jina(url)
+            elif backend == "stealth-browser":
+                status, body, final_url, headers = _fetch_stealth(
+                    url, progress=progress
+                )
+            else:
+                attempts.append((backend, "unknown-backend"))
+                _tick(f"  {backend}: unknown-backend")
+                if backend == remembered:
+                    unpin(domain)
+                    remembered = None
+                continue
+
+            hop = private_hop(url, final_url)
+            if hop:
+                attempts.append((backend, hop))
+                _tick(f"  {backend}: {hop}")
+                if backend == remembered:
+                    unpin(domain)
+                    remembered = None
+                continue
+
+            if backend == "Jina Reader":
                 reason = looks_blocked(status, body, headers)
                 if reason:
                     attempts.append((backend, reason))
@@ -1040,10 +1060,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         remembered = None
                     continue
                 text = body  # Jina already returns markdown
-            elif backend == "stealth-browser":
-                status, body, final_url, headers = _fetch_stealth(
-                    url, progress=progress
-                )
+            else:
                 reason = looks_blocked(status, body, headers)
                 if reason:
                     attempts.append((backend, reason))
@@ -1053,13 +1070,6 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         remembered = None
                     continue
                 text = html_to_text(body, url)
-            else:
-                attempts.append((backend, "unknown-backend"))
-                _tick(f"  {backend}: unknown-backend")
-                if backend == remembered:
-                    unpin(domain)
-                    remembered = None
-                continue
 
             text = text or ""
             # Login-wall on the extract only (raw HTML often has a sign-in modal).
@@ -1126,7 +1136,13 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         except Exception:  # noqa: BLE001 - patchright missing/launch failure
             status, html, final_url = None, "", url
         if looks_blocked(status, html) is None:
-            text = html_to_text(html, url)
+            hop = private_hop(url, final_url or url)
+            if hop:
+                attempts.append(("human-browser", hop))
+                _tick(f"  human-browser: {hop}")
+                text = ""
+            else:
+                text = html_to_text(html, url)
             if (
                 text
                 and looks_blocked(200, text, login_wall=True) is None

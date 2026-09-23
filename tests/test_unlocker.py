@@ -221,6 +221,60 @@ def test_fetch_clean_curl_win(monkeypatch, stub_extract):
     assert r.fetched_at.endswith("Z")
 
 
+def test_fetch_drops_a_redirect_onto_loopback(monkeypatch, stub_extract):
+    from searchts.ssrf import private_hop
+
+    assert private_hop("https://evil.example/a", "https://evil.example/b") is None
+    assert private_hop("https://evil.example/a", "http://127.0.0.1/secret")
+    monkeypatch.setattr(unlocker, "jina_enabled", lambda: False)
+    _set(
+        monkeypatch,
+        curl=(200, "P" * 800, "http://127.0.0.1/secret", {}),
+        stealth=(200, "P" * 800, "http://127.0.0.1/secret", {}),
+    )
+    with pytest.raises(UnlockerError) as ei:
+        fetch("https://evil.example/a")
+    assert "private-redirect" in str(ei.value)
+    assert "127.0.0.1" in str(ei.value)
+
+
+def test_human_browser_does_not_return_a_private_hop(monkeypatch, stub_extract):
+    monkeypatch.setattr(unlocker, "jina_enabled", lambda: False)
+    _set(
+        monkeypatch,
+        curl=(403, "nope", "https://evil.example/a", {}),
+        stealth=(403, "nope", "https://evil.example/a", {}),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_human",
+        lambda url, timeout=180: (200, "P" * 800, "http://127.0.0.1/secret"),
+    )
+    with pytest.raises(UnlockerError) as ei:
+        fetch("https://evil.example/a", allow_human=True)
+    assert "private-redirect" in str(ei.value)
+
+
+def test_curl_refuses_private_redirects_before_following(monkeypatch):
+    from curl_cffi.const import CurlFollow
+
+    seen = {}
+
+    class _Resp:
+        status_code = 200
+        text = "ok"
+        url = "https://evil.example/a"
+        headers = {}
+
+    def _get(url, **kwargs):
+        seen.update(kwargs)
+        return _Resp()
+
+    monkeypatch.setattr("curl_cffi.requests.get", _get)
+    unlocker._fetch_curl_cffi("https://evil.example/a")
+    assert seen["allow_redirects"] is CurlFollow.SAFE
+
+
 @pytest.mark.parametrize(
     ("backend", "stub_name"),
     [

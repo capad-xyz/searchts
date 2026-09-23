@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from searchts.ssrf import private_hop
 from searchts.unlocker import _UA_REAL, jina_enabled, looks_blocked, normalize
 
 
@@ -76,8 +77,15 @@ class AssetError(Exception):
 def _fetch_bytes_curl(url: str, timeout: int) -> AssetResult:
     from curl_cffi import requests as cr
 
+    from searchts.ssrf import curl_safe_redirects
+
     r = cr.get(url, impersonate="chrome", timeout=timeout,
+               allow_redirects=curl_safe_redirects(),
                headers={"Accept-Language": "en-US,en;q=0.9"})
+    final = str(getattr(r, "url", None) or url)
+    hop = private_hop(url, final)
+    if hop:
+        raise AssetError(url, [("curl_cffi", hop)])
     if r.status_code >= 400:
         raise AssetError(url, [("curl_cffi", f"http-{r.status_code}")])
     ct = r.headers.get("content-type", "") or ""
@@ -89,7 +97,7 @@ def _fetch_bytes_curl(url: str, timeout: int) -> AssetResult:
             raise AssetError(url, [("curl_cffi", reason)])
     if not content:
         raise AssetError(url, [("curl_cffi", "empty-body")])
-    return AssetResult(content, ct, str(r.url), "curl_cffi")
+    return AssetResult(content, ct, final, "curl_cffi")
 
 
 def _fetch_bytes_stealth(url: str, timeout: int) -> AssetResult:
@@ -111,6 +119,8 @@ def _fetch_bytes_stealth(url: str, timeout: int) -> AssetResult:
         try:
             ctx = browser.new_context(user_agent=_UA_REAL, locale="en-US",
                                       viewport={"width": 1280, "height": 800})
+            from searchts.ssrf import guard_browser_page
+            guard_browser_page(ctx, url)
             resp = ctx.request.get(url, timeout=ms)
             if resp.ok:
                 body = resp.body()
@@ -120,6 +130,9 @@ def _fetch_bytes_stealth(url: str, timeout: int) -> AssetResult:
                 textual = any(t in ct.lower() for t in _TEXTUAL_CT) or not ct
                 blocked = textual and looks_blocked(resp.status, body.decode("utf-8", "replace"))
                 if body and not blocked:
+                    hop = private_hop(url, resp.url)
+                    if hop:
+                        raise AssetError(url, [("stealth-browser", hop)])
                     return AssetResult(body, ct, resp.url, "stealth-browser")
             # HTML page still walled: navigate so a JS challenge can clear.
             page = ctx.new_page()
@@ -137,6 +150,9 @@ def _fetch_bytes_stealth(url: str, timeout: int) -> AssetResult:
                 except Exception:  # noqa: BLE001
                     break
             if looks_blocked(200, html) is None and len(html) >= 8000:
+                hop = private_hop(url, page.url)
+                if hop:
+                    raise AssetError(url, [("stealth-browser", hop)])
                 return AssetResult(html.encode("utf-8"), "text/html", page.url, "stealth-browser")
             raise AssetError(url, [("stealth-browser", "challenge unsolved or thin content")])
         finally:
