@@ -54,21 +54,38 @@ def test_stealth_probe_warns_when_import_raises(monkeypatch):
     assert "stealth-browser not installed" in message
 
 
-def test_jina_probe_maps_403(monkeypatch):
-    class _Resp:
-        status_code = 403
+def test_jina_probe_uses_fetch_jina(monkeypatch):
+    seen = {}
+
+    def _ok(url, timeout=40):
+        seen["url"] = url
+        seen["timeout"] = timeout
+        return 200, "ok", url, {}
 
     monkeypatch.setattr("searchts.unlocker.jina_enabled", lambda: True)
-    monkeypatch.setattr("requests.get", lambda *a, **k: _Resp())
+    monkeypatch.setattr("searchts.unlocker._fetch_jina", _ok)
+    assert _jina_probe() == ("ok", "ok")
+    assert seen == {"url": "https://example.com/", "timeout": 8}
+    import urllib.error
+
+    monkeypatch.setattr("searchts.unlocker.jina_enabled", lambda: True)
+
+    def _forbidden(url, timeout=40):
+        raise urllib.error.HTTPError(url, 403, "Forbidden", hdrs=None, fp=None)
+
+    monkeypatch.setattr("searchts.unlocker._fetch_jina", _forbidden)
     assert _jina_probe() == ("blocked", "http-403")
 
 
 def test_doctor_jina_403_is_not_available(monkeypatch):
-    class _Resp:
-        status_code = 403
+    import urllib.error
 
     monkeypatch.setattr("searchts.unlocker.jina_enabled", lambda: True)
-    monkeypatch.setattr("requests.get", lambda *a, **k: _Resp())
+
+    def _forbidden(url, timeout=40):
+        raise urllib.error.HTTPError(url, 403, "Forbidden", hdrs=None, fp=None)
+
+    monkeypatch.setattr("searchts.unlocker._fetch_jina", _forbidden)
     monkeypatch.setitem(sys.modules, "patchright", types.ModuleType("patchright"))
     ch = WebChannel()
     status, message = ch.check()
