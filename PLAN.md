@@ -52,7 +52,7 @@
 - [x] **P1.2** MCP tool descriptions: explicit retry-via-`read_url` language — #88
 - [x] **P1.2b** Skill YAML `description` ≤ 1024 (Agent Skills hosts skip the skill otherwise) — #89
 - [x] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *zCode skill-off: agents called `read_url` first. **X2** posted 2026-08-27 (`@aadarsh_io`). Gate closed.*
-- [ ] **P1.4** 0.9.0 hammer catalog: [`docs/hammer-0.9.0.md`](docs/hammer-0.9.0.md). **Fail-loud top 5** shipped in **0.10.0** / **0.10.1**. Honest walls stay. **U1** protocol: [`docs/u1-harness.md`](docs/u1-harness.md). Box stays open until a real session is logged there. **No stubs that freeze lies.**
+- [ ] **P1.4** 0.9.0 hammer catalog: [`docs/hammer-0.9.0.md`](docs/hammer-0.9.0.md). **Fail-loud top 5** shipped in **0.10.0** / **0.10.1**. Honest walls stay. **U1** answered: tool description alone did not make the model call `read_url` first. The reach paragraph did. Log: [`docs/u1-harness.md`](docs/u1-harness.md). **No stubs that freeze lies.**
 
 ### P2 — MCP 2.x hygiene (parallel with P1)
 
@@ -386,3 +386,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-23 | **U1** rule path: with the new paragraph in the rules, Laguna called `read_url` first. Login-wall was honest. Box stays open. MCP-description-only is still untested. |
 | 2026-09-23 | **Hare** must say what the diff does. Nits are **skip** rows. An empty table is not a review. Skip still does not hold. |
 | 2026-09-23 | **P1.1b** `searchts` replaces a reach block only when it is the old official 403 sentence. Edits stay. Missing files stay missing. |
+| 2026-09-23 | **U1** answered. Description alone: two hosts, skills off, no reach block. One called `read_url` third. Laguna never called it. The paragraph is what worked. No more identical sessions. |
