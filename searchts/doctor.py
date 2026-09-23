@@ -4,9 +4,12 @@
 Each channel knows how to check itself. Doctor just collects the results.
 """
 
+import csv
+import io
 import os
+import subprocess
 import sys
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Sequence
 
 from searchts.channels import get_all_channels
 from searchts.config import Config
@@ -71,7 +74,52 @@ def _name_msg(r: dict, escape) -> str:
     return text
 
 
-def format_report(results: Dict[str, dict]) -> str:
+def windows_searchts_pids(
+    *,
+    runner: Optional[Callable[[], str]] = None,
+    platform: Optional[str] = None,
+) -> list[int]:
+    """PIDs whose image is searchts.exe. Empty off Windows. Does not kill."""
+    if (platform if platform is not None else sys.platform) != "win32":
+        return []
+
+    def _default() -> str:
+        try:
+            done = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq searchts.exe", "/FO", "CSV", "/NH"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+        return done.stdout or ""
+
+    read = runner if runner is not None else _default
+    pids: list[int] = []
+    for row in csv.reader(io.StringIO(read())):
+        if len(row) < 2 or row[0].strip().lower() != "searchts.exe":
+            continue
+        try:
+            pids.append(int(row[1].strip()))
+        except ValueError:
+            continue
+    return pids
+
+
+def format_lock_note(pids: Sequence[int]) -> str:
+    if not pids:
+        return ""
+    lines = [
+        "[yellow][!][/yellow] Windows: these PIDs have searchts.exe open. "
+        "Quit them before a pip or pipx upgrade. This command does not kill them."
+    ]
+    lines.extend(f"  PID {pid}" for pid in pids)
+    return "\n".join(lines)
+
+
+def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] = None) -> str:
     """Format results as a readable text report (with Rich markup)."""
     rich_escape: Optional[Callable[[str], str]]
     try:
@@ -155,5 +203,10 @@ def format_report(results: Dict[str, dict]) -> str:
                 lines.append("   Fix: chmod 600 ~/.searchts/config.yaml")
         except OSError:
             pass
+
+    note = format_lock_note(windows_searchts_pids() if lock_pids is None else lock_pids)
+    if note:
+        lines.append("")
+        lines.append(note)
 
     return "\n".join(lines)

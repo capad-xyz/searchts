@@ -1715,6 +1715,11 @@ def _cmd_doctor(args=None):
 
     if args is not None and getattr(args, "json", False):
         print(json.dumps(results, ensure_ascii=False, indent=2))
+        from searchts.doctor import format_lock_note, windows_searchts_pids
+        note = format_lock_note(windows_searchts_pids())
+        if note:
+            import re
+            print(re.sub(r"\[[^\]]*\]", "", note), file=sys.stderr)
         return
 
     rprint(format_report(results))
