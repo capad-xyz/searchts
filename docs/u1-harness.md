@@ -33,4 +33,6 @@ Host, model, and the tool calls in order. Quote the `read_url` arguments, or say
 
 | Date | Host | Model | Call order | Verdict |
 |---|---|---|---|---|
-| | | | | |
+| 2026-09-23 | Grok CLI, OCX. searchts MCP ready (`read_url` listed). P1.1 memory rule was in `user_rules` (`searchts:reach`). Not a clean MCP-only run. | `nous/poolside/laguna-s-2.1:free` | 1. `web_fetch` `https://www.linkedin.com/feed/` → HTTP 200, 1.9 KB login form. `read_url` never called. | **FAIL** |
+
+The reach rule says to call `read_url` after a 403, a challenge, or a thin page. This fetch was a 200 with a sign-in form, so the agent treated the login chrome as the page and stopped. That is the #22 satisfice, with the tool sitting right there.
