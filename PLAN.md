@@ -51,7 +51,7 @@
 - [x] **P1.2** MCP tool descriptions: explicit retry-via-`read_url` language — #88
 - [x] **P1.2b** Skill YAML `description` ≤ 1024 (Agent Skills hosts skip the skill otherwise) — #89
 - [x] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *zCode skill-off: agents called `read_url` first. **X2** posted 2026-08-27 (`@aadarsh_io`). Gate closed.*
-- [ ] **P1.4** 0.9.0 hammer catalog: [`docs/hammer-0.9.0.md`](docs/hammer-0.9.0.md). **Fail-loud top 5** in this slice (YouTube junk id, empty transcript, doctor Jina 403, `file://`/`data:`, CLI loopback). Honest walls stay. #22 agent harness still later. **No stubs that freeze lies.**
+- [ ] **P1.4** 0.9.0 hammer catalog: [`docs/hammer-0.9.0.md`](docs/hammer-0.9.0.md). **Fail-loud top 5** shipped in **0.10.0** / **0.10.1**. Honest walls stay. **U1** protocol: [`docs/u1-harness.md`](docs/u1-harness.md). Box stays open until a real session is logged there. **No stubs that freeze lies.**
 
 ### P2 — MCP 2.x hygiene (parallel with P1)
 
@@ -226,7 +226,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 
 ### U — Unverified tracks
 
-- **U1 — #22 harness:** scripted Claude/Cursor session (MCP only, no SKILL.md, fixed walled URL). Gate for "#22 closed."
+- **U1 — #22 harness:** [`docs/u1-harness.md`](docs/u1-harness.md). MCP only, no SKILL.md, LinkedIn feed, `read_url` within two tool calls. **Not closed** until a real session is in that log. P1.3 was one zCode run, not this script. First parked slice we are opening. Not **F18**.
 - **U2 — UA A/B:** same URLs, stealth only, UA 126 vs current; ship P3.4 either way (stale UA is still wrong), invest further only if delta is large.
 - **U3 — Memory telemetry:** count remember-hit then fail; justifies TTL complexity.
 - **U4 — Jina default:** only flip to opt-in if privacy/rate-limit evidence appears.
@@ -378,3 +378,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-23 | **F18** Paid searchts is hosted `read` first. Free CLI stays. Walls stay N1 until a pass is real. No price. Not this week. |
 | 2026-09-23 | **P3.6b-rebind** pin curl and Chromium to the checked address. |
 | 2026-09-23 | **F11** RUNBOOK: Windows editable install fails while `searchts.exe` is held. No mutex. |
+| 2026-09-23 | **U1** protocol written. Not closed. A real MCP-only session still has to be logged. |
