@@ -366,4 +366,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-22 | **R1c:** concurrency key includes `event_name` so CodeRabbit comments do not cancel the PR review. |
 | 2026-09-23 | **P1.4** 0.9.0 hammer catalog (Tess). Next PR = fail-loud top 5. No stubs. |
 | 2026-09-23 | **P1.4 fail-loud:** YouTube exact id; empty transcript errors; doctor Jina 403; no `https://` rewrite of `file://`/`data:`; CLI loopback refused. |
+| 2026-09-23 | **P1.4 doctor JSON:** `backends` is the live probe, not the candidate ladder. SSRF text no longer says "via MCP" on CLI. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |

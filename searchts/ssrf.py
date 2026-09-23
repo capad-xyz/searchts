@@ -135,7 +135,7 @@ def guard_mcp_url(url: str, *, resolve_dns: bool = True) -> Optional[str]:
     if scheme and scheme not in ("http", "https"):
         return (
             f"Error: SSRF guard: scheme '{scheme}://' is not allowed "
-            "(only http/https may be fetched via MCP)."
+            "(only http/https may be fetched)."
         )
 
     # A bare host (no scheme) like ``example.com`` is treated as https, matching
@@ -154,7 +154,7 @@ def guard_mcp_url(url: str, *, resolve_dns: bool = True) -> Optional[str]:
 
     reason = _classify_host(host)
     if reason is not None:
-        return f"Error: SSRF guard: {reason} ('{host}') is not allowed via MCP."
+        return f"Error: SSRF guard: {reason} ('{host}') is not allowed."
 
     # Hostname: resolve and reject if any resolved IP is dangerous. If DNS
     # fails, fail open (documented) — the subsequent fetch errors naturally.
@@ -173,6 +173,6 @@ def guard_mcp_url(url: str, *, resolve_dns: bool = True) -> Optional[str]:
         if reason is not None:
             return (
                 f"Error: SSRF guard: '{host}' resolves to {reason} "
-                f"('{addr}') and is not allowed via MCP."
+                f"('{addr}') and is not allowed."
             )
     return None

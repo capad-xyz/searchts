@@ -22,6 +22,20 @@ class _StubChannel:
         return self._status, self._message
 
 
+def test_check_all_uses_reported_backends(tmp_config, monkeypatch):
+    ch = _StubChannel(
+        "web", "Any web page", 0, "warn",
+        "Jina Reader not available (http-401)",
+        ["curl_cffi", "Jina Reader", "stealth-browser"],
+        active_backend="curl_cffi",
+    )
+    ch.reported_backends = ["curl_cffi"]
+    monkeypatch.setattr(doctor, "get_all_channels", lambda: [ch])
+    out = doctor.check_all(tmp_config, progress=False)
+    assert out["web"]["backends"] == ["curl_cffi"]
+    assert "available" not in "".join(out["web"]["backends"])
+
+
 @pytest.fixture
 def tmp_config(tmp_path):
     return Config(config_path=tmp_path / "config.yaml")

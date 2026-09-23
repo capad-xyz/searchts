@@ -58,6 +58,14 @@ class WebChannel(Channel):
         self.active_backend = self.backends[0]
         jina_state, jina_detail = _jina_probe()
         stealth = _stealth_installed()
+        # Candidate ladder stays on the class (fetch still walks it).
+        # Doctor JSON reports only rungs this probe actually saw as up.
+        live = ["curl_cffi"]
+        if jina_state == "ok":
+            live.append("Jina Reader")
+        if stealth:
+            live.append("stealth-browser")
+        self.reported_backends = live
         jina_bit = (
             "Jina Reader"
             if jina_state == "ok"

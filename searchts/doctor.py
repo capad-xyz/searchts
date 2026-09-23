@@ -40,19 +40,23 @@ def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict
     for ch in get_all_channels():
         if progress:
             _tick(f"checking {ch.name}…")
+        reported = None
         try:
             status, message = ch.check(config)
             active = getattr(ch, "active_backend", None)
+            reported = getattr(ch, "reported_backends", None)
         except Exception as e:  # noqa: BLE001 — doctor must survive any channel
             # Channels are registry singletons: a stale active_backend from a
             # previous check must not leak into an errored result.
             status, message, active = "error", f"Health check error: {e}", None
+            reported = None
+        backends = list(reported) if reported is not None else list(ch.backends)
         results[ch.name] = {
             "status": status,
             "name": ch.description,
             "message": message,
             "tier": ch.tier,
-            "backends": ch.backends,
+            "backends": backends,
             "active_backend": active,
         }
     return results

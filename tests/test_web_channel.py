@@ -70,10 +70,14 @@ def test_doctor_jina_403_is_not_available(monkeypatch):
     monkeypatch.setattr("searchts.unlocker.jina_enabled", lambda: True)
     monkeypatch.setattr("requests.get", lambda *a, **k: _Resp())
     monkeypatch.setitem(sys.modules, "patchright", types.ModuleType("patchright"))
-    status, message = WebChannel().check()
+    ch = WebChannel()
+    status, message = ch.check()
     assert status == "warn"
     assert "Jina Reader not available (http-403)" in message
     assert "Jina Reader available" not in message
+    assert "Jina Reader" not in ch.reported_backends
+    assert ch.reported_backends == ["curl_cffi", "stealth-browser"]
+    assert "Jina Reader" in ch.backends
 
 
 def test_stealth_installed_helper_matches_import():
