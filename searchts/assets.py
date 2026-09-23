@@ -77,10 +77,11 @@ class AssetError(Exception):
 def _fetch_bytes_curl(url: str, timeout: int) -> AssetResult:
     from curl_cffi import requests as cr
 
-    from searchts.ssrf import curl_safe_redirects
+    from searchts.ssrf import curl_resolve_options, curl_safe_redirects
 
     r = cr.get(url, impersonate="chrome", timeout=timeout,
                allow_redirects=curl_safe_redirects(),
+               curl_options=curl_resolve_options(url),
                headers={"Accept-Language": "en-US,en;q=0.9"})
     final = str(getattr(r, "url", None) or url)
     hop = private_hop(url, final)
@@ -113,13 +114,13 @@ def _fetch_bytes_stealth(url: str, timeout: int) -> AssetResult:
         raise AssetError(url, [("stealth-browser",
                                 'needs patchright: pip install "searchts[browser]"')]) from e
 
+    from searchts.ssrf import chromium_pin_args, guard_browser_page
     ms = int(timeout * 1000)
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=chromium_pin_args(url))
         try:
             ctx = browser.new_context(user_agent=_UA_REAL, locale="en-US",
                                       viewport={"width": 1280, "height": 800})
-            from searchts.ssrf import guard_browser_page
             guard_browser_page(ctx, url)
             resp = ctx.request.get(url, timeout=ms)
             if resp.ok:

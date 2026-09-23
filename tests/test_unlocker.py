@@ -271,8 +271,88 @@ def test_curl_refuses_private_redirects_before_following(monkeypatch):
         return _Resp()
 
     monkeypatch.setattr("curl_cffi.requests.get", _get)
+    monkeypatch.setattr(
+        "searchts.ssrf.connection_pin", lambda url: (None, None)
+    )
     unlocker._fetch_curl_cffi("https://evil.example/a")
     assert seen["allow_redirects"] is CurlFollow.SAFE
+
+
+def test_connection_pin_locks_a_public_address(monkeypatch):
+    from searchts.ssrf import chromium_pin_args, connection_pin
+
+    def _public(*args, **kwargs):
+        return [(None, None, None, None, ("1.2.3.4", 443))]
+
+    monkeypatch.setattr("searchts.ssrf.socket.getaddrinfo", _public)
+    entry, err = connection_pin("https://evil.example/a")
+    assert err is None
+    assert entry == "evil.example:443:1.2.3.4"
+    assert chromium_pin_args("https://evil.example/a") == [
+        "--host-resolver-rules=MAP evil.example 1.2.3.4"
+    ]
+
+
+def test_connection_pin_refuses_a_private_answer(monkeypatch):
+    from searchts.ssrf import connection_pin
+
+    def _private(*args, **kwargs):
+        return [(None, None, None, None, ("127.0.0.1", 443))]
+
+    monkeypatch.setattr("searchts.ssrf.socket.getaddrinfo", _private)
+    entry, err = connection_pin("https://evil.example/a")
+    assert entry is None
+    assert err and "private-rebind" in err and "127.0.0.1" in err
+
+
+def test_curl_pins_dns_before_connecting(monkeypatch):
+    from curl_cffi import CurlOpt
+
+    seen = {}
+
+    class _Resp:
+        status_code = 200
+        text = "ok"
+        url = "https://evil.example/a"
+        headers = {}
+
+    def _get(url, **kwargs):
+        seen.update(kwargs)
+        return _Resp()
+
+    monkeypatch.setattr("curl_cffi.requests.get", _get)
+    monkeypatch.setattr(
+        "searchts.ssrf.connection_pin",
+        lambda url: ("evil.example:443:1.2.3.4", None),
+    )
+    unlocker._fetch_curl_cffi("https://evil.example/a")
+    assert seen["curl_options"][CurlOpt.RESOLVE] == ["evil.example:443:1.2.3.4"]
+
+
+def test_rebind_does_not_call_curl(monkeypatch):
+    called = {"n": 0}
+
+    def _get(*args, **kwargs):
+        called["n"] += 1
+        raise AssertionError("curl connected")
+
+    monkeypatch.setattr("curl_cffi.requests.get", _get)
+    monkeypatch.setattr(unlocker, "jina_enabled", lambda: False)
+    monkeypatch.setattr(
+        "searchts.ssrf.connection_pin",
+        lambda url: (None, "private-rebind: 'evil.example' resolves to loopback ('127.0.0.1')"),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_stealth",
+        lambda url, timeout=60, progress=None: (_ for _ in ()).throw(
+            RuntimeError("private-rebind")
+        ),
+    )
+    with pytest.raises(UnlockerError) as ei:
+        fetch("https://evil.example/a")
+    assert called["n"] == 0
+    assert "private-rebind" in str(ei.value)
 
 
 @pytest.mark.parametrize(
