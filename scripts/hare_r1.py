@@ -230,6 +230,7 @@ def render_comment(
     findings: list[dict[str, Any]],
     check_state: str,
     check_notes: list[str],
+    summary: str = "",
 ) -> str:
     rows = []
     for f in findings:
@@ -239,6 +240,7 @@ def render_comment(
         rows.append(f"| {f.get('sev')} | {loc} | {issue} | {fix} |")
     if not rows:
         rows.append("| - | - | no line findings | - |")
+    said = _no_em(summary.strip()) or "(model did not say what changed)"
     why = ""
     if intent == "hold" and check_state == "fail":
         why = "Required CI is red."
@@ -253,6 +255,8 @@ def render_comment(
         f"""{TOKEN}
 
 **{intent}** · `{model}` · effort {effort}
+
+{said}
 
 | Sev | File:line | Issue | Fix? |
 |---|---|---|---|
@@ -303,11 +307,13 @@ SYSTEM = """You are Hare, an automated PR reviewer for the searchts repo.
 Read AGENTS.md rules in the user message. Review and report. Do not fix.
 Voice: no em dashes. No first person. Emojis ok.
 Return ONLY a JSON object:
-{"effort":"low|medium|high","findings":[{"sev":"real"|"skip","path":"file","line":123,"issue":"one sentence","fix":"yes|no|later"}]}
+{"effort":"low|medium|high","summary":"one sentence of what the diff does","findings":[{"sev":"real"|"skip","path":"file","line":123,"issue":"one sentence","fix":"yes|no|later"}]}
+summary is required. Read the diff. Do not copy the PR title.
 sev real = wrong behavior, fail-loud lie, ticks on stdout, MCP break, test that cannot fail, scope creep, PLAN intent miss.
-sev skip = nits (docs, style). Skip never holds merge.
-line = new-file line number on the + side of the diff. If unsure, omit the finding.
-Zero findings is allowed: {"effort":"low","findings":[]}
+sev skip = a nit you actually saw (docs, style, a weak assertion). Write the row. Skip never holds merge.
+Do not return an empty findings list to look done. An empty list is only ok when the diff has nothing to question, and summary is still required.
+If the line number is unsure, still emit the finding with line null. Do not drop a real issue.
+line, when set, is a new-file line on the + side of the diff.
 """
 
 
@@ -617,9 +623,10 @@ def _hare_once(
     effort = str(parsed.get("effort") or "low")
     if effort not in {"low", "medium", "high"}:
         effort = "low"
+    summary = str(parsed.get("summary") or "")
     bubbles = filter_bubbles(findings, plus)
     intent = intent_for(check_state, findings)
-    comment = render_comment(used, effort, intent, findings, check_state, check_notes)
+    comment = render_comment(used, effort, intent, findings, check_state, check_notes, summary)
     if TOKEN not in comment:
         post_needed(owner, repo, n, token, "rendered comment missing token")
         return 0
