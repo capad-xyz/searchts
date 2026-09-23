@@ -5,7 +5,7 @@ import builtins
 import sys
 import types
 
-from searchts.channels.web import WebChannel, _stealth_installed
+from searchts.channels.web import WebChannel, _jina_probe, _stealth_installed
 
 
 def test_stealth_probe_warns_when_patchright_missing(monkeypatch):
@@ -54,8 +54,21 @@ def test_stealth_probe_warns_when_import_raises(monkeypatch):
     assert "stealth-browser not installed" in message
 
 
+def test_jina_probe_maps_403(monkeypatch):
+    class _Resp:
+        status_code = 403
+
+    monkeypatch.setattr("searchts.unlocker.jina_enabled", lambda: True)
+    monkeypatch.setattr("requests.get", lambda *a, **k: _Resp())
+    assert _jina_probe() == ("blocked", "http-403")
+
+
 def test_doctor_jina_403_is_not_available(monkeypatch):
-    monkeypatch.setattr("searchts.channels.web._jina_probe", lambda: ("blocked", "http-403"))
+    class _Resp:
+        status_code = 403
+
+    monkeypatch.setattr("searchts.unlocker.jina_enabled", lambda: True)
+    monkeypatch.setattr("requests.get", lambda *a, **k: _Resp())
     monkeypatch.setitem(sys.modules, "patchright", types.ModuleType("patchright"))
     status, message = WebChannel().check()
     assert status == "warn"

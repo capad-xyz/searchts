@@ -64,7 +64,11 @@ def test_youtube_shorts_junk_is_rejected():
         assert_youtube_id_exact("https://www.youtube.com/shorts/dQw4w9WgXcQzzz")
 
 
-def test_youtube_exact_id_is_ok():
+def test_youtube_blank_v_is_rejected():
+    with pytest.raises(TranscribeError, match="11 characters"):
+        assert_youtube_id_exact("https://www.youtube.com/watch?v=")
+    with pytest.raises(TranscribeError, match="11 characters"):
+        assert_youtube_id_exact("https://youtu.be/")
     assert_youtube_id_exact("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
     assert_youtube_id_exact("https://youtu.be/dQw4w9WgXcQ")
     assert_youtube_id_exact("https://www.youtube.com/shorts/dQw4w9WgXcQ")

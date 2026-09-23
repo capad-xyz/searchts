@@ -284,7 +284,7 @@ def assert_youtube_id_exact(url: str) -> None:
         host = host[4:]
     if host == "youtu.be":
         vid = parts.path.lstrip("/").split("/")[0]
-        if vid and not _YT_ID_RE.fullmatch(vid):
+        if not _YT_ID_RE.fullmatch(vid or ""):
             raise TranscribeError(
                 f"YouTube id is not exactly 11 characters ({vid!r}); "
                 "refusing to transcribe a truncated or junk id"
@@ -292,7 +292,7 @@ def assert_youtube_id_exact(url: str) -> None:
         return
     if host != "youtube.com" and not host.endswith(".youtube.com"):
         return
-    qs = urllib.parse.parse_qs(parts.query)
+    qs = urllib.parse.parse_qs(parts.query, keep_blank_values=True)
     if "v" in qs:
         vid = qs["v"][0]
         if not _YT_ID_RE.fullmatch(vid):
