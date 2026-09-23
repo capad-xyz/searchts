@@ -37,6 +37,8 @@ def test_web_search_description_tells_agent_to_call_read_url():
 def test_read_url_description_covers_followup_after_search():
     assert "web_search" in READ_URL_DESCRIPTION
     assert "snippet" in READ_URL_DESCRIPTION.lower()
+    assert "call this first" in READ_URL_DESCRIPTION
+    assert "sign-in" in READ_URL_DESCRIPTION
 
 
 def test_read_url_returns_markdown_text():
