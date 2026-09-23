@@ -122,7 +122,7 @@ class TestYtdlpCmd:
     def test_unknown_browser_does_not_fall_through_subtitles(self, tmp_path, capsys):
         with pytest.raises(tr.TranscribeError, match="unknown browser"):
             tr.transcribe(
-                "https://youtu.be/x",
+                "https://youtu.be/dQw4w9WgXcQ",
                 cookies_from_browser="notabrowser",
                 out_dir=tmp_path,
             )
@@ -487,10 +487,10 @@ class TestYouTubeChannelTranscribe:
 
         monkeypatch.setattr(tr, "transcribe", fake_transcribe)
         out = YouTubeChannel().transcribe(
-            "https://youtu.be/abc", provider="groq", config=fake_config
+            "https://youtu.be/dQw4w9WgXcQ", provider="groq", config=fake_config
         )
         assert out == "delegated text"
-        assert captured["source"] == "https://youtu.be/abc"
+        assert captured["source"] == "https://youtu.be/dQw4w9WgXcQ"
         assert captured["provider"] == "groq"
         assert captured["config"] is fake_config
 
@@ -671,7 +671,7 @@ class TestSubtitlesFirst:
         )
 
         text = tr.transcribe(
-            "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config
+            "https://youtu.be/dQw4w9WgXcQ", out_dir=tmp_path / "work", config=fake_config
         )
         assert text == "these are the existing captions of the video"
 
@@ -690,7 +690,7 @@ class TestSubtitlesFirst:
         )
 
         text = tr.transcribe(
-            "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config
+            "https://youtu.be/dQw4w9WgXcQ", out_dir=tmp_path / "work", config=fake_config
         )
         assert text == "audio transcript"
 
@@ -705,7 +705,7 @@ class TestSubtitlesFirst:
         monkeypatch.setattr(tr, "download_audio", boom_download)
         with pytest.raises(tr.NoProviderConfigured):
             tr.transcribe(
-                "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config
+                "https://youtu.be/dQw4w9WgXcQ", out_dir=tmp_path / "work", config=fake_config
             )
 
     def test_no_subtitles_with_backend_transcribes(self, monkeypatch, fake_config, tmp_path):
@@ -721,7 +721,7 @@ class TestSubtitlesFirst:
         )
 
         text = tr.transcribe(
-            "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config
+            "https://youtu.be/dQw4w9WgXcQ", out_dir=tmp_path / "work", config=fake_config
         )
         assert text == "from whisper"
 
@@ -742,7 +742,7 @@ class TestSubtitlesFirst:
         )
 
         text = tr.transcribe(
-            "https://youtu.be/abc",
+            "https://youtu.be/dQw4w9WgXcQ",
             out_dir=tmp_path / "work",
             config=fake_config,
             prefer_subtitles=False,
@@ -791,7 +791,7 @@ class TestProgressTicks:
             lambda url, work_dir, *, config=None: self._CAPTIONS,
         )
         tr.transcribe(
-            "https://youtu.be/abc", out_dir=tmp_path / "work",
+            "https://youtu.be/dQw4w9WgXcQ", out_dir=tmp_path / "work",
             config=fake_config, progress=True,
         )
         captured = capsys.readouterr()
@@ -813,7 +813,7 @@ class TestProgressTicks:
         )
 
         tr.transcribe(
-            "https://youtu.be/abc", out_dir=tmp_path / "work",
+            "https://youtu.be/dQw4w9WgXcQ", out_dir=tmp_path / "work",
             config=fake_config, progress=True,
         )
         captured = capsys.readouterr()
@@ -828,7 +828,7 @@ class TestProgressTicks:
             lambda url, work_dir, *, config=None: self._CAPTIONS,
         )
         tr.transcribe(
-            "https://youtu.be/abc", out_dir=tmp_path / "work",
+            "https://youtu.be/dQw4w9WgXcQ", out_dir=tmp_path / "work",
             config=fake_config, progress=False,
         )
         captured = capsys.readouterr()
@@ -842,7 +842,7 @@ class TestProgressTicks:
             lambda url, work_dir, *, config=None: self._CAPTIONS,
         )
         tr.transcribe(
-            "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config,
+            "https://youtu.be/dQw4w9WgXcQ", out_dir=tmp_path / "work", config=fake_config,
         )
         captured = capsys.readouterr()
         assert captured.out == ""
@@ -856,7 +856,7 @@ class TestProgressTicks:
             lambda url, work_dir, *, config=None: self._CAPTIONS,
         )
         tr.transcribe(
-            "https://youtu.be/abc", out_dir=tmp_path / "work", config=fake_config,
+            "https://youtu.be/dQw4w9WgXcQ", out_dir=tmp_path / "work", config=fake_config,
         )
         captured = capsys.readouterr()
         assert captured.out == ""

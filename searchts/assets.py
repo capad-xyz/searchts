@@ -168,7 +168,10 @@ def fetch_bytes(url: str, *, backends: Optional[List[str]] = None,
                 timeout: int = 30, progress: Optional[bool] = None) -> AssetResult:
     """Fetch raw bytes for `url`, escalating through the unlock ladder."""
     progress = _progress_default(progress)
-    url = normalize(url)
+    try:
+        url = normalize(url)
+    except ValueError as e:
+        raise AssetError(url, [("normalize", str(e))]) from e
     order = list(backends or DEFAULT_ASSET_BACKENDS)
     if not jina_enabled():
         order = [b for b in order if b != "jina-html"]
@@ -412,7 +415,10 @@ def grab(page_url: str, out_dir: str, *,
     Returns the manifest dict.
     """
     progress = _progress_default(progress)
-    page_url = normalize(page_url)
+    try:
+        page_url = normalize(page_url)
+    except ValueError as e:
+        raise AssetError(page_url, [("normalize", str(e))]) from e
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 

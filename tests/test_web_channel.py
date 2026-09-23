@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
-"""WebChannel doctor probe must report stealth honestly."""
+"""WebChannel doctor probe must report stealth and Jina honestly."""
 
 import builtins
 import sys
 import types
 
-from searchts.channels.web import WebChannel, _stealth_installed
+from searchts.channels.web import WebChannel, _jina_probe, _stealth_installed
 
 
 def test_stealth_probe_warns_when_patchright_missing(monkeypatch):
+    monkeypatch.setattr("searchts.channels.web._jina_probe", lambda: ("ok", "ok"))
     real_import = builtins.__import__
 
     def _block_patchright(name, *args, **kwargs):
@@ -27,6 +28,7 @@ def test_stealth_probe_warns_when_patchright_missing(monkeypatch):
 
 
 def test_stealth_probe_ok_when_patchright_present(monkeypatch):
+    monkeypatch.setattr("searchts.channels.web._jina_probe", lambda: ("ok", "ok"))
     fake = types.ModuleType("patchright")
     monkeypatch.setitem(sys.modules, "patchright", fake)
     ch = WebChannel()
@@ -37,6 +39,7 @@ def test_stealth_probe_ok_when_patchright_present(monkeypatch):
 
 
 def test_stealth_probe_warns_when_import_raises(monkeypatch):
+    monkeypatch.setattr("searchts.channels.web._jina_probe", lambda: ("ok", "ok"))
     real_import = builtins.__import__
 
     def _boom(name, *args, **kwargs):
@@ -49,6 +52,28 @@ def test_stealth_probe_warns_when_import_raises(monkeypatch):
     status, message = WebChannel().check()
     assert status == "warn"
     assert "stealth-browser not installed" in message
+
+
+def test_jina_probe_maps_403(monkeypatch):
+    class _Resp:
+        status_code = 403
+
+    monkeypatch.setattr("searchts.unlocker.jina_enabled", lambda: True)
+    monkeypatch.setattr("requests.get", lambda *a, **k: _Resp())
+    assert _jina_probe() == ("blocked", "http-403")
+
+
+def test_doctor_jina_403_is_not_available(monkeypatch):
+    class _Resp:
+        status_code = 403
+
+    monkeypatch.setattr("searchts.unlocker.jina_enabled", lambda: True)
+    monkeypatch.setattr("requests.get", lambda *a, **k: _Resp())
+    monkeypatch.setitem(sys.modules, "patchright", types.ModuleType("patchright"))
+    status, message = WebChannel().check()
+    assert status == "warn"
+    assert "Jina Reader not available (http-403)" in message
+    assert "Jina Reader available" not in message
 
 
 def test_stealth_installed_helper_matches_import():
