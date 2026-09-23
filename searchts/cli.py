@@ -84,6 +84,11 @@ def _run():
     _ensure_utf8_console()
     from searchts.config import load_dotenv_if_available
     load_dotenv_if_available()
+    try:
+        from searchts.integrations.memory_rule import refresh_known_rules
+        refresh_known_rules()
+    except OSError:
+        pass
 
     parser = argparse.ArgumentParser(
         prog="searchts",

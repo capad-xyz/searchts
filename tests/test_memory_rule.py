@@ -1,9 +1,15 @@
 # -*- coding: utf-8 -*-
+import sys
+
+import pytest
+
 from searchts.integrations.memory_rule import (
     BEGIN,
+    OLD_RULES,
     RULE,
     apply_one,
     install_memory_rules,
+    refresh_known_rules,
 )
 
 
@@ -68,3 +74,59 @@ def test_appends_to_existing_file_without_block(tmp_path):
     text = path.read_text()
     assert text.startswith("# my prefs")
     assert BEGIN in text
+
+
+def test_known_old_is_the_403_sentence():
+    assert len(OLD_RULES) == 1
+    assert "bot-challenge" in OLD_RULES[0]
+    assert "Do not start with a plain fetch" not in OLD_RULES[0]
+
+
+def test_refresh_replaces_known_old_and_keeps_the_rest(tmp_path):
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    path = home / ".claude" / "CLAUDE.md"
+    path.write_text("# prefs\n\n" + OLD_RULES[0], encoding="utf-8")
+    actions = refresh_known_rules(home=home, log=lambda _: None)
+    text = path.read_text()
+    assert actions == [str(path)]
+    assert text.startswith("# prefs")
+    assert "Do not start with a plain fetch" in text
+    assert "bot-challenge" not in text
+
+
+def test_refresh_leaves_an_edit_and_does_not_create(tmp_path):
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    path = home / ".claude" / "CLAUDE.md"
+    edited = OLD_RULES[0].replace("thin/empty", "CHANGED")
+    path.write_text("# keep\n" + edited, encoding="utf-8")
+    assert refresh_known_rules(home=home, log=lambda _: None) == []
+    assert "CHANGED" in path.read_text()
+    assert not (home / ".cursor" / "rules" / "searchts.mdc").exists()
+
+
+def test_noninteractive_install_replaces_known_old(tmp_path):
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    path = home / ".claude" / "CLAUDE.md"
+    path.write_text("# prefs\n" + OLD_RULES[0], encoding="utf-8")
+    actions = install_memory_rules(home=home, interactive=False, log=lambda _: None)
+    assert actions == ["wrote"]
+    text = path.read_text()
+    assert text.startswith("# prefs")
+    assert "bot-challenge" not in text
+
+
+def test_cli_refreshes_before_the_command(monkeypatch):
+    import searchts.cli as cli
+
+    called = []
+    monkeypatch.setattr(
+        "searchts.integrations.memory_rule.refresh_known_rules",
+        lambda: called.append(True),
+    )
+    monkeypatch.setattr(sys, "argv", ["searchts", "--help"])
+    with pytest.raises(SystemExit):
+        cli._run()
+    assert called == [True]
