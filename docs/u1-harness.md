@@ -34,5 +34,8 @@ Host, model, and the tool calls in order. Quote the `read_url` arguments, or say
 | Date | Host | Model | Call order | Verdict |
 |---|---|---|---|---|
 | 2026-09-23 | Grok CLI, OCX. searchts MCP ready (`read_url` listed). P1.1 memory rule was in `user_rules` (`searchts:reach`). Not a clean MCP-only run. | `nous/poolside/laguna-s-2.1:free` | 1. `web_fetch` `https://www.linkedin.com/feed/` → HTTP 200, 1.9 KB login form. `read_url` never called. | **FAIL** |
+| 2026-09-23 | Grok CLI restarted. `searchts v0.10.1` from home. Skill **disabled**. MCP `searchts` ready. | `nous/poolside/laguna-s-2.1:free` | 1. `wmux ping` (not running). 2. `web_fetch` the feed → HTTP 200, 1.4 KB login form. `read_url` never called. Asked after, it said searchts was an external CLI, not a tool it already had. | **FAIL** |
 
-The reach rule says to call `read_url` after a 403, a challenge, or a thin page. This fetch was a 200 with a sign-in form, so the agent treated the login chrome as the page and stopped. That is the #22 satisfice, with the tool sitting right there.
+The reach rule says to call `read_url` after a 403, a challenge, or a thin page. A 200 sign-in form does not trip it. On the 0.10.1 rerun the model went further: it did not treat `read_url` as a tool already in the kit.
+
+Not this gate: OpenCode, skill **on**, called `searchts_read_url` first. curl_cffi said `login-wall`, Jina 403, stealth missing patchright. That is the skill path, and the wall was named honestly. It does not close U1.
