@@ -279,7 +279,7 @@ def test_curl_refuses_private_redirects_before_following(monkeypatch):
 
 
 def test_connection_pin_locks_a_public_address(monkeypatch):
-    from searchts.ssrf import connection_pin, chromium_pin_args
+    from searchts.ssrf import chromium_pin_args, connection_pin
 
     def _public(*args, **kwargs):
         return [(None, None, None, None, ("1.2.3.4", 443))]
