@@ -177,6 +177,21 @@ class TestDoctor:
         # Inactive optional channels should be summarized in one line
         assert "optional CLIs not present" in plain
 
+    def test_lock_note_lists_pids_and_does_not_kill(self):
+        csv = '"searchts.exe","4242","Console","1","20,000 K"\n"other.exe","9","Console","1","1 K"\n'
+        pids = doctor.windows_searchts_pids(runner=lambda: csv, platform="win32")
+        assert pids == [4242]
+        note = doctor.format_lock_note(pids)
+        assert "4242" in note
+        assert "does not kill" in note
+        assert doctor.windows_searchts_pids(platform="linux") == []
+        assert doctor.format_lock_note([]) == ""
+        report = doctor.format_report(
+            {"web": {"status": "ok", "name": "Web", "message": "ok", "tier": 0}},
+            lock_pids=[4242],
+        )
+        assert "4242" in report
+
 
 def test_stale_active_backend_does_not_leak_into_errored_result(monkeypatch):
     """A channel singleton's active_backend from a previous round must not leak into this round's errored result (found in Codex review)."""
