@@ -2,6 +2,14 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.10.1](https://github.com/capad-xyz/searchts/compare/v0.10.0...v0.10.1) (2026-09-23)
+
+
+### Fixed
+
+* pin DNS so a rebind cannot swap in a private address ([9c31105](https://github.com/capad-xyz/searchts/commit/9c311058ced9bd7b345bc8f87c20f8b2a0dc98ed))
+* refuse a redirect onto a private host ([b96f6ca](https://github.com/capad-xyz/searchts/commit/b96f6ca7503f03b1958aa503feed3cfdce755647))
+
 ## [0.10.0](https://github.com/capad-xyz/searchts/compare/v0.9.0...v0.10.0) (2026-09-23)
 
 
