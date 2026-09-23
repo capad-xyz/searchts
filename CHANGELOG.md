@@ -2,6 +2,22 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.10.0](https://github.com/capad-xyz/searchts/compare/v0.9.0...v0.10.0) (2026-09-23)
+
+
+### Added
+
+* fail-loud on 0.9.0 hammer top 5 (P1.4) ([75331ca](https://github.com/capad-xyz/searchts/commit/75331ca7053964d5761dec8bcf635e7b1c86e9d9))
+* Hare posts a GitHub Review like CodeRabbit ([f5c60df](https://github.com/capad-xyz/searchts/commit/f5c60dfeb6adf2612651a8d5d49030cfbb55053c))
+* stderr update nudge with 24h cache (F13) ([ab1c09d](https://github.com/capad-xyz/searchts/commit/ab1c09d050c257ad0e169c3b9fc50ee8560cc047))
+
+
+### Fixed
+
+* doctor JSON drops a dead Jina rung ([8330f95](https://github.com/capad-xyz/searchts/commit/8330f95541bea0544416782f0e303cf46c706493))
+* doctor probes Jina with the same client as read ([a2c378a](https://github.com/capad-xyz/searchts/commit/a2c378aa9f586363fa00b849ae3fd5844c22e6e7))
+* skip a second Hare Review on the same SHA ([a3a92f4](https://github.com/capad-xyz/searchts/commit/a3a92f4f9cc2e5e653feb14aee1a03e4dcae80c4))
+
 ## [0.9.0](https://github.com/capad-xyz/searchts/compare/v0.8.0...v0.9.0) (2026-09-21)
 
 
