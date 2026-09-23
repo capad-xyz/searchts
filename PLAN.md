@@ -265,7 +265,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills`. **Revisit Codex path:** measure demand first (no id until someone asks).
 - [x] **F8b** Install-copy leftovers: `llms.txt` / `docs/update.md` / `check-update` `_UPDATE_INSTRUCTIONS` match F8. No `main.zip`, no `search-twitter`, doctor is read-only. Did **not** rewrite contributor `pip install -e`. Extra-missing `pipx inject` skipped (hints still `pip install "searchts[extra]"` for venvs). **Revisit inject:** if pipx users miss the mcp extra.
 - [x] **F8c** Remaining 2025 copy: `docs/install.md`, `CLAUDE.md`, `searchts/guides/setup-*.md`, **`docs/troubleshooting.md`**. Same honesty as F8b.
-- [x] **F11** Windows: `pip install -e .` fails while `searchts.exe` is running (MCP `serve` per IDE holds the shim — kill PIDs or `--force-reinstall`). **Do not** add `--single-instance` / a machine-wide mutex (breaks one stdio server per host). RUNBOOK gotcha, 2026-09-23. Not a feature.
+- [ ] **F11** Windows: `pip install -e .` still fails while `searchts.exe` is running. RUNBOOK has the workaround (close the MCP session, or `--force-reinstall`). **Not a fix.** **Do not** add `--single-instance` / a machine-wide mutex. **Revisit:** only if a shim can be replaced without a machine-wide lock.
 - [x] **F17** Subtitle-first: `--sub-lang en,en-US,en-GB,en-orig` (not `en.*`); `--ignore-errors`; salvage a written `.vtt` if yt-dlp still exits nonzero. **Tess 2026-09-20 / #151.**
 - [x] **F12** Wall playbook (docs): **P3.11** (done) → **F1** (persistent profile, code next) → **`--human` / F7** (extras only). Never **N1** / **N3** / **N7**. README unlocker section. Not a Reddit-green 0.8.1.
 - [x] **F13** Optional update nudge: cached ~24h GitHub check, **stderr only**, skip `mcp serve` / pipes / `check-update`, `SEARCHTS_NO_UPDATE_CHECK=1`. Not bundled with F8b.
@@ -379,3 +379,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-23 | **P3.6b-rebind** pin curl and Chromium to the checked address. |
 | 2026-09-23 | **F11** RUNBOOK: Windows editable install fails while `searchts.exe` is held. No mutex. |
 | 2026-09-23 | **U1** protocol written. Not closed. A real MCP-only session still has to be logged. |
+| 2026-09-23 | **F11** note is not a fix. Install still fails while `searchts.exe` is held. Box reopened. |
