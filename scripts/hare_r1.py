@@ -473,6 +473,29 @@ def deliver_review(
             return "needed"
 
 
+def already_reviewed(owner: str, repo: str, n: int, token: str, sha: str) -> bool:
+    """True if this SHA already has a Hare Review. /hare will not double-post."""
+    if not sha:
+        return False
+    try:
+        data = github_api(
+            "GET",
+            f"/repos/{owner}/{repo}/pulls/{n}/reviews?per_page=100",
+            token,
+        )
+    except RuntimeError:
+        return False
+    rows = data if isinstance(data, list) else []
+    for rev in rows:
+        if not isinstance(rev, dict):
+            continue
+        if str(rev.get("commit_id") or "") != sha:
+            continue
+        if TOKEN in str(rev.get("body") or ""):
+            return True
+    return False
+
+
 def run() -> int:
     token = _env("GITHUB_TOKEN") or _env("GH_TOKEN")
     repo_full = _env("GITHUB_REPOSITORY")
@@ -530,6 +553,9 @@ def _hare_once(
 
     pr_data = github_api("GET", f"/repos/{owner}/{repo}/pulls/{n}", token)
     sha = sha or pr_data.get("head", {}).get("sha") or ""
+    if already_reviewed(owner, repo, n, token, sha):
+        print(f"hare skip: review already on {sha[:12]}")
+        return 0
     title = pr_data.get("title") or ""
     body = pr_data.get("body") or ""
     diff = github_api(
