@@ -7,6 +7,13 @@ from searchts.integrations.memory_rule import (
 )
 
 
+def test_rule_calls_read_url_before_a_plain_fetch():
+    assert "call the searchts MCP tool `read_url`" in RULE
+    assert "first" in RULE
+    assert "sign-in" in RULE
+    assert "Do not start with a plain fetch." in RULE
+
+
 def test_writes_claude_and_cursor_when_detected(tmp_path):
     home = tmp_path / "home"
     (home / ".claude").mkdir(parents=True)

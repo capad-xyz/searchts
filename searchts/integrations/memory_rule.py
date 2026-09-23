@@ -15,9 +15,11 @@ BEGIN = "<!-- searchts:reach -->"
 END = "<!-- /searchts:reach -->"
 
 RULE = """<!-- searchts:reach -->
-When a page fetch returns 403, 429, a bot-challenge, or thin/empty content:
-use the searchts MCP tool `read_url`, or run `searchts read <url>`.
-Do not answer from the blocked snippet. Do not skip the URL.
+When the user asks what a URL says, call the searchts MCP tool `read_url`
+(or run `searchts read <url>`) first. Do not start with a plain fetch.
+A 200 that is a sign-in form, a join page, or a bot check is not the page.
+A 403, 429, challenge, or thin/empty body is not the page either.
+Do not answer from the login chrome or from a snippet. Do not skip the URL.
 <!-- /searchts:reach -->
 """
 
