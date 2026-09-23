@@ -2,9 +2,11 @@
 """Web — any URL via an escalating open-source unlocker.
 
 Ladder (see searchts.unlocker): curl_cffi -> Jina Reader -> stealth-browser.
-curl_cffi is always importable; Jina is probed live (403 ≠ available).
+curl_cffi is always importable; Jina is probed with the same client as read.
 stealth-browser needs the optional ``searchts[browser]`` extra.
 """
+
+import urllib.error
 
 from .. import unlocker
 from .base import Channel
@@ -26,25 +28,24 @@ def _stealth_installed() -> bool:
 
 
 def _jina_probe() -> tuple[str, str]:
-    """Live probe of r.jina.ai. Returns (ok|off|blocked, detail).
+    """Probe Jina with the same client ``read`` uses (``unlocker._fetch_jina``).
 
-    Doctor used to print "Jina Reader available" without a request. A 403
-    means the rung is not available (P1.4).
+    A separate ``requests`` call with a doctor User-Agent can get 200 while
+    the real rung gets 403. Doctor must not call Jina available in that case.
     """
     if not unlocker.jina_enabled():
         return "off", "disabled"
     try:
-        import requests
-        r = requests.get(
-            "https://r.jina.ai/https://example.com/",
-            timeout=8,
-            headers={"User-Agent": "searchts-doctor"},
+        status, _body, _final, _headers = unlocker._fetch_jina(
+            "https://example.com/", timeout=8
         )
+    except urllib.error.HTTPError as e:
+        return "blocked", f"http-{e.code}"
     except Exception as e:  # noqa: BLE001
         return "blocked", f"probe failed ({type(e).__name__})"
-    if r.status_code == 200:
+    if status == 200:
         return "ok", "ok"
-    return "blocked", f"http-{r.status_code}"
+    return "blocked", f"http-{status}"
 
 
 class WebChannel(Channel):
