@@ -52,7 +52,7 @@ Hare posts **one GitHub Review** (CodeRabbit / Macroscope shaped). Author is the
 <!-- searchts-r1-review -->
 ```
 
-Then `**ship|hold** · \`model\` · effort low|medium|high` and the findings table. Shows on the Reviews tab as `searchts-hare[bot] reviewed`.
+Then `**ship|hold** · \`model\` · effort low|medium|high`, one sentence of what the diff does, and the findings table. Shows on the Reviews tab as `searchts-hare[bot] reviewed`.
 
 2. **Inline on Files changed: real *and* skip.** Same review's `comments[]` = `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines 422: table only, no bubble.
 
@@ -71,12 +71,14 @@ Then `**ship|hold** · \`model\` · effort low|medium|high` and the findings tab
 
 4. **Later SHA of the same PR (R1d):** post a **new Review**. Matcher = **latest** token. Do not edit the old table in place. Resolve threads whose finding is gone (outdated *and* not in the new diff). New bubbles only for what is still true. Do not delete old comments.
 
-Zero rows → review body still posts (no inlines).
+Zero rows is only ok when the diff has nothing to question. The sentence is still required. A nit is a **skip** row, not an empty table. Unsure of the line: still write the row. A bubble needs a line that is in the diff. Do not drop a **real** issue to keep the table empty.
 
 ```markdown
 <!-- searchts-r1-review -->
 
 **ship** · `nous:poolside/laguna-s-2.1` · effort low
+
+One sentence of what the diff does. Not the PR title.
 
 | Sev | File:line | Issue | Fix? |
 |---|---|---|---|

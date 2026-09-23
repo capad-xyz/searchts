@@ -131,15 +131,28 @@ def test_extract_json_from_fence() -> None:
 
 
 def test_comment_has_token_and_no_em_dash() -> None:
-    body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [])
+    body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [], "Adds a log row.")
     assert body.startswith(hare_r1.TOKEN)
     assert "\u2014" not in body
     assert "**ship**" in body
     assert "`nous:x`" in body
+    assert "Adds a log row." in body
     assert "**Name**" not in body
     assert "**Purpose**" not in body
     assert "Hare · R1" not in body
     assert "| **Intent** |" not in body
+
+
+def test_missing_summary_is_visible() -> None:
+    body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [])
+    assert "(model did not say what changed)" in body
+
+
+def test_prompt_requires_a_summary_and_skip_rows() -> None:
+    assert "summary is required" in hare_r1.SYSTEM
+    assert "Do not return an empty findings list" in hare_r1.SYSTEM
+    assert "Zero findings is allowed" not in hare_r1.SYSTEM
+    assert "omit the finding" not in hare_r1.SYSTEM
 
 
 def test_bubble_is_token_plus_label() -> None:

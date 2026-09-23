@@ -383,3 +383,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-23 | **F11** note is not a fix. Install still fails while `searchts.exe` is held. Box reopened. |
 | 2026-09-23 | **F11** no `searchts mcp stop`. It would kill every host. Doctor may later print the PIDs. Do not auto-kill. |
 | 2026-09-23 | **U1** rule path: with the new paragraph in the rules, Laguna called `read_url` first. Login-wall was honest. Box stays open. MCP-description-only is still untested. |
+| 2026-09-23 | **Hare** must say what the diff does. Nits are **skip** rows. An empty table is not a review. Skip still does not hold. |
