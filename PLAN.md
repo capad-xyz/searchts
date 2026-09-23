@@ -6,7 +6,7 @@
 
 **Parked work:** If we skip something on purpose and it is still worth doing, it gets a PLAN id (`P*` / `F*` / `U*` / `N*` / `R*`) and a **revisit** (week / trigger). Chat is not the record. If it is not worth doing, put it in **N** (never) instead of “we’ll remember.” **Roles:** [`NAMES.md`](NAMES.md).
 
-**Hard non-goals:** plugin/connector framework, paid-proxy defaults, hosted SaaS, keyed backends as defaults, channel-based `read_url` routing, **hosted** MCP URL (**N2**; localhost HTTP is **F9**), MCP resources/prompts before tools are trusted.
+**Hard non-goals:** plugin/connector framework, paid-proxy defaults, hosted SaaS before **F18**, keyed backends as defaults, channel-based `read_url` routing, a public URL for the free CLI (**N2**; localhost HTTP is **F9**; a paid hosted `read` is **F18**), MCP resources/prompts before tools are trusted.
 
 ---
 
@@ -272,11 +272,12 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 - [ ] **F14** Opt-in Solari (cloud Playwright) **only when local `[browser]`/patchright is missing**. `SOLARI_API_KEY`. Never default (**N3**). 2026-09-02 cookbook: Reddit/LinkedIn still walls. Artifact: https://github.com/capad-xyz/solari-cookbook/tree/main/examples/agent-read . **Article is live.** **Revisit:** if Harry replies, or keep-gate = would pay Starter to skip patchright (not Reddit green).
 - [ ] **F15** Hare as a **review product** (other repos install an App, billed, CodeRabbit-shaped). **Different intent from searchts.** Own thread, own glossary: Model = provider + API model, not ocx / cheap-scout / this chat. R1d refresh **and** Checks-before-Intent (Check Runs API; never ship a red required job) or the product looks like #145. Do not mix sprints or tokens with the unlocker. **Revisit:** only as its own thread, after R1c has been boring. **Should-have (later):** incremental/"quick" vs full/"deep"; `@mention` doorbell like `@coderabbitai review`; paid failover across providers. Not R1c.
 - [ ] **F16** Disposable remote workspace: GitHub Actions (or similar) as a **harness box** (shell, git, network) without shipping an agent. Different product from Hare and from searchts. **Revisit:** after F15 is a real question, not a side quest.
+- [ ] **F18** Paid searchts. **Hosted `read` first.** The free CLI stays free and keyless. Walls are a second product and stay **N1** until a wall pass is real. **Not this week. No price in this file.** **Revisit:** when the free tool is something you would hand a stranger and it does what it claims (install, a real page, fail-loud where it cannot). Then design the hosted shape. Innovate on top of a product that already works. Not **F15**.
 
 ### N — Not planned (explicit)
 
 - **N1** Paid residential proxy pools as defaults
-- **N2** Hosted searchts service
+- **N2** A public hosted URL for the free CLI. A paid hosted `read` is **F18**, not a default, and not before its trigger.
 - **N3** Keyed commercial unlockers as default backends
 - **N4** Generic plugin/connector architecture for platforms
 - **N5** Routing `github.com` / Twitter through upstream CLIs inside `read_url`
@@ -374,3 +375,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-23 | **0.10.0** on PyPI. No post. Fail-loud slice is in the wheel. P1.4 stays open for the #22 harness (**U1**). |
 | 2026-09-23 | **P3.6b-hop** started. F9 already shipped, so the redirect revisit fired. Same-host DNS rebinding stays open. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |
+| 2026-09-23 | **F18** Paid searchts is hosted `read` first. Free CLI stays. Walls stay N1 until a pass is real. No price. Not this week. |
