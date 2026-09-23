@@ -382,3 +382,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-23 | **U1** first session: FAIL. Laguna used `web_fetch`, got a 200 login form, never called `read_url`. Box stays open. |
 | 2026-09-23 | **F11** note is not a fix. Install still fails while `searchts.exe` is held. Box reopened. |
 | 2026-09-23 | **F11** no `searchts mcp stop`. It would kill every host. Doctor may later print the PIDs. Do not auto-kill. |
+| 2026-09-23 | **U1** rule path: with the new paragraph in the rules, Laguna called `read_url` first. Login-wall was honest. Box stays open. MCP-description-only is still untested. |
