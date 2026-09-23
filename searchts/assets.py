@@ -76,15 +76,17 @@ class AssetError(Exception):
 
 def _fetch_bytes_curl(url: str, timeout: int) -> AssetResult:
     from curl_cffi import requests as cr
+    from searchts.ssrf import curl_safe_redirects
 
     r = cr.get(url, impersonate="chrome", timeout=timeout,
+               allow_redirects=curl_safe_redirects(),
                headers={"Accept-Language": "en-US,en;q=0.9"})
-    if r.status_code >= 400:
-        raise AssetError(url, [("curl_cffi", f"http-{r.status_code}")])
     final = str(getattr(r, "url", None) or url)
     hop = private_hop(url, final)
     if hop:
         raise AssetError(url, [("curl_cffi", hop)])
+    if r.status_code >= 400:
+        raise AssetError(url, [("curl_cffi", f"http-{r.status_code}")])
     ct = r.headers.get("content-type", "") or ""
     content = r.content or b""
     # Only HTML/text can be a challenge page; binary 200s are real bytes.
@@ -116,6 +118,8 @@ def _fetch_bytes_stealth(url: str, timeout: int) -> AssetResult:
         try:
             ctx = browser.new_context(user_agent=_UA_REAL, locale="en-US",
                                       viewport={"width": 1280, "height": 800})
+            from searchts.ssrf import guard_browser_page
+            guard_browser_page(ctx, url)
             resp = ctx.request.get(url, timeout=ms)
             if resp.ok:
                 body = resp.body()

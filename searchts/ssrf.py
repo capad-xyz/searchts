@@ -193,3 +193,30 @@ def private_hop(start: str, final: str) -> Optional[str]:
         return None
     why = blocked[7:] if blocked.startswith("Error: ") else blocked
     return f"private-redirect: {why}"
+
+
+def curl_safe_redirects():
+    """Follow public redirects. Refuse a hop onto a private address.
+
+    ``CurlFollow.SAFE`` is in the pinned curl_cffi (0.16). If an older wheel
+    is installed, fall back to following everything; ``private_hop`` still
+    drops a final URL that landed on a private host.
+    """
+    try:
+        from curl_cffi.const import CurlFollow
+    except Exception:  # noqa: BLE001 - optional extra
+        return True
+    return CurlFollow.SAFE
+
+
+def guard_browser_page(page, start: str) -> None:
+    """Abort a browser request whose host is a private hop away from `start`."""
+
+    def _handle(route) -> None:
+        target = getattr(getattr(route, "request", None), "url", "") or ""
+        if private_hop(start, target):
+            route.abort("blockedbyclient")
+        else:
+            route.continue_()
+
+    page.route("**/*", _handle) if hasattr(page, "route") else None
