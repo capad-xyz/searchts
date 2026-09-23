@@ -76,6 +76,7 @@ class AssetError(Exception):
 
 def _fetch_bytes_curl(url: str, timeout: int) -> AssetResult:
     from curl_cffi import requests as cr
+
     from searchts.ssrf import curl_safe_redirects
 
     r = cr.get(url, impersonate="chrome", timeout=timeout,

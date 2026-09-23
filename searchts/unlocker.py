@@ -552,6 +552,7 @@ def _normalize_headers(headers: Mapping[str, object]) -> Dict[str, str]:
 
 def _fetch_curl_cffi(url: str, timeout: int = 30) -> Tuple[int, str, str, Dict[str, str]]:
     from curl_cffi import requests as cr
+
     from searchts.ssrf import curl_safe_redirects
     r = cr.get(url, impersonate="chrome", timeout=timeout,
                allow_redirects=curl_safe_redirects(),
