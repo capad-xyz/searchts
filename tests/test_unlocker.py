@@ -221,6 +221,23 @@ def test_fetch_clean_curl_win(monkeypatch, stub_extract):
     assert r.fetched_at.endswith("Z")
 
 
+def test_fetch_drops_a_redirect_onto_loopback(monkeypatch, stub_extract):
+    from searchts.ssrf import private_hop
+
+    assert private_hop("https://evil.example/a", "https://evil.example/b") is None
+    assert private_hop("https://evil.example/a", "http://127.0.0.1/secret")
+    monkeypatch.setattr(unlocker, "jina_enabled", lambda: False)
+    _set(
+        monkeypatch,
+        curl=(200, "P" * 800, "http://127.0.0.1/secret", {}),
+        stealth=(200, "P" * 800, "http://127.0.0.1/secret", {}),
+    )
+    with pytest.raises(UnlockerError) as ei:
+        fetch("https://evil.example/a")
+    assert "private-redirect" in str(ei.value)
+    assert "127.0.0.1" in str(ei.value)
+
+
 @pytest.mark.parametrize(
     ("backend", "stub_name"),
     [

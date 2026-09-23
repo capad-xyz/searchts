@@ -176,3 +176,20 @@ def guard_mcp_url(url: str, *, resolve_dns: bool = True) -> Optional[str]:
                 f"('{addr}') and is not allowed."
             )
     return None
+
+
+def private_hop(start: str, final: str) -> Optional[str]:
+    """Refuse a redirect onto a different host that is loopback, private, or metadata.
+
+    Same host is allowed. A public URL that 302s onto ``127.0.0.1`` is not.
+    Same-host DNS rebinding stays **P3.6b**.
+    """
+    start_host = (urllib.parse.urlparse(start).hostname or "").lower().rstrip(".")
+    final_host = (urllib.parse.urlparse(final or "").hostname or "").lower().rstrip(".")
+    if not final_host or final_host == start_host:
+        return None
+    blocked = guard_mcp_url(final)
+    if not blocked:
+        return None
+    why = blocked[7:] if blocked.startswith("Error: ") else blocked
+    return f"private-redirect: {why}"

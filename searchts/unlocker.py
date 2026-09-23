@@ -947,7 +947,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     except ValueError as e:
         raise UnlockerError(url, [("normalize", str(e))]) from e
 
-    from searchts.ssrf import guard_mcp_url
+    from searchts.ssrf import guard_mcp_url, private_hop
     blocked = guard_mcp_url(url, resolve_dns=True)
     if blocked:
         why = blocked[7:] if blocked.startswith("Error: ") else blocked
@@ -1020,17 +1020,30 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             headers: Dict[str, str] = {}
             if backend == "curl_cffi":
                 status, body, final_url, headers = _fetch_curl_cffi(url)
-                reason = looks_blocked(status, body, headers)
-                if reason:
-                    attempts.append((backend, reason))
-                    _tick(f"  {backend}: {reason}")
-                    if backend == remembered:
-                        unpin(domain)
-                        remembered = None
-                    continue
-                text = html_to_text(body, url)
             elif backend == "Jina Reader":
                 status, body, final_url, headers = _fetch_jina(url)
+            elif backend == "stealth-browser":
+                status, body, final_url, headers = _fetch_stealth(
+                    url, progress=progress
+                )
+            else:
+                attempts.append((backend, "unknown-backend"))
+                _tick(f"  {backend}: unknown-backend")
+                if backend == remembered:
+                    unpin(domain)
+                    remembered = None
+                continue
+
+            hop = private_hop(url, final_url)
+            if hop:
+                attempts.append((backend, hop))
+                _tick(f"  {backend}: {hop}")
+                if backend == remembered:
+                    unpin(domain)
+                    remembered = None
+                continue
+
+            if backend == "Jina Reader":
                 reason = looks_blocked(status, body, headers)
                 if reason:
                     attempts.append((backend, reason))
@@ -1040,10 +1053,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         remembered = None
                     continue
                 text = body  # Jina already returns markdown
-            elif backend == "stealth-browser":
-                status, body, final_url, headers = _fetch_stealth(
-                    url, progress=progress
-                )
+            else:
                 reason = looks_blocked(status, body, headers)
                 if reason:
                     attempts.append((backend, reason))
@@ -1053,13 +1063,6 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         remembered = None
                     continue
                 text = html_to_text(body, url)
-            else:
-                attempts.append((backend, "unknown-backend"))
-                _tick(f"  {backend}: unknown-backend")
-                if backend == remembered:
-                    unpin(domain)
-                    remembered = None
-                continue
 
             text = text or ""
             # Login-wall on the extract only (raw HTML often has a sign-in modal).

@@ -73,7 +73,9 @@
 - [x] **P3.4** UA: remove hardcoded Chrome 126; single `_UA_REAL` in unlocker, imported elsewhere; updated to current stable Chrome 152
 - [x] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
 - [x] **P3.6** SSRF for **MCP only** (first layer): reject `file://`, `data:`, loopback, link-local, RFC1918, IPv6 ULA (`fc00::/7`), cloud metadata IPs; CLI stays unrestricted. Guard at MCP URL tools only — not the fetch ladder. *#105; hop checks are P3.6b.*
-- [ ] **P3.6b** Redirect / DNS-rebinding (follow-up, **not this sprint**): validate each connected destination and redirect target so `curl_cffi` / urllib / stealth `page.goto` cannot follow a public URL into RFC1918/loopback/metadata. Touches the unlocker ladder; keep CLI unrestricted for humans. Do **not** fold into P3.6. Distinct from **U5**. **Revisit:** when **F9** localhost HTTP is real, or if someone files an SSRF issue.
+- [ ] **P3.6b** Redirect / DNS-rebinding (follow-up): validate each redirect target so `curl_cffi` / stealth cannot follow a public URL into RFC1918/loopback/metadata. Distinct from **U5**.
+  - [x] **P3.6b-hop** different-host redirect onto a private target is a failed rung (`private-redirect`), not a page. Direct same-host loopback stays whatever the start-url guard already does.
+  - [ ] **P3.6b-rebind** same-host DNS rebinding (first answer public, later answer private). Not the hop check.
 - [x] **P3.7** Walled scorecard: public suite of real walls; publish pass *rate*; smoke suite stays separate ([#111](https://github.com/capad-xyz/searchts/pull/111))
 - [x] **P3.7b** Login-shell honesty: HTTP 200 Sign in / Join now extracts (LinkedIn feed login chrome) fail as `login-wall`, not a scorecard pass. Not a ladder upgrade. *Live 2026-08-28: `/feed/` → `curl_cffi: login-wall`; Jina 403; stealth `login-wall`.*
 - [x] **P3.11** Stealth `page.content()` navigation race: wait for settled load, retry `content()` on Playwright's "page is navigating", then fail loud (`UnlockerError`). Not a Reddit bypass — the race is our call during a redirect.
@@ -369,4 +371,6 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-23 | **P1.4 fail-loud:** YouTube exact id; empty transcript errors; doctor Jina 403; no `https://` rewrite of `file://`/`data:`; CLI loopback refused. |
 | 2026-09-23 | **P1.4 doctor JSON:** `backends` is the live probe, not the candidate ladder. SSRF text no longer says "via MCP" on CLI. |
 | 2026-09-23 | **P1.4 Jina probe:** doctor calls `_fetch_jina` (same client as `read`). A 200 from a different User-Agent is not "available". |
+| 2026-09-23 | **0.10.0** on PyPI. No post. Fail-loud slice is in the wheel. P1.4 stays open for the #22 harness (**U1**). |
+| 2026-09-23 | **P3.6b-hop** started. F9 already shipped, so the redirect revisit fired. Same-host DNS rebinding stays open. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |
