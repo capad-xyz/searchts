@@ -48,6 +48,7 @@
 **Verified gap + behavioral hypothesis (#22)**
 
 - [x] **P1.1** Install path writes short memory rule (~8 lines): on 403/429/challenge/thin page → `read_url` / `searchts read`; do not satisfice on a snippet. Targets: Claude Code user memory + Cursor rule if detected. **Prompt before overwrite.** — #86
+- [x] **P1.1b** A later `searchts` command replaces that block only when it is an older official copy. An edit is left alone. A missing block is not created. No Grok writer.
 - [x] **P1.2** MCP tool descriptions: explicit retry-via-`read_url` language — #88
 - [x] **P1.2b** Skill YAML `description` ≤ 1024 (Agent Skills hosts skip the skill otherwise) — #89
 - [x] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *zCode skill-off: agents called `read_url` first. **X2** posted 2026-08-27 (`@aadarsh_io`). Gate closed.*
@@ -384,3 +385,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-23 | **F11** no `searchts mcp stop`. It would kill every host. Doctor may later print the PIDs. Do not auto-kill. |
 | 2026-09-23 | **U1** rule path: with the new paragraph in the rules, Laguna called `read_url` first. Login-wall was honest. Box stays open. MCP-description-only is still untested. |
 | 2026-09-23 | **Hare** must say what the diff does. Nits are **skip** rows. An empty table is not a review. Skip still does not hold. |
+| 2026-09-23 | **P1.1b** `searchts` replaces a reach block only when it is the old official 403 sentence. Edits stay. Missing files stay missing. |
