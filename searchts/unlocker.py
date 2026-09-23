@@ -553,9 +553,10 @@ def _normalize_headers(headers: Mapping[str, object]) -> Dict[str, str]:
 def _fetch_curl_cffi(url: str, timeout: int = 30) -> Tuple[int, str, str, Dict[str, str]]:
     from curl_cffi import requests as cr
 
-    from searchts.ssrf import curl_safe_redirects
+    from searchts.ssrf import curl_resolve_options, curl_safe_redirects
     r = cr.get(url, impersonate="chrome", timeout=timeout,
                allow_redirects=curl_safe_redirects(),
+               curl_options=curl_resolve_options(url),
                headers={"Accept-Language": "en-US,en;q=0.9"})
     final = str(getattr(r, "url", None) or url)
     return r.status_code, r.text, final, _normalize_headers(dict(r.headers.items()))
@@ -760,17 +761,20 @@ def _fetch_stealth_impl(
         ) from e
 
     ms = int(timeout * 1000)
+    from searchts.ssrf import chromium_pin_args
+    pin_args = chromium_pin_args(url)
     with sync_playwright() as p:
         persistent = _use_persistent_profile()
         if persistent:
             profile_dir = _profile_path()
             browser = p.chromium.launch_persistent_context(
                 str(profile_dir), headless=True,
+                args=pin_args,
                 user_agent=_UA_REAL, locale="en-US",
                 viewport={"width": 1280, "height": 800},
             )
         else:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=True, args=pin_args)
         try:
             if persistent:
                 page = browser.new_page()
@@ -842,17 +846,20 @@ def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str,
     )
 
     deadline_ms = int(timeout * 1000)
+    from searchts.ssrf import chromium_pin_args
+    pin_args = chromium_pin_args(url)
     with sync_playwright() as p:
         persistent = _use_persistent_profile()
         if persistent:
             profile_dir = _profile_path()
             browser = p.chromium.launch_persistent_context(
                 str(profile_dir), headless=False,
+                args=pin_args,
                 user_agent=_UA_REAL, locale="en-US",
                 viewport={"width": 1280, "height": 800},
             )
         else:
-            browser = p.chromium.launch(headless=False)
+            browser = p.chromium.launch(headless=False, args=pin_args)
         try:
             if persistent:
                 page = browser.new_page()

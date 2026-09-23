@@ -73,9 +73,9 @@
 - [x] **P3.4** UA: remove hardcoded Chrome 126; single `_UA_REAL` in unlocker, imported elsewhere; updated to current stable Chrome 152
 - [x] **P3.5** Jina: remain default; document third-party relay; `SEARCHTS_NO_JINA=1` / config `jina: false`
 - [x] **P3.6** SSRF for **MCP only** (first layer): reject `file://`, `data:`, loopback, link-local, RFC1918, IPv6 ULA (`fc00::/7`), cloud metadata IPs; CLI stays unrestricted. Guard at MCP URL tools only — not the fetch ladder. *#105; hop checks are P3.6b.*
-- [ ] **P3.6b** Redirect / DNS-rebinding (follow-up): validate each redirect target so `curl_cffi` / stealth cannot follow a public URL into RFC1918/loopback/metadata. Distinct from **U5**.
+- [x] **P3.6b** Redirect / DNS-rebinding: a public URL must not be followed onto a private host, and a same-host DNS swap must not either. Distinct from **U5**.
   - [x] **P3.6b-hop** different-host redirect onto a private target is a failed rung (`private-redirect`), not a page. curl_cffi uses `CurlFollow.SAFE` (refuse the hop before following it). Browser rungs abort that request. The human rung is checked too. Direct same-host loopback stays whatever the start-url guard already does.
-  - [ ] **P3.6b-rebind** same-host DNS rebinding (first answer public, later answer private). Not the hop check.
+  - [x] **P3.6b-rebind** same-host DNS rebinding. curl and Chromium are pinned to the address we just checked. A later answer of `127.0.0.1` is not what they connect to. A different public hostname on a redirect is still the hop check, not this pin.
 - [x] **P3.7** Walled scorecard: public suite of real walls; publish pass *rate*; smoke suite stays separate ([#111](https://github.com/capad-xyz/searchts/pull/111))
 - [x] **P3.7b** Login-shell honesty: HTTP 200 Sign in / Join now extracts (LinkedIn feed login chrome) fail as `login-wall`, not a scorecard pass. Not a ladder upgrade. *Live 2026-08-28: `/feed/` → `curl_cffi: login-wall`; Jina 403; stealth `login-wall`.*
 - [x] **P3.11** Stealth `page.content()` navigation race: wait for settled load, retry `content()` on Playwright's "page is navigating", then fail loud (`UnlockerError`). Not a Reddit bypass — the race is our call during a redirect.
@@ -376,3 +376,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-23 | **P3.6b-hop** started. F9 already shipped, so the redirect revisit fired. Same-host DNS rebinding stays open. |
 | 2026-09-06 | **F5b rewrite**: HTML listing/thread (www/old/no-www, hot/new/top/rising, comments) try public `.json`, then fail-open. Caller passes a page. |
 | 2026-09-23 | **F18** Paid searchts is hosted `read` first. Free CLI stays. Walls stay N1 until a pass is real. No price. Not this week. |
+| 2026-09-23 | **P3.6b-rebind** pin curl and Chromium to the checked address. |

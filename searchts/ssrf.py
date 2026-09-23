@@ -182,7 +182,7 @@ def private_hop(start: str, final: str) -> Optional[str]:
     """Refuse a redirect onto a different host that is loopback, private, or metadata.
 
     Same host is allowed. A public URL that 302s onto ``127.0.0.1`` is not.
-    Same-host DNS rebinding stays **P3.6b**.
+    Same-host DNS rebinding is ``connection_pin``, not this check.
     """
     start_host = (urllib.parse.urlparse(start).hostname or "").lower().rstrip(".")
     final_host = (urllib.parse.urlparse(final or "").hostname or "").lower().rstrip(".")
@@ -220,3 +220,71 @@ def guard_browser_page(page, start: str) -> None:
             route.continue_()
 
     page.route("**/*", _handle) if hasattr(page, "route") else None
+
+
+def connection_pin(url: str) -> tuple[Optional[str], Optional[str]]:
+    """Pin a hostname to the address we just checked.
+
+    Returns ``(curl_resolve_entry, error)``. An IP literal needs no pin.
+    If any answer is loopback, private, or metadata, ``error`` is set and
+    the caller must not connect. A later DNS answer cannot swap in
+    ``127.0.0.1`` once curl or Chromium is pinned to this address.
+    """
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    if not host:
+        return None, None
+    try:
+        ipaddress.ip_address(host)
+        return None, None
+    except ValueError:
+        pass
+    port = parsed.port or (443 if (parsed.scheme or "").lower() == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(host, port)
+    except (socket.gaierror, UnicodeError, OSError, ValueError):
+        return None, None
+    chosen: Optional[str] = None
+    for info in infos:
+        sockaddr = info[4] if info and len(info) > 4 else None
+        addr = sockaddr[0] if sockaddr else None
+        if not isinstance(addr, str):
+            continue
+        reason = _classify_host(addr)
+        if reason is not None:
+            return None, (
+                f"private-rebind: '{host}' resolves to {reason} ('{addr}')"
+            )
+        if chosen is None:
+            chosen = addr
+    if chosen is None:
+        return None, None
+    literal = f"[{chosen}]" if ":" in chosen else chosen
+    return f"{host}:{port}:{literal}", None
+
+
+def curl_resolve_options(url: str) -> dict:
+    """curl_cffi ``curl_options`` that pin DNS, or ``{}`` when no pin applies.
+
+    Raises ``RuntimeError`` when the fresh lookup is a private address.
+    """
+    entry, err = connection_pin(url)
+    if err:
+        raise RuntimeError(err)
+    if not entry:
+        return {}
+    from curl_cffi import CurlOpt
+
+    return {CurlOpt.RESOLVE: [entry]}
+
+
+def chromium_pin_args(url: str) -> list[str]:
+    """Chromium ``--host-resolver-rules`` for the same pin. Raises on rebind."""
+    entry, err = connection_pin(url)
+    if err:
+        raise RuntimeError(err)
+    if not entry:
+        return []
+    host, _port, ip = entry.split(":", 2)
+    ip = ip[1:-1] if ip.startswith("[") and ip.endswith("]") else ip
+    return [f"--host-resolver-rules=MAP {host} {ip}"]
