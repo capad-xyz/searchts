@@ -432,6 +432,12 @@ There is no web deploy target. `searchts` ships as a Python package.
   `-e` install predates several dependency changes. Re-run
   `pip install -c constraints.txt -e ".[dev]"` after pulling; do not trust
   `pip show` for the version.
+- **Windows: `pip install -e .` fails while `searchts.exe` is running.** An IDE
+  MCP session holds `searchts.exe` (one `searchts mcp serve` per host). The
+  installer cannot replace the shim and exits with a permission error. Close
+  those sessions, or run `pip install --force-reinstall -e .`. Do **not** add a
+  `--single-instance` mutex. One stdio server per host is the design. Not a bug
+  to "fix" in code.
 - **`scratch/` is a local-only landmine.** It is gitignored, contains stale test
   files importing the pre-fork `agent_reach` module, and bare `pytest` collects
   it. Always `pytest tests/`.
