@@ -2,6 +2,21 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.11.0](https://github.com/capad-xyz/searchts/compare/v0.10.1...v0.11.0) (2026-09-24)
+
+
+### Added
+
+* send the reach paragraph as MCP instructions ([#182](https://github.com/capad-xyz/searchts/issues/182)) ([a9d9210](https://github.com/capad-xyz/searchts/commit/a9d921036c54a9396a4e71ded419e6f0f9203fc6))
+
+
+### Fixed
+
+* call read_url first, a login form is not the page ([#173](https://github.com/capad-xyz/searchts/issues/173)) ([e897649](https://github.com/capad-xyz/searchts/commit/e897649b3b0128cd1c12f834b31ae0d9b3e0dde5))
+* doctor names the PIDs holding searchts.exe ([#179](https://github.com/capad-xyz/searchts/issues/179)) ([81b9c86](https://github.com/capad-xyz/searchts/commit/81b9c86e31e6efec7deb8ebb641d6b453a934acd))
+* Hare must say what the diff does ([#176](https://github.com/capad-xyz/searchts/issues/176)) ([7bdbc0c](https://github.com/capad-xyz/searchts/commit/7bdbc0c17b34ef8aa5f12c8faaaa9c7447de178c))
+* refresh an old official reach rule ([#178](https://github.com/capad-xyz/searchts/issues/178)) ([f59a254](https://github.com/capad-xyz/searchts/commit/f59a254ecc84330ff7ebfc90d96ff5420211d799))
+
 ## [0.10.1](https://github.com/capad-xyz/searchts/compare/v0.10.0...v0.10.1) (2026-09-23)
 
 
