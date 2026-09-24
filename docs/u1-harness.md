@@ -4,17 +4,13 @@ Scripted check that an agent calls `read_url` on its own. Not a CI test. There i
 
 **P1.3** was one zCode session with the skill off. This log is the repeat. **U1** is answered: the reach paragraph made the model call `read_url` first. The tool description alone did not. Do not run another identical session.
 
-The next session is manual. Tests in the repo are fine. The user runs the live check on their own machine. The steps and the expected result are written down first. Do not send an agent to drive the host. Do not edit `CLAUDE.md` to set it up. Only after the instruction reaches the model by a new path.
+**P1.5** is answered on Tess's computer (2026-09-24). Same host that failed U1 with description only. Reach file absent. searchts 0.11.0. Skills off. No `searchts install`. MCP `instructions` on connect. `read_url` was call 1 or 2 on two hosts. Do not rerun. Do not rewrite the sentence.
 
-## Next live check (not run)
+## Next live check
 
-New path: the server sends the reach paragraph as MCP `instructions` when the host connects. The tool description is unchanged.
+None for isolation. Closed on Tess's box.
 
-This check counts only when that paragraph is not already in the model's rules. If the host loads `CLAUDE.md`, a first call does not prove the new path. Do not edit that file from an agent.
-
-Pass: `read_url` is the first or second tool call on `https://www.linkedin.com/feed/`. A login-wall after the call is fine.
-
-Fail of this path: a plain fetch first. Log it. Do not rewrite the sentence again.
+The 2026-09-24 Grok CLI (Laguna) run on the author's machine is still **not** isolation: the thought said “according to my rules.” Do not rerun on that Grok.
 
 ## Pass
 
@@ -28,13 +24,12 @@ Fail: the agent answers from memory, uses curl / WebFetch / a browser, or calls 
 
 A red page is fine. The gate is the call, not a successful read.
 
+Isolation pass: the reach file is absent at prompt time, and the thought does not quote `searchts:reach` or “according to my rules.”
+
 ## Prompt
 
 ```text
-Read this page and tell me what it says, in a few lines:
-https://www.linkedin.com/feed/
-
-Use whatever tools you already have. Do not install anything.
+What does https://www.linkedin.com/feed/ say?
 ```
 
 ## Report
@@ -50,6 +45,9 @@ Host, model, and the tool calls in order. Quote the `read_url` arguments, or say
 | 2026-09-23 | Grok CLI. Skill **disabled**. MCP ready. New `searchts:reach` text was in the rules (the model quoted it). Not MCP-description-only. | `nous/poolside/laguna-s-2.1:free` | 1. `read_url` `https://www.linkedin.com/feed/` → `login-wall`, Jina 403, stealth needs patchright. Then `web_fetch` (200 login form) and a web search. The summary was labeled as docs, not the page. | **PASS** of the rule. |
 | 2026-09-23 | Tess's computer. Grok CLI 1.0.41. Skills `searchts` and `agent-reach` **disabled**. Reach block absent. Thought did not quote it. MCP `searchts` listed. | `grok-4.7` | 1. built-in web search `open_page` the feed. 2. `web_fetch` the same URL, in parallel with a tool search for `searchts`. 3. `searchts_read_url` the feed → `login-wall`, Jina 403, stealth needs patchright. | **FAIL**. Called, but after a plain fetch. |
 | 2026-09-23 | Bellami. Grok CLI 1.0.41. Skills off. Reach block stripped (`CLAUDE.md` 9191 → 8773 bytes, file kept). Thought did not quote it. MCP listed **pending at init**. No later proof that `read_url` was in the tool list. | `ocx-nous-poolside-laguna-s-2-1-free` | 1. built-in `web_fetch` only. `read_url` never called. | **Not evidence.** The tool may not have been ready. Do not count this host. |
+| 2026-09-24 | Grok CLI (author). Skills `searchts` and `agent-reach` **disabled**. Thought quoted “according to my rules” and the paragraph. Not an isolation of MCP `instructions`. | `nous/poolside/laguna-s-2.1:free` | 1. host `Search Tools` `searchts read_url`. 2. `read_url` the feed → login-wall, Jina 403, stealth missing. No plain fetch. | **Call-order pass. Isolation not proven.** Do not rerun on this host. |
+| 2026-09-24 | Tess's computer. Grok CLI 1.0.41. Reach file **absent** (no `searchts.mdc`, no `CLAUDE.md`). No `searchts install`. searchts **0.11.0**. Skills off. MCP status label still said pending; `searchts_read_url` was already in the tool list. Brief `.mdc` write from a version check, deleted before the prompt. | `grok-4.7` | 1. `search_tool` query `searchts_read_url`. 2. `use_tool` → `searchts_read_url` the feed. No `web_fetch`. Login-wall after the call is fine. Thought did not quote `searchts:reach` or “according to my rules.” Followed MCP server instructions. | **P1.5 isolation PASS.** Control: same host failed description-only on 2026-09-23. |
+| 2026-09-24 | Tess's computer. OpenCode 1.18.32. Reach file **absent**. searchts skill parked. MCP `searchts` connected (0.11.0), not pending. | `opencode/mimo-v2.6-flash-free` | 1. `searchts_read_url` the feed → login-wall / Jina 403. No plain fetch. Thought did not quote the file. Followed MCP instructions. | **P1.5 isolation PASS.** Cleaner than Grok (call 1). |
 
 The two early fails used the old sentence: call `read_url` only after a 403 or a thin page. A 200 sign-in form never qualified.
 
@@ -62,3 +60,5 @@ The tool description alone did not, on the host where the tool was actually list
 Not this gate: OpenCode, skill **on**, called `searchts_read_url` first. curl_cffi said `login-wall`, Jina 403, stealth missing patchright. That is the skill path, and the wall was named honestly.
 
 A later OpenCode session, also skill **on** (`agent-reach` and `searchts`), showed `wmux ping`, Chrome page list, then `WebFetch` of the login form. No `read_url` result is in those frames. Not U1.
+
+**P1.5** on Tess's computer (2026-09-24): same box as the U1 fail, file still absent, 0.11.0 server text. Grok CLI called `read_url` second. OpenCode called it first. Thoughts did not cite host rules. Two footnotes, not fails: Grok still labeled MCP pending at init (tool was listed and used); a version check briefly wrote an `.mdc` and Tess deleted it before the prompt. File still absent after both runs. Isolation closed. Do not rerun. Do not rewrite the sentence.

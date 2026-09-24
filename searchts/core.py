@@ -37,6 +37,10 @@ class Searchts:
         return check_all(self.config)
 
     def doctor_report(self) -> str:
-        """Get formatted health report."""
-        from searchts.doctor import check_all, format_report
-        return format_report(check_all(self.config))
+        """Health report as plain text.
+
+        MCP ``get_status`` prints this string as-is, so Rich tags cannot stay.
+        The CLI still calls ``format_report`` when it wants color.
+        """
+        from searchts.doctor import check_all, format_report, strip_rich_markup
+        return strip_rich_markup(format_report(check_all(self.config)))

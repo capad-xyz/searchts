@@ -7,12 +7,26 @@ Each channel knows how to check itself. Doctor just collects the results.
 import csv
 import io
 import os
+import re
 import subprocess
 import sys
 from typing import Callable, Dict, Optional, Sequence
 
 from searchts.channels import get_all_channels
 from searchts.config import Config
+
+# Rich styles used by format_report. Do not match status tokens like [ok] / [X] / [!].
+_RICH_TAG = re.compile(
+    r"\[\/?(?:bold|italic|underline|strike|dim|"
+    r"cyan|green|yellow|red|blue|magenta|white|black)"
+    r"(?: [a-z]+)?\]",
+    re.IGNORECASE,
+)
+
+
+def strip_rich_markup(text: str) -> str:
+    """Drop Rich tags. Keep the [ok] / [!] / [X] tokens the report already uses."""
+    return _RICH_TAG.sub("", text).replace("\\[", "[")
 
 
 def _tick(msg: str) -> None:
@@ -27,7 +41,7 @@ def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict
     """Check all channels and return status dict.
 
     A single misbehaving channel must never take the whole report down,
-    so per-channel exceptions degrade to status="error".
+    so per-channel exceptions degrade to status=\"error\".
 
     progress:
         True: stderr ticks. False: never ticks (CLI ``--json``). None: follow
@@ -49,8 +63,6 @@ def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict
             active = getattr(ch, "active_backend", None)
             reported = getattr(ch, "reported_backends", None)
         except Exception as e:  # noqa: BLE001 — doctor must survive any channel
-            # Channels are registry singletons: a stale active_backend from a
-            # previous check must not leak into an errored result.
             status, message, active = "error", f"Health check error: {e}", None
             reported = None
         backends = list(reported) if reported is not None else list(ch.backends)
@@ -140,7 +152,6 @@ def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] =
     ok_count = sum(1 for r in results.values() if r["status"] == "ok")
     total = len(results)
 
-    # Tier 0 — zero config
     lines.append("")
     lines.append(r"[bold]\[ok] Probes (not a routing table):[/bold]")
     for key, r in results.items():
@@ -153,7 +164,6 @@ def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] =
             elif r["status"] in ("off", "error"):
                 lines.append(f"  [red][X][/red]  {name_msg}")
 
-    # Tier 1 — needs free key / login
     tier1 = {k: r for k, r in results.items() if r["tier"] == 1}
     tier1_active = {k: r for k, r in tier1.items() if r["status"] == "ok"}
     tier1_inactive = {k: r for k, r in tier1.items() if r["status"] != "ok"}
@@ -163,7 +173,6 @@ def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] =
         for key, r in tier1_active.items():
             lines.append(rf"  [green]\[ok][/green] {_name_msg(r, escape)}")
 
-    # Tier 2 — optional complex setup
     tier2 = {k: r for k, r in results.items() if r["tier"] == 2}
     tier2_active = {k: r for k, r in tier2.items() if r["status"] == "ok"}
     tier2_inactive = {k: r for k, r in tier2.items() if r["status"] != "ok"}
@@ -178,7 +187,6 @@ def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] =
     status_color = "green" if ok_count == total else ("yellow" if ok_count > 0 else "red")
     lines.append(f"Status: [{status_color}]{ok_count}/{total}[/{status_color}] probes ok")
 
-    # Summarize inactive optional channels in one line instead of listing each
     all_inactive = list(tier1_inactive.values()) + list(tier2_inactive.values())
     if all_inactive:
         names = [r["name"] for r in all_inactive]
@@ -187,9 +195,7 @@ def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] =
             "These are PATH checks, not searchts platform readers."
         )
 
-    # Security check: config file permissions (Unix only)
     import stat
-    import sys
 
     config_path = Config.CONFIG_DIR / "config.yaml"
     if config_path.exists() and sys.platform != "win32":
