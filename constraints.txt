@@ -22,5 +22,5 @@ mcp==2.0.0
 pytest==8.0.0
 ruff==0.15.1
 mypy==2.3.0
-types-requests==2.32.4.20260107
+types-requests==2.33.0.20260712
 types-PyYAML==6.0.12.20260724
