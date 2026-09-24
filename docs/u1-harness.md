@@ -4,6 +4,8 @@ Scripted check that an agent calls `read_url` on its own. Not a CI test. There i
 
 **P1.3** was one zCode session with the skill off. This log is the repeat. **U1** is answered: the reach paragraph made the model call `read_url` first. The tool description alone did not. Do not run another identical session.
 
+The next session is manual. The user runs it on their own machine and pastes the tool calls. Do not write a test for it. Do not send an agent. Do not edit `CLAUDE.md` to set it up. Only after the instruction reaches the model by a new path.
+
 ## Pass
 
 MCP only. No project `SKILL.md`. If the host auto-loads a user skill, turn that off too. The prompt must not say searchts, `read_url`, or "use the tool."
