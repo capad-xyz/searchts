@@ -6,6 +6,16 @@ Scripted check that an agent calls `read_url` on its own. Not a CI test. There i
 
 The next session is manual. Tests in the repo are fine. The user runs the live check on their own machine. The steps and the expected result are written down first. Do not send an agent to drive the host. Do not edit `CLAUDE.md` to set it up. Only after the instruction reaches the model by a new path.
 
+## Next live check (not run)
+
+New path: the server sends the reach paragraph as MCP `instructions` when the host connects. The tool description is unchanged.
+
+This check counts only when that paragraph is not already in the model's rules. If the host loads `CLAUDE.md`, a first call does not prove the new path. Do not edit that file from an agent.
+
+Pass: `read_url` is the first or second tool call on `https://www.linkedin.com/feed/`. A login-wall after the call is fine.
+
+Fail of this path: a plain fetch first. Log it. Do not rewrite the sentence again.
+
 ## Pass
 
 MCP only. No project `SKILL.md`. If the host auto-loads a user skill, turn that off too. The prompt must not say searchts, `read_url`, or "use the tool."
