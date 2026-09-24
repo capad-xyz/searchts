@@ -37,6 +37,17 @@ pip install -U "searchts[mcp]"
 
 If `searchts.exe` / `mcp serve` is running (Windows), stop it first or pipx will hit a file lock (**F11**).
 
+### Windows: one install
+
+`where.exe searchts` can list more than one binary. The first PATH hit is what a host launches as MCP.
+
+Do not keep pipx (`~/.local/bin`) and an editable Desktop checkout on PATH together. Pick one:
+
+- **pipx** after a PyPI release: `pipx upgrade searchts`
+- **repo / main:** from the checkout, `python -m searchts …`. Point the host MCP `cwd` at that folder.
+
+Quit every host that spawned `mcp serve` before replacing `searchts.exe`. `searchts doctor` lists the PIDs. There is no `searchts mcp stop`.
+
 ### 3. Skill (optional)
 
 Doctor does **not** install skills.
