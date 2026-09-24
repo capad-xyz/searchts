@@ -22,6 +22,8 @@ searchts.transcribe.
 import asyncio
 import json
 
+from searchts.integrations.memory_rule import REACH_BODY
+
 try:
     from mcp.server.mcpserver import MCPServer
 
@@ -35,8 +37,10 @@ MCP_MISSING_MESSAGE = (
     '  pip install "searchts[mcp]"'
 )
 
-# Tool descriptions are module-level so tests can assert the #22 retry language
-# without building the SDK server.
+#: Sent on initialize. Hosts that show server instructions put this in front
+#: of the model. Hosts that ignore the field never see it. Same words as the
+#: Claude / Cursor reach block, without the file markers.
+SERVER_INSTRUCTIONS = REACH_BODY
 READ_URL_DESCRIPTION = (
     "Read one web page as clean Markdown, escalating through an unlocker "
     "ladder (Chrome-fingerprint fetch -> JS-rendering relay -> stealth "
@@ -91,7 +95,7 @@ def create_server():
     if not HAS_MCP:
         raise MCPNotInstalledError(MCP_MISSING_MESSAGE)
 
-    mcp = MCPServer("searchts")
+    mcp = MCPServer("searchts", instructions=SERVER_INSTRUCTIONS)
 
     @mcp.tool(
         name="get_status",

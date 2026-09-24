@@ -18,13 +18,17 @@ from typing import Callable, Optional
 BEGIN = "<!-- searchts:reach -->"
 END = "<!-- /searchts:reach -->"
 
-RULE = """<!-- searchts:reach -->
-When the user asks what a URL says, call the searchts MCP tool `read_url`
+# The paragraph, without the file markers. The MCP server sends this as
+# `instructions`. The memory file wraps the same text.
+REACH_BODY = """When the user asks what a URL says, call the searchts MCP tool `read_url`
 (or run `searchts read <url>`) first. Do not start with a plain fetch.
 A 200 that is a sign-in form, a join page, or a bot check is not the page.
 A 403, 429, challenge, or thin/empty body is not the page either.
-Do not answer from the login chrome or from a snippet. Do not skip the URL.
-<!-- /searchts:reach -->
+Do not answer from the login chrome or from a snippet. Do not skip the URL."""
+
+RULE = f"""{BEGIN}
+{REACH_BODY}
+{END}
 """
 
 # Official text this file used to write. A byte match (newlines normalized)

@@ -15,6 +15,7 @@ import pytest
 
 from searchts.integrations.mcp_server import (
     READ_URL_DESCRIPTION,
+    SERVER_INSTRUCTIONS,
     TRANSCRIBE_DESCRIPTION,
     WEB_SEARCH_DESCRIPTION,
     fetch_asset,
@@ -38,6 +39,23 @@ def test_read_url_description_covers_followup_after_search():
     assert "web_search" in READ_URL_DESCRIPTION
     assert "snippet" in READ_URL_DESCRIPTION.lower()
     assert "call this first" in READ_URL_DESCRIPTION
+
+
+def test_server_instructions_are_the_reach_paragraph():
+    from searchts.integrations.memory_rule import BEGIN, RULE
+
+    assert "call the searchts MCP tool `read_url`" in SERVER_INSTRUCTIONS
+    assert SERVER_INSTRUCTIONS.index("read_url") < SERVER_INSTRUCTIONS.index("plain fetch")
+    assert BEGIN not in SERVER_INSTRUCTIONS
+    assert SERVER_INSTRUCTIONS in RULE
+
+
+def test_create_server_sends_the_reach_paragraph():
+    pytest.importorskip("mcp")
+    from searchts.integrations.mcp_server import create_server
+
+    server = create_server()
+    assert server.instructions == SERVER_INSTRUCTIONS
     assert "sign-in" in READ_URL_DESCRIPTION
 
 
