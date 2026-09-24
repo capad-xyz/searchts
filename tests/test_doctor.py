@@ -168,13 +168,11 @@ class TestDoctor:
             }
         )
 
-        # Strip Rich markup tags for assertion (PR #170 added [bold], [yellow] etc.)
         import re
         plain = re.sub(r"\[[^\]]*\]", "", report)
         assert "searchts" in plain
         assert "Probes (not a routing table):" in plain
         assert "1/3 probes ok" in plain
-        # Inactive optional channels should be summarized in one line
         assert "optional CLIs not present" in plain
 
     def test_lock_note_lists_pids_and_does_not_kill(self):
@@ -192,6 +190,20 @@ class TestDoctor:
         )
         assert "4242" in report
 
+    def test_strip_rich_markup_keeps_status_tokens(self):
+        raw = (
+            "[bold cyan]searchts status[/bold cyan]\n"
+            "[green][ok][/green] web\n"
+            "[yellow][!][/yellow] login\n"
+            "[red][X][/red] missing"
+        )
+        plain = doctor.strip_rich_markup(raw)
+        assert "[bold" not in plain
+        assert plain.startswith("searchts status")
+        assert "[ok]" in plain
+        assert "[!]" in plain
+        assert "[X]" in plain
+
 
 def test_stale_active_backend_does_not_leak_into_errored_result(monkeypatch):
     """A channel singleton's active_backend from a previous round must not leak into this round's errored result (found in Codex review)."""
@@ -202,7 +214,7 @@ def test_stale_active_backend_does_not_leak_into_errored_result(monkeypatch):
         description = "Exploding channel"
         tier = 0
         backends = ["a", "b"]
-        active_backend = "a"  # leftover from a previous successful round
+        active_backend = "a"
 
         def check(self, config=None):
             raise RuntimeError("boom")
