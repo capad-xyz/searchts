@@ -204,6 +204,23 @@ class TestDoctor:
         assert "[!]" in plain
         assert "[X]" in plain
 
+    def test_strip_rich_markup_unescapes_format_report_ok(self):
+        report = doctor.format_report(
+            {
+                "web": {
+                    "status": "ok",
+                    "name": "Web page",
+                    "message": "Can scrape web pages",
+                    "tier": 0,
+                    "backends": ["requests"],
+                },
+            }
+        )
+        plain = doctor.strip_rich_markup(report)
+        assert "[bold" not in plain
+        assert "\\[ok]" not in plain
+        assert "[ok]" in plain
+
 
 def test_stale_active_backend_does_not_leak_into_errored_result(monkeypatch):
     """A channel singleton's active_backend from a previous round must not leak into this round's errored result (found in Codex review)."""
