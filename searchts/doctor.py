@@ -26,7 +26,7 @@ _RICH_TAG = re.compile(
 
 def strip_rich_markup(text: str) -> str:
     """Drop Rich tags. Keep the [ok] / [!] / [X] tokens the report already uses."""
-    return _RICH_TAG.sub("", text)
+    return _RICH_TAG.sub("", text).replace("\\[", "[")
 
 
 def _tick(msg: str) -> None:
