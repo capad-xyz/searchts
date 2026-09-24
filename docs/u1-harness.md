@@ -4,7 +4,7 @@ Scripted check that an agent calls `read_url` on its own. Not a CI test. There i
 
 **P1.3** was one zCode session with the skill off. This log is the repeat. **U1** is answered: the reach paragraph made the model call `read_url` first. The tool description alone did not. Do not run another identical session.
 
-The next session is manual. The user runs it on their own machine and pastes the tool calls. Do not write a test for it. Do not send an agent. Do not edit `CLAUDE.md` to set it up. Only after the instruction reaches the model by a new path.
+The next session is manual. Tests in the repo are fine. The user runs the live check on their own machine. The steps and the expected result are written down first. Do not send an agent to drive the host. Do not edit `CLAUDE.md` to set it up. Only after the instruction reaches the model by a new path.
 
 ## Pass
 
