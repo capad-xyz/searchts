@@ -227,7 +227,7 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 
 ### U — Unverified tracks
 
-- **U1 — #22 harness:** [`docs/u1-harness.md`](docs/u1-harness.md). **Answered 2026-09-23.** The reach paragraph made Laguna call `read_url` first. The tool description alone did not, on the one host where the tool was listed (called third). Bellami's run does not count: MCP was pending at init. Not **F18**.
+- **U1 — #22 harness:** [`docs/u1-harness.md`](docs/u1-harness.md). **Answered 2026-09-23.** The reach paragraph made Laguna call `read_url` first. The tool description alone did not, on the one host where the tool was listed (called third). Bellami's run does not count: MCP was pending at init. The next session is manual, on the user's machine. No test, no agent, no `CLAUDE.md` edit. Only after a new instruction path. Not **F18**.
 - **U2 — UA A/B:** same URLs, stealth only, UA 126 vs current; ship P3.4 either way (stale UA is still wrong), invest further only if delta is large.
 - **U3 — Memory telemetry:** count remember-hit then fail; justifies TTL complexity.
 - **U4 — Jina default:** only flip to opt-in if privacy/rate-limit evidence appears.
@@ -388,3 +388,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-23 | **P1.1b** `searchts` replaces a reach block only when it is the old official 403 sentence. Edits stay. Missing files stay missing. |
 | 2026-09-23 | **U1** answered. Where the tool was listed, the description alone called `read_url` third. Bellami does not count: MCP was pending. The paragraph is what worked. |
 | 2026-09-24 | **F11** doctor prints `searchts.exe` PIDs. It does not kill them. The upgrade still fails while the file is held. |
+| 2026-09-24 | The next **U1** session is manual. The user runs it. No test, no agent, no `CLAUDE.md` edit. Only after a new instruction path. |
