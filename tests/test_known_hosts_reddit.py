@@ -651,6 +651,25 @@ _REDDIT_THREAD_HTML_MANY = """
 """
 
 
+_REDDIT_LISTING_HTML_WITH_BODY = """
+<html>
+<body>
+<shreddit-post post-title="CoWindow paper" permalink="/r/python/comments/aaa/cowindow/" comment-count="0">
+  <a slot="title">CoWindow paper</a>
+  <div slot="text-body">I am one of the authors of two recent papers exploring different sources of redundant computation in attention. CoWindow Attention distributes distant context across KV heads.</div>
+  <button>Share</button>
+</shreddit-post>
+<shreddit-post post-title="Link only card" permalink="/r/python/comments/bbb/link/">
+  <a slot="title">Link only card</a>
+</shreddit-post>
+<shreddit-post post-title="Long body post" permalink="/r/python/comments/ccc/long/" comment-count="5">
+  <div slot="text-body">%s</div>
+</shreddit-post>
+</body>
+</html>
+""" % ("word " * 80)
+
+
 def test_parse_reddit_listing_html_three_posts():
     import searchts.known_hosts.reddit as reddit_mod
     md = reddit_mod.parse_reddit_listing_html(_REDDIT_LISTING_HTML_3, "https://www.reddit.com/r/python/hot/")
@@ -663,6 +682,56 @@ def test_parse_reddit_listing_html_three_posts():
     assert "https://www.reddit.com/r/python/comments/ghi/third/" in md
     assert "(3 comments)" in md
     assert "(12 comments)" in md
+
+
+def test_parse_reddit_listing_html_includes_card_snippet():
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_listing_html(
+        _REDDIT_LISTING_HTML_WITH_BODY,
+        "https://www.reddit.com/r/python/hot/",
+    )
+    assert md is not None
+    assert "CoWindow paper" in md
+    assert "I am one of the authors of two recent papers" in md
+    # Title is not repeated as the snippet.
+    cowindow_block = md.split("Link only card")[0]
+    assert cowindow_block.count("CoWindow paper") == 1
+    # Link-only card has no snippet line between title and permalink.
+    link_block = md.split("Link only card", 1)[1].split("Long body post", 1)[0]
+    assert "I am one of the authors" not in link_block
+    assert "[`permalink`]" in link_block
+    # Card body is the full slot text, not a 280-character cut.
+    assert "word " * 40 in md
+    assert "..." not in md.split("Long body post", 1)[1]
+
+
+_REDDIT_LISTING_HTML_BR_AND_SHARE = """
+<html>
+<body>
+<shreddit-post post-title="Share paper" permalink="/r/python/comments/aaa/share/">
+  <div slot="text-body">Please share this paper<br>with the group.</div>
+  <button>Share</button>
+  <span>Award</span>
+</shreddit-post>
+<shreddit-post post-title="Other" permalink="/r/python/comments/bbb/other/"></shreddit-post>
+</body>
+</html>
+"""
+
+
+def test_listing_slot_keeps_share_word_and_br_does_not_leak_chrome():
+    """slot=text-body keeps real words; a <br> inside it must not pull in Share/Award."""
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_listing_html(
+        _REDDIT_LISTING_HTML_BR_AND_SHARE,
+        "https://www.reddit.com/r/python/hot/",
+    )
+    assert md is not None
+    block = md.split("Other", 1)[0]
+    snippet = next(ln for ln in block.splitlines() if "Please share" in ln)
+    assert "Please share this paper with the group." in snippet
+    assert snippet.lower().count("share") == 1
+    assert "Award" not in snippet
 
 
 def test_parse_reddit_listing_html_one_post_returns_none():
@@ -679,6 +748,189 @@ def test_parse_reddit_listing_html_comments_url_does_not_trigger(monkeypatch):
     assert md is None
     # And is_reddit_listing_url must be false
     assert not reddit_mod.is_reddit_listing_url("https://www.reddit.com/r/python/comments/abc/title/")
+
+
+_REDDIT_THREAD_HTML = """
+<html>
+<body>
+<shreddit-post post-title="CoWindow paper" author="alice" score="2" comment-count="3" permalink="/r/python/comments/abc/cowindow/">
+  <div slot="text-body">I am one of the authors of two recent papers exploring attention.</div>
+</shreddit-post>
+<shreddit-comment author="bob" score="1">This is a useful comment about the paper here.</shreddit-comment>
+</body>
+</html>
+"""
+
+# Nested shreddit-comment tree matching the live NeurIPS thread dump:
+# pastor_pilao -> XxCotHGxX -> (pastor_pilao, Ludditesdenylife). Chrome in
+# commentMeta / action row must not leak into the body, and nested replies
+# must be their own headers rather than mashed into the parent.
+_REDDIT_THREAD_HTML_NESTED = """
+<html>
+<body>
+<shreddit-post post-title="BA Computer Science" author="XxCotHGxX" score="73" comment-count="13" permalink="/r/MachineLearning/comments/lwsyu8m/ba/">
+  <div slot="text-body">I want to attend and present my findings in Atlanta.</div>
+</shreddit-post>
+<shreddit-comment author="pastor_pilao" score="28" depth="0">
+  <div slot="commentMeta">pastor_pilao • 17h ago Top 1% Commenter</div>
+  <div slot="comment">People are not overly-critical. The vibe depends a bit on the specific workshop. See you there!</div>
+  <button>Reply</button><button>Share</button>
+  <shreddit-comment author="XxCotHGxX" score="6" depth="1">
+    <div slot="commentMeta">XxCotHGxX • 17h ago OP</div>
+    <div slot="comment">It's the Evaluations and Datasets</div>
+    <button>Reply</button>
+    <shreddit-comment author="pastor_pilao" score="2" depth="2">
+      <div slot="commentMeta">pastor_pilao • 3h ago Top 1% Commenter</div>
+      <div slot="comment">If you got it in the main track even better! I assumed you were going for a workshop since the workshop notifications are coming out this week.</div>
+    </shreddit-comment>
+    <shreddit-comment author="Ludditesdenylife" score="3" depth="2">
+      <div slot="commentMeta">Ludditesdenylife • 5h ago</div>
+      <div slot="comment">That's a track of the main conference, not a workshop.</div>
+      <span>More replies</span>
+    </shreddit-comment>
+  </shreddit-comment>
+</shreddit-comment>
+<shreddit-comment author="Euphoric_Can_5999" score="20" depth="0">
+  <div slot="comment">Same here! Workshop paper. Did it myself. Just undergrad no PhD</div>
+</shreddit-comment>
+</body>
+</html>
+"""
+
+# Same nest without slot="comment": own-text plus chrome, like a thin light DOM.
+_REDDIT_THREAD_HTML_NESTED_FALLBACK = """
+<html>
+<body>
+<shreddit-post post-title="BA Computer Science" author="XxCotHGxX" score="73" comment-count="13" permalink="/r/MachineLearning/comments/lwsyu8m/ba/">
+  body
+</shreddit-post>
+<shreddit-comment author="pastor_pilao" score="28">
+  pastor_pilao • 17h ago Top 1% Commenter People are not overly-critical. See you there! Reply Share
+  <shreddit-comment author="XxCotHGxX" score="6">
+    XxCotHGxX • 17h ago It's the Evaluations and Datasets Reply
+    <shreddit-comment author="Ludditesdenylife" score="3">
+      Ludditesdenylife • 5h ago That's a track of the main conference, not a workshop. More replies
+    </shreddit-comment>
+  </shreddit-comment>
+</shreddit-comment>
+</body>
+</html>
+"""
+
+
+def test_parse_reddit_thread_html_op_score_body_and_comment():
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_thread_html(
+        _REDDIT_THREAD_HTML,
+        "https://www.reddit.com/r/python/comments/abc/cowindow/",
+    )
+    assert md is not None
+    assert md.startswith("# CoWindow paper")
+    assert "**OP:** /u/alice" in md
+    assert "**Score:** 2" in md
+    assert "**Comments:** 3" in md
+    assert "I am one of the authors of two recent papers" in md
+    assert "/u/bob" in md
+    assert "useful comment about the paper" in md
+    assert "https://www.reddit.com/r/python/comments/abc/cowindow/" in md
+
+
+def test_parse_reddit_thread_html_nested_replies_are_separate():
+    """Nested shreddit-comment nodes are their own indented entries.
+
+    The live dump mashed XxCotHGxX / Ludditesdenylife into pastor_pilao's
+    blob and kept Reply/Share/More replies chrome.
+    """
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_thread_html(
+        _REDDIT_THREAD_HTML_NESTED,
+        "https://www.reddit.com/r/MachineLearning/comments/lwsyu8m/ba/",
+    )
+    assert md is not None
+    assert "People are not overly-critical" in md
+    assert "It's the Evaluations and Datasets" in md
+    assert "That's a track of the main conference" in md
+    assert "Same here! Workshop paper" in md
+    assert "**/u/XxCotHGxX** (6 pts)" in md
+    assert "**/u/Ludditesdenylife** (3 pts)" in md
+    assert "**/u/Euphoric_Can_5999** (20 pts)" in md
+    # Child body is not glued onto the parent's header line.
+    parent = md.split("**/u/pastor_pilao** (28 pts)", 1)[1]
+    parent_own = parent.split("**/u/XxCotHGxX**", 1)[0]
+    assert "Evaluations and Datasets" not in parent_own
+    assert "Ludditesdenylife" not in parent_own
+    assert "main conference" not in parent_own
+    # Nested replies are indented under the parent.
+    assert "  **/u/XxCotHGxX** (6 pts)" in md
+    assert "    **/u/Ludditesdenylife** (3 pts)" in md
+    for chrome in ("Reply", "Share", "More replies", "Top 1% Commenter", "17h ago"):
+        assert chrome not in md
+
+
+def test_parse_reddit_thread_html_nested_fallback_without_comment_slot():
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_thread_html(
+        _REDDIT_THREAD_HTML_NESTED_FALLBACK,
+        "https://www.reddit.com/r/MachineLearning/comments/lwsyu8m/ba/",
+    )
+    assert md is not None
+    assert "People are not overly-critical" in md
+    assert "It's the Evaluations and Datasets" in md
+    assert "That's a track of the main conference" in md
+    assert "**/u/XxCotHGxX** (6 pts)" in md
+    assert "**/u/Ludditesdenylife** (3 pts)" in md
+    parent_own = md.split("**/u/pastor_pilao** (28 pts)", 1)[1].split("**/u/XxCotHGxX**", 1)[0]
+    assert "Evaluations and Datasets" not in parent_own
+    for chrome in ("Reply", "Share", "More replies", "Top 1% Commenter", "17h ago"):
+        assert chrome not in md
+
+
+_REDDIT_THREAD_HTML_SLOT_REPLY = """
+<html>
+<body>
+<shreddit-post post-title="T" author="alice" permalink="/r/python/comments/abc/t/">x</shreddit-post>
+<shreddit-comment author="bob" score="1">
+  <div slot="comment">I'll reply tomorrow after I share notes.</div>
+  <button>Reply</button><button>Share</button>
+</shreddit-comment>
+</body>
+</html>
+"""
+
+
+def test_thread_comment_slot_keeps_reply_and_share_words():
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_thread_html(
+        _REDDIT_THREAD_HTML_SLOT_REPLY,
+        "https://www.reddit.com/r/python/comments/abc/t/",
+    )
+    assert md is not None
+    assert "I'll reply tomorrow after I share notes." in md
+    body = md.split("**/u/bob**", 1)[1]
+    assert "Reply" not in body.split("I'll reply", 1)[0]
+
+
+def test_extract_from_html_listing_vs_thread_vs_json():
+    import searchts.known_hosts.reddit as reddit_mod
+    listing = reddit_mod.extract_from_html(
+        "https://www.reddit.com/r/python/hot/",
+        _REDDIT_LISTING_HTML_3,
+    )
+    assert listing is not None
+    assert listing[0].startswith("listing-html:")
+    thread = reddit_mod.extract_from_html(
+        "https://www.reddit.com/r/python/comments/abc/cowindow/",
+        _REDDIT_THREAD_HTML,
+    )
+    assert thread is not None
+    assert thread[0] == "thread-html: op"
+    assert reddit_mod.extract_from_html(
+        "https://www.reddit.com/r/python/hot.json",
+        _REDDIT_LISTING_HTML_3,
+    ) is None
+    assert reddit_mod.is_reddit_thread_url("https://www.reddit.com/r/python/comments/abc/cowindow/")
+    assert not reddit_mod.is_reddit_thread_url("https://www.reddit.com/r/python/hot/")
+    assert not reddit_mod.is_reddit_thread_url("https://www.reddit.com/r/python/comments/abc/cowindow.json")
 
 
 def test_is_reddit_listing_url_rejects_json_and_comments_and_other_hosts():

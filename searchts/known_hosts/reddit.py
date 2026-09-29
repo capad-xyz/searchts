@@ -402,17 +402,108 @@ def is_reddit_listing_url(url: str) -> bool:
     return True
 
 
+def is_reddit_thread_url(url: str) -> bool:
+    """True for a Reddit comments thread served as HTML (not .json)."""
+    if not url:
+        return False
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except Exception:  # noqa: BLE001
+        return False
+    host = (parts.netloc or "").lower()
+    if host not in ("reddit.com", "www.reddit.com", "old.reddit.com"):
+        return False
+    path = parts.path or "/"
+    if ".json" in path:
+        return False
+    return bool(_THREAD_PATH_RE.match(path))
+
+
+_SKIP_TAGS = frozenset({"script", "style", "svg", "noscript"})
+_VOID_TAGS = frozenset(
+    {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
+)
+_SNIPPET_MIN = 40
+_THREAD_PATH_RE = re.compile(
+    r"^/r/[A-Za-z0-9_]+/comments/[A-Za-z0-9]+(?:/[A-Za-z0-9_-]+)?/?$",
+    re.IGNORECASE,
+)
+
+
 def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
-    """Return list of attr dicts for every <shreddit-post> start tag. Uses stdlib only."""
+    """Return attr dicts for every <shreddit-post>, plus inner card text.
+
+    ``_text`` is all light-DOM text. ``_body`` is ``slot="text-body"`` when
+    that slot exists. Stdlib HTMLParser only.
+    """
+
     class _P(HTMLParser):
         def __init__(self) -> None:
             super().__init__()
             self.posts: List[Dict[str, str]] = []
+            self._depth = 0
+            self._skip = 0
+            self._body_depth = 0
+            self._attrs: Optional[Dict[str, str]] = None
+            self._all: List[str] = []
+            self._body: List[str] = []
 
         def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
-            if tag.lower() == "shreddit-post":
-                d = {str(k).lower(): (v or "") for k, v in attrs}
-                self.posts.append(d)
+            t = tag.lower()
+            if t in _SKIP_TAGS:
+                self._skip += 1
+            ad = {str(k).lower(): (v or "") for k, v in attrs}
+            if t == "shreddit-post":
+                if self._depth == 0:
+                    self._attrs = ad
+                    self._all = []
+                    self._body = []
+                    self._body_depth = 0
+                self._depth += 1
+            elif self._depth and t not in _VOID_TAGS:
+                if self._body_depth:
+                    self._body_depth += 1
+                elif ad.get("slot", "").lower() == "text-body":
+                    self._body_depth = 1
+
+        def handle_endtag(self, tag: str) -> None:
+            t = tag.lower()
+            if t in _SKIP_TAGS:
+                self._skip = max(0, self._skip - 1)
+            if t not in _VOID_TAGS and self._body_depth:
+                self._body_depth -= 1
+            if t == "shreddit-post" and self._depth:
+                self._depth -= 1
+                if self._depth == 0 and self._attrs is not None:
+                    self._attrs["_text"] = " ".join(self._all)
+                    self._attrs["_body"] = " ".join(self._body)
+                    self.posts.append(self._attrs)
+                    self._attrs = None
+
+        def handle_data(self, data: str) -> None:
+            if not self._depth or self._skip:
+                return
+            s = data.strip()
+            if not s:
+                return
+            self._all.append(s)
+            if self._body_depth:
+                self._body.append(s)
 
     p = _P()
     try:
@@ -420,6 +511,37 @@ def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
     except Exception:  # noqa: BLE001 - malformed HTML must not explode
         pass
     return p.posts
+
+
+def _card_body(title: str, body: str, all_text: str, *, require_min: bool = True) -> str:
+    """Visible card/post body. Empty when the card is title-only.
+
+    Uses ``slot="text-body"`` when present (the full card text Reddit mounted).
+    Does not truncate. ``require_min`` drops leftover chrome on link cards.
+    """
+    slot = (body or "").strip()
+    if slot:
+        text = re.sub(r"\s+", " ", slot).strip()
+        t = (title or "").strip()
+        if t and text.startswith(t):
+            text = re.sub(r"^[\s\-|]+", "", text[len(t) :]).strip()
+        return text
+    text = re.sub(r"\s+", " ", (all_text or "")).strip()
+    if not text:
+        return ""
+    t = (title or "").strip()
+    if t and text.startswith(t):
+        text = re.sub(r"^[\s\-|]+", "", text[len(t) :]).strip()
+    text = re.sub(
+        r"\b(Share|Award|Give Award|Hide|Reply|Report)\b",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"\s+", " ", text).strip()
+    if require_min and len(text) < _SNIPPET_MIN:
+        return ""
+    return text
 
 
 def _canonical_reddit_permalink(perm: str) -> str:
@@ -446,7 +568,8 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
     """If >=2 shreddit-post nodes have non-empty post-title, return compact MD index.
 
     Permalinks are normalized to absolute https://www.reddit.com/... form.
-    comment-count appears when present. Returns None for <2 titled posts.
+    comment-count and score appear when present. The full card body sits under
+    the title when the light DOM has one. Returns None for <2 titled posts.
 
     When a URL is supplied, this returns None for thread URLs (/comments/) or .json URLs
     even if the HTML contains shreddit-post nodes (threads fall through; JSON ring owns .json).
@@ -467,17 +590,38 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
             attrs.get("permalink") or attrs.get("content-href") or ""
         )
         cc = (attrs.get("comment-count") or "").strip()
-        valid.append({"title": title, "permalink": perm, "cc": cc})
+        score = (attrs.get("score") or attrs.get("upvote-count") or "").strip()
+        author = (attrs.get("author") or "").strip()
+        if author.startswith("u/"):
+            author = author[2:]
+        snippet = _card_body(title, attrs.get("_body") or "", attrs.get("_text") or "")
+        valid.append(
+            {
+                "title": title,
+                "permalink": perm,
+                "cc": cc,
+                "score": score,
+                "author": author,
+                "snippet": snippet,
+            }
+        )
 
     if len(valid) < 2:
         return None
 
     lines: List[str] = []
     for v in valid:
+        bits: List[str] = []
+        if v["author"]:
+            bits.append(f"/u/{v['author']}")
         if v["cc"]:
-            lines.append(f"- **{v['title']}** ({v['cc']} comments)")
-        else:
-            lines.append(f"- **{v['title']}**")
+            bits.append(f"{v['cc']} comments")
+        if v["score"]:
+            bits.append(f"{v['score']} pts")
+        suffix = f" ({', '.join(bits)})" if bits else ""
+        lines.append(f"- **{v['title']}**{suffix}")
+        if v["snippet"]:
+            lines.append(f"  {v['snippet']}")
         if v["permalink"]:
             lines.append(f"  [`permalink`]({v['permalink']})")
         lines.append("")
@@ -488,3 +632,205 @@ def count_titled_shreddit_posts(html: str) -> int:
     """Count shreddit-post nodes that carry a non-empty post-title attr."""
     posts = _parse_shreddit_posts(html)
     return sum(1 for a in posts if (a.get("post-title") or "").strip())
+
+
+_COMMENT_CHROME_RE = re.compile(
+    r"\b(?:"
+    r"Share|Award|Give Award|Hide|Reply|Report|"
+    r"More replies|More reply|"
+    r"Just now|"
+    r"Top \d+% Commenter"
+    r")\b"
+    r"|\b\d+\s*[smhdwy]\s+ago\b"
+    r"|[•·]",
+    re.IGNORECASE,
+)
+
+
+def _comment_body(author: str, body: str, all_text: str) -> str:
+    """Own comment text. Prefers ``slot="comment"``; else leftover own-text.
+
+    Chrome stripping is only for the light-DOM fallback, so a real comment
+    can say "I'll reply" or "please share".
+    """
+    slot = (body or "").strip()
+    if slot:
+        return re.sub(r"\s+", " ", slot).strip()
+    text = re.sub(r"\s+", " ", (all_text or "")).strip()
+    if not text:
+        return ""
+    text = _COMMENT_CHROME_RE.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip(" •·-|,")
+    a = (author or "").strip()
+    if a.lower().startswith("u/"):
+        a = a[2:]
+    if a and text.lower().startswith(a.lower()):
+        text = text[len(a) :].lstrip(" •·-|,")
+    text = re.sub(r"^OP\b\s*", "", text, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", text).strip(" •·-|,")
+
+
+def _parse_shreddit_comments(html: str) -> List[Dict[str, str]]:
+    """Every shreddit-comment as its own node, own text only, with nest depth.
+
+    Nested replies are nested ``<shreddit-comment>`` tags. Emitting only at
+    depth 0 mashed those replies into the parent blob.
+    """
+
+    class _P(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.comments: List[Dict[str, Any]] = []
+            self._stack: List[Dict[str, Any]] = []
+            self._skip = 0
+
+        def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+            t = tag.lower()
+            if t in _SKIP_TAGS:
+                self._skip += 1
+            ad = {str(k).lower(): (v or "") for k, v in attrs}
+            if t == "shreddit-comment":
+                node: Dict[str, Any] = dict(ad)
+                node["_depth"] = str(len(self._stack))
+                node["_all"] = []
+                node["_body_parts"] = []
+                node["_body_depth"] = 0
+                self._stack.append(node)
+                self.comments.append(node)
+                return
+            if not self._stack:
+                return
+            if t in _VOID_TAGS:
+                return
+            cur = self._stack[-1]
+            if cur["_body_depth"]:
+                cur["_body_depth"] += 1
+            elif ad.get("slot", "").lower() == "comment":
+                cur["_body_depth"] = 1
+
+        def handle_endtag(self, tag: str) -> None:
+            t = tag.lower()
+            if t in _SKIP_TAGS:
+                self._skip = max(0, self._skip - 1)
+            if t in _VOID_TAGS:
+                return
+            if self._stack:
+                cur = self._stack[-1]
+                if cur["_body_depth"]:
+                    cur["_body_depth"] -= 1
+            if t == "shreddit-comment" and self._stack:
+                self._finish(self._stack.pop())
+
+        def handle_data(self, data: str) -> None:
+            if not self._stack or self._skip:
+                return
+            s = data.strip()
+            if not s:
+                return
+            cur = self._stack[-1]
+            cur["_all"].append(s)
+            if cur["_body_depth"]:
+                cur["_body_parts"].append(s)
+
+        def _finish(self, node: Dict[str, Any]) -> None:
+            if "_text" in node:
+                return
+            node["_text"] = " ".join(node.pop("_all", []))
+            node["_body"] = " ".join(node.pop("_body_parts", []))
+            node.pop("_body_depth", None)
+
+    p = _P()
+    try:
+        p.feed(html or "")
+    except Exception:  # noqa: BLE001
+        pass
+    while p._stack:
+        p._finish(p._stack.pop())
+    out: List[Dict[str, str]] = []
+    keep = {"_text", "_body", "_depth"}
+    for n in p.comments:
+        out.append(
+            {str(k): str(v) for k, v in n.items() if not str(k).startswith("_") or k in keep}
+        )
+    return out
+
+
+def parse_reddit_thread_html(html: str, url: str = "") -> Optional[str]:
+    """OP plus a bounded comment tree from thread HTML. None if there is no titled post.
+
+    Nested ``shreddit-comment`` nodes are indented entries, not mashed into the parent.
+    """
+    if url and not is_reddit_thread_url(url):
+        return None
+    posts = _parse_shreddit_posts(html)
+    op = next((a for a in posts if (a.get("post-title") or "").strip()), None)
+    if op is None:
+        return None
+    title = (op.get("post-title") or "").strip()
+    author = (op.get("author") or "").strip()
+    if author.startswith("u/"):
+        author = author[2:]
+    score = (op.get("score") or op.get("upvote-count") or "").strip()
+    cc = (op.get("comment-count") or "").strip()
+    perm = _canonical_reddit_permalink(op.get("permalink") or op.get("content-href") or "")
+    body = _card_body(title, op.get("_body") or "", op.get("_text") or "", require_min=False)
+
+    lines: List[str] = [f"# {title}", ""]
+    if author:
+        lines.append(f"**OP:** /u/{author}")
+    if score:
+        lines.append(f"**Score:** {score}")
+    if cc:
+        lines.append(f"**Comments:** {cc}")
+    if perm:
+        lines.append(f"**Link:** {perm}")
+    if body:
+        lines.extend(["", body])
+
+    comments = _parse_shreddit_comments(html)
+    shown = 0
+    comment_block: List[str] = []
+    for c in comments:
+        c_author = (c.get("author") or "[deleted]").strip()
+        if c_author.startswith("u/"):
+            c_author = c_author[2:]
+        text = _comment_body(c_author, c.get("_body") or "", c.get("_text") or "")
+        if len(text) < 8:
+            continue
+        c_score = (c.get("score") or "").strip()
+        try:
+            depth = max(0, int(c.get("_depth") or "0"))
+        except ValueError:
+            depth = 0
+        indent = "  " * depth
+        header = f"{indent}**/u/{c_author}**"
+        if c_score:
+            header += f" ({c_score} pts)"
+        comment_block.append(header)
+        comment_block.append(f"{indent}{text}")
+        comment_block.append("")
+        shown += 1
+        if shown >= _MAX_COMMENTS:
+            break
+    if comment_block:
+        lines.extend(["", "## Comments", ""])
+        lines.extend(comment_block)
+    return "\n".join(lines).strip()
+
+
+def extract_from_html(url: str, html: str) -> Optional[Tuple[str, str]]:
+    """Listing index or thread document from already-downloaded HTML.
+
+    Returns ``(stderr_label, markdown)`` or None. JSON URLs stay with the JSON ring.
+    """
+    if is_reddit_listing_url(url):
+        md = parse_reddit_listing_html(html, url)
+        if md:
+            n = count_titled_shreddit_posts(html)
+            return f"listing-html: {n} posts", md
+        return None
+    if is_reddit_thread_url(url):
+        md = parse_reddit_thread_html(html, url)
+        if md:
+            return "thread-html: op", md
+    return None
