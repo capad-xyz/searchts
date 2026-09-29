@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.11.1](https://github.com/capad-xyz/searchts/compare/v0.11.0...v0.11.1) (2026-09-24)
+
+
+### Fixed
+
+* MCP get_status is plain text ([#183](https://github.com/capad-xyz/searchts/issues/183)) ([3d832f6](https://github.com/capad-xyz/searchts/commit/3d832f6eb9bd9146007f5d5c3e9e68b253fb5e3f))
+
 ## [0.11.0](https://github.com/capad-xyz/searchts/compare/v0.10.1...v0.11.0) (2026-09-24)
 
 
