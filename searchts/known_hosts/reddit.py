@@ -420,6 +420,24 @@ def is_reddit_thread_url(url: str) -> bool:
 
 
 _SKIP_TAGS = frozenset({"script", "style", "svg", "noscript"})
+_VOID_TAGS = frozenset(
+    {
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    }
+)
 _SNIPPET_MIN = 40
 _THREAD_PATH_RE = re.compile(
     r"^/r/[A-Za-z0-9_]+/comments/[A-Za-z0-9]+(?:/[A-Za-z0-9_-]+)?/?$",
@@ -457,7 +475,7 @@ def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
                     self._body = []
                     self._body_depth = 0
                 self._depth += 1
-            elif self._depth:
+            elif self._depth and t not in _VOID_TAGS:
                 if self._body_depth:
                     self._body_depth += 1
                 elif ad.get("slot", "").lower() == "text-body":
@@ -467,7 +485,7 @@ def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
             t = tag.lower()
             if t in _SKIP_TAGS:
                 self._skip = max(0, self._skip - 1)
-            if self._body_depth:
+            if t not in _VOID_TAGS and self._body_depth:
                 self._body_depth -= 1
             if t == "shreddit-post" and self._depth:
                 self._depth -= 1
@@ -502,8 +520,13 @@ def _card_body(title: str, body: str, all_text: str, *, require_min: bool = True
     Does not truncate. ``require_min`` drops leftover chrome on link cards.
     """
     slot = (body or "").strip()
-    raw = slot or (all_text or "").strip()
-    text = re.sub(r"\s+", " ", raw).strip()
+    if slot:
+        text = re.sub(r"\s+", " ", slot).strip()
+        t = (title or "").strip()
+        if t and text.startswith(t):
+            text = re.sub(r"^[\s\-|]+", "", text[len(t) :]).strip()
+        return text
+    text = re.sub(r"\s+", " ", (all_text or "")).strip()
     if not text:
         return ""
     t = (title or "").strip()
@@ -516,7 +539,7 @@ def _card_body(title: str, body: str, all_text: str, *, require_min: bool = True
         flags=re.IGNORECASE,
     )
     text = re.sub(r"\s+", " ", text).strip()
-    if require_min and not slot and len(text) < _SNIPPET_MIN:
+    if require_min and len(text) < _SNIPPET_MIN:
         return ""
     return text
 
@@ -625,10 +648,15 @@ _COMMENT_CHROME_RE = re.compile(
 
 
 def _comment_body(author: str, body: str, all_text: str) -> str:
-    """Own comment text. Prefers ``slot="comment"``; else leftover own-text."""
+    """Own comment text. Prefers ``slot="comment"``; else leftover own-text.
+
+    Chrome stripping is only for the light-DOM fallback, so a real comment
+    can say "I'll reply" or "please share".
+    """
     slot = (body or "").strip()
-    raw = slot or (all_text or "").strip()
-    text = re.sub(r"\s+", " ", raw).strip()
+    if slot:
+        return re.sub(r"\s+", " ", slot).strip()
+    text = re.sub(r"\s+", " ", (all_text or "")).strip()
     if not text:
         return ""
     text = _COMMENT_CHROME_RE.sub(" ", text)
@@ -638,8 +666,7 @@ def _comment_body(author: str, body: str, all_text: str) -> str:
         a = a[2:]
     if a and text.lower().startswith(a.lower()):
         text = text[len(a) :].lstrip(" •·-|,")
-    if not slot:
-        text = re.sub(r"^OP\b\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"^OP\b\s*", "", text, flags=re.IGNORECASE)
     return re.sub(r"\s+", " ", text).strip(" •·-|,")
 
 
@@ -673,6 +700,8 @@ def _parse_shreddit_comments(html: str) -> List[Dict[str, str]]:
                 return
             if not self._stack:
                 return
+            if t in _VOID_TAGS:
+                return
             cur = self._stack[-1]
             if cur["_body_depth"]:
                 cur["_body_depth"] += 1
@@ -683,6 +712,8 @@ def _parse_shreddit_comments(html: str) -> List[Dict[str, str]]:
             t = tag.lower()
             if t in _SKIP_TAGS:
                 self._skip = max(0, self._skip - 1)
+            if t in _VOID_TAGS:
+                return
             if self._stack:
                 cur = self._stack[-1]
                 if cur["_body_depth"]:

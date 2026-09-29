@@ -705,6 +705,35 @@ def test_parse_reddit_listing_html_includes_card_snippet():
     assert "..." not in md.split("Long body post", 1)[1]
 
 
+_REDDIT_LISTING_HTML_BR_AND_SHARE = """
+<html>
+<body>
+<shreddit-post post-title="Share paper" permalink="/r/python/comments/aaa/share/">
+  <div slot="text-body">Please share this paper<br>with the group.</div>
+  <button>Share</button>
+  <span>Award</span>
+</shreddit-post>
+<shreddit-post post-title="Other" permalink="/r/python/comments/bbb/other/"></shreddit-post>
+</body>
+</html>
+"""
+
+
+def test_listing_slot_keeps_share_word_and_br_does_not_leak_chrome():
+    """slot=text-body keeps real words; a <br> inside it must not pull in Share/Award."""
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_listing_html(
+        _REDDIT_LISTING_HTML_BR_AND_SHARE,
+        "https://www.reddit.com/r/python/hot/",
+    )
+    assert md is not None
+    block = md.split("Other", 1)[0]
+    snippet = next(ln for ln in block.splitlines() if "Please share" in ln)
+    assert "Please share this paper with the group." in snippet
+    assert snippet.lower().count("share") == 1
+    assert "Award" not in snippet
+
+
 def test_parse_reddit_listing_html_one_post_returns_none():
     import searchts.known_hosts.reddit as reddit_mod
     md = reddit_mod.parse_reddit_listing_html(_REDDIT_LISTING_HTML_1, "https://www.reddit.com/r/python/")
@@ -854,6 +883,31 @@ def test_parse_reddit_thread_html_nested_fallback_without_comment_slot():
     assert "Evaluations and Datasets" not in parent_own
     for chrome in ("Reply", "Share", "More replies", "Top 1% Commenter", "17h ago"):
         assert chrome not in md
+
+
+_REDDIT_THREAD_HTML_SLOT_REPLY = """
+<html>
+<body>
+<shreddit-post post-title="T" author="alice" permalink="/r/python/comments/abc/t/">x</shreddit-post>
+<shreddit-comment author="bob" score="1">
+  <div slot="comment">I'll reply tomorrow after I share notes.</div>
+  <button>Reply</button><button>Share</button>
+</shreddit-comment>
+</body>
+</html>
+"""
+
+
+def test_thread_comment_slot_keeps_reply_and_share_words():
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_thread_html(
+        _REDDIT_THREAD_HTML_SLOT_REPLY,
+        "https://www.reddit.com/r/python/comments/abc/t/",
+    )
+    assert md is not None
+    assert "I'll reply tomorrow after I share notes." in md
+    body = md.split("**/u/bob**", 1)[1]
+    assert "Reply" not in body.split("I'll reply", 1)[0]
 
 
 def test_extract_from_html_listing_vs_thread_vs_json():
