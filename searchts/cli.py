@@ -98,11 +98,19 @@ def _run():
     parser.add_argument("--version", action="version", version=f"searchts v{__version__}")
     sub = parser.add_subparsers(dest="command", help="Available commands")
 
+    # `-v` is accepted both before and after the subcommand. SUPPRESS on the
+    # subparser copy keeps the top-level value from being clobbered when the
+    # sub-level flag is absent.
+    _verbose = argparse.ArgumentParser(add_help=False)
+    _verbose.add_argument("-v", "--verbose", action="store_true",
+                          default=argparse.SUPPRESS, help="Show debug logs")
+
     # ── setup ──
-    sub.add_parser("setup", help="Interactive configuration wizard")
+    sub.add_parser("setup", parents=[_verbose], help="Interactive configuration wizard")
 
     # ── install ──
-    p_install = sub.add_parser("install", help="One-shot installer with flags")
+    p_install = sub.add_parser("install", parents=[_verbose],
+                               help="One-shot installer with flags")
     p_install.add_argument("--env", choices=["local", "server", "auto"], default="auto",
                            help="Environment: local, server, or auto-detect")
     p_install.add_argument("--proxy", default="",
@@ -119,21 +127,28 @@ def _run():
                            help="Show what would be done without making any changes")
     p_install.add_argument("--channels", default="",
                            help="Comma-separated optional channels to install "
-                                "(twitter,reddit,linkedin,all)")
+                                "(twitter,reddit,opencli,linkedin,all)")
 
     # ── configure ──
-    p_conf = sub.add_parser("configure", help="Set a config value or auto-extract from browser")
+    p_conf = sub.add_parser("configure", parents=[_verbose],
+                            help="Set a config value or auto-extract from browser")
     p_conf.add_argument("key", nargs="?", default=None,
                         choices=["proxy", "github-token", "groq-key", "openai-key",
                                  "twitter-cookies", "youtube-cookies"],
-                        help="What to configure (omit if using --from-browser)")
+                        help="What to configure (omit if using --from-browser). "
+                             "github-token and youtube-cookies are accepted so the "
+                             "refusal is discoverable, but are not stored: "
+                             "github-token -> export GITHUB_TOKEN/GH_TOKEN (or .env); "
+                             "youtube-cookies -> transcribe <url> "
+                             "--cookies-from-browser <browser>")
     p_conf.add_argument("value", nargs="*", help="The value(s) to set")
     p_conf.add_argument("--from-browser", metavar="BROWSER",
                         choices=["chrome", "firefox", "edge", "brave", "opera"],
                         help="Auto-extract ALL platform cookies from browser (chrome/firefox/edge/brave/opera)")
 
     # ── read ──
-    p_read = sub.add_parser("read", help="Fetch a URL through the escalating unlocker and print clean markdown")
+    p_read = sub.add_parser("read", parents=[_verbose],
+                            help="Fetch a URL through the escalating unlocker and print clean markdown")
     p_read.add_argument("url", help="The URL to read")
     p_read.add_argument("--backend", default=None,
                         help="Force a single backend (e.g. curl_cffi, 'Jina Reader', stealth-browser)")
@@ -146,7 +161,8 @@ def _run():
                              "stripping + indicator scanning always run regardless)")
 
     # ── search ──
-    p_search = sub.add_parser("search", help="Multi-source web search (fusion-merged across providers)")
+    p_search = sub.add_parser("search", parents=[_verbose],
+                              help="Multi-source web search (fusion-merged across providers)")
     p_search.add_argument("query", help="The search query")
     p_search.add_argument("-n", dest="max_results", type=int, default=10,
                           help="Maximum number of fused results to return (default: 10)")
@@ -157,22 +173,24 @@ def _run():
                                "e.g. --provider duckduckgo --provider brave")
 
     # ── doctor ──
-    p_doctor = sub.add_parser("doctor", help="Check platform availability")
+    p_doctor = sub.add_parser("doctor", parents=[_verbose], help="Check platform availability")
     p_doctor.add_argument("--json", action="store_true",
                           help="Output machine-readable JSON instead of the text report")
 
     # ── uninstall ──
-    p_uninstall = sub.add_parser("uninstall", help="Remove all searchts config, tokens, and skill files")
+    p_uninstall = sub.add_parser("uninstall", parents=[_verbose],
+                                 help="Remove all searchts config, tokens, and skill files")
     p_uninstall.add_argument("--dry-run", action="store_true",
                              help="Show what would be removed without making any changes")
     p_uninstall.add_argument("--keep-config", action="store_true",
                              help="Remove skill files only, keep ~/.searchts/ config and tokens")
 
     # ── mcp ──
-    p_mcp = sub.add_parser("mcp", help="Run or wire up the searchts MCP server")
+    p_mcp = sub.add_parser("mcp", parents=[_verbose], help="Run or wire up the searchts MCP server")
     mcp_sub = p_mcp.add_subparsers(dest="mcp_command", help="MCP subcommands")
     p_serve = mcp_sub.add_parser(
         "serve",
+        parents=[_verbose],
         help="Run the MCP server (stdio default; --http / --sse = loopback only)",
     )
     p_serve.add_argument(
@@ -197,12 +215,13 @@ def _run():
         help="Port for --http/--sse (default 8765)",
     )
     p_mcp_install = mcp_sub.add_parser(
-        "install", help="Print the exact wiring for an AI agent client (no network)")
+        "install", parents=[_verbose],
+        help="Print the exact wiring for an AI agent client (no network)")
     p_mcp_install.add_argument("--client", choices=["claude", "cursor", "json"], default=None,
                                help="Which client to print wiring for (default: all)")
 
     # ── skill ──
-    p_skill = sub.add_parser("skill", help="Manage agent skill registration")
+    p_skill = sub.add_parser("skill", parents=[_verbose], help="Manage agent skill registration")
     # Legacy flags (kept for backward compatibility): `searchts skill --install`.
     p_skill.add_argument("--install", dest="legacy_install", action="store_true",
                          help="Install the SKILL.md bundle to agent skill directories")
@@ -210,13 +229,15 @@ def _run():
                          help="Remove the SKILL.md bundle from agent skill directories")
     skill_sub = p_skill.add_subparsers(dest="skill_command", help="Skill subcommands")
     p_skill_install = skill_sub.add_parser(
-        "install", help="Write a Claude Code slash-command (searchts.md) into the commands dir")
+        "install", parents=[_verbose],
+        help="Write a Claude Code slash-command (searchts.md) into the commands dir")
     p_skill_install.add_argument("--dir", dest="dir", default=None,
                                  help="Target commands directory (default: ~/.claude/commands)")
 
     # ── check-update ──
     # ── transcribe ──
-    p_tr = sub.add_parser("transcribe", help="Transcribe a URL or local audio file (existing subtitles first, then Whisper via Groq/OpenAI or keyless local faster-whisper)")
+    p_tr = sub.add_parser("transcribe", parents=[_verbose],
+                          help="Transcribe a URL or local audio file (existing subtitles first, then Whisper via Groq/OpenAI or keyless local faster-whisper)")
     p_tr.add_argument("source", help="Audio/video URL or local file path")
     p_tr.add_argument("--provider", choices=["auto", "groq", "openai", "local"], default="auto",
                       help="Audio transcription provider used when there are no subtitles "
@@ -237,12 +258,14 @@ def _run():
     )
 
     # ── get / grab (assets + design inspiration) ──
-    p_get = sub.add_parser("get", help="Download a single asset (image/PDF/font/file) through the unlocker")
+    p_get = sub.add_parser("get", parents=[_verbose],
+                           help="Download a single asset (image/PDF/font/file) through the unlocker")
     p_get.add_argument("url", help="The asset URL to download")
     p_get.add_argument("-o", "--output", default=None,
                        help="Output file or directory (default: filename from the URL, in the cwd)")
 
-    p_grab = sub.add_parser("grab", help="Grab a page's assets + color palette + fonts (design inspiration)")
+    p_grab = sub.add_parser("grab", parents=[_verbose],
+                            help="Grab a page's assets + color palette + fonts (design inspiration)")
     p_grab.add_argument("url", help="The page URL to grab")
     p_grab.add_argument("--out", default=None,
                         help="Output directory (default: ./searchts-grab-<host>)")
@@ -254,13 +277,15 @@ def _run():
                         help="Maximum assets to download (default 60)")
     p_grab.add_argument("--json", action="store_true", help="Print the manifest JSON to stdout")
 
-    sub.add_parser("check-update", help="Check for new versions and changes")
+    sub.add_parser("check-update", parents=[_verbose],
+                   help="Check for new versions and changes")
 
     # ── watch ──
-    sub.add_parser("watch", help="Quick health check + update check (for scheduled tasks)")
+    sub.add_parser("watch", parents=[_verbose],
+                   help="Quick health check + update check (for scheduled tasks)")
 
     # ── version ──
-    sub.add_parser("version", help="Show version")
+    sub.add_parser("version", parents=[_verbose], help="Show version")
 
     _maybe_print_command_suggestion(sys.argv[1:], sub.choices)
     args = parser.parse_args()
