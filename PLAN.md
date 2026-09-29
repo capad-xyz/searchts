@@ -53,7 +53,7 @@
 - [x] **P1.2b** Skill YAML `description` ≤ 1024 (Agent Skills hosts skip the skill otherwise) — #89
 - [x] **P1.3** Acceptance gate: MCP-only session, no project SKILL.md, walled URL → `read_url` within first two tool calls. *zCode skill-off: agents called `read_url` first. **X2** posted 2026-08-27 (`@aadarsh_io`). Gate closed.*
 - [ ] **P1.4** 0.9.0 hammer catalog: [`docs/hammer-0.9.0.md`](docs/hammer-0.9.0.md). **Fail-loud top 5** shipped in **0.10.0** / **0.10.1**. Honest walls stay. **U1** answered: where the tool was listed, the description alone did not make the model call `read_url` first. The reach paragraph did. Log: [`docs/u1-harness.md`](docs/u1-harness.md). **No stubs that freeze lies.**
-- [ ] **P1.5** The MCP server sends that same paragraph as `instructions` on connect. Live check is the user's. It only counts when the paragraph is not already in the model's rules. A plain fetch first closes this path. Do not rewrite the sentence again.
+- [x] **P1.5** The MCP server sends that same paragraph as `instructions` on connect. Counts only when that paragraph is not already in the model's rules. Tess 2026-09-24 (Grok call 2, OpenCode call 1). This laptop 2026-09-29: OpenCode `--pure`, skill denied, reach block absent for the run, `read_url` first. Log: [`docs/u1-harness.md`](docs/u1-harness.md). Do not rewrite the sentence again.
 
 ### P2 — MCP 2.x hygiene (parallel with P1)
 
@@ -391,4 +391,5 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-24 | **F11** doctor prints `searchts.exe` PIDs. It does not kill them. The upgrade still fails while the file is held. |
 | 2026-09-24 | The next **U1** session is manual. The user runs it. No test, no agent, no `CLAUDE.md` edit. Only after a new instruction path. |
 | 2026-09-24 | Correction: tests are allowed. The user runs the live check. Steps and the expected result come first. Still no agent, and no `CLAUDE.md` edit. |
-| 2026-09-24 | **P1.5** the server sends the reach paragraph as MCP `instructions`. Not run yet. A plain fetch first closes this path. |
+| 2026-09-24 | **P1.5** isolation pass on Tess's computer. Reach file absent. Grok CLI `read_url` second. OpenCode `read_url` first. |
+| 2026-09-29 | **P1.5** this laptop. OpenCode 1.18.33 `--pure`, searchts skill denied, reach block removed for the run and restored. `read_url` first, then a plain fetch of the login wall. |
