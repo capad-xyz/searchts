@@ -169,7 +169,7 @@ P0 Honesty + channel delete-theater
 | Dead config / dotenv | Delete or wire; one precedence rule | P0.3–P0.4 |
 | `cli.py` (~1949 lines) | Extract per verb only when editing that verb | P4.5 |
 | Share extractors | Keep fail-open; document as extension point only | Footnote F5 |
-| Known-host extractors (Reddit JSON, etc.) | Same fail-open *ring* as shares, not a router | **F5b** — after P3.11 |
+| Known-host extractors (Reddit JSON, etc.) | Same fail-open *ring* as shares, not a router | **F5b** — after P3.11. Listing HTML index is **F5c**. |
 
 ### MCP 2.x path (no mechanical `on_*` port)
 
@@ -271,6 +271,12 @@ Installing it does **not** give a private Jev. Zero-shot it does not beat `jev-1
 - [x] **F7** Opt-in reuse of sessions already on the machine for **transcribe / extras only**. `searchts transcribe URL --cookies-from-browser chrome` (yt-dlp). Never silent (stderr line). Never inside `read_url` (**N5**). YAML `youtube-cookies` stays unwired. OpenCLI / `gh auth` stay doctor PATH probes. **F12** step 3.
 - **F10** **WebMCP** (site-exposed tools in the browser / ChatGPT Sites). Complementary surface to local MCP, not a replacement. **Revisit:** after core reach + honesty; revenue/hosted is later and must not dilute the free CLI.
 - [x] **F5b** Known-host extractors as another **ladder ring** (same pattern as shares): caller passes a **page** (e.g. `reddit.com/r/foo/hot/`) → try the public `.json` document → **fail open** to curl/Jina/stealth. Not `if host==reddit: skip unlocker` (**N4/N5**). Login shells stay `login-wall`.
+- [ ] **F5c** Reddit listing index from HTML already downloaded. Issue [#190](https://github.com/capad-xyz/searchts/issues/190). Measured 2026-09-29 on `r/MachineLearning/hot/`: stealth `page.content()` held 27 `shreddit-post` nodes and `post-title` in the light DOM (~1.1 MB). Trafilatura kept one post (527 chars) and `_MIN_CHARS` stamped `ok`. Shadow DOM is not where those posts live. Before `html_to_text` (ladder and the human rung), if the URL is a listing and the body has at least two `shreddit-post` nodes, render the compact index and skip Trafilatura. Zero or one node falls through, so a thread still reads as a thread. Markdown stays the print format. The JSON ring stays fail-open. No scroll. No cleaned-HTML output. No extra-region pass for unknown hosts. This does not claim every Reddit URL reads (**N7**).
+  - **URL detect:** `/r/{sub}/`, `/r/{sub}/hot|new|top|rising|controversial/`. Do not fire on `/comments/` thread URLs.
+  - **Fixture:** several `shreddit-post` nodes with `post-title` and a permalink attribute. The test fails if the Trafilatura path still wins. Not live Reddit.
+  - **Loud:** if the listing parse runs, stderr says so (P4.6). It must not look like a silent generic read.
+  - **Links:** permalinks are absolute (`https://www.reddit.com/...`), not `/r/...`. Read `post-title`, `permalink`, `content-href`, `comment-count`.
+  - **Deferred:** scroll-for-more (infinite scroll, no page 2; cap it; if the first post unmounts, copy rows on each step). Optional cleaned HTML for a human file. Unknown-host regions (the Flywheel card was never run through Trafilatura). Tess 2026-09-30: ship the slice with those four checks. Nothing else blocking.
 - [x] **F9** Localhost HTTP/SSE: `searchts mcp serve --http` → `http://127.0.0.1:8765/mcp` (Streamable HTTP); `--sse` for the old path. Bind loopback only (`127.0.0.1` / `localhost` / `::1`); refuse `0.0.0.0` / LAN. **Consumer:** Grok / Claude custom connector that cannot spawn stdio. Public/hosted MCP URL is still **N2**. Auth for HTTPS connectors is later; P3.6 SSRF already guards tool URLs. Not in P2.1–P2.3.
 - [x] **F8** Install/docs: pipx = keep the CLI; uvx = try + MCP one-shot. README + `mcp install` snippets. Do not ship an npm wrapper. Hosts that cannot see PATH need a full-path or uvx command. Skill install today writes `.claude/skills` and `.agents/skills`, not `.codex/skills`. **Revisit Codex path:** measure demand first (no id until someone asks).
 - [x] **F8b** Install-copy leftovers: `llms.txt` / `docs/update.md` / `check-update` `_UPDATE_INSTRUCTIONS` match F8. No `main.zip`, no `search-twitter`, doctor is read-only. Did **not** rewrite contributor `pip install -e`. Extra-missing `pipx inject` skipped (hints still `pip install "searchts[extra]"` for venvs). **Revisit inject:** if pipx users miss the mcp extra.
@@ -403,3 +409,4 @@ Organic X: draft here; publish from `@aadarsh_io`.
 | 2026-09-24 | **P1.5** isolation pass on Tess's computer. Reach file absent. Grok CLI `read_url` second. OpenCode `read_url` first. |
 | 2026-09-29 | **F19** parked. If an upgrade did not apply, say so, name the PID, print the one command. Do not auto-install or auto-kill. |
 | 2026-09-29 | **P1.5** this laptop. OpenCode 1.18.33 `--pure`, searchts skill denied, reach block removed for the run and restored. `read_url` first, then a plain fetch of the login wall. |
+| 2026-09-30 | **F5c** next unlocker slice. The hot-page HTML already has the posts. Parse `shreddit-post` before Trafilatura. Markdown stays. No HTML repair. Scroll and cleaned HTML stay deferred. |

@@ -57,6 +57,11 @@ LinkedIn login wall, a Cloudflare-fronted vendor site, a DataDome-class site, X,
 and Booking) is a real pass-rate against vendors that restrict bots. Expected
 failures are part of the result — there is no 100% trophy here.
 
+When **F5c** is in, a `reddit-hot` pass is a listing index (several post titles
+and absolute permalinks), not one article that clears 500 characters. A
+Trafilatura single-card extract of that hot page is still a miss.
+`reddit-comments` stays a thread. Do not write that rate in by hand.
+
 To measure it for real, run from a residential IP (a datacenter IP would
 understate the rate):
 
