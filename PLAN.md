@@ -226,6 +226,14 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 
 *Not committed to a sprint. Do not schedule until the matching measurement or P0–P3 pressure says so. Every skip that is still worth doing lives here with a revisit; “not this week” without an id is a bug.*
 
+### Later nudge — Laya (not a slice, not Hare)
+
+**Worth later. Do not install on a whim.** Laya (Convai, Apache 2.0, ~421M, local) is a typed-decision encoder, same shape as OpenCode **Jev** (`jev-1.13-free` on `https://opencode.ai/zen/v1/systemone`: yes/no, pick-one, small score, plus a probability). It does not read the repo, call tools, or write a review.
+
+Installing it does **not** give a private Jev. Zero-shot it does not beat `jev-1.13-free`. The number that matters needs labels and a fine-tune on **one question asked constantly** whose text must not leave the machine (sensitive diff, local gate). Until that question exists, the classifier is Jev free. Do not put Jev or Laya on the cheap-scout failover list. Do not post `searchts-r1-review` from either.
+
+**Revisit:** when that one question has a handful of labeled examples. Noted 2026-09-28.
+
 ### U — Unverified tracks
 
 - **U1 — #22 harness:** [`docs/u1-harness.md`](docs/u1-harness.md). **Answered 2026-09-23.** The reach paragraph made Laguna call `read_url` first. The tool description alone did not, on the one host where the tool was listed (called third). Bellami's run does not count: MCP was pending at init. The next live session is manual, on the user's machine, with the steps and the expected result written first. Tests in the repo are fine. No agent driving the host. No `CLAUDE.md` edit. Only after a new instruction path. Not **F18**.
