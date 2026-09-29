@@ -611,56 +611,124 @@ def count_titled_shreddit_posts(html: str) -> int:
     return sum(1 for a in posts if (a.get("post-title") or "").strip())
 
 
+_COMMENT_CHROME_RE = re.compile(
+    r"\b(?:"
+    r"Share|Award|Give Award|Hide|Reply|Report|"
+    r"More replies|More reply|"
+    r"Just now|"
+    r"Top \d+% Commenter"
+    r")\b"
+    r"|\b\d+\s*[smhdwy]\s+ago\b"
+    r"|[•·]",
+    re.IGNORECASE,
+)
+
+
+def _comment_body(author: str, body: str, all_text: str) -> str:
+    """Own comment text. Prefers ``slot="comment"``; else leftover own-text."""
+    slot = (body or "").strip()
+    raw = slot or (all_text or "").strip()
+    text = re.sub(r"\s+", " ", raw).strip()
+    if not text:
+        return ""
+    text = _COMMENT_CHROME_RE.sub(" ", text)
+    text = re.sub(r"\s+", " ", text).strip(" •·-|,")
+    a = (author or "").strip()
+    if a.lower().startswith("u/"):
+        a = a[2:]
+    if a and text.lower().startswith(a.lower()):
+        text = text[len(a) :].lstrip(" •·-|,")
+    if not slot:
+        text = re.sub(r"^OP\b\s*", "", text, flags=re.IGNORECASE)
+    return re.sub(r"\s+", " ", text).strip(" •·-|,")
+
+
 def _parse_shreddit_comments(html: str) -> List[Dict[str, str]]:
-    """Top-level-ish shreddit-comment nodes: author, score, inner text."""
+    """Every shreddit-comment as its own node, own text only, with nest depth.
+
+    Nested replies are nested ``<shreddit-comment>`` tags. Emitting only at
+    depth 0 mashed those replies into the parent blob.
+    """
 
     class _P(HTMLParser):
         def __init__(self) -> None:
             super().__init__()
-            self.comments: List[Dict[str, str]] = []
-            self._depth = 0
+            self.comments: List[Dict[str, Any]] = []
+            self._stack: List[Dict[str, Any]] = []
             self._skip = 0
-            self._attrs: Optional[Dict[str, str]] = None
-            self._buf: List[str] = []
 
         def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
             t = tag.lower()
             if t in _SKIP_TAGS:
                 self._skip += 1
+            ad = {str(k).lower(): (v or "") for k, v in attrs}
             if t == "shreddit-comment":
-                if self._depth == 0:
-                    self._attrs = {str(k).lower(): (v or "") for k, v in attrs}
-                    self._buf = []
-                self._depth += 1
+                node: Dict[str, Any] = dict(ad)
+                node["_depth"] = str(len(self._stack))
+                node["_all"] = []
+                node["_body_parts"] = []
+                node["_body_depth"] = 0
+                self._stack.append(node)
+                self.comments.append(node)
+                return
+            if not self._stack:
+                return
+            cur = self._stack[-1]
+            if cur["_body_depth"]:
+                cur["_body_depth"] += 1
+            elif ad.get("slot", "").lower() == "comment":
+                cur["_body_depth"] = 1
 
         def handle_endtag(self, tag: str) -> None:
             t = tag.lower()
             if t in _SKIP_TAGS:
                 self._skip = max(0, self._skip - 1)
-            if t == "shreddit-comment" and self._depth:
-                self._depth -= 1
-                if self._depth == 0 and self._attrs is not None:
-                    self._attrs["_text"] = " ".join(self._buf)
-                    self.comments.append(self._attrs)
-                    self._attrs = None
+            if self._stack:
+                cur = self._stack[-1]
+                if cur["_body_depth"]:
+                    cur["_body_depth"] -= 1
+            if t == "shreddit-comment" and self._stack:
+                self._finish(self._stack.pop())
 
         def handle_data(self, data: str) -> None:
-            if not self._depth or self._skip:
+            if not self._stack or self._skip:
                 return
             s = data.strip()
-            if s:
-                self._buf.append(s)
+            if not s:
+                return
+            cur = self._stack[-1]
+            cur["_all"].append(s)
+            if cur["_body_depth"]:
+                cur["_body_parts"].append(s)
+
+        def _finish(self, node: Dict[str, Any]) -> None:
+            if "_text" in node:
+                return
+            node["_text"] = " ".join(node.pop("_all", []))
+            node["_body"] = " ".join(node.pop("_body_parts", []))
+            node.pop("_body_depth", None)
 
     p = _P()
     try:
         p.feed(html or "")
     except Exception:  # noqa: BLE001
         pass
-    return p.comments
+    while p._stack:
+        p._finish(p._stack.pop())
+    out: List[Dict[str, str]] = []
+    keep = {"_text", "_body", "_depth"}
+    for n in p.comments:
+        out.append(
+            {str(k): str(v) for k, v in n.items() if not str(k).startswith("_") or k in keep}
+        )
+    return out
 
 
 def parse_reddit_thread_html(html: str, url: str = "") -> Optional[str]:
-    """OP plus a bounded comment list from thread HTML. None if there is no titled post."""
+    """OP plus a bounded comment tree from thread HTML. None if there is no titled post.
+
+    Nested ``shreddit-comment`` nodes are indented entries, not mashed into the parent.
+    """
     if url and not is_reddit_thread_url(url):
         return None
     posts = _parse_shreddit_posts(html)
@@ -692,18 +760,23 @@ def parse_reddit_thread_html(html: str, url: str = "") -> Optional[str]:
     shown = 0
     comment_block: List[str] = []
     for c in comments:
-        text = re.sub(r"\s+", " ", c.get("_text") or "").strip()
-        if len(text) < 8:
-            continue
         c_author = (c.get("author") or "[deleted]").strip()
         if c_author.startswith("u/"):
             c_author = c_author[2:]
+        text = _comment_body(c_author, c.get("_body") or "", c.get("_text") or "")
+        if len(text) < 8:
+            continue
         c_score = (c.get("score") or "").strip()
-        header = f"**/u/{c_author}**"
+        try:
+            depth = max(0, int(c.get("_depth") or "0"))
+        except ValueError:
+            depth = 0
+        indent = "  " * depth
+        header = f"{indent}**/u/{c_author}**"
         if c_score:
             header += f" ({c_score} pts)"
         comment_block.append(header)
-        comment_block.append(text)
+        comment_block.append(f"{indent}{text}")
         comment_block.append("")
         shown += 1
         if shown >= _MAX_COMMENTS:
