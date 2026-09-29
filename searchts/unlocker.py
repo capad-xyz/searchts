@@ -1171,13 +1171,16 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 _tick(f"  human-browser: {hop}")
                 text = ""
             else:
-                # F5c: Reddit listing HTML short-circuit before Trafilatura (human rung)
+                # F5c: Reddit listing HTML short-circuit before Trafilatura (human rung).
+                # The index is the document even when it is under _MIN_CHARS.
+                listing_hit = False
                 if _reddit_listing.is_reddit_listing_url(url):
                     listing_md = _reddit_listing.parse_reddit_listing_html(html, url)
                     if listing_md:
                         n = _reddit_listing.count_titled_shreddit_posts(html)
                         _tick(f"listing-html: {n} posts")
                         text = listing_md
+                        listing_hit = True
                     else:
                         text = html_to_text(html, url)
                 else:
@@ -1191,7 +1194,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     backend="human-browser", text=text, status=status,
                     final_url=final_url or url,
                 )
-                if len(text) >= min_chars:
+                if listing_hit or len(text) >= min_chars:
                     return _finalize(human, scrub)
                 best = human
 
