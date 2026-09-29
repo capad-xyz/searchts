@@ -68,7 +68,10 @@ The tier counts show how much work the unlocker needed:
 
 In the per-page table, `Chars` is a content sanity check, not a quality score.
 A fetch that returns fewer than `unlocker._MIN_CHARS` characters fails
-unless the case sets `allow_thin: true`. `Secs` is wall-clock time for that run.
+unless the case sets `allow_thin: true`. For `reddit-hot`, once **F5c** lands,
+clearing that floor with one post is not a pass. The pass is a listing index
+(several titles and absolute permalinks). `reddit-comments` stays a thread.
+`Secs` is wall-clock time for that run.
 A datacenter, CI, or some VPN connections can report a lower pass rate or more
 fallback-tier usage because their IP reputation and TLS fingerprint differ from
 a normal residential connection.
