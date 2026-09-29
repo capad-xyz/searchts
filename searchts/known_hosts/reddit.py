@@ -15,7 +15,8 @@ from __future__ import annotations
 import json
 import re
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from html.parser import HTMLParser
+from typing import Any, Dict, List, Optional, Tuple
 
 from searchts.known_hosts import KnownResult
 
@@ -32,7 +33,7 @@ PATTERN = re.compile(
     r"(?:"
     r"\.json"
     r"|/\.json"
-    r"|/(?:hot|new|top|rising)(?:\.json|/\.json)?"
+    r"|/(?:hot|new|top|rising|controversial)(?:\.json|/\.json)?"
     r"|/comments(?:/(?P<post_id>[A-Za-z0-9]+)(?:/(?P<slug>[A-Za-z0-9_-]+))?)?(?:\.json|/\.json)?"
     r")?"
     r"/?"
@@ -355,3 +356,135 @@ def extract_known(url: str, match: "re.Match[str]") -> Optional[KnownResult]:
                     return KnownResult(provider="reddit", title=f"/u/{user}", markdown=md)
 
     return None
+
+
+# ── F5c: Reddit listing HTML (shreddit-post) short-circuit for unlocker ladder ──
+
+_LISTING_PATH_RE = re.compile(
+    r"^/r/[A-Za-z0-9_]+(?:/(?:hot|new|top|rising|controversial))?/?$",
+    re.IGNORECASE,
+)
+
+
+def is_reddit_listing_url(url: str) -> bool:
+    """True for Reddit subreddit listing pages served as HTML (not threads, not .json).
+
+    Matches:
+      https://www.reddit.com/r/sub/
+      https://www.reddit.com/r/sub/hot
+      https://old.reddit.com/r/sub/new/
+      https://reddit.com/r/sub/controversial?foo=1
+
+    Does NOT match:
+      /r/sub/comments/...
+      any .json URL
+      other hosts
+    """
+    if not url:
+        return False
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except Exception:  # noqa: BLE001
+        return False
+    host = (parts.netloc or "").lower()
+    if host not in ("reddit.com", "www.reddit.com", "old.reddit.com"):
+        return False
+    path = parts.path or "/"
+    # Explicit .json never a listing for this path (JSON ring owns them)
+    if ".json" in path:
+        return False
+    # Threads are never listings
+    if "/comments/" in path.lower():
+        return False
+    # Must match a clean listing path (with optional sort and trailing slash)
+    if not _LISTING_PATH_RE.match(path):
+        return False
+    return True
+
+
+def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
+    """Return list of attr dicts for every <shreddit-post> start tag. Uses stdlib only."""
+    class _P(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.posts: List[Dict[str, str]] = []
+
+        def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+            if tag.lower() == "shreddit-post":
+                d = {str(k).lower(): (v or "") for k, v in attrs}
+                self.posts.append(d)
+
+    p = _P()
+    try:
+        p.feed(html or "")
+    except Exception:  # noqa: BLE001 - malformed HTML must not explode
+        pass
+    return p.posts
+
+
+def _canonical_reddit_permalink(perm: str) -> str:
+    """Absolute ``https://www.reddit.com`` link. Other hosts stay as given."""
+    perm = (perm or "").strip()
+    if not perm:
+        return ""
+    if perm.startswith(("http://", "https://")):
+        parts = urllib.parse.urlsplit(perm)
+        host = (parts.netloc or "").lower()
+        if host in ("reddit.com", "www.reddit.com", "old.reddit.com"):
+            path = parts.path or "/"
+            if not path.startswith("/"):
+                path = "/" + path
+            query = f"?{parts.query}" if parts.query else ""
+            return "https://www.reddit.com" + path + query
+        return perm
+    if not perm.startswith("/"):
+        perm = "/" + perm
+    return "https://www.reddit.com" + perm
+
+
+def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
+    """If >=2 shreddit-post nodes have non-empty post-title, return compact MD index.
+
+    Permalinks are normalized to absolute https://www.reddit.com/... form.
+    comment-count appears when present. Returns None for <2 titled posts.
+
+    When a URL is supplied, this returns None for thread URLs (/comments/) or .json URLs
+    even if the HTML contains shreddit-post nodes (threads fall through; JSON ring owns .json).
+
+    Does not change _render_subreddit_from_children output.
+    Markdown print format only.
+    """
+    if url:
+        if not is_reddit_listing_url(url):
+            return None
+    posts = _parse_shreddit_posts(html)
+    valid: List[Dict[str, str]] = []
+    for attrs in posts:
+        title = (attrs.get("post-title") or "").strip()
+        if not title:
+            continue
+        perm = _canonical_reddit_permalink(
+            attrs.get("permalink") or attrs.get("content-href") or ""
+        )
+        cc = (attrs.get("comment-count") or "").strip()
+        valid.append({"title": title, "permalink": perm, "cc": cc})
+
+    if len(valid) < 2:
+        return None
+
+    lines: List[str] = []
+    for v in valid:
+        if v["cc"]:
+            lines.append(f"- **{v['title']}** ({v['cc']} comments)")
+        else:
+            lines.append(f"- **{v['title']}**")
+        if v["permalink"]:
+            lines.append(f"  [`permalink`]({v['permalink']})")
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def count_titled_shreddit_posts(html: str) -> int:
+    """Count shreddit-post nodes that carry a non-empty post-title attr."""
+    posts = _parse_shreddit_posts(html)
+    return sum(1 for a in posts if (a.get("post-title") or "").strip())

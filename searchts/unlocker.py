@@ -961,6 +961,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     except ValueError as e:
         raise UnlockerError(url, [("normalize", str(e))]) from e
 
+    from searchts.known_hosts import reddit as _reddit_listing
     from searchts.ssrf import guard_mcp_url, private_hop
     blocked = guard_mcp_url(url, resolve_dns=True)
     if blocked:
@@ -1076,7 +1077,28 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         unpin(domain)
                         remembered = None
                     continue
-                text = html_to_text(body, url)
+                # F5c: Reddit listing HTML short-circuit before Trafilatura.
+                # At least two titled shreddit-post nodes → compact index wins immediately
+                # (even if short). Threads/JSON and <2 nodes fall through to normal extraction.
+                if _reddit_listing.is_reddit_listing_url(url):
+                    listing_md = _reddit_listing.parse_reddit_listing_html(body, url)
+                    if listing_md:
+                        n = _reddit_listing.count_titled_shreddit_posts(body)
+                        _tick(f"listing-html: {n} posts")
+                        return _finalize(
+                            FetchResult(
+                                backend,
+                                listing_md,
+                                status,
+                                final_url=final_url or url,
+                                headers=headers,
+                            ),
+                            scrub,
+                        )
+                    # <2 titled posts: fall through to normal html_to_text path
+                    text = html_to_text(body, url)
+                else:
+                    text = html_to_text(body, url)
 
             text = text or ""
             # Login-wall on the extract only (raw HTML often has a sign-in modal).
@@ -1144,22 +1166,40 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             status, html, final_url = None, "", url
         if looks_blocked(status, html) is None:
             hop = private_hop(url, final_url or url)
+            listing_hit = False
             if hop:
                 attempts.append(("human-browser", hop))
                 _tick(f"  human-browser: {hop}")
                 text = ""
             else:
-                text = html_to_text(html, url)
+                # F5c: Reddit listing HTML short-circuit before Trafilatura (human rung).
+                # The index is the document even when it is under _MIN_CHARS,
+                # and even when an earlier rung left a longer thin `best`.
+                if _reddit_listing.is_reddit_listing_url(url):
+                    listing_md = _reddit_listing.parse_reddit_listing_html(html, url)
+                    if listing_md:
+                        n = _reddit_listing.count_titled_shreddit_posts(html)
+                        _tick(f"listing-html: {n} posts")
+                        text = listing_md
+                        listing_hit = True
+                    else:
+                        text = html_to_text(html, url)
+                else:
+                    text = html_to_text(html, url)
             if (
                 text
                 and looks_blocked(200, text, login_wall=True) is None
-                and (best is None or len(text) > len(best.text))
+                and (
+                    listing_hit
+                    or best is None
+                    or len(text) > len(best.text)
+                )
             ):
                 human = FetchResult(
                     backend="human-browser", text=text, status=status,
                     final_url=final_url or url,
                 )
-                if len(text) >= min_chars:
+                if listing_hit or len(text) >= min_chars:
                     return _finalize(human, scrub)
                 best = human
 
