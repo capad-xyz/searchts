@@ -619,3 +619,164 @@ def test_known_host_progress_false_is_quiet(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.err == ""
     assert captured.out == ""
+
+
+# ── F5c: shreddit-post HTML listing short-circuit (no network) ────────────────
+
+_REDDIT_LISTING_HTML_3 = """
+<html>
+<body>
+<shreddit-post post-title="First post title" permalink="/r/python/comments/abc/first/" comment-count="3"></shreddit-post>
+<shreddit-post post-title="Second post title" content-href="/r/python/comments/def/second/"></shreddit-post>
+<shreddit-post post-title="Third post title" permalink="/r/python/comments/ghi/third/" comment-count="12"></shreddit-post>
+</body>
+</html>
+"""
+
+_REDDIT_LISTING_HTML_1 = """
+<html>
+<body>
+<shreddit-post post-title="Only one" permalink="/r/python/comments/only/one/"></shreddit-post>
+</body>
+</html>
+"""
+
+_REDDIT_THREAD_HTML_MANY = """
+<html>
+<body>
+<shreddit-post post-title="Thread reply one" permalink="/r/python/comments/abc/first/reply"></shreddit-post>
+<shreddit-post post-title="Thread reply two" permalink="/r/python/comments/abc/second/reply"></shreddit-post>
+</body>
+</html>
+"""
+
+
+def test_parse_reddit_listing_html_three_posts():
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_listing_html(_REDDIT_LISTING_HTML_3, "https://www.reddit.com/r/python/hot/")
+    assert md is not None
+    assert "First post title" in md
+    assert "Second post title" in md
+    assert "Third post title" in md
+    assert "https://www.reddit.com/r/python/comments/abc/first/" in md
+    assert "https://www.reddit.com/r/python/comments/def/second/" in md
+    assert "https://www.reddit.com/r/python/comments/ghi/third/" in md
+    assert "(3 comments)" in md
+    assert "(12 comments)" in md
+
+
+def test_parse_reddit_listing_html_one_post_returns_none():
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_listing_html(_REDDIT_LISTING_HTML_1, "https://www.reddit.com/r/python/")
+    assert md is None
+
+
+def test_parse_reddit_listing_html_comments_url_does_not_trigger(monkeypatch):
+    """A /comments/ page with many shreddit-post must not produce listing MD."""
+    import searchts.known_hosts.reddit as reddit_mod
+    # Even with many posts, thread URL must return None for parse
+    md = reddit_mod.parse_reddit_listing_html(_REDDIT_THREAD_HTML_MANY, "https://www.reddit.com/r/python/comments/abc/title/")
+    assert md is None
+    # And is_reddit_listing_url must be false
+    assert not reddit_mod.is_reddit_listing_url("https://www.reddit.com/r/python/comments/abc/title/")
+
+
+def test_is_reddit_listing_url_rejects_json_and_comments_and_other_hosts():
+    import searchts.known_hosts.reddit as reddit_mod
+    assert not reddit_mod.is_reddit_listing_url("https://www.reddit.com/r/python/hot.json")
+    assert not reddit_mod.is_reddit_listing_url("https://www.reddit.com/r/python/hot/.json")
+    assert not reddit_mod.is_reddit_listing_url("https://www.reddit.com/r/python/comments/abc/title/")
+    assert not reddit_mod.is_reddit_listing_url("https://example.com/r/python/hot/")
+    assert not reddit_mod.is_reddit_listing_url("https://news.ycombinator.com/")
+
+
+def test_is_reddit_listing_url_accepts_variants_and_controversial():
+    import searchts.known_hosts.reddit as reddit_mod
+    assert reddit_mod.is_reddit_listing_url("https://www.reddit.com/r/python/")
+    assert reddit_mod.is_reddit_listing_url("https://www.reddit.com/r/python")
+    assert reddit_mod.is_reddit_listing_url("https://www.reddit.com/r/python/hot/")
+    assert reddit_mod.is_reddit_listing_url("https://old.reddit.com/r/python/new")
+    assert reddit_mod.is_reddit_listing_url("https://reddit.com/r/python/top/")
+    assert reddit_mod.is_reddit_listing_url("https://reddit.com/r/python/rising?sort=hot")
+    assert reddit_mod.is_reddit_listing_url("https://www.reddit.com/r/python/controversial/")
+
+
+def test_listing_html_short_circuit_in_fetch(monkeypatch, capsys):
+    """JSON ring 403, curl returns 3-post HTML, jina/stealth raise; listing wins, ticks listing-html."""
+    import searchts.known_hosts.reddit as reddit_mod
+
+    # JSON ring returns 403 interstitial → None
+    monkeypatch.setattr(reddit_mod, "_fetch", lambda u, timeout=30: json.dumps({"error": 403, "message": "blocked"}))
+
+    def fake_curl(url, timeout=30):
+        return 200, _REDDIT_LISTING_HTML_3, url, {}
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", fake_curl)
+    monkeypatch.setattr(unlocker, "_fetch_jina", lambda url, **k: (_ for _ in ()).throw(Tripwire("jina")))
+    monkeypatch.setattr(unlocker, "_fetch_stealth", lambda url, **k: (_ for _ in ()).throw(Tripwire("stealth")))
+
+    res = unlocker.fetch(
+        "https://www.reddit.com/r/python/hot/",
+        backends=["curl_cffi"],
+        use_memory=False,
+        progress=True,
+    )
+    assert "First post title" in res.text
+    assert "Second post title" in res.text
+    assert "Third post title" in res.text
+    captured = capsys.readouterr()
+    assert "listing-html:" in captured.err
+    assert captured.out == ""
+
+
+def test_listing_html_three_posts_skips_html_to_text(monkeypatch):
+    """3-post case must short-circuit before html_to_text; 1-post case must still call through."""
+    import searchts.known_hosts.reddit as reddit_mod
+    import searchts.unlocker as ul_mod
+
+    # 3-post case
+    calls = []
+    def exploding_to_text(html, url=None):
+        calls.append("html_to_text")
+        raise AssertionError("html_to_text must not be called for 3+ post listing")
+
+    monkeypatch.setattr(ul_mod, "html_to_text", exploding_to_text)
+
+    def fake_curl(url, timeout=30):
+        return 200, _REDDIT_LISTING_HTML_3, url, {}
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", fake_curl)
+    monkeypatch.setattr(unlocker, "_fetch_jina", lambda url, **k: (_ for _ in ()).throw(Tripwire("jina")))
+    monkeypatch.setattr(unlocker, "_fetch_stealth", lambda url, **k: (_ for _ in ()).throw(Tripwire("stealth")))
+
+    res3 = unlocker.fetch(
+        "https://www.reddit.com/r/python/hot/",
+        backends=["curl_cffi"],
+        use_memory=False,
+    )
+    assert "First post title" in res3.text
+    assert calls == [], "html_to_text must not have been called for >=2 titled posts"
+
+    # 1-post case: must fall through to html_to_text
+    html_to_text_calls = []
+    def spy_to_text(html, url=None):
+        html_to_text_calls.append(1)
+        # Return > _MIN_CHARS so the normal win path returns instead of thin-fail.
+        return "FALLTHROUGH TEXT FROM HTML_TO_TEXT " + ("x" * 600)
+
+    monkeypatch.setattr(ul_mod, "html_to_text", spy_to_text)
+
+    def fake_curl1(url, timeout=30):
+        return 200, _REDDIT_LISTING_HTML_1, url, {}
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", fake_curl1)
+    monkeypatch.setattr(unlocker, "_fetch_jina", lambda url, **k: (_ for _ in ()).throw(Tripwire("jina")))
+    monkeypatch.setattr(unlocker, "_fetch_stealth", lambda url, **k: (_ for _ in ()).throw(Tripwire("stealth")))
+
+    res1 = unlocker.fetch(
+        "https://www.reddit.com/r/python/",
+        backends=["curl_cffi"],
+        use_memory=False,
+    )
+    assert html_to_text_calls, "html_to_text should have been called for 1-post fallthrough"
+    assert "FALLTHROUGH" in res1.text

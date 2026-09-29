@@ -962,6 +962,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         raise UnlockerError(url, [("normalize", str(e))]) from e
 
     from searchts.ssrf import guard_mcp_url, private_hop
+    from searchts.known_hosts import reddit as _reddit_listing
     blocked = guard_mcp_url(url, resolve_dns=True)
     if blocked:
         why = blocked[7:] if blocked.startswith("Error: ") else blocked
@@ -1076,7 +1077,28 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         unpin(domain)
                         remembered = None
                     continue
-                text = html_to_text(body, url)
+                # F5c: Reddit listing HTML short-circuit before Trafilatura.
+                # At least two titled shreddit-post nodes → compact index wins immediately
+                # (even if short). Threads/JSON and <2 nodes fall through to normal extraction.
+                if _reddit_listing.is_reddit_listing_url(url):
+                    listing_md = _reddit_listing.parse_reddit_listing_html(body, url)
+                    if listing_md:
+                        n = _reddit_listing.count_titled_shreddit_posts(body)
+                        _tick(f"listing-html: {n} posts")
+                        return _finalize(
+                            FetchResult(
+                                backend,
+                                listing_md,
+                                status,
+                                final_url=final_url or url,
+                                headers=headers,
+                            ),
+                            scrub,
+                        )
+                    # <2 titled posts: fall through to normal html_to_text path
+                    text = html_to_text(body, url)
+                else:
+                    text = html_to_text(body, url)
 
             text = text or ""
             # Login-wall on the extract only (raw HTML often has a sign-in modal).
@@ -1149,7 +1171,17 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 _tick(f"  human-browser: {hop}")
                 text = ""
             else:
-                text = html_to_text(html, url)
+                # F5c: Reddit listing HTML short-circuit before Trafilatura (human rung)
+                if _reddit_listing.is_reddit_listing_url(url):
+                    listing_md = _reddit_listing.parse_reddit_listing_html(html, url)
+                    if listing_md:
+                        n = _reddit_listing.count_titled_shreddit_posts(html)
+                        _tick(f"listing-html: {n} posts")
+                        text = listing_md
+                    else:
+                        text = html_to_text(html, url)
+                else:
+                    text = html_to_text(html, url)
             if (
                 text
                 and looks_blocked(200, text, login_wall=True) is None
