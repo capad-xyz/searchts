@@ -873,3 +873,64 @@ class TestConfigureDeadKnobs:
         gh = capsys.readouterr().out
         assert "GITHUB_TOKEN" in gh
         assert "Missing value" not in gh
+
+
+class TestHelpMentionsRealSurface:
+    """Help must name what the code actually accepts/installs."""
+
+    def test_install_help_names_opencli(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["searchts", "install", "--help"]):
+                main()
+        assert exc_info.value.code == 0
+        out = capsys.readouterr().out
+        assert "opencli" in out
+        assert "all" in out
+
+    def test_configure_help_says_dead_keys_are_not_stored(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["searchts", "configure", "--help"]):
+                main()
+        assert exc_info.value.code == 0
+        raw = capsys.readouterr().out
+        out = " ".join(raw.split())  # argparse hard-wraps help mid-phrase
+        flat = "".join(raw.split())  # hard wrap can split "--flag" at the hyphen
+        assert "github-token" in out
+        assert "youtube-cookies" in out
+        assert "not stored" in out
+        # The supported alternative is discoverable from --help alone.
+        assert "GITHUB_TOKEN" in out
+        assert "--cookies-from-browser" in flat
+
+
+class TestVerboseAfterSubcommand:
+    """`-v` must be accepted both before and after the subcommand."""
+
+    def _run_read(self, argv, monkeypatch):
+        seen = {}
+        monkeypatch.setattr(cli, "_cmd_read", lambda args: seen.setdefault("url", args.url))
+        monkeypatch.setattr(cli, "_configure_logging", lambda verbose: seen.setdefault("verbose", verbose))
+        with patch("sys.argv", argv):
+            main()
+        return seen
+
+    def test_verbose_flag_after_subcommand(self, monkeypatch):
+        seen = self._run_read(["searchts", "read", "-v", "https://example.com"], monkeypatch)
+        assert seen["url"] == "https://example.com"
+        assert seen["verbose"] is True
+
+    def test_verbose_long_flag_after_subcommand(self, monkeypatch):
+        seen = self._run_read(
+            ["searchts", "read", "https://example.com", "--verbose"], monkeypatch
+        )
+        assert seen["url"] == "https://example.com"
+        assert seen["verbose"] is True
+
+    def test_verbose_flag_before_subcommand_still_works(self, monkeypatch):
+        seen = self._run_read(["searchts", "-v", "read", "https://example.com"], monkeypatch)
+        assert seen["url"] == "https://example.com"
+        assert seen["verbose"] is True
+
+    def test_no_verbose_flag_stays_false(self, monkeypatch):
+        seen = self._run_read(["searchts", "read", "https://example.com"], monkeypatch)
+        assert seen["verbose"] is False
