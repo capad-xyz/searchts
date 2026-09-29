@@ -651,6 +651,25 @@ _REDDIT_THREAD_HTML_MANY = """
 """
 
 
+_REDDIT_LISTING_HTML_WITH_BODY = """
+<html>
+<body>
+<shreddit-post post-title="CoWindow paper" permalink="/r/python/comments/aaa/cowindow/" comment-count="0">
+  <a slot="title">CoWindow paper</a>
+  <div slot="text-body">I am one of the authors of two recent papers exploring different sources of redundant computation in attention. CoWindow Attention distributes distant context across KV heads.</div>
+  <button>Share</button>
+</shreddit-post>
+<shreddit-post post-title="Link only card" permalink="/r/python/comments/bbb/link/">
+  <a slot="title">Link only card</a>
+</shreddit-post>
+<shreddit-post post-title="Long body post" permalink="/r/python/comments/ccc/long/" comment-count="5">
+  <div slot="text-body">%s</div>
+</shreddit-post>
+</body>
+</html>
+""" % ("word " * 80)
+
+
 def test_parse_reddit_listing_html_three_posts():
     import searchts.known_hosts.reddit as reddit_mod
     md = reddit_mod.parse_reddit_listing_html(_REDDIT_LISTING_HTML_3, "https://www.reddit.com/r/python/hot/")
@@ -663,6 +682,28 @@ def test_parse_reddit_listing_html_three_posts():
     assert "https://www.reddit.com/r/python/comments/ghi/third/" in md
     assert "(3 comments)" in md
     assert "(12 comments)" in md
+
+
+def test_parse_reddit_listing_html_includes_card_snippet():
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_listing_html(
+        _REDDIT_LISTING_HTML_WITH_BODY,
+        "https://www.reddit.com/r/python/hot/",
+    )
+    assert md is not None
+    assert "CoWindow paper" in md
+    assert "I am one of the authors of two recent papers" in md
+    # Title is not repeated as the snippet.
+    cowindow_block = md.split("Link only card")[0]
+    assert cowindow_block.count("CoWindow paper") == 1
+    # Link-only card has no snippet line between title and permalink.
+    link_block = md.split("Link only card", 1)[1].split("Long body post", 1)[0]
+    assert "I am one of the authors" not in link_block
+    assert "[`permalink`]" in link_block
+    # Long body is truncated.
+    assert "..." in md
+    assert len("word " * 80) > 280
+    assert ("word " * 80).strip() not in md
 
 
 def test_parse_reddit_listing_html_one_post_returns_none():

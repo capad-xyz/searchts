@@ -402,17 +402,70 @@ def is_reddit_listing_url(url: str) -> bool:
     return True
 
 
+_SKIP_TAGS = frozenset({"script", "style", "svg", "noscript"})
+_SNIPPET_MAX = 280
+_SNIPPET_MIN = 40
+
+
 def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
-    """Return list of attr dicts for every <shreddit-post> start tag. Uses stdlib only."""
+    """Return attr dicts for every <shreddit-post>, plus inner card text.
+
+    ``_text`` is all light-DOM text. ``_body`` is ``slot="text-body"`` when
+    that slot exists. Stdlib HTMLParser only.
+    """
+
     class _P(HTMLParser):
         def __init__(self) -> None:
             super().__init__()
             self.posts: List[Dict[str, str]] = []
+            self._depth = 0
+            self._skip = 0
+            self._body_depth = 0
+            self._attrs: Optional[Dict[str, str]] = None
+            self._all: List[str] = []
+            self._body: List[str] = []
 
         def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
-            if tag.lower() == "shreddit-post":
-                d = {str(k).lower(): (v or "") for k, v in attrs}
-                self.posts.append(d)
+            t = tag.lower()
+            if t in _SKIP_TAGS:
+                self._skip += 1
+            ad = {str(k).lower(): (v or "") for k, v in attrs}
+            if t == "shreddit-post":
+                if self._depth == 0:
+                    self._attrs = ad
+                    self._all = []
+                    self._body = []
+                    self._body_depth = 0
+                self._depth += 1
+            elif self._depth:
+                if self._body_depth:
+                    self._body_depth += 1
+                elif ad.get("slot", "").lower() == "text-body":
+                    self._body_depth = 1
+
+        def handle_endtag(self, tag: str) -> None:
+            t = tag.lower()
+            if t in _SKIP_TAGS:
+                self._skip = max(0, self._skip - 1)
+            if self._body_depth:
+                self._body_depth -= 1
+            if t == "shreddit-post" and self._depth:
+                self._depth -= 1
+                if self._depth == 0 and self._attrs is not None:
+                    self._attrs["_text"] = " ".join(self._all)
+                    self._attrs["_body"] = " ".join(self._body)
+                    self.posts.append(self._attrs)
+                    self._attrs = None
+
+        def handle_data(self, data: str) -> None:
+            if not self._depth or self._skip:
+                return
+            s = data.strip()
+            if not s:
+                return
+            self._all.append(s)
+            if self._body_depth:
+                self._body.append(s)
 
     p = _P()
     try:
@@ -420,6 +473,33 @@ def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
     except Exception:  # noqa: BLE001 - malformed HTML must not explode
         pass
     return p.posts
+
+
+def _card_snippet(title: str, body: str, all_text: str) -> str:
+    """Short card body under the title. Empty when the card is title-only."""
+    raw = (body or "").strip() or (all_text or "").strip()
+    text = re.sub(r"\s+", " ", raw).strip()
+    if not text:
+        return ""
+    t = (title or "").strip()
+    if t and text.startswith(t):
+        text = re.sub(r"^[\s\-|]+", "", text[len(t) :]).strip()
+    text = re.sub(
+        r"\b(Share|Award|Give Award|Hide|Reply|Report)\b",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) < _SNIPPET_MIN:
+        return ""
+    if len(text) > _SNIPPET_MAX:
+        cut = text[:_SNIPPET_MAX]
+        sp = cut.rfind(" ")
+        if sp >= 80:
+            cut = cut[:sp]
+        text = cut.rstrip(".,;:") + "..."
+    return text
 
 
 def _canonical_reddit_permalink(perm: str) -> str:
@@ -446,7 +526,8 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
     """If >=2 shreddit-post nodes have non-empty post-title, return compact MD index.
 
     Permalinks are normalized to absolute https://www.reddit.com/... form.
-    comment-count appears when present. Returns None for <2 titled posts.
+    comment-count appears when present. A truncated card snippet sits under
+    the title when the light DOM has a body. Returns None for <2 titled posts.
 
     When a URL is supplied, this returns None for thread URLs (/comments/) or .json URLs
     even if the HTML contains shreddit-post nodes (threads fall through; JSON ring owns .json).
@@ -467,7 +548,8 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
             attrs.get("permalink") or attrs.get("content-href") or ""
         )
         cc = (attrs.get("comment-count") or "").strip()
-        valid.append({"title": title, "permalink": perm, "cc": cc})
+        snippet = _card_snippet(title, attrs.get("_body") or "", attrs.get("_text") or "")
+        valid.append({"title": title, "permalink": perm, "cc": cc, "snippet": snippet})
 
     if len(valid) < 2:
         return None
@@ -478,6 +560,8 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
             lines.append(f"- **{v['title']}** ({v['cc']} comments)")
         else:
             lines.append(f"- **{v['title']}**")
+        if v["snippet"]:
+            lines.append(f"  {v['snippet']}")
         if v["permalink"]:
             lines.append(f"  [`permalink`]({v['permalink']})")
         lines.append("")
