@@ -700,10 +700,9 @@ def test_parse_reddit_listing_html_includes_card_snippet():
     link_block = md.split("Link only card", 1)[1].split("Long body post", 1)[0]
     assert "I am one of the authors" not in link_block
     assert "[`permalink`]" in link_block
-    # Long body is truncated.
-    assert "..." in md
-    assert len("word " * 80) > 280
-    assert ("word " * 80).strip() not in md
+    # Card body is the full slot text, not a 280-character cut.
+    assert "word " * 40 in md
+    assert "..." not in md.split("Long body post", 1)[1]
 
 
 def test_parse_reddit_listing_html_one_post_returns_none():
@@ -720,6 +719,58 @@ def test_parse_reddit_listing_html_comments_url_does_not_trigger(monkeypatch):
     assert md is None
     # And is_reddit_listing_url must be false
     assert not reddit_mod.is_reddit_listing_url("https://www.reddit.com/r/python/comments/abc/title/")
+
+
+_REDDIT_THREAD_HTML = """
+<html>
+<body>
+<shreddit-post post-title="CoWindow paper" author="alice" score="2" comment-count="3" permalink="/r/python/comments/abc/cowindow/">
+  <div slot="text-body">I am one of the authors of two recent papers exploring attention.</div>
+</shreddit-post>
+<shreddit-comment author="bob" score="1">This is a useful comment about the paper here.</shreddit-comment>
+</body>
+</html>
+"""
+
+
+def test_parse_reddit_thread_html_op_score_body_and_comment():
+    import searchts.known_hosts.reddit as reddit_mod
+    md = reddit_mod.parse_reddit_thread_html(
+        _REDDIT_THREAD_HTML,
+        "https://www.reddit.com/r/python/comments/abc/cowindow/",
+    )
+    assert md is not None
+    assert md.startswith("# CoWindow paper")
+    assert "**OP:** /u/alice" in md
+    assert "**Score:** 2" in md
+    assert "**Comments:** 3" in md
+    assert "I am one of the authors of two recent papers" in md
+    assert "/u/bob" in md
+    assert "useful comment about the paper" in md
+    assert "https://www.reddit.com/r/python/comments/abc/cowindow/" in md
+
+
+def test_extract_from_html_listing_vs_thread_vs_json():
+    import searchts.known_hosts.reddit as reddit_mod
+    listing = reddit_mod.extract_from_html(
+        "https://www.reddit.com/r/python/hot/",
+        _REDDIT_LISTING_HTML_3,
+    )
+    assert listing is not None
+    assert listing[0].startswith("listing-html:")
+    thread = reddit_mod.extract_from_html(
+        "https://www.reddit.com/r/python/comments/abc/cowindow/",
+        _REDDIT_THREAD_HTML,
+    )
+    assert thread is not None
+    assert thread[0] == "thread-html: op"
+    assert reddit_mod.extract_from_html(
+        "https://www.reddit.com/r/python/hot.json",
+        _REDDIT_LISTING_HTML_3,
+    ) is None
+    assert reddit_mod.is_reddit_thread_url("https://www.reddit.com/r/python/comments/abc/cowindow/")
+    assert not reddit_mod.is_reddit_thread_url("https://www.reddit.com/r/python/hot/")
+    assert not reddit_mod.is_reddit_thread_url("https://www.reddit.com/r/python/comments/abc/cowindow.json")
 
 
 def test_is_reddit_listing_url_rejects_json_and_comments_and_other_hosts():

@@ -402,9 +402,29 @@ def is_reddit_listing_url(url: str) -> bool:
     return True
 
 
+def is_reddit_thread_url(url: str) -> bool:
+    """True for a Reddit comments thread served as HTML (not .json)."""
+    if not url:
+        return False
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except Exception:  # noqa: BLE001
+        return False
+    host = (parts.netloc or "").lower()
+    if host not in ("reddit.com", "www.reddit.com", "old.reddit.com"):
+        return False
+    path = parts.path or "/"
+    if ".json" in path:
+        return False
+    return bool(_THREAD_PATH_RE.match(path))
+
+
 _SKIP_TAGS = frozenset({"script", "style", "svg", "noscript"})
-_SNIPPET_MAX = 280
 _SNIPPET_MIN = 40
+_THREAD_PATH_RE = re.compile(
+    r"^/r/[A-Za-z0-9_]+/comments/[A-Za-z0-9]+(?:/[A-Za-z0-9_-]+)?/?$",
+    re.IGNORECASE,
+)
 
 
 def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
@@ -475,9 +495,14 @@ def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
     return p.posts
 
 
-def _card_snippet(title: str, body: str, all_text: str) -> str:
-    """Short card body under the title. Empty when the card is title-only."""
-    raw = (body or "").strip() or (all_text or "").strip()
+def _card_body(title: str, body: str, all_text: str, *, require_min: bool = True) -> str:
+    """Visible card/post body. Empty when the card is title-only.
+
+    Uses ``slot="text-body"`` when present (the full card text Reddit mounted).
+    Does not truncate. ``require_min`` drops leftover chrome on link cards.
+    """
+    slot = (body or "").strip()
+    raw = slot or (all_text or "").strip()
     text = re.sub(r"\s+", " ", raw).strip()
     if not text:
         return ""
@@ -491,14 +516,8 @@ def _card_snippet(title: str, body: str, all_text: str) -> str:
         flags=re.IGNORECASE,
     )
     text = re.sub(r"\s+", " ", text).strip()
-    if len(text) < _SNIPPET_MIN:
+    if require_min and not slot and len(text) < _SNIPPET_MIN:
         return ""
-    if len(text) > _SNIPPET_MAX:
-        cut = text[:_SNIPPET_MAX]
-        sp = cut.rfind(" ")
-        if sp >= 80:
-            cut = cut[:sp]
-        text = cut.rstrip(".,;:") + "..."
     return text
 
 
@@ -526,8 +545,8 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
     """If >=2 shreddit-post nodes have non-empty post-title, return compact MD index.
 
     Permalinks are normalized to absolute https://www.reddit.com/... form.
-    comment-count appears when present. A truncated card snippet sits under
-    the title when the light DOM has a body. Returns None for <2 titled posts.
+    comment-count and score appear when present. The full card body sits under
+    the title when the light DOM has one. Returns None for <2 titled posts.
 
     When a URL is supplied, this returns None for thread URLs (/comments/) or .json URLs
     even if the HTML contains shreddit-post nodes (threads fall through; JSON ring owns .json).
@@ -548,18 +567,36 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
             attrs.get("permalink") or attrs.get("content-href") or ""
         )
         cc = (attrs.get("comment-count") or "").strip()
-        snippet = _card_snippet(title, attrs.get("_body") or "", attrs.get("_text") or "")
-        valid.append({"title": title, "permalink": perm, "cc": cc, "snippet": snippet})
+        score = (attrs.get("score") or attrs.get("upvote-count") or "").strip()
+        author = (attrs.get("author") or "").strip()
+        if author.startswith("u/"):
+            author = author[2:]
+        snippet = _card_body(title, attrs.get("_body") or "", attrs.get("_text") or "")
+        valid.append(
+            {
+                "title": title,
+                "permalink": perm,
+                "cc": cc,
+                "score": score,
+                "author": author,
+                "snippet": snippet,
+            }
+        )
 
     if len(valid) < 2:
         return None
 
     lines: List[str] = []
     for v in valid:
+        bits: List[str] = []
+        if v["author"]:
+            bits.append(f"/u/{v['author']}")
         if v["cc"]:
-            lines.append(f"- **{v['title']}** ({v['cc']} comments)")
-        else:
-            lines.append(f"- **{v['title']}**")
+            bits.append(f"{v['cc']} comments")
+        if v["score"]:
+            bits.append(f"{v['score']} pts")
+        suffix = f" ({', '.join(bits)})" if bits else ""
+        lines.append(f"- **{v['title']}**{suffix}")
         if v["snippet"]:
             lines.append(f"  {v['snippet']}")
         if v["permalink"]:
@@ -572,3 +609,124 @@ def count_titled_shreddit_posts(html: str) -> int:
     """Count shreddit-post nodes that carry a non-empty post-title attr."""
     posts = _parse_shreddit_posts(html)
     return sum(1 for a in posts if (a.get("post-title") or "").strip())
+
+
+def _parse_shreddit_comments(html: str) -> List[Dict[str, str]]:
+    """Top-level-ish shreddit-comment nodes: author, score, inner text."""
+
+    class _P(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.comments: List[Dict[str, str]] = []
+            self._depth = 0
+            self._skip = 0
+            self._attrs: Optional[Dict[str, str]] = None
+            self._buf: List[str] = []
+
+        def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+            t = tag.lower()
+            if t in _SKIP_TAGS:
+                self._skip += 1
+            if t == "shreddit-comment":
+                if self._depth == 0:
+                    self._attrs = {str(k).lower(): (v or "") for k, v in attrs}
+                    self._buf = []
+                self._depth += 1
+
+        def handle_endtag(self, tag: str) -> None:
+            t = tag.lower()
+            if t in _SKIP_TAGS:
+                self._skip = max(0, self._skip - 1)
+            if t == "shreddit-comment" and self._depth:
+                self._depth -= 1
+                if self._depth == 0 and self._attrs is not None:
+                    self._attrs["_text"] = " ".join(self._buf)
+                    self.comments.append(self._attrs)
+                    self._attrs = None
+
+        def handle_data(self, data: str) -> None:
+            if not self._depth or self._skip:
+                return
+            s = data.strip()
+            if s:
+                self._buf.append(s)
+
+    p = _P()
+    try:
+        p.feed(html or "")
+    except Exception:  # noqa: BLE001
+        pass
+    return p.comments
+
+
+def parse_reddit_thread_html(html: str, url: str = "") -> Optional[str]:
+    """OP plus a bounded comment list from thread HTML. None if there is no titled post."""
+    if url and not is_reddit_thread_url(url):
+        return None
+    posts = _parse_shreddit_posts(html)
+    op = next((a for a in posts if (a.get("post-title") or "").strip()), None)
+    if op is None:
+        return None
+    title = (op.get("post-title") or "").strip()
+    author = (op.get("author") or "").strip()
+    if author.startswith("u/"):
+        author = author[2:]
+    score = (op.get("score") or op.get("upvote-count") or "").strip()
+    cc = (op.get("comment-count") or "").strip()
+    perm = _canonical_reddit_permalink(op.get("permalink") or op.get("content-href") or "")
+    body = _card_body(title, op.get("_body") or "", op.get("_text") or "", require_min=False)
+
+    lines: List[str] = [f"# {title}", ""]
+    if author:
+        lines.append(f"**OP:** /u/{author}")
+    if score:
+        lines.append(f"**Score:** {score}")
+    if cc:
+        lines.append(f"**Comments:** {cc}")
+    if perm:
+        lines.append(f"**Link:** {perm}")
+    if body:
+        lines.extend(["", body])
+
+    comments = _parse_shreddit_comments(html)
+    shown = 0
+    comment_block: List[str] = []
+    for c in comments:
+        text = re.sub(r"\s+", " ", c.get("_text") or "").strip()
+        if len(text) < 8:
+            continue
+        c_author = (c.get("author") or "[deleted]").strip()
+        if c_author.startswith("u/"):
+            c_author = c_author[2:]
+        c_score = (c.get("score") or "").strip()
+        header = f"**/u/{c_author}**"
+        if c_score:
+            header += f" ({c_score} pts)"
+        comment_block.append(header)
+        comment_block.append(text)
+        comment_block.append("")
+        shown += 1
+        if shown >= _MAX_COMMENTS:
+            break
+    if comment_block:
+        lines.extend(["", "## Comments", ""])
+        lines.extend(comment_block)
+    return "\n".join(lines).strip()
+
+
+def extract_from_html(url: str, html: str) -> Optional[Tuple[str, str]]:
+    """Listing index or thread document from already-downloaded HTML.
+
+    Returns ``(stderr_label, markdown)`` or None. JSON URLs stay with the JSON ring.
+    """
+    if is_reddit_listing_url(url):
+        md = parse_reddit_listing_html(html, url)
+        if md:
+            n = count_titled_shreddit_posts(html)
+            return f"listing-html: {n} posts", md
+        return None
+    if is_reddit_thread_url(url):
+        md = parse_reddit_thread_html(html, url)
+        if md:
+            return "thread-html: op", md
+    return None

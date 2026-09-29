@@ -1077,28 +1077,22 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         unpin(domain)
                         remembered = None
                     continue
-                # F5c: Reddit listing HTML short-circuit before Trafilatura.
-                # At least two titled shreddit-post nodes → compact index wins immediately
-                # (even if short). Threads/JSON and <2 nodes fall through to normal extraction.
-                if _reddit_listing.is_reddit_listing_url(url):
-                    listing_md = _reddit_listing.parse_reddit_listing_html(body, url)
-                    if listing_md:
-                        n = _reddit_listing.count_titled_shreddit_posts(body)
-                        _tick(f"listing-html: {n} posts")
-                        return _finalize(
-                            FetchResult(
-                                backend,
-                                listing_md,
-                                status,
-                                final_url=final_url or url,
-                                headers=headers,
-                            ),
-                            scrub,
-                        )
-                    # <2 titled posts: fall through to normal html_to_text path
-                    text = html_to_text(body, url)
-                else:
-                    text = html_to_text(body, url)
+                # F5c: Reddit listing or thread HTML before Trafilatura.
+                reddit_hit = _reddit_listing.extract_from_html(url, body)
+                if reddit_hit:
+                    label, listing_md = reddit_hit
+                    _tick(label)
+                    return _finalize(
+                        FetchResult(
+                            backend,
+                            listing_md,
+                            status,
+                            final_url=final_url or url,
+                            headers=headers,
+                        ),
+                        scrub,
+                    )
+                text = html_to_text(body, url)
 
             text = text or ""
             # Login-wall on the extract only (raw HTML often has a sign-in modal).
@@ -1172,18 +1166,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 _tick(f"  human-browser: {hop}")
                 text = ""
             else:
-                # F5c: Reddit listing HTML short-circuit before Trafilatura (human rung).
-                # The index is the document even when it is under _MIN_CHARS,
+                # F5c: listing or thread HTML (human rung). Wins even if short,
                 # and even when an earlier rung left a longer thin `best`.
-                if _reddit_listing.is_reddit_listing_url(url):
-                    listing_md = _reddit_listing.parse_reddit_listing_html(html, url)
-                    if listing_md:
-                        n = _reddit_listing.count_titled_shreddit_posts(html)
-                        _tick(f"listing-html: {n} posts")
-                        text = listing_md
-                        listing_hit = True
-                    else:
-                        text = html_to_text(html, url)
+                reddit_hit = _reddit_listing.extract_from_html(url, html)
+                if reddit_hit:
+                    label, listing_md = reddit_hit
+                    _tick(label)
+                    text = listing_md
+                    listing_hit = True
                 else:
                     text = html_to_text(html, url)
             if (
