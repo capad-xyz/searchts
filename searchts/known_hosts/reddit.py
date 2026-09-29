@@ -422,6 +422,26 @@ def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
     return p.posts
 
 
+def _canonical_reddit_permalink(perm: str) -> str:
+    """Absolute ``https://www.reddit.com`` link. Other hosts stay as given."""
+    perm = (perm or "").strip()
+    if not perm:
+        return ""
+    if perm.startswith(("http://", "https://")):
+        parts = urllib.parse.urlsplit(perm)
+        host = (parts.netloc or "").lower()
+        if host in ("reddit.com", "www.reddit.com", "old.reddit.com"):
+            path = parts.path or "/"
+            if not path.startswith("/"):
+                path = "/" + path
+            query = f"?{parts.query}" if parts.query else ""
+            return "https://www.reddit.com" + path + query
+        return perm
+    if not perm.startswith("/"):
+        perm = "/" + perm
+    return "https://www.reddit.com" + perm
+
+
 def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
     """If >=2 shreddit-post nodes have non-empty post-title, return compact MD index.
 
@@ -443,12 +463,9 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
         title = (attrs.get("post-title") or "").strip()
         if not title:
             continue
-        perm = attrs.get("permalink") or attrs.get("content-href") or ""
-        if perm:
-            if not perm.startswith(("http://", "https://")):
-                if not perm.startswith("/"):
-                    perm = "/" + perm
-                perm = "https://www.reddit.com" + perm
+        perm = _canonical_reddit_permalink(
+            attrs.get("permalink") or attrs.get("content-href") or ""
+        )
         cc = (attrs.get("comment-count") or "").strip()
         valid.append({"title": title, "permalink": perm, "cc": cc})
 

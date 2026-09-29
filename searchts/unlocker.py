@@ -961,8 +961,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     except ValueError as e:
         raise UnlockerError(url, [("normalize", str(e))]) from e
 
-    from searchts.ssrf import guard_mcp_url, private_hop
     from searchts.known_hosts import reddit as _reddit_listing
+    from searchts.ssrf import guard_mcp_url, private_hop
     blocked = guard_mcp_url(url, resolve_dns=True)
     if blocked:
         why = blocked[7:] if blocked.startswith("Error: ") else blocked
@@ -1166,14 +1166,15 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             status, html, final_url = None, "", url
         if looks_blocked(status, html) is None:
             hop = private_hop(url, final_url or url)
+            listing_hit = False
             if hop:
                 attempts.append(("human-browser", hop))
                 _tick(f"  human-browser: {hop}")
                 text = ""
             else:
                 # F5c: Reddit listing HTML short-circuit before Trafilatura (human rung).
-                # The index is the document even when it is under _MIN_CHARS.
-                listing_hit = False
+                # The index is the document even when it is under _MIN_CHARS,
+                # and even when an earlier rung left a longer thin `best`.
                 if _reddit_listing.is_reddit_listing_url(url):
                     listing_md = _reddit_listing.parse_reddit_listing_html(html, url)
                     if listing_md:
@@ -1188,7 +1189,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             if (
                 text
                 and looks_blocked(200, text, login_wall=True) is None
-                and (best is None or len(text) > len(best.text))
+                and (
+                    listing_hit
+                    or best is None
+                    or len(text) > len(best.text)
+                )
             ):
                 human = FetchResult(
                     backend="human-browser", text=text, status=status,

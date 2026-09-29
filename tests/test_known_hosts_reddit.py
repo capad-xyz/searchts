@@ -734,6 +734,12 @@ def test_listing_html_three_posts_skips_html_to_text(monkeypatch):
     import searchts.known_hosts.reddit as reddit_mod
     import searchts.unlocker as ul_mod
 
+    monkeypatch.setattr(
+        reddit_mod,
+        "_fetch",
+        lambda u, timeout=30: json.dumps({"error": 403, "message": "blocked"}),
+    )
+
     # 3-post case
     calls = []
     def exploding_to_text(html, url=None):
@@ -780,3 +786,60 @@ def test_listing_html_three_posts_skips_html_to_text(monkeypatch):
     )
     assert html_to_text_calls, "html_to_text should have been called for 1-post fallthrough"
     assert "FALLTHROUGH" in res1.text
+
+
+def test_canonical_permalink_rewrites_old_reddit_and_keeps_other_hosts():
+    import searchts.known_hosts.reddit as reddit_mod
+    html = """
+    <shreddit-post post-title="Old host" permalink="https://old.reddit.com/r/python/comments/abc/old/"></shreddit-post>
+    <shreddit-post post-title="Off site" permalink="https://example.com/not-reddit"></shreddit-post>
+    """
+    md = reddit_mod.parse_reddit_listing_html(html, "https://www.reddit.com/r/python/hot/")
+    assert md is not None
+    assert "https://www.reddit.com/r/python/comments/abc/old/" in md
+    assert "old.reddit.com" not in md
+    assert "https://example.com/not-reddit" in md
+
+
+def test_human_listing_beats_longer_thin_best(monkeypatch):
+    """A short listing from the human rung wins even when an earlier thin body is longer."""
+    import searchts.known_hosts.reddit as reddit_mod
+
+    monkeypatch.setattr(
+        reddit_mod,
+        "_fetch",
+        lambda u, timeout=30: json.dumps({"error": 403, "message": "blocked"}),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda url, timeout=30: (200, "<html><body>no posts here</body></html>", url, {}),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "html_to_text",
+        lambda html, url=None: "Z" * 450,
+    )
+    monkeypatch.setattr(unlocker, "_fetch_jina", lambda url, **k: (_ for _ in ()).throw(Tripwire("jina")))
+    monkeypatch.setattr(unlocker, "_fetch_stealth", lambda url, **k: (_ for _ in ()).throw(Tripwire("stealth")))
+    short = (
+        '<shreddit-post post-title="Aa" permalink="/r/python/comments/a/a/"></shreddit-post>'
+        '<shreddit-post post-title="Bb" permalink="/r/python/comments/b/b/"></shreddit-post>'
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_human",
+        lambda url, **k: (200, short, url),
+    )
+
+    res = unlocker.fetch(
+        "https://www.reddit.com/r/python/hot/",
+        backends=["curl_cffi"],
+        use_memory=False,
+        allow_human=True,
+        progress=False,
+    )
+    assert "Aa" in res.text
+    assert "Bb" in res.text
+    assert "ZZZ" not in res.text
+    assert res.backend == "human-browser"
