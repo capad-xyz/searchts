@@ -1,1 +1,1 @@
-PLACEHOLDER
+@file:///tmp/f22-fixed/browser_install.py
