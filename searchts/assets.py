@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from searchts.ssrf import private_hop
+from searchts.ssrf import guard_mcp_url, private_hop
 from searchts.unlocker import _UA_REAL, jina_enabled, looks_blocked, normalize
 
 
@@ -183,12 +183,21 @@ def _fetch_bytes_jina_html(url: str, timeout: int) -> AssetResult:
 
 def fetch_bytes(url: str, *, backends: Optional[List[str]] = None,
                 timeout: int = 30, progress: Optional[bool] = None) -> AssetResult:
-    """Fetch raw bytes for `url`, escalating through the unlock ladder."""
+    """Fetch raw bytes for `url`, escalating through the unlock ladder.
+
+    Same SSRF boundary as ``unlocker.fetch``: every URL is checked before any
+    rung connects, including each asset URL ``grab`` pulls out of a page (an
+    ``<img src="http://169.254.169.254/...">`` must not become a fetch).
+    """
     progress = _progress_default(progress)
     try:
         url = normalize(url)
     except ValueError as e:
         raise AssetError(url, [("normalize", str(e))]) from e
+    blocked = guard_mcp_url(url, resolve_dns=True)
+    if blocked:
+        why = blocked[7:] if blocked.startswith("Error: ") else blocked
+        raise AssetError(url, [("ssrf", why)])
     order = list(backends or DEFAULT_ASSET_BACKENDS)
     if not jina_enabled():
         order = [b for b in order if b != "jina-html"]
@@ -250,8 +259,12 @@ def _unique_path(path: Path) -> Path:
 
 
 def get_asset(url: str, out_path: Optional[str] = None, *, timeout: int = 30,
-              progress: Optional[bool] = None) -> Path:
-    """Download one asset to disk; return the saved path."""
+              progress: Optional[bool] = None, overwrite: bool = True) -> Path:
+    """Download one asset to disk; return the saved path.
+
+    ``overwrite=False`` never replaces an existing file: the name gets a
+    ``-1``, ``-2`` … suffix instead (the MCP tool uses this).
+    """
     progress = _progress_default(progress)
     _tick(progress, "fetching asset…")
     res = fetch_bytes(url, timeout=timeout, progress=progress)
@@ -261,6 +274,8 @@ def get_asset(url: str, out_path: Optional[str] = None, *, timeout: int = 30,
             dest = dest / guess_filename(res.final_url, res.content_type)
     else:
         dest = Path(guess_filename(res.final_url, res.content_type))
+    if not overwrite:
+        dest = _unique_path(dest)
     if dest.parent and not dest.parent.exists():
         dest.parent.mkdir(parents=True, exist_ok=True)
     _tick(progress, "saving asset…")

@@ -544,6 +544,19 @@ def _card_body(title: str, body: str, all_text: str, *, require_min: bool = True
     return text
 
 
+_READ_MORE_RE = re.compile(r"\s*\u2026?\s*\bRead more\s*$", re.IGNORECASE)
+
+
+def _strip_read_more(text: str) -> Tuple[str, bool]:
+    """Drop Reddit's trailing "Read more" fold marker. Returns (text, was_folded)."""
+    if not text:
+        return text, False
+    stripped = _READ_MORE_RE.sub("", text)
+    if stripped == text:
+        return text, False
+    return stripped.rstrip(), True
+
+
 def _canonical_reddit_permalink(perm: str) -> str:
     """Absolute ``https://www.reddit.com`` link. Other hosts stay as given."""
     perm = (perm or "").strip()
@@ -595,6 +608,7 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
         if author.startswith("u/"):
             author = author[2:]
         snippet = _card_body(title, attrs.get("_body") or "", attrs.get("_text") or "")
+        snippet, _folded = _strip_read_more(snippet)
         valid.append(
             {
                 "title": title,
@@ -774,6 +788,7 @@ def parse_reddit_thread_html(html: str, url: str = "") -> Optional[str]:
     cc = (op.get("comment-count") or "").strip()
     perm = _canonical_reddit_permalink(op.get("permalink") or op.get("content-href") or "")
     body = _card_body(title, op.get("_body") or "", op.get("_text") or "", require_min=False)
+    body, folded = _strip_read_more(body)
 
     lines: List[str] = [f"# {title}", ""]
     if author:
@@ -786,9 +801,16 @@ def parse_reddit_thread_html(html: str, url: str = "") -> Optional[str]:
         lines.append(f"**Link:** {perm}")
     if body:
         lines.extend(["", body])
+    if folded:
+        lines.extend([
+            "",
+            "[truncated: Reddit folded this post behind \"Read more\"; only the part "
+            "above was in the page]",
+        ])
 
     comments = _parse_shreddit_comments(html)
     shown = 0
+    in_page = 0
     comment_block: List[str] = []
     for c in comments:
         c_author = (c.get("author") or "[deleted]").strip()
@@ -796,6 +818,9 @@ def parse_reddit_thread_html(html: str, url: str = "") -> Optional[str]:
             c_author = c_author[2:]
         text = _comment_body(c_author, c.get("_body") or "", c.get("_text") or "")
         if len(text) < 8:
+            continue
+        in_page += 1
+        if shown >= _MAX_COMMENTS:
             continue
         c_score = (c.get("score") or "").strip()
         try:
@@ -810,11 +835,22 @@ def parse_reddit_thread_html(html: str, url: str = "") -> Optional[str]:
         comment_block.append(f"{indent}{text}")
         comment_block.append("")
         shown += 1
-        if shown >= _MAX_COMMENTS:
-            break
-    if comment_block:
+    notes: List[str] = []
+    if in_page > shown:
+        notes.append(
+            f"[truncated: {in_page - shown} more comments in the page were cut at the "
+            f"{_MAX_COMMENTS}-comment cap]"
+        )
+    claimed = int(cc) if cc.isdigit() else 0
+    if claimed > in_page:
+        notes.append(
+            f"[partial: Reddit reports {claimed} comments; {in_page} were in the page. "
+            "Collapsed or not-yet-loaded replies are not included]"
+        )
+    if comment_block or notes:
         lines.extend(["", "## Comments", ""])
         lines.extend(comment_block)
+        lines.extend(notes)
     return "\n".join(lines).strip()
 
 

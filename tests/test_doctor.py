@@ -175,9 +175,20 @@ class TestDoctor:
         assert "1/3 probes ok" in plain
         assert "optional CLIs not present" in plain
 
+    def test_lock_pids_leave_out_this_command(self, monkeypatch):
+        """The searchts.exe that launched this command is not 'still open'."""
+        monkeypatch.setattr(doctor.os, "getpid", lambda: 111)
+        monkeypatch.setattr(doctor.os, "getppid", lambda: 222)
+        csv = (
+            '"searchts.exe","222","Console","1","9 K"\n'
+            '"searchts.exe","111","Console","1","9 K"\n'
+            '"searchts.exe","4242","Console","1","9 K"\n'
+        )
+        assert doctor.windows_searchts_pids(runner=lambda: csv, platform="win32") == [4242]
+
     def test_lock_note_lists_pids_and_does_not_kill(self):
         csv = '"searchts.exe","4242","Console","1","20,000 K"\n"other.exe","9","Console","1","1 K"\n'
-        pids = doctor.windows_searchts_pids(runner=lambda: csv, platform="win32")
+        pids = doctor.windows_searchts_pids(runner=lambda: csv, platform="win32", exclude=[])
         assert pids == [4242]
         note = doctor.format_lock_note(pids)
         assert "4242" in note

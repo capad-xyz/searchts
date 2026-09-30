@@ -68,8 +68,8 @@ Custom connectors that require HTTPS still need a tunnel you run yourself; searc
 |------|-------------|---------|
 | `read_url(url)` | A page is blocked (403/429, a Cloudflare/DataDome/PerimeterX bot-wall, an "enable JavaScript" page) or is JS-rendered, and you want its text. | Clean Markdown. Invisible characters stripped; if prompt-injection indicators are found, the body is fenced as untrusted and a one-line warning is prepended. |
 | `web_search(query, max_results=5)` | You need to find URLs or answer an open-ended question. Keyless (DuckDuckGo) by default; SearXNG/Exa/Brave/Tavily merge in when configured. | A ranked, de-duplicated `title + URL + snippet` block. `max_results` is clamped to 1–25. |
-| `fetch_asset(url, out_dir="")` | You want one specific file (image, PDF, font, CSS) by its direct URL. | JSON `{path, content_type, bytes}`. Saves into `out_dir`, else the current directory. |
-| `grab_site(url, out_dir="", read=false)` | You want a whole page's design/assets at once — images, icons, css, fonts, a color palette, and the fonts in use. | JSON manifest with local paths. Saves into `out_dir`, else `searchts-grab-<host>`; set `read=true` to also save the page text as `page.md`. |
+| `fetch_asset(url, out_dir="")` | You want one specific file (image, PDF, font, CSS) by its direct URL. | JSON `{path, content_type, bytes}`. Saves into `out_dir` (a relative folder inside the server's working directory, or inside `SEARCHTS_MCP_OUT_DIR` when you set it: no absolute paths, `..`, dot folders or autostart folders), else that folder itself. Never overwrites: a clash gets a `-1`, `-2` … suffix. |
+| `grab_site(url, out_dir="", read=false)` | You want a whole page's design/assets at once — images, icons, css, fonts, a color palette, and the fonts in use. | JSON manifest with local paths. Saves into `out_dir` (same rules as `fetch_asset`), else `searchts-grab-<host>` inside it; set `read=true` to also save the page text as `page.md`. |
 | `get_status()` | A call fails, or you want to see what's configured before relying on an optional capability. | A human-readable health report (unlocker tiers, search providers, optional integrations). |
 | `transcribe(source, provider="auto", prefer_subtitles=true, cookies_from_browser="")` | You want spoken words from a video URL or local audio file. Subtitles-first (no key); Whisper only if there are no captions. | Transcript text. `cookies_from_browser` is opt-in (this machine; never `read_url`). |
 
@@ -82,3 +82,5 @@ All three surfaces call the same core — pick by how your agent works:
 - **MCP server** (above) — always-on tools, no subprocess per call. Best for agents that speak MCP.
 - **Slash command** (`searchts skill install`) — a `/searchts` command for Claude Code that drives the CLI verbs.
 - **CLI** (`searchts read` / `search` / `transcribe` / `grab`) — the underlying commands; scriptable and pipeable.
+
+**Where MCP saves land.** Some hosts start the server with `/` as its working directory, where nothing can be saved. Set `SEARCHTS_MCP_OUT_DIR` in the server's environment (for example `SEARCHTS_MCP_OUT_DIR=~/Downloads/searchts`) to give `fetch_asset` and `grab_site` a folder of your choosing. The agent can still only pick relative folders inside it.
