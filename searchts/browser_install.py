@@ -30,9 +30,18 @@ EXIT_ACTION_NEEDED = 2
 #: Hint when ephemeral uvx lacks patchright (re-run with the browser extra).
 EPHEMERAL_UVX_HINT = (
     "This searchts is an ephemeral uvx run without patchright.\n"
-    "Chromium is cached per-user (ms-playwright), but patchright must be on "
-    "the uvx env. Retry with the browser extra:\n"
-    '  uvx --from "searchts[browser]@latest" searchts install --browser'
+    "Chromium is shared per-user (ms-playwright), but patchright only exists in "
+    "a uvx env whose --from spec has the browser extra. Use that spec here and "
+    "in your everyday commands:\n"
+    '  uvx --from "searchts[mcp,browser]@latest" searchts install --browser\n'
+    '  uvx --from "searchts[mcp,browser]" searchts read <url>\n'
+    '  claude mcp add searchts -- uvx --from "searchts[mcp,browser]" searchts mcp serve'
+)
+
+#: Reminder after a uvx install: other --from specs resolve an env without patchright.
+UVX_KEEP_NOTE = (
+    'uvx: keep "browser" in your --from spec (for example "searchts[mcp,browser]"), '
+    "including the MCP command. A spec without it has no stealth tier."
 )
 
 #: Hint when a persistent uv tool lacks patchright (never uv-pip into the tool env).
@@ -400,7 +409,10 @@ def install_browser(
             hint = EPHEMERAL_UVX_HINT if env.kind == "ephemeral_uvx" else UV_TOOL_HINT
             print(hint, file=sys.stderr)
             return EXIT_ACTION_NEEDED
-        return _install_chromium_and_check(chromium_cmd, runner=runner, dry_run=dry_run)
+        code = _install_chromium_and_check(chromium_cmd, runner=runner, dry_run=dry_run)
+        if code == 0 and env.kind == "ephemeral_uvx" and not dry_run:
+            _tick(UVX_KEEP_NOTE)
+        return code
 
     extra_cmd = _extra_install_cmd(env)
     untracked_pipx = env.kind == "pipx" and extra_cmd[1:2] != ["inject"]

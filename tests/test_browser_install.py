@@ -123,8 +123,9 @@ class TestInstallBrowser:
         code = bi.install_browser(cli_env=env, runner=_ok)
         assert code == 2
         err = capsys.readouterr().err
-        assert 'uvx --from "searchts[browser]@latest"' in err
-        assert "searchts install --browser" in err
+        assert 'uvx --from "searchts[mcp,browser]@latest" searchts install --browser' in err
+        # The everyday commands need the extra too, or later runs have no stealth tier.
+        assert 'uvx --from "searchts[mcp,browser]" searchts mcp serve' in err
 
     def test_uvx_with_patchright_only_chromium(self, monkeypatch, capsys):
         env = bi.CliEnv("ephemeral_uvx", "ephemeral uvx", "/tmp/archive-v0/py")
@@ -146,6 +147,7 @@ class TestInstallBrowser:
         assert "downloading Chromium" in captured.err
         assert "checking stealth" in captured.err
         assert "stealth installed" in captured.out
+        assert 'keep "browser" in your --from spec' in captured.err
 
     def test_dry_run_prints_commands(self, capsys, monkeypatch):
         env = bi.CliEnv("venv", "venv (/tmp/v)", "/tmp/v/bin/python")

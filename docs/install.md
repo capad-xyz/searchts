@@ -26,7 +26,9 @@ uvx --from "searchts[mcp]" searchts -v read https://en.wikipedia.org/wiki/Ada_Lo
 claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 ```
 
-uvx is already latest PyPI each run.
+uvx can reuse a build it already cached; add `@latest` to the `--from` spec to be sure you get a new release.
+
+For the stealth tier (walls, Reddit), use `searchts[mcp,browser]` in both lines above, then run `uvx --from "searchts[mcp,browser]" searchts install --browser` once. A spec without `browser` resolves a separate env with no stealth tier.
 
 ### venv only
 
@@ -53,10 +55,10 @@ It prints which env it is mutating (pipx / uv tool / venv / editable).
 
 - **pipx / venv / editable**: installs the `[browser]` extra's requirements into that env (`pipx inject` when pipx is on PATH), then downloads Chromium with progress on stderr. Chromium itself lives in the per-user ms-playwright cache.
 - **uv tool**: never injects into the tool env (upgrade wipes it). If patchright is already there, it only installs Chromium. If not, it prints `uv tool install "searchts[mcp,browser]" --force` (quit `searchts.exe` first on Windows, F11) and exits 2 without changing anything.
-- **ephemeral uvx**: if patchright is already on the uvx env, only installs Chromium into the user cache. If patchright is missing, it exits 2 and prints:
+- **ephemeral uvx**: if patchright is already on the uvx env, only installs Chromium into the user cache, then reminds you to keep `browser` in your `--from` spec. If patchright is missing, it exits 2 and prints the spec to use here and in your everyday and MCP commands:
 
 ```bash
-uvx --from "searchts[browser]@latest" searchts install --browser
+uvx --from "searchts[mcp,browser]@latest" searchts install --browser
 ```
 
 Manual equivalent (venv only): `pip install "searchts[browser]"` then `patchright install chromium`.
