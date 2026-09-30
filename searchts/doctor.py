@@ -90,8 +90,15 @@ def windows_searchts_pids(
     *,
     runner: Optional[Callable[[], str]] = None,
     platform: Optional[str] = None,
+    exclude: Optional[Sequence[int]] = None,
 ) -> list[int]:
-    """PIDs whose image is searchts.exe. Empty off Windows. Does not kill."""
+    """PIDs whose image is searchts.exe, other than this command. Does not kill.
+
+    Empty off Windows. The ``searchts.exe`` that launched this very command
+    (our parent) and this process are left out by default: telling someone to
+    quit the command they are running is noise.
+    """
+    skip = set(exclude) if exclude is not None else {os.getpid(), os.getppid()}
     if (platform if platform is not None else sys.platform) != "win32":
         return []
 
@@ -114,9 +121,11 @@ def windows_searchts_pids(
         if len(row) < 2 or row[0].strip().lower() != "searchts.exe":
             continue
         try:
-            pids.append(int(row[1].strip()))
+            pid = int(row[1].strip())
         except ValueError:
             continue
+        if pid not in skip:
+            pids.append(pid)
     return pids
 
 

@@ -98,46 +98,73 @@ def test_no_pid_line_when_no_pids(monkeypatch, tmp_path, capsys):
     assert "did not take effect" in err
 
 
-def test_uvx_kind_says_nothing_to_upgrade(monkeypatch, tmp_path, capsys):
+def test_uvx_kind_points_at_latest(monkeypatch, tmp_path, capsys):
+    """uvx reuses a cached build, so 'nothing to upgrade' would be false here."""
     err = _cached_nudge(monkeypatch, tmp_path, capsys, install_kind="uvx", pids=[])
-    assert "uvx already latest PyPI; nothing to upgrade" in err
+    assert '"searchts[mcp]@latest"' in err
+    assert "nothing to upgrade" not in err
     assert "pipx upgrade" not in err
     assert "pip install -U" not in err
 
 
-def test_detect_install_kind(monkeypatch):
-    for key in un.UV_ENV_KEYS:
+def test_uv_tool_kind_upgrade_command(monkeypatch, tmp_path, capsys):
+    err = _cached_nudge(monkeypatch, tmp_path, capsys, install_kind="uv_tool", pids=[])
+    assert "uv tool upgrade searchts" in err
+
+
+def test_did_not_take_effect_is_conditional(monkeypatch, tmp_path, capsys):
+    """Nobody may have tried to upgrade yet: do not claim an upgrade failed."""
+    err = _cached_nudge(monkeypatch, tmp_path, capsys, install_kind="pip", pids=[])
+    assert "If you just upgraded, it did not take effect here." in err
+
+
+def _fake_env(monkeypatch, executable, prefix, env=None):
+    import searchts.browser_install as bi
+
+    for key in ("UV_RUNNING", "UVX", "UV_PYTHON", "PIPX_HOME", "VIRTUAL_ENV"):
         monkeypatch.delenv(key, raising=False)
-    monkeypatch.delenv("PIPX_HOME", raising=False)
-    monkeypatch.setattr(un.sys, "executable", r"C:\Python\python.exe")
-    monkeypatch.setattr(un.sys, "prefix", r"C:\venv")
+    for key, value in (env or {}).items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setattr(bi.sys, "executable", executable)
+    monkeypatch.setattr(bi.sys, "prefix", prefix)
+    monkeypatch.setattr(bi, "_is_editable_install", lambda: False)
+
+
+def test_detect_install_kind_pip(monkeypatch):
+    _fake_env(monkeypatch, r"C:\Python\python.exe", r"C:\Python")
     assert un.detect_install_kind() == "pip"
 
-    monkeypatch.setenv("UV_RUNNING", "1")
-    assert un.detect_install_kind() == "uvx"
 
-    monkeypatch.delenv("UV_RUNNING")
-    monkeypatch.setenv("PIPX_HOME", r"C:\Users\a\pipx")
+def test_detect_install_kind_uv_python_env_does_not_mean_uvx(monkeypatch):
+    """UV_PYTHON is a normal uv setting; a pipx install must still say pipx."""
+    _fake_env(
+        monkeypatch,
+        "/home/a/.local/share/pipx/venvs/searchts/bin/python",
+        "/home/a/.local/share/pipx/venvs/searchts",
+        env={"UV_PYTHON": "3.12", "UV_RUNNING": "1"},
+    )
     assert un.detect_install_kind() == "pipx"
 
 
-def test_detect_install_kind_from_uvx_path(monkeypatch):
-    for key in un.UV_ENV_KEYS:
-        monkeypatch.delenv(key, raising=False)
-    monkeypatch.delenv("PIPX_HOME", raising=False)
+def test_detect_install_kind_custom_pipx_home(monkeypatch):
+    _fake_env(
+        monkeypatch,
+        r"C:\Users\a\.pipx\venvs\searchts\Scripts\python.exe",
+        r"C:\Users\a\.pipx\venvs\searchts",
+        env={"PIPX_HOME": r"C:\Users\a\.pipx"},
+    )
+    assert un.detect_install_kind() == "pipx"
+
+
+def test_detect_install_kind_from_uv_tool_path(monkeypatch):
     uv_tools = r"C:\Users\a\AppData\Roaming\uv\tools\searchts"
-    monkeypatch.setattr(un.sys, "executable", uv_tools + r"\Scripts\python.exe")
-    monkeypatch.setattr(un.sys, "prefix", uv_tools)
-    assert un.detect_install_kind() == "uvx"
+    _fake_env(monkeypatch, uv_tools + r"\Scripts\python.exe", uv_tools)
+    assert un.detect_install_kind() == "uv_tool"
 
 
-def test_detect_install_kind_from_posix_uvx_path(monkeypatch):
-    for key in un.UV_ENV_KEYS:
-        monkeypatch.delenv(key, raising=False)
-    monkeypatch.delenv("PIPX_HOME", raising=False)
-    uv_tools = "/home/a/.local/share/uv/tools/searchts"
-    monkeypatch.setattr(un.sys, "executable", uv_tools + "/bin/python")
-    monkeypatch.setattr(un.sys, "prefix", uv_tools)
+def test_detect_install_kind_from_posix_uvx_cache(monkeypatch):
+    cache = "/home/a/.cache/uv/archive-v0/AbC123"
+    _fake_env(monkeypatch, cache + "/bin/python", cache)
     assert un.detect_install_kind() == "uvx"
 
 

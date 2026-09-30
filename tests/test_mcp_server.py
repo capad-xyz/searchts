@@ -9,6 +9,7 @@ import asyncio
 import json
 import socket
 import threading
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -254,17 +255,20 @@ def test_create_server_builds_against_the_installed_sdk():
 def test_fetch_asset_returns_json(monkeypatch, tmp_path):
     saved = tmp_path / "logo.png"
     saved.write_bytes(b"PNGDATA")
-    monkeypatch.setattr("searchts.assets.get_asset", lambda url, out=None: saved)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("searchts.assets.get_asset", lambda url, out=None, **kw: saved)
     data = json.loads(fetch_asset("https://x.test/logo.png"))
     assert data["path"] == str(saved)
     assert data["bytes"] == 7
     assert data["content_type"] == "image/png"
 
 
-def test_fetch_asset_error_string(monkeypatch):
+def test_fetch_asset_error_string(monkeypatch, tmp_path):
     from searchts import assets
 
-    def boom(url, out=None):
+    monkeypatch.chdir(tmp_path)
+
+    def boom(url, out=None, **kw):
         raise assets.AssetError(url, [("curl_cffi", "http-403")])
 
     monkeypatch.setattr("searchts.assets.get_asset", boom)
@@ -291,6 +295,81 @@ def test_grab_site_returns_manifest_json(monkeypatch):
 
 def test_grab_site_requires_url():
     assert grab_site("").startswith("Error:")
+
+
+# ── MCP writes stay inside the working directory ────────────────────────────
+
+
+def test_fetch_asset_saves_in_cwd_without_overwrite(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+
+    def fake_get_asset(url, out=None, **kw):
+        seen["out"], seen["kw"] = out, kw
+        dest = Path(out) / "logo.png"
+        dest.write_bytes(b"x")
+        return dest
+
+    monkeypatch.setattr("searchts.assets.get_asset", fake_get_asset)
+    data = json.loads(fetch_asset("https://x.test/logo.png", "pics/brand"))
+    assert Path(seen["out"]) == (tmp_path / "pics" / "brand").resolve()
+    assert seen["kw"] == {"overwrite": False}
+    assert data["bytes"] == 1
+
+
+@pytest.mark.parametrize(
+    "out_dir",
+    [
+        "/etc",
+        "~/.ssh",
+        "../outside",
+        "a/../../outside",
+        ".ssh",
+        "notes/.config/autostart",
+        "AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
+        "Library/LaunchAgents",
+    ],
+)
+def test_fetch_asset_refuses_unsafe_out_dir(monkeypatch, tmp_path, out_dir):
+    monkeypatch.chdir(tmp_path)
+
+    def must_not_run(*a, **k):
+        raise AssertionError("get_asset must not run for an unsafe out_dir")
+
+    monkeypatch.setattr("searchts.assets.get_asset", must_not_run)
+    out = fetch_asset("https://x.test/authorized_keys", out_dir)
+    assert out.startswith("Error:")
+
+
+def test_fetch_asset_refuses_symlink_escape(monkeypatch, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    try:
+        (work / "link").symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):  # Windows without symlink rights
+        pytest.skip("cannot create a symlink here")
+    monkeypatch.chdir(work)
+    monkeypatch.setattr(
+        "searchts.assets.get_asset",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+    assert fetch_asset("https://x.test/x.png", "link").startswith("Error:")
+
+
+def test_grab_site_defaults_inside_cwd_and_refuses_absolute(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+
+    def fake_grab(url, out, read=False):
+        seen["out"] = out
+        return {"url": url, "assets": []}
+
+    monkeypatch.setattr("searchts.assets.grab", fake_grab)
+    json.loads(grab_site("https://x.test/"))
+    assert Path(seen["out"]) == (tmp_path / "searchts-grab-x.test").resolve()
+    assert grab_site("https://x.test/", "/tmp/elsewhere").startswith("Error:")
 
 
 # ── async concurrency (P3.10) ────────────────────────────────────────────────
@@ -566,3 +645,73 @@ def test_transcribe_source_local_path_skips_ssrf(monkeypatch, tmp_path):
 
 
 
+
+
+# ── Tool bodies never raise: an unexpected failure is still an Error string ──
+
+
+def test_read_url_unexpected_exception_is_an_error_string(monkeypatch):
+    def boom(url, **kw):
+        raise RuntimeError("stealth tier exploded")
+
+    monkeypatch.setattr("searchts.unlocker.fetch", boom)
+    monkeypatch.setattr("searchts.ssrf.guard_mcp_url", lambda url, **kw: None)
+    out = read_url("https://example.org/")
+    assert out.startswith("Error: read_url failed unexpectedly (RuntimeError")
+
+
+def test_web_search_unexpected_exception_is_an_error_string(monkeypatch):
+    def boom(*a, **k):
+        raise ValueError("provider returned garbage")
+
+    monkeypatch.setattr("searchts.search.search", boom)
+    out = web_search("anything", 3)
+    assert out.startswith("Error: web_search failed unexpectedly (ValueError")
+
+
+def test_out_dir_base_can_be_moved_by_the_user(monkeypatch, tmp_path):
+    base = tmp_path / "saves"
+    monkeypatch.setenv("SEARCHTS_MCP_OUT_DIR", str(base))
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+
+    def fake_get_asset(url, out=None, **kw):
+        seen["out"] = out
+        dest = Path(out) / "logo.png"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"x")
+        return dest
+
+    monkeypatch.setattr("searchts.assets.get_asset", fake_get_asset)
+    json.loads(fetch_asset("https://x.test/logo.png", "brand"))
+    assert Path(seen["out"]) == (base / "brand").resolve()
+    err = fetch_asset("https://x.test/logo.png", "/etc")
+    assert err.startswith("Error:") and "SEARCHTS_MCP_OUT_DIR" in err
+
+
+def test_grab_site_never_writes_into_the_base_or_a_used_folder(monkeypatch, tmp_path):
+    """grab writes page.md / manifest.json at its top level; an MCP grab must not
+    land in the working directory itself or in a folder that already has files."""
+    monkeypatch.chdir(tmp_path)
+    seen = []
+
+    def fake_grab(url, out, read=False):
+        seen.append(Path(out))
+        return {"url": url, "assets": []}
+
+    monkeypatch.setattr("searchts.assets.grab", fake_grab)
+    data = json.loads(grab_site("https://x.test/", "."))
+    assert seen[-1] == (tmp_path / "searchts-grab-x.test").resolve()
+    assert data["out_dir"] == str(seen[-1])
+
+    used = tmp_path / "searchts-grab-x.test"
+    used.mkdir()
+    (used / "manifest.json").write_text("{}", encoding="utf-8")
+    data = json.loads(grab_site("https://x.test/"))
+    assert seen[-1] == (tmp_path / "searchts-grab-x.test-2").resolve()
+    assert data["out_dir"] == str(seen[-1])
+
+    empty = tmp_path / "shots"
+    empty.mkdir()
+    json.loads(grab_site("https://x.test/", "shots"))
+    assert seen[-1] == empty.resolve()

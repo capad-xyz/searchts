@@ -11,6 +11,13 @@ Rejected:
 - IPv4/IPv6 link-local (169.254.0.0/16, fe80::/10)
 - RFC1918 (10/8, 172.16/12, 192.168/16)
 - IPv6 unique-local (fc00::/7; same role as RFC1918)
+- unspecified addresses (0.0.0.0/8, ::): on Linux and macOS a connect to
+  these reaches this machine, so they are loopback in practice
+- shared / CGNAT space (100.64.0.0/10, e.g. Tailscale), multicast, and the
+  reserved 240.0.0.0/4 block (including 255.255.255.255)
+- IPv6 forms that carry an IPv4 address (IPv4-mapped, IPv4-compatible,
+  NAT64 64:ff9b::/96, 6to4 2002::/16) are judged by the embedded IPv4;
+  the local-use NAT64 prefix 64:ff9b:1::/48 is refused outright
 - cloud metadata endpoints (169.254.169.254 and the well-known metadata
   hostnames/IPv6 address shared by AWS/GCP/Azure IMDS)
 """
@@ -39,10 +46,20 @@ _RFC1918 = (
     ipaddress.ip_network("192.168.0.0/16"),
 )
 _ULA_V6 = ipaddress.ip_network("fc00::/7")
+_UNSPECIFIED_V4 = ipaddress.ip_network("0.0.0.0/8")
+_CGNAT_V4 = ipaddress.ip_network("100.64.0.0/10")
+_RESERVED_V4 = ipaddress.ip_network("240.0.0.0/4")
+_NAT64_V6 = ipaddress.ip_network("64:ff9b::/96")
+_NAT64_LOCAL_V6 = ipaddress.ip_network("64:ff9b:1::/48")
+_V4_COMPAT_V6 = ipaddress.ip_network("::/96")
 
 
 def _classify(ip: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> Optional[str]:
     """Return a human-readable reason if `ip` is a blocked address, else None."""
+    # Unspecified: connecting to 0.0.0.0 / :: reaches this machine.
+    if ip.is_unspecified or (ip.version == 4 and ip in _UNSPECIFIED_V4):
+        return f"unspecified address ({ip}), which reaches this machine"
+
     # Cloud metadata endpoints (most specific first).
     if ip.version == 4 and str(ip) == "169.254.169.254":
         return "cloud metadata endpoint 169.254.169.254"
@@ -70,6 +87,32 @@ def _classify(ip: "ipaddress.IPv4Address | ipaddress.IPv6Address") -> Optional[s
     if ip.version == 6 and ip in _ULA_V6:
         return "IPv6 unique-local address (fc00::/7)"
 
+    # Shared address space (carrier-grade NAT, Tailscale): not the public web.
+    if ip.version == 4 and ip in _CGNAT_V4:
+        return "shared/CGNAT address (100.64.0.0/10)"
+    if ip.version == 6 and ip in _NAT64_LOCAL_V6:
+        return "local-use NAT64 address (64:ff9b:1::/48)"
+    if ip.is_multicast:
+        return "multicast address"
+    if ip.version == 4 and ip in _RESERVED_V4:
+        return "reserved address (240.0.0.0/4)"
+
+    return None
+
+
+def _embedded_v4(ip: "ipaddress.IPv6Address") -> "Optional[ipaddress.IPv4Address]":
+    """The IPv4 address an IPv6 literal carries, if any.
+
+    IPv4-mapped (::ffff:a.b.c.d), 6to4 (2002:AABB:CCDD::), NAT64
+    (64:ff9b::a.b.c.d), and the deprecated IPv4-compatible (::a.b.c.d) forms
+    all route to an IPv4 target, so they are judged by that target.
+    """
+    if ip.ipv4_mapped is not None:
+        return ip.ipv4_mapped
+    if ip.sixtofour is not None:
+        return ip.sixtofour
+    if ip in _NAT64_V6 or (ip in _V4_COMPAT_V6 and int(ip) > 1):
+        return ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
     return None
 
 
@@ -106,11 +149,13 @@ def _classify_host(host: str) -> Optional[str]:
         ip = ipaddress.ip_address(host)
     except ValueError:
         return None
-    # IPv4-mapped / IPv4-compatible IPv6 (e.g. ::ffff:127.0.0.1).
+    # IPv6 that carries an IPv4 target (mapped, 6to4, NAT64, compatible).
     if isinstance(ip, ipaddress.IPv6Address):
-        mapped = ip.ipv4_mapped
-        if mapped is not None:
-            return _classify(mapped)
+        embedded = _embedded_v4(ip)
+        if embedded is not None:
+            reason = _classify(embedded)
+            if reason is not None:
+                return f"{reason} via IPv6 {ip}"
     return _classify(ip)
 
 

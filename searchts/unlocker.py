@@ -1154,11 +1154,19 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     # rather than second-guessing which failures a human could fix.
     if allow_human:
         _tick("trying human-browser…")
+        human_error = ""
         try:
             status, html, final_url = _fetch_human(url)
-        except Exception:  # noqa: BLE001 - patchright missing/launch failure
+        except Exception as e:  # noqa: BLE001 - patchright missing/launch failure
             status, html, final_url = None, "", url
-        if looks_blocked(status, html) is None:
+            human_error = f"{type(e).__name__}: {e}"
+        blocked_reason = looks_blocked(status, html)
+        if blocked_reason is not None:
+            # Fail loud: the rung the user asked for must show up in the error.
+            why = human_error or blocked_reason
+            attempts.append(("human-browser", why))
+            _tick(f"  human-browser: {why}")
+        else:
             hop = private_hop(url, final_url or url)
             listing_hit = False
             if hop:
@@ -1168,17 +1176,22 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             else:
                 # F5c: listing or thread HTML (human rung). Wins even if short,
                 # and even when an earlier rung left a longer thin `best`.
-                reddit_hit = _reddit_listing.extract_from_html(url, html)
-                if reddit_hit:
-                    label, listing_md = reddit_hit
-                    _tick(label)
-                    text = listing_md
-                    listing_hit = True
-                else:
-                    text = html_to_text(html, url)
+                try:
+                    reddit_hit = _reddit_listing.extract_from_html(url, html)
+                    if reddit_hit:
+                        label, listing_md = reddit_hit
+                        _tick(label)
+                        text = listing_md
+                        listing_hit = True
+                    else:
+                        text = html_to_text(html, url)
+                except Exception as e:  # noqa: BLE001 - fail loud, not a traceback
+                    text = ""
+                    human_error = human_error or f"extract failed ({type(e).__name__}: {e})"
+            wall = looks_blocked(200, text, login_wall=True) if text else None
             if (
                 text
-                and looks_blocked(200, text, login_wall=True) is None
+                and wall is None
                 and (
                     listing_hit
                     or best is None
@@ -1192,6 +1205,19 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 if listing_hit or len(text) >= min_chars:
                     return _finalize(human, scrub)
                 best = human
+                attempts.append(("human-browser", f"thin-{len(text)}b"))
+                _tick(f"  human-browser: thin-{len(text)}b")
+            elif not hop:
+                if human_error:
+                    why = human_error
+                elif not text:
+                    why = "empty-extract"
+                elif wall is not None:
+                    why = wall
+                else:
+                    why = f"thin-{len(text)}b"
+                attempts.append(("human-browser", why))
+                _tick(f"  human-browser: {why}")
 
     if allow_thin and best is not None:
         return _finalize(best, scrub)

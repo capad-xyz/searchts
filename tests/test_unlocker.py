@@ -1464,3 +1464,59 @@ def test_human_uses_persistent_profile(monkeypatch, stub_extract):
     assert len(launch_calls) == 1
     assert str(Path(launch_calls[0]["args"][0])) == str(Path("/tmp/test-human-profile"))
     assert launch_calls[0]["kwargs"]["headless"] is False
+
+
+def test_human_rung_failure_is_named_in_the_error(monkeypatch, stub_extract):
+    """--human was asked for: when it fails, the error must say why (fail loud)."""
+
+    def boom(url, timeout=60, progress=None):
+        raise NotImplementedError("no tier-2")
+
+    _set(monkeypatch, curl=(200, "Just a moment..."), jina=(503, ""))
+    monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
+
+    def human_launch_fails(url, timeout=180):
+        raise RuntimeError("patchright missing")
+
+    monkeypatch.setattr(unlocker, "_fetch_human", human_launch_fails)
+    with pytest.raises(UnlockerError) as ei:
+        unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    rungs = dict(ei.value.attempts)
+    assert "human-browser" in rungs
+    assert "patchright missing" in rungs["human-browser"]
+
+
+def test_human_rung_still_blocked_is_named_in_the_error(monkeypatch, stub_extract):
+    def boom(url, timeout=60, progress=None):
+        raise NotImplementedError("no tier-2")
+
+    _set(monkeypatch, curl=(200, "Just a moment..."), jina=(503, ""))
+    monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
+    monkeypatch.setattr(
+        unlocker, "_fetch_human", lambda url, timeout=180: (200, "Just a moment...", url)
+    )
+    with pytest.raises(UnlockerError) as ei:
+        unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    assert dict(ei.value.attempts).get("human-browser") == "challenge"
+
+
+def test_human_rung_extract_crash_fails_loud(monkeypatch):
+    """An extractor crash on the human rung is a named failure, not a traceback."""
+
+    def boom(url, timeout=60, progress=None):
+        raise NotImplementedError("no tier-2")
+
+    def extract(body, url=None):
+        if "HUMAN" in body:
+            raise ValueError("bad html")
+        return body
+
+    monkeypatch.setattr(unlocker, "html_to_text", extract)
+    _set(monkeypatch, curl=(200, "Just a moment..."), jina=(503, ""))
+    monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
+    monkeypatch.setattr(
+        unlocker, "_fetch_human", lambda url, timeout=180: (200, "<html>HUMAN page</html>", url)
+    )
+    with pytest.raises(UnlockerError) as ei:
+        unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
+    assert "extract failed (ValueError" in dict(ei.value.attempts)["human-browser"]

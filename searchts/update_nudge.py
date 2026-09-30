@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """F13: optional stderr update nudge. Never stdout. Never MCP protocol.
 
-F19: when the nudge fires it also says this process is still the old build,
-names the searchts.exe PIDs on Windows, and prints the one install command.
-It never installs and never kills.
+F19: when the nudge fires it also says which build this process runs (an
+upgrade you just ran did not take effect here), names any other searchts.exe
+PIDs on Windows, and prints the one upgrade command for how this copy was
+installed. It never installs and never kills.
 """
 
 from __future__ import annotations
@@ -27,12 +28,14 @@ UPDATE_DOC = (
 )
 SKIP_COMMANDS = frozenset({"check-update", "watch", "version"})
 
+#: One upgrade command per install kind (see ``detect_install_kind``).
 INSTALL_COMMANDS = {
     "pipx": "pipx upgrade searchts",
+    "uv_tool": "uv tool upgrade searchts",
+    "uvx": 'uvx reuses its cached build: run uvx --from "searchts[mcp]@latest" searchts',
+    "editable": "source checkout: git pull, then reinstall the editable install",
     "pip": 'pip install -U "searchts[mcp]"',
-    "uvx": "uvx already latest PyPI; nothing to upgrade",
 }
-UV_ENV_KEYS = ("UV_RUNNING", "UVX", "UV_PYTHON")
 
 
 def is_newer_version(remote: str, local: str) -> bool:
@@ -113,35 +116,24 @@ def _path_parts(value: Optional[str]) -> list[str]:
     return parts
 
 
-def _has_uv_marker(parts: Sequence[str]) -> bool:
-    for part in parts:
-        if part == "uv" or part == "uvx" or part == "uv-tools" or part == "archive-v0":
-            return True
-        if "uv-cache" in part or part.startswith("uv-"):
-            return True
-    return False
+_KIND_BY_ENV = {
+    "ephemeral_uvx": "uvx",
+    "uv_tool": "uv_tool",
+    "pipx": "pipx",
+    "editable": "editable",
+}
 
 
 def detect_install_kind() -> str:
-    """How this interpreter was installed: uvx, pipx, or pip.
+    """How this copy was installed: uvx, uv_tool, pipx, editable, or pip.
 
-    uvx wins over pipx: a uv tool venv can also live under a pipx-ish path.
+    One source of truth with ``searchts install --browser``
+    (``browser_install.detect_cli_env``): paths decide, not env vars such as
+    UV_PYTHON that also show up under pipx and venv installs.
     """
-    if any(os.environ.get(key) for key in UV_ENV_KEYS):
-        return "uvx"
+    from searchts.browser_install import detect_cli_env
 
-    for raw in (getattr(sys, "executable", ""), sys.prefix, sys.exec_prefix):
-        if _has_uv_marker(_path_parts(raw)):
-            return "uvx"
-
-    if os.environ.get("PIPX_HOME"):
-        return "pipx"
-    for raw in (getattr(sys, "executable", ""), sys.prefix, sys.exec_prefix):
-        parts = _path_parts(raw)
-        if "pipx" in parts or "pipx" in raw.lower():
-            return "pipx"
-
-    return "pip"
+    return _KIND_BY_ENV.get(detect_cli_env().kind, "pip")
 
 
 def _searchts_pids() -> list[int]:
@@ -164,13 +156,14 @@ def _nudge_lines(
     lines = [
         f"searchts v{latest} is available. "
         f"SEARCHTS_NO_UPDATE_CHECK=1 hides this. {UPDATE_DOC}",
-        f"This process is still v{local}: the update did not take effect here.",
+        f"This process is still v{local}. If you just upgraded, "
+        "it did not take effect here.",
     ]
     if pids:
         pid_text = ", ".join(f"PID {pid}" for pid in pids)
         lines.append(
-            f"Windows: searchts.exe still open ({pid_text}). "
-            "This message does not kill them."
+            f"Windows: other searchts.exe still open ({pid_text}). "
+            "Quit them before upgrading. This message does not kill them."
         )
     lines.append(INSTALL_COMMANDS.get(install_kind, INSTALL_COMMANDS["pip"]))
     return lines

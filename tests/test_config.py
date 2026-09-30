@@ -3,6 +3,8 @@
 
 
 import os
+import stat
+import sys
 
 import pytest
 
@@ -123,3 +125,13 @@ class TestConfig:
         from searchts.config import load_dotenv_if_available
         load_dotenv_if_available()
         assert os.environ["SEARCHTS_DOTENV_FILL"] == "from-file"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
+def test_save_tightens_an_existing_world_readable_config(tmp_path):
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text("old: 1\n", encoding="utf-8")
+    os.chmod(config_file, 0o644)
+    cfg = Config(config_path=config_file)
+    cfg.set("exa_api_key", "secret")
+    assert stat.S_IMODE(os.stat(config_file).st_mode) == 0o600

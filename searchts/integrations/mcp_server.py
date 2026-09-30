@@ -21,6 +21,9 @@ searchts.transcribe.
 
 import asyncio
 import json
+import os
+from pathlib import Path
+from typing import Optional, Tuple
 
 from searchts.integrations.memory_rule import REACH_BODY
 
@@ -132,8 +135,11 @@ def create_server():
             "its URL through the same unlock ladder as read_url, save it to disk, "
             "and return {path, content_type, bytes} as JSON. Use this for one "
             "specific file by its direct URL; to pull a whole page's assets at "
-            "once use grab_site instead. Saves into out_dir when given, otherwise "
-            "the current directory. Returns an 'Error: ...' string on failure."
+            "once use grab_site instead. Saves into out_dir (a relative folder "
+            "inside the working directory, or SEARCHTS_MCP_OUT_DIR if the user set "
+            "it) when given, otherwise that folder itself, and never overwrites an "
+            "existing file. Returns an "
+            "'Error: ...' string on failure."
         ),
     )
     def fetch_asset_tool(url: str, out_dir: str = "") -> str:
@@ -147,7 +153,11 @@ def create_server():
             "the color palette and the fonts in use, and return a manifest (with "
             "local file paths) as JSON. Use this for a whole page's design/assets "
             "at once; for a single known file use fetch_asset. Saves into out_dir "
-            "when given, otherwise a 'searchts-grab-<host>' folder. Set read=true "
+            "(a relative folder inside the working directory, or SEARCHTS_MCP_OUT_DIR "
+            "if the user set it) when given, otherwise a 'searchts-grab-<host>' "
+            "folder there. A folder that already has files is never written into; "
+            "the grab goes to '<folder>-2', '<folder>-3' and so on, and the folder "
+            "used is returned as out_dir. Set read=true "
             "to also save the page text as page.md. Returns an 'Error: ...' string "
             "on failure."
         ),
@@ -172,6 +182,84 @@ def create_server():
         )
 
     return mcp
+
+
+def _unexpected(tool: str, exc: BaseException) -> str:
+    """Error string for a failure no rung anticipated (tool bodies never raise).
+
+    MCP 2.x turns an uncaught exception into a JSON-RPC error, which hosts show
+    as a crashed tool instead of a readable result.
+    """
+    return f"Error: {tool} failed unexpectedly ({type(exc).__name__}: {exc})."
+
+
+#: Folder names that run what lands in them (login items, autostart).
+_AUTOSTART_PARTS = frozenset(
+    {"startup", "autostart", "launchagents", "launchdaemons", "start menu"}
+)
+
+
+#: Env var a user sets to move the MCP save folder (e.g. hosts that start the
+#: server with ``/`` as the working directory). The user's hand, not the model's.
+MCP_OUT_DIR_ENV = "SEARCHTS_MCP_OUT_DIR"
+
+
+def _mcp_out_base() -> Path:
+    """Folder MCP saves stay inside: ``$SEARCHTS_MCP_OUT_DIR`` or the working directory."""
+    configured = os.environ.get(MCP_OUT_DIR_ENV, "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return Path.cwd().resolve()
+
+
+def _fresh_dir(folder: Path) -> Optional[Path]:
+    """``folder`` when it is new or empty, else the first free ``<folder>-2``, ``-3``...
+
+    grab writes ``page.md`` and ``manifest.json`` at the top of its folder, so an
+    MCP grab never lands in a folder that already holds files.
+    """
+
+    def taken(p: Path) -> bool:
+        return p.exists() and (not p.is_dir() or any(p.iterdir()))
+
+    if not taken(folder):
+        return folder
+    for n in range(2, 1000):
+        cand = folder.with_name(f"{folder.name}-{n}")
+        if not taken(cand):
+            return cand
+    return None
+
+
+def _mcp_out_dir(out_dir: str, default: str) -> Tuple[Optional[Path], Optional[str]]:
+    """Resolve an agent-supplied folder for fetch_asset / grab_site.
+
+    An MCP caller is a model that may have read a prompt-injected page, so its
+    writes stay inside one base folder (the server's working directory, or
+    ``$SEARCHTS_MCP_OUT_DIR`` when the user sets it): a relative folder, no
+    ``..``, no hidden (dot) folders such as ``.ssh``, and no autostart /
+    Startup folders. Returns ``(path, None)`` or ``(None, "Error: ...")``.
+    The CLI is the user's own hand and keeps any path.
+    """
+    base = _mcp_out_base()
+    raw = (out_dir or "").strip() or default
+    requested = Path(raw)
+    if requested.anchor or raw.startswith("~"):
+        return None, (
+            f"Error: out_dir must be a relative folder inside {base} (got {raw!r}). "
+            f"The user can move that folder with {MCP_OUT_DIR_ENV}."
+        )
+    for part in requested.parts:
+        if part == "..":
+            return None, f"Error: out_dir may not contain '..' (got {raw!r})."
+        if part.startswith(".") and part != ".":
+            return None, f"Error: out_dir may not use hidden folders like {part!r}."
+        if part.lower() in _AUTOSTART_PARTS:
+            return None, f"Error: out_dir may not target a startup folder ({part!r})."
+    target = (base / requested).resolve()
+    if target != base and base not in target.parents:
+        return None, f"Error: out_dir resolves outside {base} (got {raw!r})."
+    return target, None
 
 
 def get_status() -> str:
@@ -210,6 +298,8 @@ def read_url(url: str) -> str:
         result = unlocker.fetch(url)
     except unlocker.UnlockerError as e:
         return f"Error: {e}"
+    except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
+        return _unexpected("read_url", e)
 
     # fetch() already strips invisibles and scans; reuse its findings. (Belt-and-
     # braces strip in case a caller swaps in a non-sanitizing fetch.)
@@ -250,6 +340,8 @@ def web_search(query: str, max_results: int = 5) -> str:
         results = search_mod.search(query, max_results=max_results)
     except search_mod.SearchError as e:
         return f"Error: {e}"
+    except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
+        return _unexpected("web_search", e)
 
     blocks = []
     for i, r in enumerate(results, start=1):
@@ -264,8 +356,9 @@ def fetch_asset(url: str, out_dir: str = "") -> str:
     """Download one asset through the unlock ladder and save it.
 
     Returns a JSON string {path, content_type, bytes}, or an error string.
-    Module-level (like read_url) so it is testable without the optional `mcp`
-    package.
+    Saves inside the working directory (see ``_mcp_out_dir``) and never
+    overwrites an existing file. Module-level (like read_url) so it is testable
+    without the optional `mcp` package.
     """
     import mimetypes
 
@@ -277,10 +370,18 @@ def fetch_asset(url: str, out_dir: str = "") -> str:
     blocked = ssrf.guard_mcp_url(url)
     if blocked:
         return blocked
+    folder, bad = _mcp_out_dir(out_dir, ".")
+    if bad or folder is None:
+        return bad or "Error: invalid out_dir."
     try:
-        path = assets.get_asset(url, out_dir or None)
+        folder.mkdir(parents=True, exist_ok=True)
+        path = assets.get_asset(url, str(folder), overwrite=False)
     except assets.AssetError as e:
         return f"Error: {e}"
+    except OSError as e:
+        return f"Error: could not save the asset ({e})."
+    except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
+        return _unexpected("fetch_asset", e)
     try:
         size = path.stat().st_size
     except OSError:
@@ -307,12 +408,27 @@ def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
     if blocked:
         return blocked
     host = urlparse(assets.normalize(url)).netloc.replace(":", "_") or "site"
-    out = out_dir or f"searchts-grab-{host}"
+    default = f"searchts-grab-{host}"
+    folder, bad = _mcp_out_dir(out_dir, default)
+    if bad or folder is None:
+        return bad or "Error: invalid out_dir."
+    if folder == _mcp_out_base():
+        # Never the base itself: page.md / manifest.json there could replace a
+        # project's own files.
+        folder = folder / default
+    fresh = _fresh_dir(folder)
+    if fresh is None:
+        return f"Error: no free folder next to {folder} (tried -2 to -999)."
+    folder = fresh
     try:
-        manifest = assets.grab(url, out, read=read)
+        manifest = assets.grab(url, str(folder), read=read)
     except assets.AssetError as e:
         return f"Error: {e}"
-    return json.dumps(manifest, ensure_ascii=False, indent=2)
+    except OSError as e:
+        return f"Error: could not save the grab ({e})."
+    except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
+        return _unexpected("grab_site", e)
+    return json.dumps({**manifest, "out_dir": str(folder)}, ensure_ascii=False, indent=2)
 
 
 def transcribe_source(
@@ -348,6 +464,8 @@ def transcribe_source(
         )
     except TranscribeError as e:
         return f"Error: {e}"
+    except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
+        return _unexpected("transcribe", e)
 
 
 async def _run_stdio():

@@ -71,6 +71,13 @@ class Config:
                 os.O_WRONLY | os.O_CREAT | os.O_TRUNC,
                 stat.S_IRUSR | stat.S_IWUSR,  # 0o600
             )
+            # The mode above only applies when the file is created. A config
+            # written by an older version may still be world-readable.
+            if hasattr(os, "fchmod"):
+                try:
+                    os.fchmod(fd, stat.S_IRUSR | stat.S_IWUSR)
+                except OSError:
+                    pass
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 yaml.dump(self.data, f, default_flow_style=False, allow_unicode=True)
         except OSError:
