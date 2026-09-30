@@ -23,7 +23,7 @@ def test_stealth_probe_warns_when_patchright_missing(monkeypatch):
     status, message = ch.check()
     assert status == "warn"
     assert "stealth-browser not installed" in message
-    assert "searchts[browser]" in message
+    assert "searchts install --browser" in message
     assert ch.active_backend == "curl_cffi"
 
 

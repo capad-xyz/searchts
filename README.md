@@ -91,8 +91,12 @@ venv / packaging only (not the recommended path for the CLI):
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install "searchts[mcp]"
-# optional stealth-browser extra, still venv-only:
-# pip install "searchts[browser]" && patchright install chromium
+```
+
+Stealth browser (same env as the running CLI; not for ephemeral uvx):
+
+```bash
+searchts install --browser
 ```
 
 ## Quickstart
