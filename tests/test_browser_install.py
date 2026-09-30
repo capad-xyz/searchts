@@ -1,0 +1,1 @@
+@file:///workspace/searchts/tests/test_browser_install.py
