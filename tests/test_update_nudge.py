@@ -131,6 +131,16 @@ def test_detect_install_kind_from_uvx_path(monkeypatch):
     assert un.detect_install_kind() == "uvx"
 
 
+def test_detect_install_kind_from_posix_uvx_path(monkeypatch):
+    for key in un.UV_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.delenv("PIPX_HOME", raising=False)
+    uv_tools = "/home/a/.local/share/uv/tools/searchts"
+    monkeypatch.setattr(un.sys, "executable", uv_tools + "/bin/python")
+    monkeypatch.setattr(un.sys, "prefix", uv_tools)
+    assert un.detect_install_kind() == "uvx"
+
+
 def test_nudge_prints_only_never_installs_or_kills(monkeypatch, tmp_path, capsys):
     _tty(monkeypatch)
 

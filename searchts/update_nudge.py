@@ -14,7 +14,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Optional, Sequence
 
 from searchts import __version__
@@ -100,9 +100,17 @@ def _fetch_latest(timeout: float = 2.0) -> Optional[str]:
 
 
 def _path_parts(value: Optional[str]) -> list[str]:
+    """Split a path using both Windows and POSIX rules.
+
+    Host ``Path`` only understands local separators, so a ``C:\\...\\uv\\tools``
+    string on Linux CI is one part and would miss the uvx marker.
+    """
     if not value:
         return []
-    return [p.strip().lower() for p in Path(value).parts]
+    parts: list[str] = []
+    for parsed in (PureWindowsPath(value), PurePosixPath(value)):
+        parts.extend(p.strip().lower() for p in parsed.parts if p.strip())
+    return parts
 
 
 def _has_uv_marker(parts: Sequence[str]) -> bool:
