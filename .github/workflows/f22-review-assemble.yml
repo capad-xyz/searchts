@@ -18,14 +18,26 @@ jobs:
         with:
           ref: feat/install-browser-f22
           fetch-depth: 0
-      - name: Assemble reviewed files and commit
+      - name: Decode reviewed files and commit
         run: |
           set -euo pipefail
-          mkdir -p searchts tests docs
-          cat .github/f22-review/browser_install.part1 .github/f22-review/browser_install.part2 > searchts/browser_install.py
-          cat .github/f22-review/test_browser_install.part1 .github/f22-review/test_browser_install.part2 > tests/test_browser_install.py
-          cp .github/f22-review/install.md docs/install.md
-          cp .github/f22-review/README.md README.md
+          python3 << 'PY'
+          import base64, zlib
+          from pathlib import Path
+
+          def decode(stem: str, n: int, dest: str):
+              parts = []
+              for i in range(n):
+                  parts.append(Path(f".github/f22-review/{stem}.{i}.b64").read_text().strip())
+              data = zlib.decompress(base64.b64decode("".join(parts)))
+              Path(dest).write_bytes(data)
+              print("wrote", dest, len(data))
+
+          decode("bi", 2, "searchts/browser_install.py")
+          decode("test", 1, "tests/test_browser_install.py")
+          decode("docs", 1, "docs/install.md")
+          decode("readme", 3, "README.md")
+          PY
           rm -rf .github/f22-review .github/workflows/f22-review-assemble.yml
           git config user.name "capad-xyz"
           git config user.email "163459540+capad-xyz@users.noreply.github.com"
@@ -39,6 +51,7 @@ jobs:
           Detect ephemeral uvx via archive-v0 only (not UV_PYTHON).
           uv tool prints force reinstall instead of uv pip inject.
           Stream Chromium to stderr. pipx by pipx/venvs prefix; inject metadata reqs.
+          Typecheck: environ Mapping[str, str] | None.
 
           Co-authored-by: Tess <composer-2-fast>
           Effort: high
