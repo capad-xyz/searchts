@@ -2,6 +2,19 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.12.0](https://github.com/capad-xyz/searchts/compare/v0.11.1...v0.12.0) (2026-09-29)
+
+
+### Added
+
+* card snippet under each Reddit listing title ([#194](https://github.com/capad-xyz/searchts/issues/194)) ([36d8b9d](https://github.com/capad-xyz/searchts/commit/36d8b9dcbb9a1fd9bdc0325ae6e67802170cb9fa))
+* Reddit listing index from shreddit-post HTML ([#192](https://github.com/capad-xyz/searchts/issues/192)) ([55fc9a6](https://github.com/capad-xyz/searchts/commit/55fc9a6c5870a5c4a26fe4bccc36216e1b968c6e))
+
+
+### Fixed
+
+* keep CLI --help honest about channels, configure, and -v ([#195](https://github.com/capad-xyz/searchts/issues/195)) ([04d6a7c](https://github.com/capad-xyz/searchts/commit/04d6a7cbf188a53a63f88dae68d52936c4a17b03))
+
 ## [0.11.1](https://github.com/capad-xyz/searchts/compare/v0.11.0...v0.11.1) (2026-09-24)
 
 
