@@ -684,3 +684,31 @@ def test_out_dir_base_can_be_moved_by_the_user(monkeypatch, tmp_path):
     assert Path(seen["out"]) == (base / "brand").resolve()
     err = fetch_asset("https://x.test/logo.png", "/etc")
     assert err.startswith("Error:") and "SEARCHTS_MCP_OUT_DIR" in err
+
+
+def test_grab_site_never_writes_into_the_base_or_a_used_folder(monkeypatch, tmp_path):
+    """grab writes page.md / manifest.json at its top level; an MCP grab must not
+    land in the working directory itself or in a folder that already has files."""
+    monkeypatch.chdir(tmp_path)
+    seen = []
+
+    def fake_grab(url, out, read=False):
+        seen.append(Path(out))
+        return {"url": url, "assets": []}
+
+    monkeypatch.setattr("searchts.assets.grab", fake_grab)
+    data = json.loads(grab_site("https://x.test/", "."))
+    assert seen[-1] == (tmp_path / "searchts-grab-x.test").resolve()
+    assert data["out_dir"] == str(seen[-1])
+
+    used = tmp_path / "searchts-grab-x.test"
+    used.mkdir()
+    (used / "manifest.json").write_text("{}", encoding="utf-8")
+    data = json.loads(grab_site("https://x.test/"))
+    assert seen[-1] == (tmp_path / "searchts-grab-x.test-2").resolve()
+    assert data["out_dir"] == str(seen[-1])
+
+    empty = tmp_path / "shots"
+    empty.mkdir()
+    json.loads(grab_site("https://x.test/", "shots"))
+    assert seen[-1] == empty.resolve()

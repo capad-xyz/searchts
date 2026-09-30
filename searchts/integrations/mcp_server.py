@@ -155,7 +155,9 @@ def create_server():
             "at once; for a single known file use fetch_asset. Saves into out_dir "
             "(a relative folder inside the working directory, or SEARCHTS_MCP_OUT_DIR "
             "if the user set it) when given, otherwise a 'searchts-grab-<host>' "
-            "folder there. Set read=true "
+            "folder there. A folder that already has files is never written into; "
+            "the grab goes to '<folder>-2', '<folder>-3' and so on, and the folder "
+            "used is returned as out_dir. Set read=true "
             "to also save the page text as page.md. Returns an 'Error: ...' string "
             "on failure."
         ),
@@ -208,6 +210,25 @@ def _mcp_out_base() -> Path:
     if configured:
         return Path(configured).expanduser().resolve()
     return Path.cwd().resolve()
+
+
+def _fresh_dir(folder: Path) -> Optional[Path]:
+    """``folder`` when it is new or empty, else the first free ``<folder>-2``, ``-3``...
+
+    grab writes ``page.md`` and ``manifest.json`` at the top of its folder, so an
+    MCP grab never lands in a folder that already holds files.
+    """
+
+    def taken(p: Path) -> bool:
+        return p.exists() and (not p.is_dir() or any(p.iterdir()))
+
+    if not taken(folder):
+        return folder
+    for n in range(2, 1000):
+        cand = folder.with_name(f"{folder.name}-{n}")
+        if not taken(cand):
+            return cand
+    return None
 
 
 def _mcp_out_dir(out_dir: str, default: str) -> Tuple[Optional[Path], Optional[str]]:
@@ -387,9 +408,18 @@ def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
     if blocked:
         return blocked
     host = urlparse(assets.normalize(url)).netloc.replace(":", "_") or "site"
-    folder, bad = _mcp_out_dir(out_dir, f"searchts-grab-{host}")
+    default = f"searchts-grab-{host}"
+    folder, bad = _mcp_out_dir(out_dir, default)
     if bad or folder is None:
         return bad or "Error: invalid out_dir."
+    if folder == _mcp_out_base():
+        # Never the base itself: page.md / manifest.json there could replace a
+        # project's own files.
+        folder = folder / default
+    fresh = _fresh_dir(folder)
+    if fresh is None:
+        return f"Error: no free folder next to {folder} (tried -2 to -999)."
+    folder = fresh
     try:
         manifest = assets.grab(url, str(folder), read=read)
     except assets.AssetError as e:
@@ -398,7 +428,7 @@ def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
         return f"Error: could not save the grab ({e})."
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
         return _unexpected("grab_site", e)
-    return json.dumps(manifest, ensure_ascii=False, indent=2)
+    return json.dumps({**manifest, "out_dir": str(folder)}, ensure_ascii=False, indent=2)
 
 
 def transcribe_source(

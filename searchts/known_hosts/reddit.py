@@ -544,7 +544,9 @@ def _card_body(title: str, body: str, all_text: str, *, require_min: bool = True
     return text
 
 
-_READ_MORE_RE = re.compile(r"\s*\u2026?\s*\bRead more\s*$", re.IGNORECASE)
+# Reddit's fold button text, exactly as shown (capital R). Case-sensitive so a
+# post that really ends "...you can read more" is not marked truncated.
+_READ_MORE_RE = re.compile(r"\s*\u2026?\s*\bRead more\s*$")
 
 
 def _strip_read_more(text: str) -> Tuple[str, bool]:

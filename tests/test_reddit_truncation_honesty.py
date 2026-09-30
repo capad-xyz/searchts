@@ -73,3 +73,11 @@ def test_listing_snippet_drops_the_fold_marker():
     assert md is not None
     assert "Read more" not in md
     assert "Preview of the first post" in md
+
+
+def test_a_post_that_really_ends_with_read_more_is_not_marked():
+    html = _post("Guide", "The full guide is on the wiki, where you can read more", comment_count="0")
+    md = reddit.parse_reddit_thread_html(html, THREAD)
+    assert md is not None
+    assert "where you can read more" in md
+    assert "[truncated" not in md
