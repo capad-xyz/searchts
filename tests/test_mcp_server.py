@@ -346,7 +346,10 @@ def test_fetch_asset_refuses_symlink_escape(monkeypatch, tmp_path):
     outside.mkdir()
     work = tmp_path / "work"
     work.mkdir()
-    (work / "link").symlink_to(outside, target_is_directory=True)
+    try:
+        (work / "link").symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):  # Windows without symlink rights
+        pytest.skip("cannot create a symlink here")
     monkeypatch.chdir(work)
     monkeypatch.setattr(
         "searchts.assets.get_asset",
