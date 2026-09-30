@@ -93,7 +93,7 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install "searchts[mcp]"
 ```
 
-Stealth browser (same env as the running CLI; not for ephemeral uvx):
+Stealth browser (installs into the same env as the running CLI). With uvx or uv tool, put `browser` in the spec itself, for example `uvx --from "searchts[mcp,browser]"`, in every command you use, the MCP one included. Only Chromium is shared between environments:
 
 ```bash
 searchts install --browser
