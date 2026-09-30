@@ -40,7 +40,18 @@ Windows Store `python3` alias: use `py -3` instead.
 
 If `searchts.exe` / `mcp serve` is running (Windows), stop it before reinstall (**F11**).
 
-Optional stealth extra (venv): `pip install "searchts[browser]"` then `patchright install chromium`.
+### Browser / stealth (keep-path)
+
+Recommended after a keep install (`pipx` or a real venv). One command installs the `[browser]` extra and Chromium into **the same environment** as the running `searchts` CLI:
+
+```bash
+searchts install --browser
+searchts doctor
+```
+
+It prints which env it is mutating (pipx / uv tool / venv / editable). Ephemeral `uvx` cannot keep Chromium: keep-install with pipx first, then retry.
+
+Manual equivalent (venv only): `pip install "searchts[browser]"` then `patchright install chromium`.
 
 ### After install
 
