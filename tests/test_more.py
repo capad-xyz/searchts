@@ -154,6 +154,77 @@ def test_details_still_read_without_help():
     assert "How do refunds work?" in text and "five days" in text
 
 
+# Bootstrap 5.3 markup (getbootstrap.com/docs/5.3/components/accordion/): the
+# button sits inside the page's own <h2>, with whitespace around it.
+BOOTSTRAP_ACCORDION = (
+    '<div class="accordion" id="acc">'
+    '<div class="accordion-item"><h2 class="accordion-header">\n      '
+    '<button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#one" '
+    'aria-expanded="true" aria-controls="one">\n        Accordion Item #1\n      </button>\n    </h2>'
+    '<div id="one" class="accordion-collapse collapse show"><div class="accordion-body">'
+    "<strong>This is the first item's accordion body.</strong> It is shown by default until the plugin runs."
+    "</div></div></div>"
+    '<div class="accordion-item"><h2 class="accordion-header">\n      '
+    '<button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#two" '
+    'aria-expanded="false" aria-controls="two">\n        Accordion Item #2\n      </button>\n    </h2>'
+    '<div id="two" class="accordion-collapse collapse"><div class="accordion-body">'
+    "<strong>This is the second item's accordion body.</strong> It is hidden by default until the plugin runs."
+    "</div></div></div></div>"
+)
+
+
+def test_button_inside_a_heading_becomes_that_heading():
+    text = unlocker.html_to_text(_page(BOOTSTRAP_ACCORDION), URL)
+    lines = text.splitlines()
+    assert "## Accordion Item #1" in lines
+    assert "## Accordion Item #2" in lines  # was indented, so Markdown read it as code
+    assert "##" not in [ln.strip() for ln in lines]  # no empty heading left behind
+    assert "### Accordion Item" not in text
+    assert "shown by default until the plugin runs" in text
+    assert "hidden by default until the plugin runs" in text
+
+
+def test_table_of_contents_toggle_is_not_a_question():
+    toc = (
+        '<div class="bd-toc"><button class="bd-toc-toggle" type="button" data-bs-toggle="collapse" '
+        'data-bs-target="#toc" aria-expanded="false" aria-controls="toc">On this page</button>'
+        '<div class="collapse" id="toc"><nav id="TableOfContents"><ul>'
+        '<li><a href="#how">How it works</a></li><li><a href="#example">Example</a></li>'
+        '<li><a href="#a11y">Accessibility</a></li></ul></nav></div></div>'
+    )
+    html = _page(toc)
+    assert more.prepare_panels(html) == html
+    assert "On this page" not in unlocker.html_to_text(html, URL)
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        '<a href="/docs/">Read the docs</a>',
+        '<ul><li><a href="/g/1">Setup guide</a></li><li><a href="/g/2">API guide</a></li>'
+        '<li><a href="/g/3">CLI guide</a></li></ul>',
+    ],
+)
+def test_an_answer_made_of_links_is_still_an_answer(answer):
+    faq = (
+        '<button aria-expanded="false" aria-controls="d">Where are the docs?</button>'
+        f'<div id="d" hidden>{answer}</div>'
+    )
+    out = more.prepare_panels(_page(faq))
+    assert "<h3>Where are the docs?</h3>" in out  # only a nav of links is skipped
+    assert '<div id="d">' in out  # and the panel is un-hidden
+
+
+def test_tidy_headings_puts_an_indented_heading_on_its_own_line():
+    md = "limit overflow.\n      ## Accordion Item #2\n\nBody text."
+    assert more.tidy_headings(md) == "limit overflow.\n\n## Accordion Item #2\n\nBody text."
+
+
+def test_tidy_headings_leaves_fenced_code_alone():
+    md = "Intro.\n\n```\n    # a shell comment\n  ## not a heading\n```\n\n## Real heading"
+    assert more.tidy_headings(md) == md
+
+
 # ── list pages the extract mostly dropped ────────────────────────────────────
 
 
