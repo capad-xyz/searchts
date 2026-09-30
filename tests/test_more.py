@@ -1,0 +1,266 @@
+# -*- coding: utf-8 -*-
+"""F23a: say when a page has more than the read returned (no extra requests, no clicks)."""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from searchts import more, unlocker
+
+URL = "https://example.org/blog/"
+PARA = "This paragraph carries enough ordinary words to look like the main body of a real page, part {}."
+
+
+def _page(inner: str, head: str = "") -> str:
+    body = "".join(f"<p>{PARA.format(i)} {PARA.format(i + 100)}</p>" for i in range(3))
+    return f"<html><head>{head}</head><body><main><article><h1>Title</h1>{body}{inner}</article></main></body></html>"
+
+
+def _kinds(found):
+    return [m.kind for m in found]
+
+
+# ── next page ────────────────────────────────────────────────────────────────
+
+
+def test_link_rel_next_in_head():
+    found = more.detect(_page("", head='<link rel="next" href="/blog/page/2/">'), URL, "text")
+    assert _kinds(found) == ["next-page"]
+    assert found[0].url == "https://example.org/blog/page/2/"
+    assert "https://example.org/blog/page/2/" in found[0].note
+
+
+def test_anchor_rel_next_resolves_relative_links():
+    found = more.detect(_page('<a rel="prev next" href="?page=3">3</a>'), "https://example.org/list?page=2", "t")
+    assert found[0].url == "https://example.org/list?page=3"
+
+
+def test_pager_next_link_without_rel():
+    pager = '<nav aria-label="Pagination"><a href="/blog/page/1/">1</a><a href="/blog/page/2/">Next ›</a></nav>'
+    found = more.detect(_page(pager), URL, "t")
+    assert found and found[0].url == "https://example.org/blog/page/2/"
+
+
+def test_pager_uses_the_current_page_number():
+    pager = (
+        '<ul class="pagination"><li><span aria-current="page">4</span></li>'
+        '<li><a href="/blog/page/5/">5</a></li><li><a href="/blog/page/6/">6</a></li></ul>'
+    )
+    found = more.detect(_page(pager), "https://example.org/blog/page/4/", "t")
+    assert found[0].url == "https://example.org/blog/page/5/"
+
+
+@pytest.mark.parametrize(
+    "inner",
+    [
+        '<a href="/blog/another-post/">Next article</a>',  # a related post, not page 2
+        '<p>Read the <a href="/blog/page/2/">next</a> post.</p>',  # not in a pager
+        '<link rel="next" href="https://other.example/page/2">',  # another host
+        '<a rel="next" href="#comments">Next</a>',  # same page
+    ],
+)
+def test_not_a_next_page(inner):
+    assert "next-page" not in _kinds(more.detect(_page(inner), URL, "t"))
+
+
+# ── feeds ────────────────────────────────────────────────────────────────────
+
+
+def test_role_feed_is_a_feed():
+    found = more.detect(_page('<div role="feed"><article>one</article></div>'), URL, "t")
+    assert _kinds(found) == ["feed"]
+
+
+def test_load_more_button_is_a_feed():
+    found = more.detect(_page("<button>Load more</button>"), URL, "t")
+    assert _kinds(found) == ["feed"]
+    assert "first window" in found[0].note
+
+
+def test_load_more_link_is_the_next_page():
+    found = more.detect(_page('<a href="/blog/page/2/">Load more posts</a>'), URL, "t")
+    assert _kinds(found) == ["next-page"]
+    assert found[0].url == "https://example.org/blog/page/2/"
+
+
+# ── folds ────────────────────────────────────────────────────────────────────
+
+
+def test_read_more_button_is_a_fold():
+    found = more.detect(_page('<p>Start of a long post</p><button type="button">Read more</button>'), URL, "t")
+    assert _kinds(found) == ["fold"]
+    assert '1 control like "Read more"' in found[0].note
+
+
+def test_blog_index_read_more_links_are_links_not_folds():
+    cards = "".join(f'<p>Excerpt {i}</p><a href="/blog/post-{i}/">Read more</a>' for i in range(5))
+    assert "fold" not in _kinds(more.detect(_page(cards), URL, "t"))
+
+
+def test_read_more_in_page_chrome_is_ignored():
+    html = _page("").replace("<main>", '<header><button>Show more</button></header><main>')
+    html = html.replace("</main>", '</main><footer><a href="#">See more</a></footer>')
+    assert more.detect(html, URL, "t") == []
+
+
+# ── accordions and tabs ──────────────────────────────────────────────────────
+
+
+FAQ_HIDDEN = (
+    "<h2>FAQ</h2>"
+    '<button aria-expanded="false" aria-controls="p1">Can I change my plan?</button>'
+    '<div id="p1" hidden><p>Yes, you can switch plans at any time from the billing page.</p></div>'
+    '<button aria-expanded="false">Is there a free tier?</button>'
+    '<div style="display:none"><p>There is a free tier with three projects and community support.</p></div>'
+)
+
+
+def test_accordion_questions_and_hidden_answers_survive_extraction():
+    text = unlocker.html_to_text(_page(FAQ_HIDDEN), URL)
+    assert "Can I change my plan?" in text
+    assert "switch plans at any time" in text
+    assert "Is there a free tier?" in text
+    assert "free tier with three projects" in text  # was dropped whole before F23a
+
+
+def test_tab_labels_move_into_their_panels():
+    tabs = (
+        '<div role="tablist"><button role="tab" aria-controls="m">Monthly</button>'
+        '<button role="tab" aria-controls="y">Yearly</button></div>'
+        '<div role="tabpanel" id="m"><p>Monthly costs ten dollars per seat billed each month.</p></div>'
+        '<div role="tabpanel" id="y" hidden><p>Yearly costs one hundred dollars per seat per year.</p></div>'
+    )
+    text = unlocker.html_to_text(_page(tabs), URL)
+    assert text.index("Monthly") < text.index("ten dollars") < text.index("Yearly") < text.index("one hundred")
+
+
+def test_menu_toggles_are_left_alone():
+    html = _page('<button aria-expanded="false" aria-haspopup="true">Share</button><ul><li>X</li></ul>')
+    assert more.prepare_panels(html) == html
+
+
+def test_empty_panel_is_a_fold():
+    html = _page('<button aria-expanded="false" aria-controls="q">Shipping times?</button><div id="q"></div>')
+    found = more.detect(html, URL, "t")
+    assert _kinds(found) == ["fold"]
+    assert "1 collapsed section was empty" in found[0].note
+
+
+def test_details_still_read_without_help():
+    html = _page("<details><summary>How do refunds work?</summary><p>Refunds reach the card in five days.</p></details>")
+    text = unlocker.html_to_text(html, URL)
+    assert "How do refunds work?" in text and "five days" in text
+
+
+# ── list pages the extract mostly dropped ────────────────────────────────────
+
+
+def _cards(n: int) -> str:
+    return "".join(
+        f'<div class="card"><h3><a href="/item/{i}">Story number {i} about something</a></h3>'
+        f"<p>A short teaser for story {i} with a few more words.</p></div>"
+        for i in range(n)
+    )
+
+
+def _list_page(n: int) -> str:
+    return f'<html><body><main><div class="grid">{_cards(n)}</div></main></body></html>'
+
+
+def test_list_page_where_the_extract_kept_one_item():
+    found = more.detect(_list_page(27), URL, "Story number 0 about something. A short teaser.")
+    assert _kinds(found) == ["list"]
+    assert found[0].note == "[partial: the page lists 27 items; this read kept 1]"
+
+
+def test_list_page_fully_kept_has_no_note():
+    text = " ".join(f"Story number {i} about something" for i in range(27))
+    assert more.detect(_list_page(27), URL, text) == []
+
+
+def test_related_grid_under_an_article_is_not_a_partial_list():
+    long_body = "".join(f"<p>{PARA.format(i)} {PARA.format(i + 50)} {PARA.format(i + 90)}</p>" for i in range(12))
+    html = (
+        f"<html><body><main><article><h1>A long article</h1>{long_body}</article>"
+        f'<section class="related"><div class="grid">{_cards(9)}</div></section></main></body></html>'
+    )
+    assert "list" not in _kinds(more.detect(html, URL, "the article text only"))
+
+
+def test_nav_menus_are_not_lists():
+    links = "".join(f'<li class="m"><a href="/c/{i}">Category number {i} with a long name</a></li>' for i in range(20))
+    html = f"<html><body><nav><ul>{links}</ul></nav><main><p>{PARA.format(1) * 3}</p></main></body></html>"
+    assert "list" not in _kinds(more.detect(html, URL, PARA.format(1)))
+
+
+# ── counts the page states ───────────────────────────────────────────────────
+
+
+def test_showing_x_of_y():
+    found = more.detect(_page("<p>Showing 1–20 of 340 results</p>"), URL, "t")
+    assert "[page says: showing 1–20 of 340]" in [m.note for m in found]
+
+
+def test_page_x_of_y():
+    found = more.detect(_page("<span>Page 2 of 9</span>"), URL, "t")
+    assert "[page says: page 2 of 9]" in [m.note for m in found]
+
+
+@pytest.mark.parametrize("said", ["Showing 1–20 of 20 results", "Page 9 of 9"])
+def test_counts_already_complete_say_nothing(said):
+    assert more.detect(_page(f"<p>{said}</p>"), URL, "t") == []
+
+
+# ── plain pages and bad input ────────────────────────────────────────────────
+
+
+def test_plain_article_has_no_notes():
+    assert more.detect(_page(""), URL, "whatever") == []
+    assert more.annotate("body", []) == "body"
+
+
+@pytest.mark.parametrize("bad", ["", "   ", '<?xml version="1.0" encoding="utf-8"?><html><body>x</body></html>'])
+def test_odd_input_never_raises(bad):
+    assert more.detect(bad, URL, "") == []
+    assert more.prepare_panels(bad) == bad or "<html" in more.prepare_panels(bad)
+
+
+# ── wired into fetch, --json and MCP ─────────────────────────────────────────
+
+
+def _curl(monkeypatch, html, final_url=URL):
+    monkeypatch.setattr(unlocker, "jina_enabled", lambda: False)
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (200, html, final_url, {}))
+
+
+def test_fetch_carries_next_url_and_a_trailing_note(monkeypatch):
+    html = _page("", head='<link rel="next" href="/blog/page/2/">')
+    _curl(monkeypatch, html)
+    r = unlocker.fetch(URL, backends=["curl_cffi"], use_memory=False)
+    assert r.next_url == "https://example.org/blog/page/2/"
+    assert r.more == [{"kind": "next-page", "note": "[more: the next page is https://example.org/blog/page/2/]",
+                       "url": "https://example.org/blog/page/2/"}]
+    assert r.text.rstrip().endswith("[more: the next page is https://example.org/blog/page/2/]")
+    assert r.page_html is None  # the HTML is never returned
+
+
+def test_fetch_without_findings_is_unchanged(monkeypatch):
+    _curl(monkeypatch, _page(""))
+    r = unlocker.fetch(URL, backends=["curl_cffi"], use_memory=False)
+    assert r.next_url is None and r.more == []
+    assert "[" not in r.text.splitlines()[-1]
+
+
+def test_mcp_read_url_reports_next_url(monkeypatch):
+    from searchts.integrations import mcp_server
+
+    html = _page("", head='<link rel="next" href="/blog/page/2/">')
+    _curl(monkeypatch, html)
+    monkeypatch.setattr("searchts.ssrf.guard_mcp_url", lambda url, **kw: None)
+    real_fetch = unlocker.fetch
+    monkeypatch.setattr(unlocker, "fetch", lambda url, **kw: real_fetch(url, backends=["curl_cffi"], use_memory=False))
+    data = json.loads(mcp_server.read_url(URL))
+    assert data["next_url"] == "https://example.org/blog/page/2/"
+    assert data["more"][0]["kind"] == "next-page"

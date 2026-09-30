@@ -57,7 +57,11 @@ READ_URL_DESCRIPTION = (
     "snippet or from the login chrome — call this tool on that URL. Returns Markdown ready to feed "
     "a model, always strips invisible/control characters, and if "
     "prompt-injection indicators are detected it fences the body as "
-    "untrusted and prepends a one-line warning. Returns an 'Error: ...' "
+    "untrusted and prepends a one-line warning. When the page has more than "
+    "this read returned (a next page, a feed, folded text, a list it mostly "
+    "dropped), the text ends with a bracketed note and the JSON has "
+    "'next_url' and 'more'; read 'next_url' to continue. No note does not "
+    "prove the page is complete. Returns an 'Error: ...' "
     "string (not an exception) when every tier fails."
 )
 
@@ -278,7 +282,8 @@ def read_url(url: str) -> str:
 
     The result is a JSON object with citation/provenance fields (``url``,
     ``final_url``, ``fetched_at``, ``backend``, ``status``, ``chars``) plus the
-    page ``text`` as clean Markdown. Invisible/control characters are always
+    page ``text`` as clean Markdown, and (F23a) ``next_url`` / ``more`` when the
+    page has more than this read returned. Invisible/control characters are always
     stripped. When prompt-injection indicators are detected the body is fenced
     as untrusted content and a one-line warning is prepended inside ``text``.
 
@@ -320,6 +325,8 @@ def read_url(url: str) -> str:
             "status": result.status,
             "chars": len(result.text),
             "text": text,
+            "next_url": result.next_url,
+            "more": result.more,
         },
         ensure_ascii=False,
     )
