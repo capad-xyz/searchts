@@ -21,30 +21,13 @@ jobs:
       - name: Decode reviewed files and commit
         run: |
           set -euo pipefail
-          python3 << 'PY'
-          import base64, zlib
-          from pathlib import Path
-
-          def decode(stem: str, n: int, dest: str):
-              parts = []
-              for i in range(n):
-                  parts.append(Path(f".github/f22-review/{stem}.{i}.b64").read_text().strip())
-              data = zlib.decompress(base64.b64decode("".join(parts)))
-              Path(dest).write_bytes(data)
-              print("wrote", dest, len(data))
-
-          decode("bi", 2, "searchts/browser_install.py")
-          decode("test", 1, "tests/test_browser_install.py")
-          decode("docs", 1, "docs/install.md")
-          decode("readme", 3, "README.md")
-          PY
+          python3 .github/f22-review/decode.py
           rm -rf .github/f22-review .github/workflows/f22-review-assemble.yml
           git config user.name "capad-xyz"
           git config user.email "163459540+capad-xyz@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then echo No changes; exit 0; fi
-          git commit -m "$(cat <<'EOF'
-          fix(cli): Claude review for install --browser (uvx/uv tool/pipx)
+          git commit -m "fix(cli): Claude review for install --browser (uvx/uv tool/pipx)
 
           Chromium is per-user cache: uvx with patchright only installs Chromium;
           missing patchright hints uvx --from searchts[browser]@latest.
@@ -54,7 +37,5 @@ jobs:
           Typecheck: environ Mapping[str, str] | None.
 
           Co-authored-by: Tess <composer-2-fast>
-          Effort: high
-          EOF
-          )"
+          Effort: high"
           git push origin HEAD:feat/install-browser-f22
