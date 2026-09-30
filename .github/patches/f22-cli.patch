@@ -1,0 +1,37 @@
+--- a/searchts/cli.py
++++ b/searchts/cli.py
+@@ -4,6 +4,7 @@
+ 
+ Usage:
+     searchts install --env=auto
++    searchts install --browser
+     searchts doctor
+     searchts configure twitter-cookies "auth_token=xxx; ct0=yyy"
+     searchts setup
+@@ -128,6 +129,12 @@
+     p_install.add_argument("--channels", default="",
+                            help="Comma-separated optional channels to install "
+                                 "(twitter,reddit,opencli,linkedin,all)")
++    p_install.add_argument(
++        "--browser",
++        action="store_true",
++        help="Install searchts[browser] + Chromium into this CLI's environment "
++             "(same interpreter as the running searchts). Refuses ephemeral uvx.",
++    )
+ 
+     # ── configure ──
+     p_conf = sub.add_parser("configure", parents=[_verbose],
+@@ -373,6 +380,13 @@
+ def _cmd_install(args):
+     """One-shot deterministic installer."""
+     import os
++
++    # F22: focused keep-path for stealth. Do not invent a second install verb.
++    if getattr(args, "browser", False):
++        from searchts.browser_install import install_browser
++
++        code = install_browser(dry_run=bool(getattr(args, "dry_run", False)))
++        raise SystemExit(code)
+ 
+     from searchts.config import Config
+     from searchts.doctor import check_all, format_report
