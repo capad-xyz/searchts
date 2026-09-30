@@ -757,7 +757,7 @@ def _fetch_stealth_impl(
     except ImportError as e:  # pragma: no cover - environment dependent
         raise RuntimeError(
             "stealth-browser backend needs patchright: "
-            "pip install patchright && patchright install chromium"
+            "searchts install --browser"
         ) from e
 
     ms = int(timeout * 1000)
@@ -836,7 +836,7 @@ def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str,
     except ImportError as e:  # pragma: no cover - environment dependent
         raise RuntimeError(
             "human-browser fallback needs patchright: "
-            "pip install patchright && patchright install chromium"
+            "searchts install --browser"
         ) from e
 
     print(

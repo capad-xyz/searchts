@@ -91,7 +91,7 @@ class WebChannel(Channel):
             "warn",
             "Escalating fetch unlocker: curl_cffi -> "
             f"{extra}stealth-browser not installed "
-            "(pip install 'searchts[browser]' && patchright install chromium)",
+            "(searchts install --browser)",
         )
 
     def read(self, url: str, config=None) -> str:
