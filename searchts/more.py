@@ -7,7 +7,8 @@ bracketed note under the text and a structured entry for ``--json`` / MCP.
 
 Also keeps accordion and tab text through extraction (``prepare_panels``):
 Trafilatura drops ``<button>`` labels (the questions) and inline
-``display:none`` panels (the answers).
+``display:none`` panels (the answers). ``tidy_markdown`` puts headings and
+code fences back on their own lines after extraction.
 
 No note is not a promise that the page is complete. These are page signals,
 not per-host code (Reddit keeps its own ring in ``known_hosts``).
@@ -208,6 +209,46 @@ def _is_descendant(el, ancestor) -> bool:
     return False
 
 
+_HEADING_TAGS = frozenset({"h1", "h2", "h3", "h4", "h5", "h6"})
+
+
+def _heading_around(el):
+    """The heading a toggle already sits in (up to three levels up), or None."""
+    node = el.getparent()
+    for _ in range(3):
+        if node is None or not isinstance(node.tag, str):
+            return None
+        if node.tag.lower() in _HEADING_TAGS:
+            return node
+        node = node.getparent()
+    return None
+
+
+def _swap_for_text(el, text: str) -> None:
+    """Replace ``el`` with plain ``text``, keeping its tail."""
+    parent = el.getparent()
+    joined = f" {text} {el.tail or ''}"
+    prev = el.getprevious()
+    if prev is not None:
+        prev.tail = (prev.tail or "") + joined
+    else:
+        parent.text = (parent.text or "") + joined
+    parent.remove(el)
+
+
+def _is_link_list(panel) -> bool:
+    """A table of contents or menu: a ``nav`` whose links are nearly all the text.
+
+    An FAQ answer made of links ("Read the docs", a list of guides) has no
+    ``nav``, so it is still an answer.
+    """
+    if not (_in_nav(panel) or panel.xpath(".//nav|.//*[@role='navigation']")):
+        return False
+    text = _norm(panel.text_content())
+    link_text = sum(len(_norm(a.text_content())) for a in panel.xpath(".//a[@href]"))
+    return bool(text) and link_text >= 0.8 * len(text)
+
+
 def _accordion_toggles(doc):
     """(toggle, panel, label) for disclosure buttons outside page chrome.
 
@@ -226,6 +267,8 @@ def _accordion_toggles(doc):
         panel = _panel_for(toggle, ids)
         if panel is None or panel is toggle or not isinstance(panel.tag, str):
             continue
+        if _is_link_list(panel):  # "On this page" / menu toggles open links, not an answer
+            continue
         yield toggle, panel, label
 
 
@@ -235,7 +278,10 @@ def prepare_panels(html: str) -> str:
     Each disclosure button becomes a heading (Trafilatura drops buttons, so an
     FAQ lost its questions), its panel is un-hidden (inline ``display:none``
     panels were dropped whole), and each tab label moves to the top of its
-    panel. Anything unexpected returns the HTML unchanged.
+    panel. A button that already sits in a heading (Bootstrap's
+    ``<h2 class="accordion-header"><button>``) becomes that heading's text,
+    never a second heading nested inside it. Anything unexpected returns the
+    HTML unchanged.
     """
     doc = _parse(html)
     if doc is None:
@@ -248,10 +294,13 @@ def prepare_panels(html: str) -> str:
             _unhide(panel)
             parent = toggle.getparent()
             if parent is not None and not _is_descendant(panel, toggle):
-                heading = lxml.html.Element("h3")
-                heading.text = label
-                heading.tail = toggle.tail
-                parent.replace(toggle, heading)
+                if _heading_around(toggle) is not None:
+                    _swap_for_text(toggle, label)
+                else:
+                    heading = lxml.html.Element("h3")
+                    heading.text = label
+                    heading.tail = toggle.tail
+                    parent.replace(toggle, heading)
             changed = True
 
         ids = {el.get("id"): el for el in doc.xpath("//*[@id]")}
@@ -276,6 +325,62 @@ def prepare_panels(html: str) -> str:
         return lxml.html.tostring(doc, encoding="unicode")
     except Exception:  # noqa: BLE001 - never lose a read over a preprocessing step
         return html
+
+
+_FENCE_LINE_RE = re.compile(r"^([ \t]*)(`{3,}|~{3,})[^`]*$")
+_GLUED_FENCE_RE = re.compile(r"^(.*[^`\s])[ \t]*```[ \t]*$")
+_HEADING_LINE_RE = re.compile(r"^([ \t]*)(#{1,6} \S.*)$")
+
+
+def _indent(prefix: str) -> int:
+    return len(prefix.expandtabs(4))
+
+
+def tidy_markdown(markdown: str) -> str:
+    """Undo two layout slips Trafilatura makes after inline text.
+
+    It keeps the whitespace in front of a heading or a code fence, so
+    ``## Item`` can come out indented four spaces or more, which Markdown
+    reads as code. It can also glue a code fence to the end of the text line
+    before it (``...application.```), so the fence never opens. Both are put
+    on their own line after a blank line. Code inside a fence is left alone.
+    """
+    lines = markdown.split("\n")
+    standalone = [i for i, ln in enumerate(lines) if _FENCE_LINE_RE.match(ln)]
+    out: List[str] = []
+    fenced = False
+
+    def _own_line(text: str) -> None:
+        if out and out[-1].strip():
+            out.append("")
+        out.append(text)
+
+    for i, line in enumerate(lines):
+        fence = _FENCE_LINE_RE.match(line)
+        if fenced:
+            out.append(line)
+            if fence and _indent(fence.group(1)) <= 3:
+                fenced = False
+            continue
+        if fence:
+            fenced = True
+            if _indent(fence.group(1)) >= 4:
+                _own_line(line.lstrip())
+            else:
+                out.append(line)
+            continue
+        glued = _GLUED_FENCE_RE.match(line)
+        if glued and any(j > i for j in standalone):  # a closing fence follows
+            out.append(glued.group(1))
+            _own_line("```")
+            fenced = True
+            continue
+        heading = _HEADING_LINE_RE.match(line)
+        if heading and _indent(heading.group(1)) >= 4:
+            _own_line(heading.group(2))
+            continue
+        out.append(line)
+    return "\n".join(out)
 
 
 # ── detection ───────────────────────────────────────────────────────────────

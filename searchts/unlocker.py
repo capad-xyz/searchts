@@ -536,7 +536,7 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     try:
         import trafilatura
 
-        from searchts.more import prepare_panels
+        from searchts.more import prepare_panels, tidy_markdown
 
         html = prepare_panels(html)  # F23a: keep FAQ questions and hidden answers
         out = trafilatura.extract(
@@ -544,7 +544,7 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
             include_links=True, include_tables=True, favor_recall=True,
         )
         if out and out.strip():
-            return out.strip()
+            return tidy_markdown(out).strip()
     except Exception:
         pass
     # Fallback: crude tag strip so we never hard-fail on extraction.
