@@ -207,6 +207,8 @@ class TestCLI:
             "status": 200,
             "chars": len("markdown text"),
             "text": "markdown text",
+            "next_url": None,
+            "more": [],
         }
 
     def test_read_command_forwards_flags(self, capsys):

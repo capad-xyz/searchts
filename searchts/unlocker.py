@@ -130,6 +130,16 @@ class FetchResult:
     fetched_at: Optional[str] = None
     #: Normalized response headers. Defaulted to preserve positional construction.
     headers: Dict[str, str] = field(default_factory=dict)
+    #: F23a: the next page when the page links one (``rel=next``, a pager, a
+    #: "Load more" link). None when nothing was detected, which is not a
+    #: promise that the page is complete.
+    next_url: Optional[str] = None
+    #: F23a: what the page has beyond this read, as ``{kind, note, url?}``
+    #: (kinds: next-page, feed, fold, list, count). The notes are also the last
+    #: lines of ``text``.
+    more: List[Dict[str, str]] = field(default_factory=list)
+    #: Page HTML kept only until ``_finalize`` runs detection; never returned.
+    page_html: Optional[str] = field(default=None, repr=False, compare=False)
 
 
 @dataclass
@@ -525,6 +535,10 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     """Extract clean main-content markdown from raw HTML (trafilatura, with fallback)."""
     try:
         import trafilatura
+
+        from searchts.more import prepare_panels
+
+        html = prepare_panels(html)  # F23a: keep FAQ questions and hidden answers
         out = trafilatura.extract(
             html, url=url, output_format="markdown",
             include_links=True, include_tables=True, favor_recall=True,
@@ -891,16 +905,32 @@ def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str,
 
 # ── the ladder ───────────────────────────────────────────────────────────────
 
-def _finalize(result: FetchResult, scrub: bool) -> FetchResult:
+def _finalize(
+    result: FetchResult, scrub: bool, tick: Optional[Callable[[str], None]] = None
+) -> FetchResult:
     """Sanitize a winning FetchResult before returning it.
 
     ALWAYS strips invisible/control chars and scans for prompt-injection
     indicators, attaching any findings to ``result.warnings``. When ``scrub`` is
     True the matched injection spans in the text are redacted too. Untrusted web
     content must never reach a model with hidden instructions intact.
-    """
-    from searchts import sanitize
 
+    F23a: when the page HTML came along, notes what the page has beyond this
+    read (next page, feed, folds, a list the extract mostly dropped, stated
+    counts) as trailing lines and in ``next_url`` / ``more``. The HTML is
+    dropped here and never returned.
+    """
+    from searchts import more, sanitize
+
+    if result.page_html:
+        found = more.detect(result.page_html, result.final_url or "", result.text)
+        if found:
+            result.text = more.annotate(result.text, found)
+            result.more = [m.as_dict() for m in found]
+            result.next_url = next((m.url for m in found if m.kind == "next-page"), None)
+            if tick is not None:
+                tick(f"  {more.summary(found)}")
+        result.page_html = None
     out = sanitize.scrub(result.text, redact=scrub)
     result.text = out.text
     if not result.fetched_at:
@@ -1117,8 +1147,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         status,
                         final_url=final_url or url,
                         headers=headers,
+                        page_html=None if backend == "Jina Reader" else body,
                     ),
                     scrub,
+                    tick=_tick,
                 )
             # Real but thin (e.g. JS-rendered or genuinely short): keep as a
             # fallback and escalate in case a richer backend renders more.
@@ -1136,6 +1168,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     status,
                     final_url=final_url or url,
                     headers=headers,
+                    page_html=None if backend == "Jina Reader" else body,
                 )
         except Exception as e:  # noqa: BLE001 — any backend failure escalates
             why = f"{type(e).__name__}: {e}"
@@ -1201,9 +1234,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 human = FetchResult(
                     backend="human-browser", text=text, status=status,
                     final_url=final_url or url,
+                    page_html=None if listing_hit else html,
                 )
                 if listing_hit or len(text) >= min_chars:
-                    return _finalize(human, scrub)
+                    return _finalize(human, scrub, tick=_tick)
                 best = human
                 attempts.append(("human-browser", f"thin-{len(text)}b"))
                 _tick(f"  human-browser: thin-{len(text)}b")
@@ -1220,6 +1254,6 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 _tick(f"  human-browser: {why}")
 
     if allow_thin and best is not None:
-        return _finalize(best, scrub)
+        return _finalize(best, scrub, tick=_tick)
 
     raise UnlockerError(url, attempts)

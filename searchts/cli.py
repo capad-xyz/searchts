@@ -160,7 +160,7 @@ def _run():
     p_read.add_argument("--backend", default=None,
                         help="Force a single backend (e.g. curl_cffi, 'Jina Reader', stealth-browser)")
     p_read.add_argument("--json", action="store_true",
-                        help="Print {url,final_url,fetched_at,backend,status,chars,text} as JSON instead of raw text")
+                        help="Print {url,final_url,fetched_at,backend,status,chars,text,next_url,more} as JSON instead of raw text")
     p_read.add_argument("--human", action="store_true",
                         help="If no tier gets clean content, open a headful browser to clear it by hand")
     p_read.add_argument("--scrub", action="store_true",
@@ -1619,6 +1619,8 @@ def _cmd_read(args):
             "status": result.status,
             "chars": len(result.text),
             "text": result.text,
+            "next_url": result.next_url,
+            "more": result.more,
         }
         print(json.dumps(payload, ensure_ascii=False))
     else:
