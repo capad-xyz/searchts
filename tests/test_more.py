@@ -215,14 +215,64 @@ def test_an_answer_made_of_links_is_still_an_answer(answer):
     assert '<div id="d">' in out  # and the panel is un-hidden
 
 
-def test_tidy_headings_puts_an_indented_heading_on_its_own_line():
+# The live page puts a code sample right after each accordion. When the last
+# body text is a tail after <code>, Trafilatura prints the fence glued to it
+# ("application.```") or indented by the tail's whitespace.
+CODE_SAMPLE = (
+    '<div class="bd-code-snippet"><div class="highlight"><pre tabindex="0" class="chroma">'
+    '<code class="language-html">&lt;div class="accordion accordion-flush"&gt;\n'
+    '  &lt;div class="accordion-item"&gt;&lt;/div&gt;\n&lt;/div&gt;</code></pre></div></div>'
+)
+
+
+def _flush_page(tail_ws: str) -> str:
+    def item(n: int) -> str:
+        return (
+            '<div class="accordion-item"><h2 class="accordion-header">\n      '
+            f'<button class="accordion-button collapsed" type="button" aria-expanded="false" aria-controls="f{n}">'
+            f"\n        Accordion Item #{n}\n      </button>\n    </h2>"
+            f'<div id="f{n}" class="accordion-collapse collapse"><div class="accordion-body">'
+            "Placeholder content to show the <code>.accordion-flush</code> class in a real-world application."
+            f"{tail_ws}</div></div></div>"
+        )
+
+    accordion = f'<div class="accordion accordion-flush" id="flush">{item(1)}{item(2)}</div>'
+    after = '<h3 id="always-open">Always open</h3><p>Omit the parent attribute to keep items open.</p>'
+    return _page("<h3>Flush</h3>" + accordion + CODE_SAMPLE + after)
+
+
+@pytest.mark.parametrize("tail_ws", ["", "\n      "])
+def test_code_sample_after_an_accordion_opens_on_its_own_line(tail_ws):
+    lines = unlocker.html_to_text(_flush_page(tail_ws), URL).splitlines()
+    assert "## Accordion Item #2" in lines
+    first_code_line = lines.index('<div class="accordion accordion-flush">')
+    assert lines[first_code_line - 1] == "```"
+    assert lines.count("```") == 2
+    assert not any(ln.endswith("application.```") for ln in lines)
+
+
+def test_tidy_markdown_puts_an_indented_heading_on_its_own_line():
     md = "limit overflow.\n      ## Accordion Item #2\n\nBody text."
-    assert more.tidy_headings(md) == "limit overflow.\n\n## Accordion Item #2\n\nBody text."
+    assert more.tidy_markdown(md) == "limit overflow.\n\n## Accordion Item #2\n\nBody text."
 
 
-def test_tidy_headings_leaves_fenced_code_alone():
-    md = "Intro.\n\n```\n    # a shell comment\n  ## not a heading\n```\n\n## Real heading"
-    assert more.tidy_headings(md) == md
+def test_tidy_markdown_unglues_and_unindents_code_fences():
+    glued = "a real-world application.```\n<div></div>\n```\n### Always open"
+    assert more.tidy_markdown(glued) == "a real-world application.\n\n```\n<div></div>\n```\n### Always open"
+    indented = "limit overflow.\n      ```\n<div></div>\n```"
+    assert more.tidy_markdown(indented) == "limit overflow.\n\n```\n<div></div>\n```"
+
+
+@pytest.mark.parametrize(
+    "md",
+    [
+        "Intro.\n\n```\n    # a shell comment\n  ## not a heading\n      ```\n```\n\n## Real heading",
+        "Wrap code in ```",  # no closing fence anywhere, so this is just a sentence
+        "- item\n  ## Nested",  # under four spaces is still a heading
+    ],
+)
+def test_tidy_markdown_leaves_these_alone(md):
+    assert more.tidy_markdown(md) == md
 
 
 # ── list pages the extract mostly dropped ────────────────────────────────────

@@ -7,8 +7,8 @@ bracketed note under the text and a structured entry for ``--json`` / MCP.
 
 Also keeps accordion and tab text through extraction (``prepare_panels``):
 Trafilatura drops ``<button>`` labels (the questions) and inline
-``display:none`` panels (the answers). ``tidy_headings`` puts headings back
-at the start of their line after extraction.
+``display:none`` panels (the answers). ``tidy_markdown`` puts headings and
+code fences back on their own lines after extraction.
 
 No note is not a promise that the page is complete. These are page signals,
 not per-host code (Reddit keeps its own ring in ``known_hosts``).
@@ -327,31 +327,59 @@ def prepare_panels(html: str) -> str:
         return html
 
 
-_FENCE_RE = re.compile(r"\s*(```|~~~)")
-_INDENTED_HEADING_RE = re.compile(r"[ \t]+(#{1,6} \S.*)$")
+_FENCE_LINE_RE = re.compile(r"^([ \t]*)(`{3,}|~{3,})[^`]*$")
+_GLUED_FENCE_RE = re.compile(r"^(.*[^`\s])[ \t]*```[ \t]*$")
+_HEADING_LINE_RE = re.compile(r"^([ \t]*)(#{1,6} \S.*)$")
 
 
-def tidy_headings(markdown: str) -> str:
-    """Put each Markdown heading at the start of its line, after a blank line.
+def _indent(prefix: str) -> int:
+    return len(prefix.expandtabs(4))
 
-    Trafilatura keeps the whitespace in front of a heading that follows inline
-    text, so ``## Item`` can come out indented. Four spaces make it a code
-    block. Fenced code is left alone.
+
+def tidy_markdown(markdown: str) -> str:
+    """Undo two layout slips Trafilatura makes after inline text.
+
+    It keeps the whitespace in front of a heading or a code fence, so
+    ``## Item`` can come out indented four spaces or more, which Markdown
+    reads as code. It can also glue a code fence to the end of the text line
+    before it (``...application.```), so the fence never opens. Both are put
+    on their own line after a blank line. Code inside a fence is left alone.
     """
+    lines = markdown.split("\n")
+    standalone = [i for i, ln in enumerate(lines) if _FENCE_LINE_RE.match(ln)]
     out: List[str] = []
     fenced = False
-    for line in markdown.split("\n"):
-        if _FENCE_RE.match(line):
-            fenced = not fenced
-            out.append(line)
-            continue
-        m = None if fenced else _INDENTED_HEADING_RE.match(line)
-        if m is None:
-            out.append(line)
-            continue
+
+    def _own_line(text: str) -> None:
         if out and out[-1].strip():
             out.append("")
-        out.append(m.group(1))
+        out.append(text)
+
+    for i, line in enumerate(lines):
+        fence = _FENCE_LINE_RE.match(line)
+        if fenced:
+            out.append(line)
+            if fence and _indent(fence.group(1)) <= 3:
+                fenced = False
+            continue
+        if fence:
+            fenced = True
+            if _indent(fence.group(1)) >= 4:
+                _own_line(line.lstrip())
+            else:
+                out.append(line)
+            continue
+        glued = _GLUED_FENCE_RE.match(line)
+        if glued and any(j > i for j in standalone):  # a closing fence follows
+            out.append(glued.group(1))
+            _own_line("```")
+            fenced = True
+            continue
+        heading = _HEADING_LINE_RE.match(line)
+        if heading and _indent(heading.group(1)) >= 4:
+            _own_line(heading.group(2))
+            continue
+        out.append(line)
     return "\n".join(out)
 
 
