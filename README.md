@@ -93,7 +93,7 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install "searchts[mcp]"
 ```
 
-Stealth browser (same env as the running CLI; not for ephemeral uvx):
+Stealth browser (installs into the same env as the running CLI, uvx included):
 
 ```bash
 searchts install --browser
