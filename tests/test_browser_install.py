@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*
 """F22: searchts install --browser (mocked; no live Chromium download)."""
 
 from __future__ import annotations
@@ -22,14 +22,15 @@ def _fail(cmd, code=1, err="boom"):
 
 
 class TestDetectCliEnv:
-    def test_ephemeral_uvx_env_key(self, monkeypatch):
-        monkeypatch.setenv("UVX", "1")
+    def test_uv_python_env_does_not_force_ephemeral_uvx(self):
+        """UV_PYTHON alone must not refuse; pipx prefix wins."""
         env = bi.detect_cli_env(
-            executable="/usr/bin/python",
-            prefix="/tmp/x",
+            environ={"UV_PYTHON": "3.12", "UVX": "1"},
+            executable="/home/u/.local/pipx/venvs/searchts/bin/python",
+            prefix="/home/u/.local/pipx/venvs/searchts",
             editable=False,
         )
-        assert env.kind == "ephemeral_uvx"
+        assert env.kind == "pipx"
 
     def test_ephemeral_uvx_archive_path(self):
         env = bi.detect_cli_env(
@@ -59,14 +60,15 @@ class TestDetectCliEnv:
         )
         assert env.kind == "pipx"
 
-    def test_pipx_home_env(self):
+    def test_pipx_home_alone_with_venv_is_venv(self):
+        """PIPX_HOME must not force pipx when prefix is a normal venv."""
         env = bi.detect_cli_env(
-            environ={"PIPX_HOME": "/opt/pipx"},
-            executable="/usr/bin/python",
-            prefix="/usr",
+            environ={"PIPX_HOME": "/opt/pipx", "VIRTUAL_ENV": "/repo/.venv"},
+            executable="/repo/.venv/bin/python",
+            prefix="/repo/.venv",
             editable=False,
         )
-        assert env.kind == "pipx"
+        assert env.kind == "venv"
 
     def test_editable(self):
         env = bi.detect_cli_env(
@@ -97,14 +99,35 @@ class TestDetectCliEnv:
 
 
 class TestInstallBrowser:
-    def test_refuses_ephemeral_uvx(self, capsys):
-        env = bi.CliEnv("ephemeral_uvx", "ephemeral uvx", "/tmp/py")
+    def test_uvx_without_patchright_hints_uvx_from(self, monkeypatch, capsys):
+        env = bi.CliEnv("ephemeral_uvx", "ephemeral uvx", "/tmp/archive-v0/py")
+        monkeypatch.setattr(bi, "_patchright_importable", lambda: False)
         code = bi.install_browser(cli_env=env, runner=_ok)
         assert code == 2
         err = capsys.readouterr().err
-        assert "ephemeral uvx" in err
-        assert "pipx install" in err
+        assert 'uvx --from "searchts[browser]@latest"' in err
         assert "searchts install --browser" in err
+
+    def test_uvx_with_patchright_only_chromium(self, monkeypatch, capsys):
+        env = bi.CliEnv("ephemeral_uvx", "ephemeral uvx", "/tmp/archive-v0/py")
+        monkeypatch.setattr(bi, "_patchright_importable", lambda: True)
+        monkeypatch.setattr(
+            bi, "stealth_status", lambda: (True, "stealth installed: ok")
+        )
+        calls = []
+
+        def runner(cmd):
+            calls.append(list(cmd))
+            return _ok(cmd)
+
+        code = bi.install_browser(cli_env=env, runner=runner)
+        assert code == 0
+        assert len(calls) == 1
+        assert calls[0] == ["/tmp/archive-v0/py", "-m", "patchright", "install", "chromium"]
+        captured = capsys.readouterr()
+        assert "downloading Chromium" in captured.err
+        assert "checking stealth" in captured.err
+        assert "stealth installed" in captured.out
 
     def test_dry_run_prints_commands(self, capsys):
         env = bi.CliEnv("venv", "venv (/tmp/v)", "/tmp/v/bin/python")
@@ -118,7 +141,7 @@ class TestInstallBrowser:
         assert code == 0
         assert calls == []
         err = capsys.readouterr().err
-        assert "installing" not in err.lower() or "dry-run" in err
+        assert "dry-run" in err
         assert "searchts[browser]" in err
         assert "patchright" in err
         assert "chromium" in err
@@ -131,7 +154,7 @@ class TestInstallBrowser:
             calls.append(list(cmd))
             return _ok(cmd)
 
-        monkeypatch.setattr(bi, "stealth_status", lambda: (True, "stealth ready: ok"))
+        monkeypatch.setattr(bi, "stealth_status", lambda: (True, "stealth installed: ok"))
         code = bi.install_browser(cli_env=env, runner=runner)
         assert code == 0
         assert calls[0] == ["/tmp/v/bin/python", "-m", "pip", "install", "searchts[browser]"]
@@ -139,15 +162,17 @@ class TestInstallBrowser:
         captured = capsys.readouterr()
         assert "installing [browser] extra" in captured.err
         assert "downloading Chromium" in captured.err
-        assert "checking doctor" in captured.err
+        assert "checking stealth" in captured.err
 
-    def test_success_prints_stealth_ready(self, capsys, monkeypatch):
+    def test_success_prints_stealth_installed(self, capsys, monkeypatch):
         env = bi.CliEnv("venv", "venv (/tmp/v)", "/tmp/v/bin/python")
-        monkeypatch.setattr(bi, "stealth_status", lambda: (True, "stealth ready: patchright importable"))
+        monkeypatch.setattr(
+            bi, "stealth_status", lambda: (True, "stealth installed: patchright importable")
+        )
         code = bi.install_browser(cli_env=env, runner=_ok)
         assert code == 0
         captured = capsys.readouterr()
-        assert "stealth ready" in captured.out
+        assert "stealth installed" in captured.out
         assert "doctor stays read-only" in captured.out
 
     def test_pip_failure_returns_1(self, capsys):
@@ -174,49 +199,86 @@ class TestInstallBrowser:
         assert code == 1
         assert "chromium failed" in capsys.readouterr().err
 
-    def test_pipx_prefers_inject(self, monkeypatch):
+    def test_pipx_injects_metadata_reqs(self, monkeypatch):
         env = bi.CliEnv("pipx", "pipx env", "/opt/pipx/venvs/searchts/bin/python")
-        monkeypatch.setattr(bi.shutil, "which", lambda name: "/usr/bin/pipx" if name == "pipx" else None)
+        monkeypatch.setattr(
+            bi.shutil, "which", lambda name: "/usr/bin/pipx" if name == "pipx" else None
+        )
+        monkeypatch.setattr(bi, "browser_extra_requirements", lambda: ["patchright>=1.50"])
         calls = []
 
         def runner(cmd):
             calls.append(list(cmd))
             return _ok(cmd)
 
-        monkeypatch.setattr(bi, "stealth_status", lambda: (True, "stealth ready"))
+        monkeypatch.setattr(bi, "stealth_status", lambda: (True, "stealth installed"))
         assert bi.install_browser(cli_env=env, runner=runner) == 0
-        assert calls[0] == ["/usr/bin/pipx", "inject", "searchts", "searchts[browser]"]
+        assert calls[0] == ["/usr/bin/pipx", "inject", "searchts", "patchright>=1.50"]
 
-    def test_uv_tool_uses_uv_pip(self, monkeypatch):
+    def test_uv_tool_prints_force_hint_and_runs_chromium(self, monkeypatch, capsys):
         env = bi.CliEnv(
             "uv_tool",
             "uv tool env",
             "/home/u/.local/share/uv/tools/searchts/bin/python",
         )
-        monkeypatch.setattr(bi.shutil, "which", lambda name: "/usr/bin/uv" if name == "uv" else None)
+        monkeypatch.setattr(bi, "_patchright_importable", lambda: True)
+        monkeypatch.setattr(bi, "stealth_status", lambda: (True, "stealth installed"))
         calls = []
 
         def runner(cmd):
             calls.append(list(cmd))
             return _ok(cmd)
 
-        monkeypatch.setattr(bi, "stealth_status", lambda: (True, "stealth ready"))
         assert bi.install_browser(cli_env=env, runner=runner) == 0
-        assert calls[0][:3] == ["/usr/bin/uv", "pip", "install"]
-        assert "--python" in calls[0]
-        assert "searchts[browser]" in calls[0]
+        err = capsys.readouterr().err
+        assert 'uv tool install "searchts[mcp,browser]" --force' in err
+        assert "F11" in err or "searchts.exe" in err
+        # No uv pip install into the tool env.
+        assert all("pip" not in c for c in calls)
+        assert calls == [
+            [
+                "/home/u/.local/share/uv/tools/searchts/bin/python",
+                "-m",
+                "patchright",
+                "install",
+                "chromium",
+            ]
+        ]
 
-    def test_editable_installs_patchright_only(self, monkeypatch):
+    def test_uv_tool_without_patchright_returns_1(self, monkeypatch, capsys):
+        env = bi.CliEnv(
+            "uv_tool",
+            "uv tool env",
+            "/home/u/.local/share/uv/tools/searchts/bin/python",
+        )
+        monkeypatch.setattr(bi, "_patchright_importable", lambda: False)
+        code = bi.install_browser(cli_env=env, runner=_ok)
+        assert code == 1
+        err = capsys.readouterr().err
+        assert 'uv tool install "searchts[mcp,browser]" --force' in err
+
+    def test_editable_installs_metadata_reqs(self, monkeypatch):
         env = bi.CliEnv("editable", "editable", "/repo/.venv/bin/python")
+        monkeypatch.setattr(bi, "browser_extra_requirements", lambda: ["patchright>=1.50"])
         calls = []
 
         def runner(cmd):
             calls.append(list(cmd))
             return _ok(cmd)
 
-        monkeypatch.setattr(bi, "stealth_status", lambda: (True, "stealth ready"))
+        monkeypatch.setattr(bi, "stealth_status", lambda: (True, "stealth installed"))
         assert bi.install_browser(cli_env=env, runner=runner) == 0
-        assert calls[0] == ["/repo/.venv/bin/python", "-m", "pip", "install", "patchright>=1.50"]
+        assert calls[0] == [
+            "/repo/.venv/bin/python",
+            "-m",
+            "pip",
+            "install",
+            "patchright>=1.50",
+        ]
+
+    def test_browser_extra_requirements_from_metadata(self):
+        reqs = bi.browser_extra_requirements()
+        assert any(r.startswith("patchright") for r in reqs)
 
 
 class TestCliInstallBrowser:
