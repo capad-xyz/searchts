@@ -264,3 +264,60 @@ def test_mcp_read_url_reports_next_url(monkeypatch):
     data = json.loads(mcp_server.read_url(URL))
     assert data["next_url"] == "https://example.org/blog/page/2/"
     assert data["more"][0]["kind"] == "next-page"
+
+
+# ── next-page follow-up: links that name themselves, and links that are another document ──
+
+
+def test_bing_style_next_page_label_without_rel_or_pager_class():
+    pager = (
+        '<nav role="navigation" aria-label="More results for test"><ul class="sb_pagF">'
+        '<li><a class="sb_pagS" aria-current="page">1</a></li>'
+        '<li><a href="/search?q=test&amp;first=11" aria-label="Page 2">2</a></li>'
+        '<li><a class="sb_pagN" href="/search?q=test&amp;first=11&amp;FORM=PORE" title="Next page" '
+        'aria-label="Next page"><div class="sw_next"></div></a></li></ul></nav>'
+    )
+    found = more.detect(_page(pager), "https://www.bing.com/search?q=test", "t")
+    assert found[0].url == "https://www.bing.com/search?q=test&first=11&FORM=PORE"
+
+
+def test_google_style_next_text_in_a_page_number_table():
+    pager = (
+        '<div role="navigation"><table><tr><td><span>1</span></td>'
+        '<td><a href="/search?q=x&amp;start=10">2</a></td><td><a href="/search?q=x&amp;start=20">3</a></td>'
+        '<td><a id="pnnext" href="/search?q=x&amp;start=10"><span>Next</span></a></td></tr></table></div>'
+    )
+    found = more.detect(_page(pager), "https://www.google.com/search?q=x", "t")
+    assert found[0].url == "https://www.google.com/search?q=x&start=10"
+
+
+def test_wordpress_next_post_links_are_not_a_next_page():
+    head = "<link rel='next' title='Another post' href='https://example.org/2026/09/another-post/' />"
+    nav = (
+        '<nav class="navigation post-navigation" aria-label="Posts"><div class="nav-links">'
+        '<div class="nav-next"><a href="/2026/09/another-post/" rel="next">Another post</a></div></div></nav>'
+    )
+    found = more.detect(_page(nav, head=head), "https://example.org/2026/09/this-post/", "t")
+    assert "next-page" not in _kinds(found)
+
+
+def test_wordpress_multi_page_post_is_a_next_page():
+    head = '<link rel="next" href="https://example.org/2026/09/long-post/2/" />'
+    found = more.detect(_page("", head=head), "https://example.org/2026/09/long-post/", "t")
+    assert found[0].url == "https://example.org/2026/09/long-post/2/"
+
+
+def test_docs_next_chapter_is_another_document():
+    head = '<link rel="next" title="Chapter 2" href="chapter2.html" />'
+    found = more.detect(_page("", head=head), "https://docs.example.org/guide/intro.html", "t")
+    assert "next-page" not in _kinds(found)
+
+
+def test_a_thousand_links_stay_fast():
+    import time
+
+    rows = "".join(f"<tr><td><a href='/r/{i}'>{i % 100}</a></td><td>cell text {i}</td></tr>" for i in range(1500))
+    html = _page(f"<table><tbody>{rows}</tbody></table>")
+    started = time.monotonic()
+    more.detect(html, URL, "t")
+    assert time.monotonic() - started < 2.0
