@@ -49,7 +49,15 @@ searchts install --browser
 searchts doctor
 ```
 
-It prints which env it is mutating (pipx / uv tool / venv / editable). Ephemeral `uvx` cannot keep Chromium: keep-install with pipx first, then retry.
+It prints which env it is mutating (pipx / uv tool / venv / editable).
+
+- **pipx / venv / editable**: installs browser deps into that env, then downloads Chromium (progress on stderr). Chromium itself lives in the per-user ms-playwright cache.
+- **uv tool**: does not inject into the tool env (upgrade wipes it). Prints `uv tool install "searchts[mcp,browser]" --force` (quit `searchts.exe` first on Windows, F11), then still runs the Chromium step if patchright is already importable.
+- **ephemeral uvx**: if patchright is already on the uvx env, only installs Chromium into the user cache. If patchright is missing:
+
+```bash
+uvx --from "searchts[browser]@latest" searchts install --browser
+```
 
 Manual equivalent (venv only): `pip install "searchts[browser]"` then `patchright install chromium`.
 
