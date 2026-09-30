@@ -40,7 +40,11 @@ _FOLD_RE = re.compile(
     re.I,
 )
 _NEXT_TEXT_RE = re.compile(r"^(?:next(?:\s+page)?|older(?:\s+(?:posts|entries))?|[›»>])[\s›»>]*$", re.I)
-_PAGER_HINT_RE = re.compile(r"pagination|pager|paging", re.I)
+_PAGER_HINT_RE = re.compile(r"pagination|pager|paging|page\s+navigation|more\s+results", re.I)
+#: A link's own name (aria-label or title) that says it is the next page (Bing, Google).
+_NEXT_LABEL_RE = re.compile(r"^next(?:\s+(?:page|results?))?[\s›»>]*$", re.I)
+#: Trailing page markers: /page/2, /page-2, /2 (a short number).
+_PAGE_SEG_RE = re.compile(r"/(?:page[-_/]?\d{1,4}|\d{1,3})$", re.I)
 _SHOWING_RE = re.compile(
     r"\bshowing\s+(\d[\d,]*)\s*(?:-|–|—|to)\s*(\d[\d,]*)\s+of\s+(\d[\d,]*)", re.I
 )
@@ -137,6 +141,28 @@ def _same_page(a: str, b: str) -> bool:
     return a.split("#", 1)[0].rstrip("/") == b.split("#", 1)[0].rstrip("/")
 
 
+def _page_base(u: str) -> str:
+    """Path with trailing page markers removed: /blog/page/3/ and /blog/ -> /blog."""
+    path = (urlsplit(u).path or "/").lower().rstrip("/")
+    for _ in range(2):
+        stripped = _PAGE_SEG_RE.sub("", path).rstrip("/")
+        if stripped == path:
+            break
+        path = stripped
+    return path
+
+
+def _continues(target: str, url: str) -> bool:
+    """True when ``target`` is this URL's next page, not another document.
+
+    A next page keeps the path and changes a page marker (``?page=3``,
+    ``&first=11``, ``/page/3/``, ``/2/``). WordPress puts ``rel="next"`` on the
+    next *post* of every single post, and docs sites on the next *chapter*;
+    those have their own path, so they are not "more of this page".
+    """
+    return _page_base(target) == _page_base(url)
+
+
 def _good_next(href: str, base: str, url: str) -> Optional[str]:
     href = (href or "").strip()
     if not href or href.startswith("#") or href.lower().startswith(("javascript:", "mailto:")):
@@ -144,7 +170,7 @@ def _good_next(href: str, base: str, url: str) -> Optional[str]:
     target = urljoin(base, href)
     if urlsplit(target).scheme not in ("http", "https"):
         return None
-    if _host(target) != _host(url) or _same_page(target, url):
+    if _host(target) != _host(url) or _same_page(target, url) or not _continues(target, url):
         return None
     return target.split("#", 1)[0]
 
@@ -255,29 +281,92 @@ def prepare_panels(html: str) -> str:
 # ── detection ───────────────────────────────────────────────────────────────
 
 
+def _is_pager(el) -> bool:
+    """A pagination block: named like one, or holding several page-number links."""
+    hint = " ".join(el.get(a) or "" for a in ("aria-label", "class", "id"))
+    if _PAGER_HINT_RE.search(hint):
+        return True
+    links = el.xpath(".//a[@href]")
+    if not links or len(links) > 40:
+        return False
+    return sum(1 for a in links if re.fullmatch(r"\d{1,3}", _norm(a.text_content()))) >= 2
+
+
+def _pager_of(a):
+    """The pager this link sits in (up to three levels up), or None."""
+    node = a.getparent()
+    for _ in range(3):
+        if node is None or not isinstance(node.tag, str):
+            return None
+        if _is_pager(node):
+            return node
+        node = node.getparent()
+    return None
+
+
+def _current_page(pager) -> Optional[int]:
+    """The page this pager marks as current (``aria-current``, or a number that is not a link)."""
+    for cur in pager.xpath(".//*[@aria-current='page']"):
+        txt = _norm(cur.text_content())
+        if txt.isdigit():
+            return int(txt)
+    for el in pager.iter():
+        if not isinstance(el.tag, str) or len(el):
+            continue
+        txt = _norm(el.text_content())
+        if txt.isdigit() and len(txt) <= 3 and not (el.tag == "a" and el.get("href")):
+            return int(txt)
+    return None
+
+
+def _in_header(el) -> bool:
+    node = el
+    while node is not None:
+        if isinstance(node.tag, str) and node.tag.lower() == "header":
+            return True
+        node = node.getparent()
+    return False
+
+
 def _next_page(doc, base: str, url: str) -> Optional[str]:
-    for el in doc.xpath("//link[@rel][@href] | //a[@rel][@href]"):
+    # 1. <link rel="next"> (head).
+    for el in doc.xpath("//link[@rel][@href]"):
         if "next" in (el.get("rel") or "").lower().split():
             good = _good_next(el.get("href"), base, url)
             if good:
                 return good
+    # 2. A link that names itself the next page. Only these few links pay for the
+    #    pager walk, so a page of thousands of links stays cheap.
+    for a in doc.xpath("//a[@href]"):
+        txt = _norm(a.text_content())
+        label = _norm(a.get("aria-label") or a.get("title") or "")
+        says_next = bool(_NEXT_TEXT_RE.match(txt) or re.search(r"\bnext\b", label.lower()))
+        rel_next = "next" in (a.get("rel") or "").lower().split()
+        if not (says_next or rel_next) or _in_header(a):
+            continue
+        if label and _NEXT_LABEL_RE.match(label):
+            is_next = True  # aria-label / title "Next page" (Bing, Google)
+        elif rel_next and (_NEXT_TEXT_RE.match(txt) or txt.isdigit()):
+            is_next = True  # rel=next on a pager-looking link, not a post title
+        else:
+            is_next = says_next and _pager_of(a) is not None
+        if is_next:
+            good = _good_next(a.get("href"), base, url)
+            if good:
+                return good
+    # 3. A named pager with no Next link: the page after the current one.
     for pager in doc.iter():
         if not isinstance(pager.tag, str):
             continue
         hint = " ".join(pager.get(a) or "" for a in ("aria-label", "class", "id"))
         if not _PAGER_HINT_RE.search(hint):
             continue
-        current = None
-        for cur in pager.xpath(".//*[@aria-current='page']"):
-            txt = _norm(cur.text_content())
-            if txt.isdigit():
-                current = int(txt)
+        current = _current_page(pager)
+        if current is None:
+            continue
         for a in pager.xpath(".//a[@href]"):
             txt = _norm(a.text_content())
-            label = (a.get("aria-label") or "").lower()
-            if _NEXT_TEXT_RE.match(txt) or re.search(r"\bnext\b", label) or (
-                current is not None and txt.isdigit() and int(txt) == current + 1
-            ):
+            if txt.isdigit() and int(txt) == current + 1:
                 good = _good_next(a.get("href"), base, url)
                 if good:
                     return good
