@@ -77,4 +77,5 @@ searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace
 4. `check-update` notes if any
 5. Optional: a one-line stderr nudge on interactive commands when a newer
    GitHub release exists (F13). Hidden by `SEARCHTS_NO_UPDATE_CHECK=1`.
-   Never on `mcp serve` or pipes.
+   Never on `mcp serve` or pipes. It also says when this process is still the
+   old build (F19).
