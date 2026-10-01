@@ -451,8 +451,10 @@ def _next_page(doc, base: str, url: str) -> Optional[str]:
             continue
         if label and _NEXT_LABEL_RE.match(label):
             is_next = True  # aria-label / title "Next page" (Bing, Google)
-        elif rel_next and (_NEXT_TEXT_RE.match(txt) or txt.isdigit()):
-            is_next = True  # rel=next on a pager-looking link, not a post title
+        elif rel_next:
+            # The page declares it, whatever the link says (Hacker News: "More").
+            # A rel=next to another post or chapter fails _good_next's same-URL rule.
+            is_next = True
         else:
             is_next = says_next and _pager_of(a) is not None
         if is_next:
