@@ -15,6 +15,8 @@ from typing import Any
 TOKEN = "<!-- searchts-r1-review -->"
 NEEDED = "<!-- searchts-r1-needed -->"
 BUBBLE_HEAD = TOKEN
+# v2: summary, finding blocks, line bubbles, Models table. Same shape as Hare Bot on #221.
+REVIEW_SHAPE = "v2"
 SKIP_CHECKS = frozenset({"test-full", "wheel-gate"})
 HARE_JOB_MARKERS = frozenset({"hare", "r1"})
 MAX_DIFF = 90_000
@@ -242,43 +244,58 @@ def render_comment(
     check_notes: list[str],
     summary: str = "",
 ) -> str:
-    rows = []
+    """v2 review body. Summary, then finding blocks. Not a one-line skim."""
+    said = _no_em(summary.strip()) or "(model did not say what changed)"
+    blocks: list[str] = []
     for f in findings:
+        sev = "real" if f.get("sev") == "real" else "skip"
         loc = f"{f.get('path')}:{f.get('line')}" if f.get("line") is not None else str(f.get("path") or "-")
         issue = _no_em(str(f.get("issue") or "").strip() or "see bubble")
-        fix = str(f.get("fix") or "later")
-        rows.append(f"| {f.get('sev')} | {loc} | {issue} | {fix} |")
-    if not rows:
-        rows.append("| - | - | no line findings | - |")
-    said = _no_em(summary.strip()) or "(model did not say what changed)"
+        fix = _no_em(str(f.get("fix") or "later"))
+        blocks.append(
+            f"#### {sev} · `{loc}`\n\n**Issue:** {issue}\n\n**Fix:** {fix}."
+        )
+    if not blocks:
+        blocks.append("No line findings.")
     why = ""
     if intent == "hold" and check_state == "fail":
         why = "Required CI is red."
     elif intent == "hold" and check_state == "pending":
         why = "Required CI is still running."
-    table = "\n".join(rows)
     notes = "; ".join(check_notes[:6])
-    extra = f"\n\nChecks: `{check_state}`" + (f" ({notes})" if notes else "")
+    checks = f"Checks: `{check_state}`" + (f" ({notes})" if notes else "")
     if why:
-        extra += f"\n{why}"
+        checks += f"\n{why}"
+    findings_md = "\n\n".join(blocks)
     return _no_em(
         f"""{TOKEN}
 
-**{intent}** · `{model}` · effort {effort}
+## Summary
 
 {said}
 
-| Sev | File:line | Issue | Fix? |
-|---|---|---|---|
-{table}
-{extra}
+Intent: {intent}
+Model: `{model}`
+
+### Findings
+
+{findings_md}
+
+{checks}
+
+## Models
+
+| Role | Model | Effort |
+| --- | --- | --- |
+| reviewer | `{model}` | {effort} |
 """
     )
 
 
-def bubble_body(sev: str, issue: str) -> str:
+def bubble_body(sev: str, issue: str, fix: str = "later") -> str:
     label = "real" if sev == "real" else "skip"
-    return _no_em(f"{BUBBLE_HEAD}\n**{label}**: {issue.strip()}")
+    fix_s = _no_em(str(fix or "later"))
+    return _no_em(f"{BUBBLE_HEAD}\n**{label}**: {issue.strip()}\n\n**Fix:** {fix_s}.")
 
 
 def chat_complete(base: str, key: str, model: str, messages: list[dict[str, str]]) -> str:
@@ -646,7 +663,7 @@ def _hare_once(
             "path": f["path"],
             "line": f["line"],
             "side": "RIGHT",
-            "body": bubble_body(str(f["sev"]), str(f.get("issue") or "")),
+            "body": bubble_body(str(f["sev"]), str(f.get("issue") or ""), str(f.get("fix") or "later")),
         }
         for f in bubbles
     ]

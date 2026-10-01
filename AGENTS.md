@@ -44,7 +44,7 @@ If a Review with `<!-- searchts-r1-review -->` already exists on this SHA, the A
 
 **Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: Nous then OpenRouter then Zen (fixed list in `scripts/hare_r1.py`: Space Bunny, then Laguna / LongCat / Qwen, Ling Fin last on Zen). Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs have no secrets: nag.
 
-Hare posts **one GitHub Review** (CodeRabbit / Macroscope shaped). Author is the bot. Local chat is not enough.
+Hare posts **one GitHub Review** (v2, the shape locked on Hare Bot #221). Author is the bot. Local chat is not enough.
 
 1. **PR review** (`POST .../pulls/{n}/reviews`, event `COMMENT`). Body starts **exactly**:
 
@@ -52,15 +52,17 @@ Hare posts **one GitHub Review** (CodeRabbit / Macroscope shaped). Author is the
 <!-- searchts-r1-review -->
 ```
 
-Then `**ship|hold** · \`model\` · effort low|medium|high`, one sentence of what the diff does, and the findings table. Shows on the Reviews tab as `searchts-hare[bot] reviewed`.
+Then `## Summary`, `Intent: ship|hold`, `Model: \`id\``, finding blocks (`#### real|skip · \`file:line\``, **Issue**, **Fix**), and a Models table (Role, Model, Effort). Shows on the Reviews tab as `searchts-hare[bot] reviewed`. Not a one-line skim. Do not say fine to merge.
 
-2. **Inline on Files changed: real *and* skip.** Same review's `comments[]` = `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines 422: table only, no bubble.
+2. **Inline on Files changed: real *and* skip.** Same review's `comments[]` = `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines stay in the summary only, no bubble.
 
    Bubble body starts **exactly**:
 
 ```
 <!-- searchts-r1-review -->
 **skip**: <one sentence>
+
+**Fix:** later.
 ```
 
    Use `**real**` instead of `**skip**` when it is real. No scores. No first person. No em dashes. No name line. The bot avatar is the identity.
@@ -76,13 +78,26 @@ Zero rows is only ok when the diff has nothing to question. The sentence is stil
 ```markdown
 <!-- searchts-r1-review -->
 
-**ship** · `nous:poolside/laguna-s-2.1` · effort low
+## Summary
 
 One sentence of what the diff does. Not the PR title.
 
-| Sev | File:line | Issue | Fix? |
-|---|---|---|---|
-| real / skip | … | one sentence | yes / no / later |
+Intent: ship
+Model: `nous:poolside/laguna-s-2.1`
+
+### Findings
+
+#### real · `file.py:10`
+
+**Issue:** one sentence
+
+**Fix:** later.
+
+## Models
+
+| Role | Model | Effort |
+| --- | --- | --- |
+| reviewer | `nous:poolside/laguna-s-2.1` | low |
 ```
 
 **Real:** wrong behavior, fail-loud lie, ticks on stdout, MCP break, test that cannot fail, scope creep, **PLAN-id intent miss**.
