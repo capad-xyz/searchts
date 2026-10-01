@@ -93,7 +93,16 @@ Do not push fixes unless asked. Do not review as any other GitHub user.
 
 ## Commits / PRs
 
-- `type(scope): message`. PRs are squash-merged; the title becomes the `main` commit.
-- Co-author trailer: exact model, agent, effort.
+Shape is #103 and #216. Do not invent a third.
+
+- Title: `type(scope): message`. Squash-merge, so the title is the commit on `main`. No status essay in the title.
+- Body, in this order: **What** (what changed, and what it does not do), **Why** (one short reason, skip if What already says it), **Test plan** (commands actually run, checked), **Checklist** (the fences for this PR). A table is fine when the change is a list.
+- **Models** table when more than one agent wrote or edited: Role, Model, Effort. One writer can be one line. Trailer under the table:
+
+```
+Co-authored-by: Name <email>
+```
+
+Name is the agent. Effort stays in the table, not a second essay.
 - Never hand-edit version numbers. `docs` / `chore` / `test` do not cut a PyPI release.
-- New branch, PR to `main`, never push to `main`.
+- New branch, PR to `main`, never push to `main`. One change per PR.
