@@ -22,6 +22,7 @@
 - Reads complete ChatGPT / Claude / Gemini / Grok / Poe / DeepSeek / Perplexity / Copilot shared conversations
 - Works with Claude, Codex, and MCP agents
 - Extracts clean Markdown, ready to feed a model
+- Says when a page has more than it returned (a next page, a feed, folded text) and rebuilds search results and feeds the extractor mangles
 - Searches the web without API keys
 - Downloads a page's assets (images, fonts, palette)
 - Transcribes videos, subtitles-first
