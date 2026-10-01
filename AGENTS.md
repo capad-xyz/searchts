@@ -97,7 +97,7 @@ Shape is #103 and #216. Do not invent a third.
 
 - Title: `type(scope): message`. Squash-merge, so the title is the commit on `main`. No status essay in the title.
 - Body, in this order: **What** (what changed, and what it does not do), **Why** (one short reason, skip if What already says it), **Test plan** (commands actually run, checked), **Checklist** (the fences for this PR). A table is fine when the change is a list.
-- **Models** table when more than one agent wrote or edited: Role, Model, Effort. One writer can be one line. Trailer under the table:
+- **Models** table on every agent PR: Role, Model, Effort. Model is the model id (`grok-4.7`, `claude-opus-5-5`), not the product name. Role is who wrote. One writer still gets the table. Trailer under it:
 
 ```
 Co-authored-by: Name <email>
