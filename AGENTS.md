@@ -93,11 +93,11 @@ Do not push fixes unless asked. Do not review as any other GitHub user.
 
 ## Commits / PRs
 
-Shape is #103 and #216. Do not invent a third.
+Shape is #103 and #115. Do not invent a third.
 
 - Title: `type(scope): message`. Squash-merge, so the title is the commit on `main`. No status essay in the title.
 - Body, in this order: **What** (what changed, and what it does not do), **Why** (one short reason, skip if What already says it), **Test plan** (commands actually run, checked), **Checklist** (the fences for this PR). A table is fine when the change is a list.
-- **Models** table on every agent PR. One writer still gets the table. Columns: Platform, Role, Agent, Model, Effort. Platform is where it ran (`xAI chat`, `claude.ai`, `OpenCode`). Role is the job (`wrote`, `editor`). Agent is the name. Model is the id (`grok-4.7`, `claude-opus-5-5`). Effort stays in the table, not a second essay. Trailer under it, name is the agent:
+- **Models** on every agent PR. One writer can be one line, like #103 (`Ox Alpha retry (implementation); editor Grok 4.5`). More than one role uses the #115 table. Columns are Role, Model, Effort. Model is the agent and the model together (`Grok 4.6`, `claude-opus-5-5`). Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one cell, not a second essay. Trailer under it. The name is the agent:
 
 ```
 Co-authored-by: Name <email>
