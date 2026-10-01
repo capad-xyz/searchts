@@ -1,0 +1,1295 @@
+<!doctype html>
+<!-- Trimmed from a saved r/MachineLearning thread (2026-09-30): class, style and tracking attributes and SVGs removed. -->
+<html><body><main>
+<shreddit-post eager-media-cuj-failures-enabled="" permalink="/r/MachineLearning/comments/1wsejb7/functional_gradient_descent_with_adaptive/" content-href="https://i.redd.it/wom07k9ih9sh1.gif" view-context="CommentsPage" comment-count="37" award-count="0" hide-awards-button="" moderation-verdict="" uses-reddit-play-client-tab-switching="" is-embeddable="" is-desktop-viewport="" is-awardable="" share-button-ssr="" created-timestamp="2026-09-28T13:23:54.777000+0000" domain="i.redd.it" id="t3_1wsejb7" post-title="Functional Gradient Descent with Adaptive Representations [R]" post-language="en" post-type="gif" score="196" upvote-ratio="0.9949494949494949" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" author-id="t2_7kihyxp2" author="dccsillag0" icon="https://styles.redditmedia.com/t5_2ybhyf/styles/profileIcon_snoo87c4fbad-3c9e-452a-89e8-46594611f25a-headshot.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=eac5f30ed6b3278ce8ebd89919e0766043da3300" subreddit-name="MachineLearning" item-state="UNMODERATED">
+    
+          
+        <div slot="credit-bar" id="pdp-credit-bar">
+    
+    <span>
+      
+            <pdp-back-button post-id="t3_1wsejb7" subreddit-prefixed-name="r/MachineLearning"></pdp-back-button>
+          
+      <span>
+            <faceplate-tracker source="post_credit_bar" action="click" noun="community">
+              <a href="https://www.reddit.com/r/MachineLearning/">
+                <div>
+                        <span avatar="">
+    
+    <span>
+    <img src="https://styles.redditmedia.com/t5_2r3gv/styles/communityIcon_kilpomt3l5c51.png?width=96&amp;height=96&amp;frame=1&amp;auto=webp&amp;s=b450f128223274f19254cc7483e695a9691fb42e" alt="" width="32">
+  </span></span>
+                      </div>
+                <faceplate-screen-reader-content>
+                  Go to MachineLearning
+                </faceplate-screen-reader-content>
+              </a>
+            <!----></faceplate-tracker>
+          </span>
+
+      <div role="group">
+        <span>
+          <span>
+                <faceplate-tracker source="post_credit_bar" action="click" noun="community">
+                  
+    
+    <faceplate-hovercard enter-delay="500" leave-delay="150" position="bottom-start" label="r/MachineLearning" mouse-only="" appearance="neutral">
+      <a href="https://www.reddit.com/r/MachineLearning/">r/MachineLearning</a>
+      <div slot="content" hidden="">
+        <faceplate-partial src="/svc/shreddit/community-hover-card/MachineLearning">
+          <div>
+            <faceplate-progress value="20" status="incomplete"></faceplate-progress>
+          </div>
+        </faceplate-partial>
+      </div>
+    </faceplate-hovercard>
+  
+                <!----></faceplate-tracker>
+              </span>
+          
+          <span>•</span><faceplate-timeago ts="2026-09-28T13:23:54.777Z" format="narrow" locale="en-US-u-nu-latn"><!----> <time datetime="2026-09-28T13:23:54.777Z" title="Monday, September 28, 2026 at 6:53:54 PM GMT+5:30"><!--?lit$630251095$-->2d ago</time> </faceplate-timeago>
+          <shreddit-brand-affiliate-tag post-id="t3_1wsejb7"><!----></shreddit-brand-affiliate-tag>
+        </span>
+        <div>
+          
+    <span slot="authorName">
+      <div>
+        
+    
+    <faceplate-hovercard enter-delay="500" leave-delay="150" position="bottom-start" close-on-track="" label="dccsillag0 details" mouse-only="" appearance="neutral">
+      <faceplate-tracker source="post_credit_bar" action="click" noun="user_profile"><a href="https://www.reddit.com/user/dccsillag0/"><span dir="auto">dccsillag0</span></a><!----></faceplate-tracker>
+      <div slot="content" hidden="">
+        <faceplate-partial src="/svc/shreddit/user-hover-card/dccsillag0?subredditName=MachineLearning">
+          <div>
+            <faceplate-progress value="20" status="incomplete"></faceplate-progress>
+          </div>
+        </faceplate-partial>
+      </div>
+    </faceplate-hovercard>
+  
+      </div>
+    </span>
+  
+          
+          
+    <shreddit-async-loader bundlename="distinguished_post_tags">
+      <shreddit-distinguished-post-tags post-id="t3_1wsejb7">
+      </shreddit-distinguished-post-tags>
+    </shreddit-async-loader>
+  
+          
+          
+        </div>
+      </div>
+    </span>
+    <span>
+      
+    
+    <shreddit-async-loader bundlename="status_icons">
+      <shreddit-status-icons thing-id="t3_1wsejb7">
+        
+        <rpl-tooltip appearance="inverted" trigger="hover focus" content="Locked post"></rpl-tooltip>
+        <rpl-tooltip appearance="inverted" trigger="hover focus" content="Stickied post"></rpl-tooltip>
+        <rpl-tooltip appearance="inverted" trigger="hover focus" content="Archived post"></rpl-tooltip>
+      </shreddit-status-icons>
+    </shreddit-async-loader>
+  
+      
+      
+       <faceplate-loader name="ShredditPostOverflowMenu_TJk9LY" src="concat:-M-c1dQOog,aWkj9Hlb6q,B3RwOul8p9,B7hjrMJRJM,B8WurPyEyl,B9ANXII6Tr,BB283FhmSH,BdUK7VFP3t,BIKq8ky3H1,BjfmbTn-_t,BO2Ze2PU1L,BOf6ZMmkFw,BpsRAZdOlC,BPVABrMMgZ,BqKLyiKknE,Bs8PNRpyIc,BSDIGpL4Yj,BtPOEM8ViQ,BUx0D2mJbV,Bv4ycV1pvc,Bvf1ceRsSz,Bxq2aoBDnT,BxVmTeLRGf,BYeGBWlRtr,C3xL9jmBWd,CaAmKf3JG8,Cb1JlVSv6A,CdS2hCzZbT,CDtWz65bLg,CdXNNoYIaW,Ceok6M-yGB,CFm-2UzxUG,CgIjF4XE2V,CN8KHofjvl,CQfyGQRUDD,CSqP0PI6X5,CtvuTkQ94x,CWsVzlyxCc,Cy0onUMkkY,CYS1ZhS-H_,CZLQ9sR7cI,D77lOYCycT,DA_dDI-yqF,DB1d2a5i7U,DE4W6uOWnX,DElD0QT36N,DF66wp8J2N,dl2Got7IRf,DN_-qXBk_8,DqzocsQtBC,DR8j6gbI8x,Dub0C0fn2n,ePgKcmcc3I,EYalyjSe-N,hWN-W44hep,iDNZ3MTYOC,JEwlzMYHG8,jiE2s3yUs1,MX3VmP6qk9,qaBl_axcMI,UKFfZ0Z_O1,wQuTbYWNu3,zK9St2yBk6">
+    
+        <!----></faceplate-loader> <shreddit-post-overflow-menu post-id="t3_1wsejb7" author-id="t2_7kihyxp2" author-name="dccsillag0" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" post-type="gif" score="196" comment-count="37" permalink="/r/MachineLearning/comments/1wsejb7/functional_gradient_descent_with_adaptive/" post-view-context="CommentsPage" has-post-flair="" is-desktop-viewport="" ama-state="" ama-starts-at="" ama-ends-at="" should-render-follow-menu-item="" is-post-awardable="" should-render-award-menu-item="" recommendation-context-json="{}" translation-state="" award-count="0" premium-ad-overflow-variant="" item-state="UNMODERATED">
+    <button>
+      <span>
+      <span></span>
+      
+    </span>
+    
+    </button>
+    
+    
+          <div slot="devvit-context-actions" role="menuitem">
+            
+          </div>
+        
+  </shreddit-post-overflow-menu>
+      
+    </span>
+  
+  </div>
+        <div slot="ssr-post-content-header"></div>
+        <div slot="related-community-recommendation">
+        
+      </div>
+        
+        <h1 id="post-title-t3_1wsejb7" slot="title" dir="auto">
+      Functional Gradient Descent with Adaptive Representations [R]
+    </h1>
+        <div slot="post-flair">
+    <shreddit-post-flair slot="post-flair" post-id="t3_1wsejb7"><a href="/r/MachineLearning/?f=flair_name%3A%22Research%22" actioned="">
+    <span>
+      <div dir="auto">
+    Research
+  </div>
+    </span>
+  </a></shreddit-post-flair>
+  </div>
+        
+        
+     <faceplate-loader name="PostMediaContainer_zGcX6F" src="concat:-M-c1dQOog,6Rvt3vXfi6,9O2vKJ_JzO,aWkj9Hlb6q,B7hjrMJRJM,B9ANXII6Tr,BjfmbTn-_t,BO2Ze2PU1L,BOf6ZMmkFw,Br22weLQba,BtPOEM8ViQ,BtuyHcMEPw,Bvf1ceRsSz,Bxq2aoBDnT,BXsIKE0x-M,BxxVVqc-8z,C8pXAKeBqe,CD2Orn3FqU,Cda6L39FlB,CDtWz65bLg,CdXNNoYIaW,CE6hH57DGr,Ceok6M-yGB,cfHWQIzw26,CFm-2UzxUG,CgIjF4XE2V,CI1YPVj0cf,Cj8fjdIHEm,CjusIvhALw,CK6DuA8jNi,CLersEDhKy,CN8KHofjvl,CNRQOg5Pil,CTMHwrk7_y,CtvuTkQ94x,CV7jQEm9bM,CWsVzlyxCc,CYS1ZhS-H_,DcwceIRxTJ,DDE_4cNBrt,DE4W6uOWnX,DF66wp8J2N,DN_-qXBk_8,Dn8qctS4tN,DR8j6gbI8x,DSRG-l5sHR,DynZ-3My91,DYRSnnX_B1,EVuLNI7qA_,EYalyjSe-N,F-lBbbI7aM,iDNZ3MTYOC,JEwlzMYHG8,kcDjAqNkCT,UKFfZ0Z_O1,wQuTbYWNu3,X2PHjx1El6,xTDYpZpJ8l">
+    
+        <!----></faceplate-loader>
+    <div slot="post-media-container">
+      
+      <div></div>
+      <div id="t3_1wsejb7-aspect-ratio">
+    <div>
+    <shreddit-media-lightbox-listener permalink="/r/MachineLearning/comments/1wsejb7/functional_gradient_descent_with_adaptive/" post-id="t3_1wsejb7" telemetry='{"post":{"id":"t3_1wsejb7","nsfw":false,"url":"https://i.redd.it/wom07k9ih9sh1.gif","created_timestamp":1790601834777,"type":"gif","promoted":false,"domain":"i.redd.it","translation_state":false,"translation_language":"original","translation_reason":"original","translatable_state":"is_not_translatable","is_event":false,"number_comments":37,"score":196,"upvote_ratio":0.9949494949494949},"subreddit":{"id":"t5_2r3gv","name":"machinelearning","nsfw":false,"quarantined":false}}'>
+    <link rel="preload" href="https://preview.redd.it/functional-gradient-descent-with-adaptive-representations-r-v0-wom07k9ih9sh1.gif?width=640&amp;crop=smart&amp;format=png8&amp;s=a9b7df51f5cf005977e6b5a42d6a0a4845b0aed9" as="image">
+    
+    
+    
+    <shreddit-async-loader bundlename="shreddit_player_loader">
+      <shreddit-player src="https://preview.redd.it/wom07k9ih9sh1.gif?width=900&amp;format=mp4&amp;s=2e87dc3f5b0fba76cecc0d5fde98169ef7bd5fee" autoplay="" autoplay-pref="" gif="" player-type="post_detail_screen" post-created-at="2026-09-28T13:23:54.777000+0000" post-domain="i.redd.it" post-id="t3_1wsejb7" post-score="196" post-type="gif" poster="https://preview.redd.it/functional-gradient-descent-with-adaptive-representations-r-v0-wom07k9ih9sh1.gif?width=640&amp;crop=smart&amp;format=png8&amp;s=a9b7df51f5cf005977e6b5a42d6a0a4845b0aed9" subreddit-id="t5_2r3gv" subreddit-name="MachineLearning" priority="auto" vp9-codec-delivery-variant="update_cookie_on_fail" media-codec-cookie-recalc-version="0">
+        <source src="https://preview.redd.it/wom07k9ih9sh1.gif?width=900&amp;format=mp4&amp;s=2e87dc3f5b0fba76cecc0d5fde98169ef7bd5fee">
+        
+    <img alt="media poster" objectfit="contain" src="https://preview.redd.it/functional-gradient-descent-with-adaptive-representations-r-v0-wom07k9ih9sh1.gif?width=640&amp;crop=smart&amp;format=png8&amp;s=a9b7df51f5cf005977e6b5a42d6a0a4845b0aed9" slot="poster">
+
+    
+    <div slot="loading-spinner">
+      </div>
+  
+        
+      </source></shreddit-player>
+      
+    <template slot="error">
+    
+    <div>
+      <img alt="Media error" objectfit="contain" src="https://preview.redd.it/functional-gradient-descent-with-adaptive-representations-r-v0-wom07k9ih9sh1.gif?width=640&amp;crop=smart&amp;format=png8&amp;s=a9b7df51f5cf005977e6b5a42d6a0a4845b0aed9">
+      <div>
+        <p dir="auto">
+          Sorry, something went wrong when loading this video.
+        </p>
+        
+    <a name="app-link" rel="nofollow" href="https://reddit.onelink.me/MRHZ?deep_link_value=https%3A%2F%2Fwww.reddit.com%2Fr%2FMachineLearning%2Fcomments%2F1wsejb7%2Ffunctional_gradient_descent_with_adaptive%2F&amp;af_dp=reddit%3A%2F%2Freddit%2Fr%2FMachineLearning%2Fcomments%2F1wsejb7%2Ffunctional_gradient_descent_with_adaptive%2F&amp;base_url=%2Fr%2FMachineLearning%2Fcomments%2F1wsejb7%2Ffunctional_gradient_descent_with_adaptive%2F&amp;ob_post_id=t3_1wsejb7&amp;mweb_loid_enc=v1%3AsHCkwNDYIpZSL-4F6otO1m7Pb8r1vEj2R_EGzX5TSOiISiidljBeEU4&amp;mweb_loid_created=1788904560257&amp;referrer_domain=www.reddit.com&amp;referrer_url=%2F&amp;pid=xpromo&amp;c=no_amp_test&amp;af_channel=xpromo&amp;af_keywords=no_amp&amp;af_sub1=web3x&amp;af_sub4=rmp_fail&amp;af_sub2=rmp_fail">
+      <span>
+        <span>
+          View in app
+          
+    
+    <ac-manipulate-href nonce="tbi3sVSZ70HIqb3zrt0jLcze" payload="?$referrer" target="closest([href])" trigger="init"></ac-manipulate-href>
+    
+    <ac-publish nonce="tbi3sVSZ70HIqb3zrt0jLcze" topic="trigger_educational_deeplink_prompt" trigger-elem="closest([href])" trigger="click"></ac-publish>
+  
+          <ac-track nonce="tbi3sVSZ70HIqb3zrt0jLcze" san="xpromo|click|rmp_fail" trigger-elem="closest([href])"></ac-track>
+        </span>
+      </span>
+    </a>
+  
+      </div>
+      <ac-track nonce="tbi3sVSZ70HIqb3zrt0jLcze" san="xpromo|view|rmp_fail" trigger="view"></ac-track>
+    </div>
+  
+    </template>
+  
+    </shreddit-async-loader>
+  
+  </shreddit-media-lightbox-listener>
+    <faceplate-perfmark name="first-post-meaningful-paint"></faceplate-perfmark>
+  </div>
+  </div>
+      <div>
+    
+  </div>
+    </div>
+  
+    
+    <shreddit-post-text-body slot="text-body" post-id="t3_1wsejb7" view-context="CommentsPage" feed-view-type="cardView" max-text-body-height="253" text-body-height-class="max-h-[253px] overflow-hidden s:max-h-[318px] m:max-h-[337px] l:max-h-[352px] xl:max-h-[452px]" subreddit-prefixed-name="r/MachineLearning">
+       <div slot="text-body">
+    <div>
+      <div id="t3_1wsejb7-post-rtjson-content" about="t3_1wsejb7" property="schema:articleBody" dir="auto">
+      <p>
+      Sharing our recent work, now accepted at NeurIPS: <strong>Functional Gradient Descent with Adaptive Representations</strong>.
+    </p><p>
+      Functional GD algorithms generally outperform neural nets, but are hard to accurately implement.<br>This is because functional gradients are infinite-dimensional, and therefore must be approximated in practice; but if you approximate them naively, you converge to the wrong place!
+    </p><p>
+      To rectify this, we formalize a broad class of approximation schemes ("adaptive representations"), which provably ensure convergence to the global minimizer while being immediately implementable.<br>The resulting algorithms outperform corresponding neural nets often by an order of magnitude, across a number of settings.
+    </p><p>
+      It is still the start for this line of work, but we believe it has quite a bit of potential!<br>Paper: <a href="https://arxiv.org/abs/2606.16926" rel="noopener nofollow ugc" target="_blank">https://arxiv.org/abs/2606.16926</a><br>(First author here, happy to take any questions)
+    </p>
+    </div>
+    <div id="t3_1wsejb7-overflow-cover"></div>
+    <button id="t3_1wsejb7-read-more-button" type="button">
+      <span>
+      
+      <span>Read more</span>
+    </span>
+    <span></span>
+    </button>
+    </div>
+  </div> 
+    </shreddit-post-text-body>
+  
+    
+  
+        
+        
+        
+         
+        
+        
+        
+        
+          
+        
+        
+        
+        
+         <rpl-dropdown placement="bottom-start" trigger="manual" hoist="" slot="ssr-share-button">
+    <button type="button">
+      <span>
+      <span><span>
+  <faceplate-progress status="indeterminate"></faceplate-progress>
+</span></span>
+      <span>
+            Share
+          </span>
+    </span>
+    
+    </button>
+  </rpl-dropdown>
+      
+  </shreddit-post>
+    
+    
+    
+<shreddit-comment created="2026-09-28T13:45:09.905000+0000" author="neurogramer" avatar="https://preview.redd.it/snoovatar/avatars/6ae35d53-b18d-4985-a5f4-da7ff06bbed9-headshot.png?width=64&amp;height=64&amp;crop=smart&amp;auto=webp&amp;s=2d6559b533b291410e97112676c96d07b33b3cdc" thingid="t1_pckq9dm" depth="0" comment-position="0" comment-parent-positions="[]" permalink="/r/MachineLearning/comments/1wsejb7/comment/pckq9dm/" reload-url="/svc/shreddit/comment/t1_pckq9dm?depth=0&amp;subredditName=MachineLearning" score="15" paid-award-only-comment-highlighting-enabled="" postid="t3_1wsejb7" content-type="text" highlight-variant="" arialabel="Comment from neurogramer 2 days ago" record-ttci="" slot-config="light" award-count="0" reply-permalink="">
+      
+            
+            <details role="article" open="" tabindex="0">
+              <summary>
+                <div>
+                  <div></div>
+                  <div slot="commentAvatar"><span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author_avatar">
+      <a href="https://www.reddit.com/user/neurogramer/"><span avatar="">
+    
+    <span> 
+    <span>
+       <span>
+    
+  </span>
+    </span>
+  </span></span></a>
+    <!----></faceplate-tracker>
+  
+    </div></span></div>
+                  </div>
+                <div slot="commentMeta">
+                  
+      <div>
+        <div>
+          <div>
+            
+     <span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author">
+       <a href="https://www.reddit.com/user/neurogramer/" dir="auto">
+      
+      neurogramer
+    </a>
+    <!----></faceplate-tracker>
+  
+    </div></span>
+    
+  
+    
+  <span>•</span>
+ 
+    <faceplate-tracker source="post_detail" action="click" noun="comment_time">
+      <a href="https://www.reddit.com/r/MachineLearning/comments/1wsejb7/comment/pckq9dm/" rel="nofollow noopener noreferrer"><faceplate-timeago ts="2026-09-28T13:45:09.905Z" format="narrow" locale="en-US-u-nu-latn"><!----> <time datetime="2026-09-28T13:45:09.905Z" title="Monday, September 28, 2026 at 7:15:09 PM GMT+5:30"><!--?lit$630251095$-->2d ago</time> </faceplate-timeago></a>
+    <!----></faceplate-tracker>
+  
+    
+  
+             <faceplate-loader name="CommentBadges_MnNCwp" src="concat:BOf6ZMmkFw,Bvf1ceRsSz,Bxq2aoBDnT,CA_HjISyoq,CDtWz65bLg,CtvuTkQ94x,CYS1ZhS-H_,DF66wp8J2N,DN_-qXBk_8,DR8j6gbI8x,hWN-W44hep,iDNZ3MTYOC,JEwlzMYHG8">
+    
+        <!----></faceplate-loader>
+      <shreddit-comment-badges thing-id="t1_pckq9dm"></shreddit-comment-badges>
+    
+            
+            
+            
+          </div>
+          
+        </div>
+      </div>
+      
+    
+                </div>
+                <div></div>
+              </summary>
+
+              <div>
+                <div></div>
+                <div>
+                  <div></div>
+                </div>
+                <div>
+                  
+      <div id="t1_pckq9dm-comment-rtjson-content" slot="comment">
+        <div id="t1_pckq9dm-post-rtjson-content" dir="auto">
+      <p>
+      That is very cool. What are the limitations?
+    </p>
+    </div>
+      </div>
+      
+      
+    
+                </div>
+                <div>
+                  <div></div>
+                   <faceplate-loader name="CommentActionRowFull_pGjT7n" src="concat:-M-c1dQOog,B7hjrMJRJM,B95RZj-r9X,B9ANXII6Tr,BCb51MbSHO,BF2oAzYVAQ,Bg_jtLWxAt,BIKq8ky3H1,BOf6ZMmkFw,BPVABrMMgZ,BSDIGpL4Yj,BtPOEM8ViQ,BUx0D2mJbV,Bv4ycV1pvc,BV6alVT_4v,BVCCVQQJdk,Bvf1ceRsSz,Bxq2aoBDnT,CAq2TITRKy,Cb1JlVSv6A,CDtWz65bLg,CdXNNoYIaW,CgIjF4XE2V,CN8KHofjvl,CnD-72jutx,CSCjyyTl3E,CSqP0PI6X5,Ct754RSfTq,CtvuTkQ94x,CWsVzlyxCc,Cy0onUMkkY,CYS1ZhS-H_,CZLQ9sR7cI,D4zs7wHrVW,DB1d2a5i7U,DE4W6uOWnX,DF66wp8J2N,DN_-qXBk_8,DqzocsQtBC,DR8j6gbI8x,EtEzuQOwbe,EYalyjSe-N,iDNZ3MTYOC,JEwlzMYHG8,jiE2s3yUs1,wFeUq53GEm,wQuTbYWNu3,xru2U0DTzO">
+    
+        <!----></faceplate-loader>
+    <div slot="actionRow" actioned="">
+      
+    </div>
+  
+                </div>
+                <div id="comment-children">
+                  
+    
+    <shreddit-comment created="2026-09-28T14:04:29.109000+0000" author="dccsillag0" avatar="https://styles.redditmedia.com/t5_2ybhyf/styles/profileIcon_snoo87c4fbad-3c9e-452a-89e8-46594611f25a-headshot.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=eac5f30ed6b3278ce8ebd89919e0766043da3300" thingid="t1_pckuojl" depth="1" parentid="t1_pckq9dm" comment-position="0" comment-parent-positions="[0]" permalink="/r/MachineLearning/comments/1wsejb7/comment/pckuojl/" parent-permalink="/r/MachineLearning/comments/1wsejb7/comment/pckq9dm/" reload-url="/svc/shreddit/comment/t1_pckuojl?depth=1&amp;subredditName=MachineLearning" score="33" paid-award-only-comment-highlighting-enabled="" postid="t3_1wsejb7" content-type="text" is-op="" highlight-variant="" slot="children-t1_pckq9dm-0" arialabel="Comment thread level 1: Reply from dccsillag0 2 days ago" slot-config="light" award-count="0" reply-permalink="">
+      
+            
+            <details role="article" open="" tabindex="0">
+              <summary>
+                <div>
+                  <div></div>
+                  <div slot="commentAvatar"><span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author_avatar">
+      <a href="https://www.reddit.com/user/dccsillag0/"><span avatar="">
+    
+    <span> 
+    <span>
+       <span>
+    
+  </span>
+    </span>
+  </span></span></a>
+    <!----></faceplate-tracker>
+  
+    </div></span></div>
+                  </div>
+                <div slot="commentMeta">
+                  
+      <div>
+        <div>
+          <div>
+            
+     <span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author">
+       <a href="https://www.reddit.com/user/dccsillag0/" dir="auto">
+      
+      dccsillag0
+    </a>
+    <!----></faceplate-tracker>
+  
+    </div></span><span>
+    <span>
+      <shreddit-comment-author-modifier-icon thing-id="t1_pckuojl" op=""></shreddit-comment-author-modifier-icon>
+    </span>
+  </span>
+    
+  
+    
+  <span>•</span>
+ 
+    <faceplate-tracker source="post_detail" action="click" noun="comment_time">
+      <a href="https://www.reddit.com/r/MachineLearning/comments/1wsejb7/comment/pckuojl/" rel="nofollow noopener noreferrer"><faceplate-timeago ts="2026-09-28T14:04:29.109Z" format="narrow" locale="en-US-u-nu-latn"><!----> <time datetime="2026-09-28T14:04:29.109Z" title="Monday, September 28, 2026 at 7:34:29 PM GMT+5:30"><!--?lit$630251095$-->2d ago</time> </faceplate-timeago></a>
+    <!----></faceplate-tracker>
+  
+    
+  
+             <faceplate-loader name="CommentBadges_MnNCwp" src="concat:BOf6ZMmkFw,Bvf1ceRsSz,Bxq2aoBDnT,CA_HjISyoq,CDtWz65bLg,CtvuTkQ94x,CYS1ZhS-H_,DF66wp8J2N,DN_-qXBk_8,DR8j6gbI8x,hWN-W44hep,iDNZ3MTYOC,JEwlzMYHG8">
+    
+        <!----></faceplate-loader>
+      <shreddit-comment-badges thing-id="t1_pckuojl" op=""></shreddit-comment-badges>
+    
+            
+            
+            
+          </div>
+          
+        </div>
+      </div>
+      
+    
+                </div>
+                <div></div>
+              </summary>
+
+              <div>
+                <div></div>
+                <div>
+                  <div></div>
+                </div>
+                <div>
+                  
+      <div id="t1_pckuojl-comment-rtjson-content" slot="comment">
+        <div id="t1_pckuojl-post-rtjson-content" dir="auto">
+      <p>
+      Thanks!
+    </p><p>
+      IMO, the main limitation (at least for now) is that of inductive bias. If you look at our current experiments, you will see that they are all on settings where we would use MLP-ish neural networks (e.g. plain MLPs, MLPs with positional encodings or Fourier features, MLPs with some feature sharing, etc.). I would not expect our current procedures to work well e.g. on language modelling. I don't think it's a fundamental limitation of the approach, just that it needs some "tweak", analogous to how we opt to use a Transformer instead of an MLP.
+    </p><p>
+      Additionally, to use our method you need to compute the form of the functional gradient by hand. And this can get tricky -- see, e.g. the 7-page derivation in the appendix for the functional gradient for our third experiment. Though I think that recent LLM agents can do these derivations on their own now...
+    </p>
+    </div>
+      </div>
+      
+      
+    
+                </div>
+                <div>
+                  <div></div>
+                   <faceplate-loader name="CommentActionRowFull_pGjT7n" src="concat:-M-c1dQOog,B7hjrMJRJM,B95RZj-r9X,B9ANXII6Tr,BCb51MbSHO,BF2oAzYVAQ,Bg_jtLWxAt,BIKq8ky3H1,BOf6ZMmkFw,BPVABrMMgZ,BSDIGpL4Yj,BtPOEM8ViQ,BUx0D2mJbV,Bv4ycV1pvc,BV6alVT_4v,BVCCVQQJdk,Bvf1ceRsSz,Bxq2aoBDnT,CAq2TITRKy,Cb1JlVSv6A,CDtWz65bLg,CdXNNoYIaW,CgIjF4XE2V,CN8KHofjvl,CnD-72jutx,CSCjyyTl3E,CSqP0PI6X5,Ct754RSfTq,CtvuTkQ94x,CWsVzlyxCc,Cy0onUMkkY,CYS1ZhS-H_,CZLQ9sR7cI,D4zs7wHrVW,DB1d2a5i7U,DE4W6uOWnX,DF66wp8J2N,DN_-qXBk_8,DqzocsQtBC,DR8j6gbI8x,EtEzuQOwbe,EYalyjSe-N,iDNZ3MTYOC,JEwlzMYHG8,jiE2s3yUs1,wFeUq53GEm,wQuTbYWNu3,xru2U0DTzO">
+    
+        <!----></faceplate-loader>
+    <div slot="actionRow" actioned="">
+      
+    </div>
+  
+                </div>
+                <div id="comment-children">
+                  
+    
+    <shreddit-comment created="2026-09-28T15:01:19.212000+0000" author="Xemorr" avatar="https://styles.redditmedia.com/t5_iutmg/styles/profileIcon_snoo-nftv2_bmZ0X2VpcDE1NToxMzdfNDY2YTMzMDg4N2JkZjYyZDUzZjk2OGVhODI0NzkzMTUwZjA3NzYyZV80ODcxNTM_rare_7a2807ea-9395-47e8-b847-b5802f5ac131-headshot.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=0161acdd7273eea7e9af4f09988ddceb4bb95924" thingid="t1_pcl8amk" depth="2" parentid="t1_pckuojl" comment-position="0" comment-parent-positions="[0,0]" permalink="/r/MachineLearning/comments/1wsejb7/comment/pcl8amk/" parent-permalink="/r/MachineLearning/comments/1wsejb7/comment/pckuojl/" reload-url="/svc/shreddit/comment/t1_pcl8amk?depth=2&amp;subredditName=MachineLearning" score="3" paid-award-only-comment-highlighting-enabled="" postid="t3_1wsejb7" content-type="text" highlight-variant="" slot="children-t1_pckuojl-0" arialabel="Comment thread level 2: Reply from Xemorr 2 days ago" slot-config="light" award-count="0" reply-permalink="">
+      
+            
+            <details role="article" open="" tabindex="0">
+              <summary>
+                <div>
+                  <div></div>
+                  <div slot="commentAvatar"><span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author_avatar">
+      <a href="https://www.reddit.com/user/Xemorr/"><span avatar="">
+    
+    <span><div>
+    </div>
+    <span>
+    </span><div>
+    </div>
+  </span></span></a>
+    <!----></faceplate-tracker>
+  
+    </div></span></div>
+                  </div>
+                <div slot="commentMeta">
+                  
+      <div>
+        <div>
+          <div>
+            
+     <span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author">
+       <a href="https://www.reddit.com/user/Xemorr/" dir="auto">
+      
+      Xemorr
+    </a>
+    <!----></faceplate-tracker>
+  
+    </div></span>
+    
+  
+    
+  <span>•</span>
+ 
+    <faceplate-tracker source="post_detail" action="click" noun="comment_time">
+      <a href="https://www.reddit.com/r/MachineLearning/comments/1wsejb7/comment/pcl8amk/" rel="nofollow noopener noreferrer"><faceplate-timeago ts="2026-09-28T15:01:19.212Z" format="narrow" locale="en-US-u-nu-latn"><!----> <time datetime="2026-09-28T15:01:19.212Z" title="Monday, September 28, 2026 at 8:31:19 PM GMT+5:30"><!--?lit$630251095$-->2d ago</time> </faceplate-timeago></a>
+    <!----></faceplate-tracker>
+  
+    
+  
+             <faceplate-loader name="CommentBadges_MnNCwp" src="concat:BOf6ZMmkFw,Bvf1ceRsSz,Bxq2aoBDnT,CA_HjISyoq,CDtWz65bLg,CtvuTkQ94x,CYS1ZhS-H_,DF66wp8J2N,DN_-qXBk_8,DR8j6gbI8x,hWN-W44hep,iDNZ3MTYOC,JEwlzMYHG8">
+    
+        <!----></faceplate-loader>
+      <shreddit-comment-badges thing-id="t1_pcl8amk"></shreddit-comment-badges>
+    
+            
+            
+            
+          </div>
+          
+        </div>
+      </div>
+      
+    
+                </div>
+                <div></div>
+              </summary>
+
+              <div>
+                <div></div>
+                <div>
+                  <div></div>
+                </div>
+                <div>
+                  
+      <div id="t1_pcl8amk-comment-rtjson-content" slot="comment">
+        <div id="t1_pcl8amk-post-rtjson-content" dir="auto">
+      <p>
+      still reading through your paper, and a bit of a novice - is there anything limiting using models similar to what you present as a direct swap in replacement for MLP components in larger neural networks?
+    </p>
+    </div>
+      </div>
+      
+      
+    
+                </div>
+                <div>
+                  <div></div>
+                   <faceplate-loader name="CommentActionRowFull_pGjT7n" src="concat:-M-c1dQOog,B7hjrMJRJM,B95RZj-r9X,B9ANXII6Tr,BCb51MbSHO,BF2oAzYVAQ,Bg_jtLWxAt,BIKq8ky3H1,BOf6ZMmkFw,BPVABrMMgZ,BSDIGpL4Yj,BtPOEM8ViQ,BUx0D2mJbV,Bv4ycV1pvc,BV6alVT_4v,BVCCVQQJdk,Bvf1ceRsSz,Bxq2aoBDnT,CAq2TITRKy,Cb1JlVSv6A,CDtWz65bLg,CdXNNoYIaW,CgIjF4XE2V,CN8KHofjvl,CnD-72jutx,CSCjyyTl3E,CSqP0PI6X5,Ct754RSfTq,CtvuTkQ94x,CWsVzlyxCc,Cy0onUMkkY,CYS1ZhS-H_,CZLQ9sR7cI,D4zs7wHrVW,DB1d2a5i7U,DE4W6uOWnX,DF66wp8J2N,DN_-qXBk_8,DqzocsQtBC,DR8j6gbI8x,EtEzuQOwbe,EYalyjSe-N,iDNZ3MTYOC,JEwlzMYHG8,jiE2s3yUs1,wFeUq53GEm,wQuTbYWNu3,xru2U0DTzO">
+    
+        <!----></faceplate-loader>
+    <div slot="actionRow" actioned="">
+      
+    </div>
+  
+                </div>
+                <div id="comment-children">
+                  
+    <faceplate-partial tabindex="0" src="/svc/shreddit/more-comments/MachineLearning/t3_1wsejb7?sort=CONFIDENCE&amp;startingDepth=3&amp;seeker-session=true&amp;commentParentPositions=0,0,0" method="post" slot="children">
+      <input type="hidden" name="cursor" value="Y29tbWVudHRyZWU6YzljMmMwMTEsOjozOmQxOnQxX3BjbDhhbWs=">
+      
+    <div>
+      <button type="button">
+    
+    <span>
+      </span>
+  
+    <span><faceplate-tracker source="post_detail" action="click" noun="more_replies">
+        <faceplate-number number="1"><!---->1</faceplate-number> more reply
+      <!----></faceplate-tracker></span>
+  </button>
+    </div>
+
+    <div slot="loading">
+          <button type="button">
+            
+    
+    <span>
+      </span>
+  
+    <span><faceplate-tracker source="post_detail" action="click" noun="more_replies">
+        <faceplate-number number="1"><!---->1</faceplate-number> more reply
+      <!----></faceplate-tracker></span>
+  
+          </button>
+          <button type="button">
+            </button>
+        </div>
+  
+    </faceplate-partial>
+  
+                </div>
+                <div>
+                      <div></div>
+                      <div>
+                        
+    <a href="/r/MachineLearning/comments/1wsejb7/comment/pcl8amk/?force-legacy-sct=1" rel="nofollow" id="comments-permalink-/r/MachineLearning/comments/1wsejb7/comment/pcl8amk/" slot="more-comments-permalink" actioned="">
+      
+    
+    <span>
+      </span>
+  
+    <span><faceplate-tracker source="post_detail" action="click" noun="more_replies">
+        <faceplate-number number="1"><!---->1</faceplate-number> more reply
+      <!----></faceplate-tracker></span>
+  
+      
+    </a>
+  
+                      </div>
+                    </div>
+              </div>
+              
+            </details>
+            
+          
+    <!----></shreddit-comment>
+  
+    
+    <shreddit-comment created="2026-09-28T15:30:49.299000+0000" author="ipullguard" avatar="https://styles.redditmedia.com/t5_af1u9/styles/profileIcon_snoobf20b929-e53f-4733-9e2c-29c2020d4a56-headshot.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=54b2cb94e2280562f3772f9abf75c98e1b4a8fe3" thingid="t1_pclficc" depth="2" parentid="t1_pckuojl" comment-position="1" comment-parent-positions="[0,0]" permalink="/r/MachineLearning/comments/1wsejb7/comment/pclficc/" parent-permalink="/r/MachineLearning/comments/1wsejb7/comment/pckuojl/" reload-url="/svc/shreddit/comment/t1_pclficc?depth=2&amp;subredditName=MachineLearning" score="3" paid-award-only-comment-highlighting-enabled="" postid="t3_1wsejb7" content-type="text" highlight-variant="" slot="children-t1_pckuojl-1" arialabel="Comment thread level 2: Reply from ipullguard 2 days ago" slot-config="light" award-count="0" reply-permalink="">
+      
+            
+            <details role="article" open="" tabindex="0">
+              <summary>
+                <div>
+                  <div></div>
+                  <div slot="commentAvatar"><span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author_avatar">
+      <a href="https://www.reddit.com/user/ipullguard/"><span avatar="">
+    
+    <span> 
+    <span>
+       <span>
+    
+  </span>
+    </span>
+  </span></span></a>
+    <!----></faceplate-tracker>
+  
+    </div></span></div>
+                  </div>
+                <div slot="commentMeta">
+                  
+      <div>
+        <div>
+          <div>
+            
+     <span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author">
+       <a href="https://www.reddit.com/user/ipullguard/" dir="auto">
+      
+      ipullguard
+    </a>
+    <!----></faceplate-tracker>
+  
+    </div></span>
+    
+  
+    
+  <span>•</span>
+ 
+    <faceplate-tracker source="post_detail" action="click" noun="comment_time">
+      <a href="https://www.reddit.com/r/MachineLearning/comments/1wsejb7/comment/pclficc/" rel="nofollow noopener noreferrer"><faceplate-timeago ts="2026-09-28T15:30:49.299Z" format="narrow" locale="en-US-u-nu-latn"><!----> <time datetime="2026-09-28T15:30:49.299Z" title="Monday, September 28, 2026 at 9:00:49 PM GMT+5:30"><!--?lit$630251095$-->2d ago</time> </faceplate-timeago></a>
+    <!----></faceplate-tracker>
+  
+    
+  
+             <faceplate-loader name="CommentBadges_MnNCwp" src="concat:BOf6ZMmkFw,Bvf1ceRsSz,Bxq2aoBDnT,CA_HjISyoq,CDtWz65bLg,CtvuTkQ94x,CYS1ZhS-H_,DF66wp8J2N,DN_-qXBk_8,DR8j6gbI8x,hWN-W44hep,iDNZ3MTYOC,JEwlzMYHG8">
+    
+        <!----></faceplate-loader>
+      <shreddit-comment-badges thing-id="t1_pclficc"></shreddit-comment-badges>
+    
+            
+            
+            
+          </div>
+          
+        </div>
+      </div>
+      
+    
+                </div>
+                <div></div>
+              </summary>
+
+              <div>
+                <div></div>
+                <div>
+                  <div></div>
+                </div>
+                <div>
+                  
+      <div id="t1_pclficc-comment-rtjson-content" slot="comment">
+        <div id="t1_pclficc-post-rtjson-content" dir="auto">
+      <p>
+      How does regularization work here, eg in a supervised learning setting where you're fitting to some training data? In some sense, a perfect fit to the data is easy (a lookup table on your training data) but it won't generalize. I think the main point of NN architecture design is to pick one that will generalize well (on some particular domain, when combined with some particular initialization and training procedure, etc).
+    </p>
+    </div>
+      </div>
+      
+      
+    
+                </div>
+                <div>
+                  <div></div>
+                   <faceplate-loader name="CommentActionRowFull_pGjT7n" src="concat:-M-c1dQOog,B7hjrMJRJM,B95RZj-r9X,B9ANXII6Tr,BCb51MbSHO,BF2oAzYVAQ,Bg_jtLWxAt,BIKq8ky3H1,BOf6ZMmkFw,BPVABrMMgZ,BSDIGpL4Yj,BtPOEM8ViQ,BUx0D2mJbV,Bv4ycV1pvc,BV6alVT_4v,BVCCVQQJdk,Bvf1ceRsSz,Bxq2aoBDnT,CAq2TITRKy,Cb1JlVSv6A,CDtWz65bLg,CdXNNoYIaW,CgIjF4XE2V,CN8KHofjvl,CnD-72jutx,CSCjyyTl3E,CSqP0PI6X5,Ct754RSfTq,CtvuTkQ94x,CWsVzlyxCc,Cy0onUMkkY,CYS1ZhS-H_,CZLQ9sR7cI,D4zs7wHrVW,DB1d2a5i7U,DE4W6uOWnX,DF66wp8J2N,DN_-qXBk_8,DqzocsQtBC,DR8j6gbI8x,EtEzuQOwbe,EYalyjSe-N,iDNZ3MTYOC,JEwlzMYHG8,jiE2s3yUs1,wFeUq53GEm,wQuTbYWNu3,xru2U0DTzO">
+    
+        <!----></faceplate-loader>
+    <div slot="actionRow" actioned="">
+      
+    </div>
+  
+                </div>
+                <div id="comment-children">
+                  
+    <faceplate-partial tabindex="0" src="/svc/shreddit/more-comments/MachineLearning/t3_1wsejb7?sort=CONFIDENCE&amp;startingDepth=3&amp;seeker-session=true&amp;commentParentPositions=0,0,1" method="post" slot="children">
+      <input type="hidden" name="cursor" value="Y29tbWVudHRyZWU6NWE0NjdjMmMsOjozOmQxOnQxX3BjbGZpY2M=">
+      
+    <div>
+      <button type="button">
+    
+    <span>
+      </span>
+  
+    <span><faceplate-tracker source="post_detail" action="click" noun="more_replies">
+        <faceplate-number number="1"><!---->1</faceplate-number> more reply
+      <!----></faceplate-tracker></span>
+  </button>
+    </div>
+
+    <div slot="loading">
+          <button type="button">
+            
+    
+    <span>
+      </span>
+  
+    <span><faceplate-tracker source="post_detail" action="click" noun="more_replies">
+        <faceplate-number number="1"><!---->1</faceplate-number> more reply
+      <!----></faceplate-tracker></span>
+  
+          </button>
+          <button type="button">
+            </button>
+        </div>
+  
+    </faceplate-partial>
+  
+                </div>
+                <div>
+                      <div></div>
+                      <div>
+                        
+    <a href="/r/MachineLearning/comments/1wsejb7/comment/pclficc/?force-legacy-sct=1" rel="nofollow" id="comments-permalink-/r/MachineLearning/comments/1wsejb7/comment/pclficc/" slot="more-comments-permalink" actioned="">
+      
+    
+    <span>
+      </span>
+  
+    <span><faceplate-tracker source="post_detail" action="click" noun="more_replies">
+        <faceplate-number number="1"><!---->1</faceplate-number> more reply
+      <!----></faceplate-tracker></span>
+  
+      
+    </a>
+  
+                      </div>
+                    </div>
+              </div>
+              
+            </details>
+            
+          
+    <!----></shreddit-comment>
+  
+    
+    <shreddit-comment created="2026-09-28T14:58:14.218000+0000" author="DerDave" avatar="https://styles.redditmedia.com/t5_c1ep6/styles/profileIcon_snoo15c7ba63-b66b-4ba1-903c-043b2ad2e907-headshot.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=b6343c101110f0ed67144ce6d179dc86181da98d" thingid="t1_pcl7j31" depth="2" parentid="t1_pckuojl" comment-position="2" comment-parent-positions="[0,0]" permalink="/r/MachineLearning/comments/1wsejb7/comment/pcl7j31/" parent-permalink="/r/MachineLearning/comments/1wsejb7/comment/pckuojl/" reload-url="/svc/shreddit/comment/t1_pcl7j31?depth=2&amp;subredditName=MachineLearning" score="1" paid-award-only-comment-highlighting-enabled="" postid="t3_1wsejb7" content-type="text" highlight-variant="" slot="children-t1_pckuojl-2" arialabel="Comment thread level 2: Reply from DerDave 2 days ago" slot-config="light" award-count="0" reply-permalink="">
+      
+            <div></div>
+            <details role="article" open="" tabindex="0">
+              <summary>
+                <div>
+                  <div></div>
+                  <div slot="commentAvatar"><span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author_avatar">
+      <a href="https://www.reddit.com/user/DerDave/"><span avatar="">
+    
+    <span> 
+    <span>
+       <span>
+    
+  </span>
+    </span>
+  </span></span></a>
+    <!----></faceplate-tracker>
+  
+    </div></span></div>
+                  </div>
+                <div slot="commentMeta">
+                  
+      <div>
+        <div>
+          <div>
+            
+     <span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author">
+       <a href="https://www.reddit.com/user/DerDave/" dir="auto">
+      
+      DerDave
+    </a>
+    <!----></faceplate-tracker>
+  
+    </div></span>
+    
+  
+    
+  <span>•</span>
+ 
+    <faceplate-tracker source="post_detail" action="click" noun="comment_time">
+      <a href="https://www.reddit.com/r/MachineLearning/comments/1wsejb7/comment/pcl7j31/" rel="nofollow noopener noreferrer"><faceplate-timeago ts="2026-09-28T14:58:14.218Z" format="narrow" locale="en-US-u-nu-latn"><!----> <time datetime="2026-09-28T14:58:14.218Z" title="Monday, September 28, 2026 at 8:28:14 PM GMT+5:30"><!--?lit$630251095$-->2d ago</time> </faceplate-timeago></a>
+    <!----></faceplate-tracker>
+  
+    
+  
+             <faceplate-loader name="CommentBadges_MnNCwp" src="concat:BOf6ZMmkFw,Bvf1ceRsSz,Bxq2aoBDnT,CA_HjISyoq,CDtWz65bLg,CtvuTkQ94x,CYS1ZhS-H_,DF66wp8J2N,DN_-qXBk_8,DR8j6gbI8x,hWN-W44hep,iDNZ3MTYOC,JEwlzMYHG8">
+    
+        <!----></faceplate-loader>
+      <shreddit-comment-badges thing-id="t1_pcl7j31"></shreddit-comment-badges>
+    
+            
+            
+            
+          </div>
+          
+        </div>
+      </div>
+      
+    
+                </div>
+                <div></div>
+              </summary>
+
+              <div>
+                <div></div>
+                <div>
+                  <div></div>
+                </div>
+                <div>
+                  
+      <div id="t1_pcl7j31-comment-rtjson-content" slot="comment">
+        <div id="t1_pcl7j31-post-rtjson-content" dir="auto">
+      <p>
+      Was immediately jumping to the same conclusion you mentioned in your last sentence...
+    </p><p>
+      Very intersting work guys, kudos!
+    </p>
+    </div>
+      </div>
+      
+      
+    
+                </div>
+                <div>
+                  <div></div>
+                   <faceplate-loader name="CommentActionRowFull_pGjT7n" src="concat:-M-c1dQOog,B7hjrMJRJM,B95RZj-r9X,B9ANXII6Tr,BCb51MbSHO,BF2oAzYVAQ,Bg_jtLWxAt,BIKq8ky3H1,BOf6ZMmkFw,BPVABrMMgZ,BSDIGpL4Yj,BtPOEM8ViQ,BUx0D2mJbV,Bv4ycV1pvc,BV6alVT_4v,BVCCVQQJdk,Bvf1ceRsSz,Bxq2aoBDnT,CAq2TITRKy,Cb1JlVSv6A,CDtWz65bLg,CdXNNoYIaW,CgIjF4XE2V,CN8KHofjvl,CnD-72jutx,CSCjyyTl3E,CSqP0PI6X5,Ct754RSfTq,CtvuTkQ94x,CWsVzlyxCc,Cy0onUMkkY,CYS1ZhS-H_,CZLQ9sR7cI,D4zs7wHrVW,DB1d2a5i7U,DE4W6uOWnX,DF66wp8J2N,DN_-qXBk_8,DqzocsQtBC,DR8j6gbI8x,EtEzuQOwbe,EYalyjSe-N,iDNZ3MTYOC,JEwlzMYHG8,jiE2s3yUs1,wFeUq53GEm,wQuTbYWNu3,xru2U0DTzO">
+    
+        <!----></faceplate-loader>
+    <div slot="actionRow" actioned="">
+      
+    </div>
+  
+                </div>
+                <div id="comment-children">
+                  
+                </div>
+                
+              </div>
+              
+            </details>
+            
+          
+    <!----></shreddit-comment>
+  
+                </div>
+                <div>
+                      <div></div>
+                      <div>
+                        
+    <a href="/r/MachineLearning/comments/1wsejb7/comment/pckuojl/?force-legacy-sct=1" rel="nofollow" id="comments-permalink-/r/MachineLearning/comments/1wsejb7/comment/pckuojl/" slot="more-comments-permalink" actioned="">
+      
+    
+    <span>
+      </span>
+  
+    <span><faceplate-tracker source="post_detail" action="click" noun="continue_thread">
+          More replies
+        <!----></faceplate-tracker></span>
+  
+      
+    </a>
+  
+                      </div>
+                    </div>
+              </div>
+              
+            </details>
+            
+          
+    <!----></shreddit-comment>
+  
+    
+    <shreddit-comment created="2026-09-28T13:59:13.349000+0000" author="vanonym_" avatar="https://styles.redditmedia.com/t5_58cwi4/styles/profileIcon_snoobf5d2515-df98-4e88-a22d-ac4b156e4eb4-headshot.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=e9a0bb9ab5b5c161dd3d5bee226d9478db406f83" thingid="t1_pcktgu3" depth="1" parentid="t1_pckq9dm" comment-position="1" comment-parent-positions="[0]" permalink="/r/MachineLearning/comments/1wsejb7/comment/pcktgu3/" parent-permalink="/r/MachineLearning/comments/1wsejb7/comment/pckq9dm/" reload-url="/svc/shreddit/comment/t1_pcktgu3?depth=1&amp;subredditName=MachineLearning" score="1" paid-award-only-comment-highlighting-enabled="" postid="t3_1wsejb7" content-type="text" highlight-variant="" slot="children-t1_pckq9dm-1" arialabel="Comment thread level 1: Reply from vanonym_ 2 days ago" slot-config="light" award-count="0" reply-permalink="">
+      
+            <div></div>
+            <details role="article" open="" tabindex="0">
+              <summary>
+                <div>
+                  <div></div>
+                  <div slot="commentAvatar"><span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author_avatar">
+      <a href="https://www.reddit.com/user/vanonym_/"><span avatar="">
+    
+    <span> 
+    <span>
+       <span>
+    
+  </span>
+    </span>
+  </span></span></a>
+    <!----></faceplate-tracker>
+  
+    </div></span></div>
+                  </div>
+                <div slot="commentMeta">
+                  
+      <div>
+        <div>
+          <div>
+            
+     <span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author">
+       <a href="https://www.reddit.com/user/vanonym_/" dir="auto">
+      
+      vanonym_
+    </a>
+    <!----></faceplate-tracker>
+  
+    </div></span>
+    
+  
+    
+  <span>•</span>
+ 
+    <faceplate-tracker source="post_detail" action="click" noun="comment_time">
+      <a href="https://www.reddit.com/r/MachineLearning/comments/1wsejb7/comment/pcktgu3/" rel="nofollow noopener noreferrer"><faceplate-timeago ts="2026-09-28T13:59:13.349Z" format="narrow" locale="en-US-u-nu-latn"><!----> <time datetime="2026-09-28T13:59:13.349Z" title="Monday, September 28, 2026 at 7:29:13 PM GMT+5:30"><!--?lit$630251095$-->2d ago</time> </faceplate-timeago></a>
+    <!----></faceplate-tracker>
+  
+    
+  
+             <faceplate-loader name="CommentBadges_MnNCwp" src="concat:BOf6ZMmkFw,Bvf1ceRsSz,Bxq2aoBDnT,CA_HjISyoq,CDtWz65bLg,CtvuTkQ94x,CYS1ZhS-H_,DF66wp8J2N,DN_-qXBk_8,DR8j6gbI8x,hWN-W44hep,iDNZ3MTYOC,JEwlzMYHG8">
+    
+        <!----></faceplate-loader>
+      <shreddit-comment-badges thing-id="t1_pcktgu3"></shreddit-comment-badges>
+    
+            
+            
+            
+          </div>
+          
+        </div>
+      </div>
+      
+    
+                </div>
+                <div></div>
+              </summary>
+
+              <div>
+                <div></div>
+                <div>
+                  <div></div>
+                </div>
+                <div>
+                  
+      <div id="t1_pcktgu3-comment-rtjson-content" slot="comment">
+        <div id="t1_pcktgu3-post-rtjson-content" dir="auto">
+      <p>
+      yes, I don't see limitations clearly laid out in the paper. Other than that it looks like nice work
+    </p>
+    </div>
+      </div>
+      
+      
+    
+                </div>
+                <div>
+                  <div></div>
+                   <faceplate-loader name="CommentActionRowFull_pGjT7n" src="concat:-M-c1dQOog,B7hjrMJRJM,B95RZj-r9X,B9ANXII6Tr,BCb51MbSHO,BF2oAzYVAQ,Bg_jtLWxAt,BIKq8ky3H1,BOf6ZMmkFw,BPVABrMMgZ,BSDIGpL4Yj,BtPOEM8ViQ,BUx0D2mJbV,Bv4ycV1pvc,BV6alVT_4v,BVCCVQQJdk,Bvf1ceRsSz,Bxq2aoBDnT,CAq2TITRKy,Cb1JlVSv6A,CDtWz65bLg,CdXNNoYIaW,CgIjF4XE2V,CN8KHofjvl,CnD-72jutx,CSCjyyTl3E,CSqP0PI6X5,Ct754RSfTq,CtvuTkQ94x,CWsVzlyxCc,Cy0onUMkkY,CYS1ZhS-H_,CZLQ9sR7cI,D4zs7wHrVW,DB1d2a5i7U,DE4W6uOWnX,DF66wp8J2N,DN_-qXBk_8,DqzocsQtBC,DR8j6gbI8x,EtEzuQOwbe,EYalyjSe-N,iDNZ3MTYOC,JEwlzMYHG8,jiE2s3yUs1,wFeUq53GEm,wQuTbYWNu3,xru2U0DTzO">
+    
+        <!----></faceplate-loader>
+    <div slot="actionRow" actioned="">
+      
+    </div>
+  
+                </div>
+                <div id="comment-children">
+                  
+                </div>
+                
+              </div>
+              
+            </details>
+            
+          
+    <!----></shreddit-comment>
+  
+                </div>
+                <div>
+                      <div></div>
+                      <div>
+                        
+    <a top-level="true" href="/r/MachineLearning/comments/1wsejb7/comment/pckq9dm/?force-legacy-sct=1" rel="nofollow" id="comments-permalink-/r/MachineLearning/comments/1wsejb7/comment/pckq9dm/" slot="more-comments-permalink" actioned="">
+      
+    
+    <span>
+      </span>
+  
+    <span><faceplate-tracker source="post_detail" action="click" noun="continue_thread">
+          More replies
+        <!----></faceplate-tracker></span>
+  
+      
+    </a>
+  
+                      </div>
+                    </div>
+              </div>
+              
+            </details>
+             <faceplate-perfmark name="first-comment-meaningful-paint"></faceplate-perfmark>
+          
+    <!----></shreddit-comment>
+  
+    
+  
+  
+<shreddit-comment created="2026-09-28T17:45:09.073000+0000" author="jnez71" avatar="https://styles.redditmedia.com/t5_179imp/styles/profileIcon_u1ucuepq9lv51.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=47b845beafff289a933cb58e6b8c15ca964bf4f9" thingid="t1_pcmd9tr" depth="0" comment-position="1" comment-parent-positions="[]" permalink="/r/MachineLearning/comments/1wsejb7/comment/pcmd9tr/" reload-url="/svc/shreddit/comment/t1_pcmd9tr?depth=0&amp;subredditName=MachineLearning" score="9" paid-award-only-comment-highlighting-enabled="" postid="t3_1wsejb7" content-type="text" highlight-variant="" arialabel="Comment from jnez71 2 days ago" slot-config="light" award-count="0" reply-permalink="">
+      
+            
+            <details role="article" open="" tabindex="0">
+              <summary>
+                <div>
+                  <div></div>
+                  <div slot="commentAvatar"><span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author_avatar">
+      <a href="https://www.reddit.com/user/jnez71/"><span avatar="">
+    
+    <span>
+    <img src="https://styles.redditmedia.com/t5_179imp/styles/profileIcon_u1ucuepq9lv51.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=47b845beafff289a933cb58e6b8c15ca964bf4f9" alt="u/jnez71 avatar">
+  </span></span></a>
+    <!----></faceplate-tracker>
+  
+    </div></span></div>
+                  </div>
+                <div slot="commentMeta">
+                  
+      <div>
+        <div>
+          <div>
+            
+     <span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author">
+       <a href="https://www.reddit.com/user/jnez71/" dir="auto">
+      
+      jnez71
+    </a>
+    <!----></faceplate-tracker>
+  
+    </div></span>
+    
+  
+    
+  <span>•</span>
+ 
+    <faceplate-tracker source="post_detail" action="click" noun="comment_time">
+      <a href="https://www.reddit.com/r/MachineLearning/comments/1wsejb7/comment/pcmd9tr/" rel="nofollow noopener noreferrer"><faceplate-timeago ts="2026-09-28T17:45:09.073Z" format="narrow" locale="en-US-u-nu-latn"><!----> <time datetime="2026-09-28T17:45:09.073Z" title="Monday, September 28, 2026 at 11:15:09 PM GMT+5:30"><!--?lit$630251095$-->2d ago</time> </faceplate-timeago></a>
+    <!----></faceplate-tracker>
+  
+    
+  
+             <faceplate-loader name="CommentBadges_MnNCwp" src="concat:BOf6ZMmkFw,Bvf1ceRsSz,Bxq2aoBDnT,CA_HjISyoq,CDtWz65bLg,CtvuTkQ94x,CYS1ZhS-H_,DF66wp8J2N,DN_-qXBk_8,DR8j6gbI8x,hWN-W44hep,iDNZ3MTYOC,JEwlzMYHG8">
+    
+        <!----></faceplate-loader>
+      <shreddit-comment-badges thing-id="t1_pcmd9tr"></shreddit-comment-badges>
+    
+            
+            
+            
+          </div>
+          
+        </div>
+      </div>
+      
+    
+                </div>
+                <div></div>
+              </summary>
+
+              <div>
+                <div></div>
+                <div>
+                  <div></div>
+                </div>
+                <div>
+                  
+      <div id="t1_pcmd9tr-comment-rtjson-content" slot="comment">
+        <div id="t1_pcmd9tr-post-rtjson-content" dir="auto">
+      <p>
+      Neat work. It's remnicient of adaptive refinement in PDE solvers, which also uses error bounds to adjust representation fidelity while minimizing residuals, but nice to see such a mechanism spelled out plainly. Btw you may want to temper your global optimality claim in the intro by mentioning that it requires a functional convexity condition (Polyak-Lojasiewicz). Otherwise you'll bug global nonconvex optimization researchers like myself lol
+    </p>
+    </div>
+      </div>
+      
+      
+    
+                </div>
+                <div>
+                  <div></div>
+                   <faceplate-loader name="CommentActionRowFull_pGjT7n" src="concat:-M-c1dQOog,B7hjrMJRJM,B95RZj-r9X,B9ANXII6Tr,BCb51MbSHO,BF2oAzYVAQ,Bg_jtLWxAt,BIKq8ky3H1,BOf6ZMmkFw,BPVABrMMgZ,BSDIGpL4Yj,BtPOEM8ViQ,BUx0D2mJbV,Bv4ycV1pvc,BV6alVT_4v,BVCCVQQJdk,Bvf1ceRsSz,Bxq2aoBDnT,CAq2TITRKy,Cb1JlVSv6A,CDtWz65bLg,CdXNNoYIaW,CgIjF4XE2V,CN8KHofjvl,CnD-72jutx,CSCjyyTl3E,CSqP0PI6X5,Ct754RSfTq,CtvuTkQ94x,CWsVzlyxCc,Cy0onUMkkY,CYS1ZhS-H_,CZLQ9sR7cI,D4zs7wHrVW,DB1d2a5i7U,DE4W6uOWnX,DF66wp8J2N,DN_-qXBk_8,DqzocsQtBC,DR8j6gbI8x,EtEzuQOwbe,EYalyjSe-N,iDNZ3MTYOC,JEwlzMYHG8,jiE2s3yUs1,wFeUq53GEm,wQuTbYWNu3,xru2U0DTzO">
+    
+        <!----></faceplate-loader>
+    <div slot="actionRow" actioned="">
+      
+    </div>
+  
+                </div>
+                <div id="comment-children">
+                  
+    
+    <shreddit-comment created="2026-09-28T18:36:01.298000+0000" author="dccsillag0" avatar="https://styles.redditmedia.com/t5_2ybhyf/styles/profileIcon_snoo87c4fbad-3c9e-452a-89e8-46594611f25a-headshot.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=eac5f30ed6b3278ce8ebd89919e0766043da3300" thingid="t1_pcmq5x3" depth="1" parentid="t1_pcmd9tr" comment-position="0" comment-parent-positions="[1]" permalink="/r/MachineLearning/comments/1wsejb7/comment/pcmq5x3/" parent-permalink="/r/MachineLearning/comments/1wsejb7/comment/pcmd9tr/" reload-url="/svc/shreddit/comment/t1_pcmq5x3?depth=1&amp;subredditName=MachineLearning" score="3" paid-award-only-comment-highlighting-enabled="" postid="t3_1wsejb7" content-type="text" is-op="" highlight-variant="" slot="children-t1_pcmd9tr-0" arialabel="Comment thread level 1: Reply from dccsillag0 2 days ago" slot-config="light" award-count="0" reply-permalink="">
+      
+            <div></div>
+            <details role="article" open="" tabindex="0">
+              <summary>
+                <div>
+                  <div></div>
+                  <div slot="commentAvatar"><span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author_avatar">
+      <a href="https://www.reddit.com/user/dccsillag0/"><span avatar="">
+    
+    <span> 
+    <span>
+       <span>
+    
+  </span>
+    </span>
+  </span></span></a>
+    <!----></faceplate-tracker>
+  
+    </div></span></div>
+                  </div>
+                <div slot="commentMeta">
+                  
+      <div>
+        <div>
+          <div>
+            
+     <span><div>
+      
+    <faceplate-tracker source="post_detail" action="click" noun="comment_author">
+       <a href="https://www.reddit.com/user/dccsillag0/" dir="auto">
+      
+      dccsillag0
+    </a>
+    <!----></faceplate-tracker>
+  
+    </div></span><span>
+    <span>
+      <shreddit-comment-author-modifier-icon thing-id="t1_pcmq5x3" op=""></shreddit-comment-author-modifier-icon>
+    </span>
+  </span>
+    
+  
+    
+  <span>•</span>
+ 
+    <faceplate-tracker source="post_detail" action="click" noun="comment_time">
+      <a href="https://www.reddit.com/r/MachineLearning/comments/1wsejb7/comment/pcmq5x3/" rel="nofollow noopener noreferrer"><faceplate-timeago ts="2026-09-28T18:36:01.298Z" format="narrow" locale="en-US-u-nu-latn"><!----> <time datetime="2026-09-28T18:36:01.298Z" title="Tuesday, September 29, 2026 at 12:06:01 AM GMT+5:30"><!--?lit$630251095$-->2d ago</time> </faceplate-timeago></a>
+    <!----></faceplate-tracker>
+  
+    
+  
+             <faceplate-loader name="CommentBadges_MnNCwp" src="concat:BOf6ZMmkFw,Bvf1ceRsSz,Bxq2aoBDnT,CA_HjISyoq,CDtWz65bLg,CtvuTkQ94x,CYS1ZhS-H_,DF66wp8J2N,DN_-qXBk_8,DR8j6gbI8x,hWN-W44hep,iDNZ3MTYOC,JEwlzMYHG8">
+    
+        <!----></faceplate-loader>
+      <shreddit-comment-badges thing-id="t1_pcmq5x3" op=""></shreddit-comment-badges>
+    
+            
+            
+            
+          </div>
+          
+        </div>
+      </div>
+      
+    
+                </div>
+                <div></div>
+              </summary>
+
+              <div>
+                <div></div>
+                <div>
+                  <div></div>
+                </div>
+                <div>
+                  
+      <div id="t1_pcmq5x3-comment-rtjson-content" slot="comment">
+        <div id="t1_pcmq5x3-post-rtjson-content" dir="auto">
+      <p>
+      Thanks you for the comments! Indeed it has some similarities to e.g. some finite element methods.<br>We'll see if we can tweak the writing of the global minimizer part, haha
+    </p>
+    </div>
+      </div>
+      
+      
+    
+                </div>
+                <div>
+                  <div></div>
+                   <faceplate-loader name="CommentActionRowFull_pGjT7n" src="concat:-M-c1dQOog,B7hjrMJRJM,B95RZj-r9X,B9ANXII6Tr,BCb51MbSHO,BF2oAzYVAQ,Bg_jtLWxAt,BIKq8ky3H1,BOf6ZMmkFw,BPVABrMMgZ,BSDIGpL4Yj,BtPOEM8ViQ,BUx0D2mJbV,Bv4ycV1pvc,BV6alVT_4v,BVCCVQQJdk,Bvf1ceRsSz,Bxq2aoBDnT,CAq2TITRKy,Cb1JlVSv6A,CDtWz65bLg,CdXNNoYIaW,CgIjF4XE2V,CN8KHofjvl,CnD-72jutx,CSCjyyTl3E,CSqP0PI6X5,Ct754RSfTq,CtvuTkQ94x,CWsVzlyxCc,Cy0onUMkkY,CYS1ZhS-H_,CZLQ9sR7cI,D4zs7wHrVW,DB1d2a5i7U,DE4W6uOWnX,DF66wp8J2N,DN_-qXBk_8,DqzocsQtBC,DR8j6gbI8x,EtEzuQOwbe,EYalyjSe-N,iDNZ3MTYOC,JEwlzMYHG8,jiE2s3yUs1,wFeUq53GEm,wQuTbYWNu3,xru2U0DTzO">
+    
+        <!----></faceplate-loader>
+    <div slot="actionRow" actioned="">
+      
+    </div>
+  
+                </div>
+                <div id="comment-children">
+                  
+                </div>
+                
+              </div>
+              
+            </details>
+            
+          
+    <!----></shreddit-comment>
+  
+                </div>
+                <div>
+                      <div></div>
+                      <div>
+                        
+    <a top-level="true" href="/r/MachineLearning/comments/1wsejb7/comment/pcmd9tr/?force-legacy-sct=1" rel="nofollow" id="comments-permalink-/r/MachineLearning/comments/1wsejb7/comment/pcmd9tr/" slot="more-comments-permalink" actioned="">
+      
+    
+    <span>
+      </span>
+  
+    <span><faceplate-tracker source="post_detail" action="click" noun="continue_thread">
+          More replies
+        <!----></faceplate-tracker></span>
+  
+      
+    </a>
+  
+                      </div>
+                    </div>
+              </div>
+              
+            </details>
+            
+          
+    <!----></shreddit-comment>
+</main></body></html>
