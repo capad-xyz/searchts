@@ -104,6 +104,31 @@ def test_related_grid_under_an_article_is_left_alone():
     assert more.list_index(html, "https://example.org/a", html_to_text(html, url="https://example.org/a")) is None
 
 
+def _short_post_beside_a_grid() -> str:
+    cards = "".join(
+        f'<li class="card"><h3><a href="/posts/{i}">Related story number {i} about the town fair</a></h3>'
+        f"<p>A longer teaser for related story {i}, with enough words to look like a real card.</p></li>"
+        for i in range(1, 9)
+    )
+    return (
+        "<html><head><title>Store hours</title></head><body><main><article>"
+        "<h1>Store hours this week</h1><p>Closed on Monday.</p><p>Back Tuesday at 9.</p>"
+        "<p>Thanks, the team.</p></article>"
+        f'<section class="related"><h2>More stories</h2><ul>{cards}</ul></section></main></body></html>'
+    )
+
+
+def test_short_article_is_not_replaced_by_a_related_grid():
+    # Every paragraph is under the coverage cut-off, so the guard had nothing to measure.
+    short = "# Store hours this week\n\nClosed on Monday.\n\nBack Tuesday at 9.\n\nThanks, the team."
+    assert more.list_index(_short_post_beside_a_grid(), "https://news.example/hours", short) is None
+
+
+def test_an_extract_with_no_text_still_gets_the_index():
+    out = more.list_index(_short_post_beside_a_grid(), "https://news.example/hours", "")
+    assert out is not None and out[1].kind == "index"
+
+
 def test_list_the_extract_kept_whole_is_left_alone():
     items = "".join(
         f'<li class="entry"><a href="https://example.org/lang/{i}">Language number {i}</a>'
