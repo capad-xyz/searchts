@@ -25,14 +25,15 @@ def _comment(i, depth_children=""):
     )
 
 
-def test_folded_op_is_marked_and_marker_removed():
+def test_read_more_label_is_dropped_without_a_note():
+    # Reddit ships the whole post even when "Read more" shows (a CSS clamp,
+    # checked on saved threads, F5e), so the label goes and no note is added.
     html = _post("A long post", "The first part of a long post. Read more", comment_count="0")
     md = reddit.parse_reddit_thread_html(html, THREAD)
     assert md is not None
+    assert "Read more" not in md
+    assert "[truncated" not in md
     assert "The first part of a long post." in md
-    assert "Read more" not in md.split("[truncated")[0]
-    assert "[truncated: Reddit folded this post" in md
-
 
 def test_unfolded_op_has_no_truncation_note():
     html = _post("Short post", "Complete short body.", comment_count="0")

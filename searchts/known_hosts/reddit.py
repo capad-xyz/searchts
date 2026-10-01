@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import re
 import urllib.parse
+from datetime import datetime, timezone
 from html.parser import HTMLParser
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -449,7 +450,9 @@ def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
     """Return attr dicts for every <shreddit-post>, plus inner card text.
 
     ``_text`` is all light-DOM text. ``_body`` is ``slot="text-body"`` when
-    that slot exists. Stdlib HTMLParser only.
+    that slot exists. ``_flair`` is the ``shreddit-post-flair`` text,
+    ``_gallery`` the ``gallery-carousel`` image URLs and ``_player`` the
+    ``shreddit-player`` sources, newline-joined. Stdlib HTMLParser only.
     """
 
     class _P(HTMLParser):
@@ -462,6 +465,11 @@ def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
             self._attrs: Optional[Dict[str, str]] = None
             self._all: List[str] = []
             self._body: List[str] = []
+            self._flair_depth = 0
+            self._gallery_depth = 0
+            self._flair: List[str] = []
+            self._gallery: List[str] = []
+            self._player: List[str] = []
 
         def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
             t = tag.lower()
@@ -474,24 +482,51 @@ def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
                     self._all = []
                     self._body = []
                     self._body_depth = 0
+                    self._flair_depth = 0
+                    self._gallery_depth = 0
+                    self._flair = []
+                    self._gallery = []
+                    self._player = []
                 self._depth += 1
             elif self._depth and t not in _VOID_TAGS:
                 if self._body_depth:
                     self._body_depth += 1
                 elif ad.get("slot", "").lower() == "text-body":
                     self._body_depth = 1
+                if self._flair_depth:
+                    self._flair_depth += 1
+                elif t == "shreddit-post-flair":
+                    self._flair_depth = 1
+                if self._gallery_depth:
+                    self._gallery_depth += 1
+                elif t == "gallery-carousel":
+                    self._gallery_depth = 1
+                if t in ("shreddit-player", "shreddit-player-2") and ad.get("src"):
+                    self._player.append(ad["src"])
+            elif self._depth and t == "img" and self._gallery_depth:
+                src = ad.get("src") or ad.get("data-lazy-src") or ""
+                if "redd.it/" in src and src not in self._gallery:
+                    self._gallery.append(src)
 
         def handle_endtag(self, tag: str) -> None:
             t = tag.lower()
             if t in _SKIP_TAGS:
                 self._skip = max(0, self._skip - 1)
-            if t not in _VOID_TAGS and self._body_depth:
-                self._body_depth -= 1
+            if t not in _VOID_TAGS:
+                if self._body_depth:
+                    self._body_depth -= 1
+                if self._flair_depth:
+                    self._flair_depth -= 1
+                if self._gallery_depth:
+                    self._gallery_depth -= 1
             if t == "shreddit-post" and self._depth:
                 self._depth -= 1
                 if self._depth == 0 and self._attrs is not None:
                     self._attrs["_text"] = " ".join(self._all)
                     self._attrs["_body"] = " ".join(self._body)
+                    self._attrs["_flair"] = " ".join(self._flair)
+                    self._attrs["_gallery"] = "\n".join(self._gallery)
+                    self._attrs["_player"] = "\n".join(self._player)
                     self.posts.append(self._attrs)
                     self._attrs = None
 
@@ -504,6 +539,8 @@ def _parse_shreddit_posts(html: str) -> List[Dict[str, str]]:
             self._all.append(s)
             if self._body_depth:
                 self._body.append(s)
+            if self._flair_depth:
+                self._flair.append(s)
 
     p = _P()
     try:
@@ -559,6 +596,95 @@ def _strip_read_more(text: str) -> Tuple[str, bool]:
     return stripped.rstrip(), True
 
 
+_REDDIT_MEDIA_HOSTS = frozenset({"i.redd.it", "v.redd.it", "preview.redd.it"})
+_MEDIA_POST_TYPES = frozenset({"image", "gif", "video", "gallery"})
+_MAX_MEDIA = 6
+
+
+def _post_type(attrs: Dict[str, str]) -> str:
+    return (attrs.get("post-type") or "").strip().lower()
+
+
+def _post_links(attrs: Dict[str, str]) -> Tuple[str, List[str], bool]:
+    """(outbound URL, media URLs, media present but not resolved) for one post.
+
+    A link post points off Reddit through ``content-href``. Image, GIF and
+    video posts point at ``i.redd.it`` / ``v.redd.it``; a gallery lists its
+    ``preview.redd.it`` images in ``gallery-carousel``. An image or video post
+    with none of those says so instead of going silent.
+    """
+    ptype = _post_type(attrs)
+    href = (attrs.get("content-href") or "").strip()
+    host = (urllib.parse.urlsplit(href).netloc or "").lower() if href else ""
+    outbound = ""
+    on_reddit = host == "reddit.com" or host.endswith(".reddit.com") or host in _REDDIT_MEDIA_HOSTS
+    if ptype == "link" and host and not on_reddit:
+        outbound = href
+    media: List[str] = []
+    if ptype in ("image", "gif", "video") and host in _REDDIT_MEDIA_HOSTS:
+        media = [href]
+    elif ptype == "gallery":
+        media = _one_per_image([u for u in (attrs.get("_gallery") or "").split("\n") if u])
+    if not media and ptype in _MEDIA_POST_TYPES:
+        media = [u for u in (attrs.get("_player") or "").split("\n") if u]
+    return outbound, media, ptype in _MEDIA_POST_TYPES and not media
+
+
+_MEDIA_ID_RE = re.compile(r"([A-Za-z0-9]{8,20})\.(?:jpe?g|png|gif|webp|mp4)$", re.IGNORECASE)
+
+
+def _one_per_image(urls: List[str]) -> List[str]:
+    """One URL per gallery image, in order. A carousel shows each image twice
+    (a ``preview.redd.it`` size and the ``i.redd.it`` original, same media id);
+    keep the original."""
+    best: Dict[str, str] = {}
+    for u in urls:
+        m = _MEDIA_ID_RE.search(urllib.parse.urlsplit(u).path or "")
+        key = m.group(1).lower() if m else u
+        if key not in best or (
+            urllib.parse.urlsplit(u).netloc == "i.redd.it"
+            and urllib.parse.urlsplit(best[key]).netloc != "i.redd.it"
+        ):
+            best[key] = u
+    return list(best.values())
+
+
+def _media_text(media: List[str]) -> str:
+    shown = media[:_MAX_MEDIA]
+    more = f" (+{len(media) - len(shown)} more)" if len(media) > len(shown) else ""
+    return " · ".join(shown) + more
+
+
+def _posted(attrs: Dict[str, str]) -> str:
+    """``created-timestamp`` as ``2026-09-28 13:23 UTC``; empty when missing or odd."""
+    raw = (attrs.get("created-timestamp") or "").strip()
+    if not raw:
+        return ""
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z"):
+        try:
+            when = datetime.strptime(raw.replace("Z", "+0000"), fmt)
+        except ValueError:
+            continue
+        return when.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    return ""
+
+
+_SUB_IN_PATH_RE = re.compile(r"^/r/([A-Za-z0-9_]+)", re.IGNORECASE)
+
+
+def _url_subreddit(url: str) -> str:
+    """``r/Name`` from a reddit URL path, or empty."""
+    m = _SUB_IN_PATH_RE.match(urllib.parse.urlsplit(url or "").path or "")
+    return f"r/{m.group(1)}" if m else ""
+
+
+def _post_subreddit(attrs: Dict[str, str], url: str = "") -> str:
+    name = (attrs.get("subreddit-prefixed-name") or "").strip()
+    if name and not name.lower().startswith("r/"):
+        name = f"r/{name}"
+    return name or _url_subreddit(url)
+
+
 def _canonical_reddit_permalink(perm: str) -> str:
     """Absolute ``https://www.reddit.com`` link. Other hosts stay as given."""
     perm = (perm or "").strip()
@@ -596,6 +722,7 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
         if not is_reddit_listing_url(url):
             return None
     posts = _parse_shreddit_posts(html)
+    listing_sub = _url_subreddit(url)
     valid: List[Dict[str, str]] = []
     for attrs in posts:
         title = (attrs.get("post-title") or "").strip()
@@ -609,8 +736,22 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
         author = (attrs.get("author") or "").strip()
         if author.startswith("u/"):
             author = author[2:]
-        snippet = _card_body(title, attrs.get("_body") or "", attrs.get("_text") or "")
+        # Text body only: the whole-card fallback mixed usernames, ages, flair
+        # and link domains into the snippet (F5e).
+        snippet = _card_body(title, attrs.get("_body") or "", "")
         snippet, _folded = _strip_read_more(snippet)
+        outbound, media, unresolved = _post_links(attrs)
+        meta: List[str] = []
+        flair = re.sub(r"\s+", " ", attrs.get("_flair") or "").strip()
+        if flair:
+            meta.append(f"Flair: {flair}")
+        if _post_type(attrs):
+            meta.append(f"Type: {_post_type(attrs)}")
+        if _posted(attrs):
+            meta.append(f"Posted: {_posted(attrs)}")
+        sub = _post_subreddit(attrs)
+        if sub and sub.lower() != listing_sub.lower():
+            meta.append(sub)
         valid.append(
             {
                 "title": title,
@@ -619,6 +760,9 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
                 "score": score,
                 "author": author,
                 "snippet": snippet,
+                "meta": " · ".join(meta),
+                "outbound": outbound,
+                "media": _media_text(media) if media else ("present, not resolved" if unresolved else ""),
             }
         )
 
@@ -636,8 +780,14 @@ def parse_reddit_listing_html(html: str, url: str = "") -> Optional[str]:
             bits.append(f"{v['score']} pts")
         suffix = f" ({', '.join(bits)})" if bits else ""
         lines.append(f"- **{v['title']}**{suffix}")
+        if v["meta"]:
+            lines.append(f"  {v['meta']}")
         if v["snippet"]:
             lines.append(f"  {v['snippet']}")
+        if v["outbound"]:
+            lines.append(f"  Outbound: {v['outbound']}")
+        if v["media"]:
+            lines.append(f"  Media: {v['media']}")
         if v["permalink"]:
             lines.append(f"  [`permalink`]({v['permalink']})")
         lines.append("")
@@ -789,26 +939,40 @@ def parse_reddit_thread_html(html: str, url: str = "") -> Optional[str]:
     score = (op.get("score") or op.get("upvote-count") or "").strip()
     cc = (op.get("comment-count") or "").strip()
     perm = _canonical_reddit_permalink(op.get("permalink") or op.get("content-href") or "")
-    body = _card_body(title, op.get("_body") or "", op.get("_text") or "", require_min=False)
-    body, folded = _strip_read_more(body)
+    # Text body only, never the whole card. Reddit ships the full post even when
+    # "Read more" shows (a CSS clamp, checked on saved threads), so the label is
+    # dropped with no truncation note (F5e).
+    body = _card_body(title, op.get("_body") or "", "", require_min=False)
+    body, _folded = _strip_read_more(body)
+    outbound, media, unresolved = _post_links(op)
+    subreddit = _post_subreddit(op, url)
+    flair = re.sub(r"\s+", " ", op.get("_flair") or "").strip()
 
     lines: List[str] = [f"# {title}", ""]
     if author:
         lines.append(f"**OP:** /u/{author}")
+    if subreddit:
+        lines.append(f"**Subreddit:** {subreddit}")
+    if flair:
+        lines.append(f"**Flair:** {flair}")
+    if _post_type(op):
+        lines.append(f"**Type:** {_post_type(op)}")
+    if _posted(op):
+        lines.append(f"**Posted:** {_posted(op)}")
     if score:
         lines.append(f"**Score:** {score}")
     if cc:
         lines.append(f"**Comments:** {cc}")
     if perm:
         lines.append(f"**Link:** {perm}")
+    if outbound:
+        lines.append(f"**Outbound:** {outbound}")
+    if media:
+        lines.append(f"**Media:** {_media_text(media)}")
+    elif unresolved:
+        lines.append("**Media:** present, not resolved")
     if body:
         lines.extend(["", body])
-    if folded:
-        lines.extend([
-            "",
-            "[truncated: Reddit folded this post behind \"Read more\"; only the part "
-            "above was in the page]",
-        ])
 
     comments = _parse_shreddit_comments(html)
     shown = 0
