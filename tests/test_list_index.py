@@ -1,0 +1,131 @@
+# -*- coding: utf-8 -*-
+"""F23f: a list page whose extract lost the items is rebuilt from its HTML.
+
+Bing, Hashnode and the Django weblog fixtures are trimmed from real pages
+(2026-10-01). Curl got every title, link and date; the extractor did not.
+"""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+import pytest
+
+from searchts import more, unlocker
+from searchts.unlocker import html_to_text
+
+FIXTURES = Path(__file__).parent / "fixtures"
+PARA = "This paragraph carries enough ordinary words to look like the main body of a real article, part {}."
+
+
+def _index(name: str, url: str):
+    html = (FIXTURES / name).read_text(encoding="utf-8")
+    return more.list_index(html, url, html_to_text(html, url=url))
+
+
+def test_bing_results_get_titles_and_real_links_back():
+    rebuilt = _index("bing_results.html", "https://www.bing.com/search?q=searchts")
+    assert rebuilt is not None
+    md, note = rebuilt
+    assert note.kind == "index"
+    assert note.note == "[list: 10 items rebuilt from the page; the extractor dropped their titles and links]"
+    assert md.startswith("# searchts - Search\n")
+    assert "- [searchts · PyPI](https://pypi.org/project/searchts/)" in md
+    assert "- [SearchTS MCP Server by Aadarsh Upadhyay | PulseMCP](https://www.pulsemcp.com/servers/capad-xyz-searchts)" in md
+    assert len(re.findall(r"^- \[", md, re.M)) == 10
+    assert "bing.com/ck/" not in md  # the redirect is replaced by its target
+
+
+def test_hashnode_cards_get_links_and_stop_running_together():
+    rebuilt = _index("hashnode_tag.html", "https://hashnode.com/tag/web-development")
+    assert rebuilt is not None
+    md, note = rebuilt
+    assert note.note == "[list: 10 items rebuilt from the page; the extractor dropped their links]"
+    assert md.startswith("# #web-development\n")
+    assert (
+        "- [What is MERN Stack? Complete Beginner's Guide 2026]"
+        "(https://umercodelabs.hashnode.dev/what-is-mern-stack-complete-beginner-s-guide-2026)" in md
+    )
+    assert re.search(r"^  Muhammed Umer in umercodelabs\.hashnode\.dev · \d+h ago · 3 min read$", md, re.M)
+    assert "utm_" not in md
+    assert "Umerinumercodelabs" not in md and not re.search(r"\d00$", md, re.M)
+
+
+def test_django_weblog_gets_its_dates_back():
+    rebuilt = _index("django_weblog.html", "https://www.djangoproject.com/weblog/")
+    assert rebuilt is not None
+    md, note = rebuilt
+    assert note.note == "[list: 10 items rebuilt from the page; the extractor dropped their dates]"
+    assert md.startswith("# News & Events\n")
+    assert "  Posted by Sarah Abderemane on Sept. 24, 2026" in md.splitlines()
+    assert "Read more" not in md
+    assert "Upcoming Events" not in md  # the sidebar is not part of the list
+
+
+def test_fetch_puts_the_index_first_and_drops_the_partial_note(monkeypatch):
+    html = (FIXTURES / "bing_results.html").read_text(encoding="utf-8")
+    url = "https://www.bing.com/search?q=searchts"
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", lambda u, timeout=30: (200, html, url, {}))
+    r = unlocker.fetch(url, backends=["curl_cffi"], use_memory=False)
+    assert r.text.startswith("# searchts - Search")
+    assert r.more[0]["kind"] == "index"
+    assert "[list: 10 items rebuilt from the page" in r.text
+    assert "[partial:" not in r.text
+
+
+def _cards(n: int) -> str:
+    return "".join(
+        f'<div class="card"><h3><a href="/item/{i}">Story number {i} about something</a></h3>'
+        f"<p>A short teaser for story {i} with a few more words.</p></div>"
+        for i in range(n)
+    )
+
+
+def test_related_grid_under_an_article_is_left_alone():
+    body = "".join(f"<p>{PARA.format(i)} {PARA.format(i + 50)} {PARA.format(i + 90)}</p>" for i in range(12))
+    html = (
+        f"<html><body><main><article><h1>A long article</h1>{body}</article>"
+        f'<section class="related"><div class="grid">{_cards(9)}</div></section></main></body></html>'
+    )
+    assert more.list_index(html, "https://example.org/a", html_to_text(html, url="https://example.org/a")) is None
+
+
+def test_list_the_extract_kept_whole_is_left_alone():
+    items = "".join(
+        f'<li class="entry"><a href="https://example.org/lang/{i}">Language number {i}</a>'
+        f" is a programming language from the year {1970 + i} with a long and storied history.</li>"
+        for i in range(12)
+    )
+    html = f"<html><body><main><h1>List of languages</h1><ul>{items}</ul></main></body></html>"
+    text = html_to_text(html, url="https://example.org/list")
+    assert "https://example.org/lang/3" in text  # the extractor kept the links itself
+    assert more.list_index(html, "https://example.org/list", text) is None
+
+
+def test_article_with_a_comment_list_is_not_replaced():
+    body = "".join(f"<p>{PARA.format(i)} {PARA.format(i + 50)}</p>" for i in range(10))
+    comments = "".join(
+        f'<li class="comment"><a href="/u/{i}">commenter{i}</a> <time>Sep {i + 1}, 2026</time>'
+        f"<p>Comment {i}: I agree with most of this and want to add a long thought of my own here.</p></li>"
+        for i in range(12)
+    )
+    html = f"<html><body><main><article><h1>Essay</h1>{body}</article><ol>{comments}</ol></main></body></html>"
+    text = "\n\n".join(f"{PARA.format(i)} {PARA.format(i + 50)}" for i in range(10))  # the article only
+    assert more.list_index(html, "https://example.org/essay", text) is None
+
+
+@pytest.mark.parametrize(
+    "url, expected",
+    [
+        (
+            "https://www.bing.com/ck/a?!&&p=abc&u=a1aHR0cHM6Ly9weXBpLm9yZy9wcm9qZWN0L3NlYXJjaHRzLw&ntb=1",
+            "https://pypi.org/project/searchts/",
+        ),
+        ("https://www.bing.com/ck/a?!&&p=abc&u=a1%%%&ntb=1", "https://www.bing.com/ck/a?!&&p=abc&u=a1%%%&ntb=1"),
+        ("https://x.dev/post?utm_source=hashnode&utm_medium=feed&id=7", "https://x.dev/post?id=7"),
+        ("https://x.dev/post", "https://x.dev/post"),
+    ],
+)
+def test_item_urls_lose_redirects_and_tracking(url, expected):
+    assert more._clean_item_url(url) == expected

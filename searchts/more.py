@@ -16,10 +16,11 @@ not per-host code (Reddit keeps its own ring in ``known_hosts``).
 
 from __future__ import annotations
 
+import base64
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
-from urllib.parse import urljoin, urlsplit
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 #: Page chrome. A control or list inside these never counts.
 _CHROME_TAGS = frozenset({"header", "footer", "aside", "form", "dialog", "menu", "template"})
@@ -61,7 +62,7 @@ _LIST_MAX_KEPT = 0.3
 class More:
     """One finding: what kind, the note text, and a URL when there is one."""
 
-    kind: str  # next-page | feed | fold | list | count
+    kind: str  # next-page | feed | fold | list | count | index
     note: str
     url: Optional[str] = None
 
@@ -543,8 +544,8 @@ def _item_key(item) -> str:
     return _norm(item.text_content())[:60].lower()
 
 
-def _list_kept(doc, text: str) -> Optional[Tuple[int, int]]:
-    """(items on the page, items the extract kept) for a list the page is made of."""
+def _best_list(doc) -> Optional[List]:
+    """The repeated items the page is made of (results, cards, posts), or None."""
     body = doc.find(".//body")
     root = body if body is not None else doc
     page_len = len(_visible_text(root))
@@ -573,6 +574,14 @@ def _list_kept(doc, text: str) -> Optional[Tuple[int, int]]:
     if not best or _in_chrome(best[0]) or _in_nav(best[0]):
         return None
     if best_len < _LIST_MIN_SHARE * page_len:
+        return None
+    return best
+
+
+def _list_kept(doc, text: str) -> Optional[Tuple[int, int]]:
+    """(items on the page, items the extract kept) for a list the page is made of."""
+    best = _best_list(doc)
+    if not best:
         return None
     lowered = _norm(text).lower()
     kept = sum(1 for it in best if _item_key(it) and _item_key(it) in lowered)
@@ -651,6 +660,187 @@ def detect(html: str, url: str, text: str) -> List[More]:
     return found
 
 
+# ── F23f: list index ─────────────────────────────────────────────────────────
+
+#: Words that are controls, not part of an item's byline.
+_ITEM_CHROME_RE = re.compile(
+    r"^(?:read\s+more|continue\s+reading|more|share|save|reply|bookmark|follow|"
+    r"like|comment|comments)[\s.…›»]*$",
+    re.I,
+)
+#: Something a byline would carry: a date, a relative time or a read time.
+_DATEISH_RE = re.compile(
+    r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b"
+    r"|\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b"
+    r"|\b\d{4}-\d{2}-\d{2}\b"
+    r"|\b\d+\s*(?:s|m|h|d|w|mo|y|sec|min|mins|hour|hours|day|days|week|weeks|month|months|year|years)\.?\s+ago\b"
+    r"|\b\d+\s+min(?:ute)?s?\s+read\b",
+    re.I,
+)
+_BREADCRUMB_RE = re.compile(r"^https?://\S+(?:\s+›\s+\S+)+$")
+_INDEX_MIN_COVERAGE = 0.6
+
+
+def _text_pieces(item) -> List[Tuple[Any, str]]:
+    """(owning element, text) for each visible text run in ``item``, in order."""
+    out: List[Tuple[Any, str]] = []
+    for t in item.xpath(".//text()"):
+        el = t.getparent()
+        if el is None:
+            continue
+        node = el
+        skip = False
+        while node is not None and node is not item.getparent():
+            if isinstance(node.tag, str) and node.tag.lower() in _SKIP_TEXT_TAGS:
+                skip = True
+                break
+            node = node.getparent()
+        txt = _norm(str(t))
+        if not skip and txt:
+            out.append((el, txt))
+    return out
+
+
+def _clean_item_url(url: str) -> str:
+    """The real target of a search-engine redirect, without ``utm_*`` tags."""
+    parts = urlsplit(url)
+    if parts.netloc.lower().endswith("bing.com") and parts.path.startswith("/ck/"):
+        u = dict(parse_qsl(parts.query)).get("u", "")
+        if u.startswith("a1"):
+            raw = u[2:] + "=" * (-len(u[2:]) % 4)
+            try:
+                target = base64.urlsafe_b64decode(raw).decode("utf-8")
+            except Exception:  # noqa: BLE001 - keep the redirect when it does not decode
+                target = ""
+            if target.startswith(("http://", "https://")):
+                parts = urlsplit(target)
+    pairs = parse_qsl(parts.query, keep_blank_values=True)
+    query = [(k, v) for k, v in pairs if not k.lower().startswith("utm_")]
+    if len(query) == len(pairs):
+        return urlunsplit(parts)  # nothing to drop: keep the query exactly as written
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+def _item_parts(item, base: str) -> Optional[Dict[str, str]]:
+    """Title, link, byline and snippet of one list item, or None."""
+    heading = next(
+        (h for h in item.xpath(".//h1|.//h2|.//h3|.//h4") if len(_norm(h.text_content())) >= 3), None
+    )
+    link = None
+    if heading is not None:
+        inside = heading.xpath(".//a[@href]")
+        around = [a for a in heading.iterancestors("a") if a.get("href")]
+        link = (inside or around or [None])[0]
+        title = _norm(heading.text_content())
+    if link is None:
+        links = [a for a in item.xpath(".//a[@href]") if len(_norm(a.text_content())) >= 8]
+        if not links:
+            return None
+        link = max(links, key=lambda a: len(_norm(a.text_content())))
+        if heading is None:
+            title = _norm(link.text_content())
+    href = (link.get("href") or "").strip()
+    if not href or href.startswith(("#", "javascript:")):
+        return None
+    url = _clean_item_url(urljoin(base, href))
+
+    title_el = heading if heading is not None else link
+    pieces = [(el, t) for el, t in _text_pieces(item) if el is not title_el and title_el not in el.iterancestors()]
+    snippet_i = max(range(len(pieces)), key=lambda i: len(pieces[i][1]), default=None)
+    snippet = ""
+    if snippet_i is not None and len(pieces[snippet_i][1]) >= 40:
+        snippet = re.sub(r"^[\s·•|…\-–—]+", "", pieces[snippet_i][1])
+        pieces = pieces[:snippet_i] + pieces[snippet_i + 1 :]
+    texts = [t for _, t in pieces]
+    kept: List[str] = []
+    for i, t in enumerate(texts):
+        if _ITEM_CHROME_RE.match(t) or t.isdigit() or _BREADCRUMB_RE.match(t) or len(t) > 160:
+            continue
+        if t.startswith(("http://", "https://")) and urlsplit(t).netloc.lower() == urlsplit(url).netloc.lower():
+            continue  # the result's own address, already in the link
+        nxt = texts[i + 1] if i + 1 < len(texts) else ""
+        initials = "".join(w[0] for w in nxt.split()[:3] if w).upper()
+        if re.fullmatch(r"[A-Z]{1,2}", t) or (re.fullmatch(r"[A-Z]{3}", t) and initials.startswith(t)):
+            continue  # an avatar's initials, alone or right before the name
+        kept.append(t)
+    byline = re.sub(r"\s+([·•|])", r" \1", " ".join(kept))
+    byline = re.sub(r"(?:\s*[·•|]\s*){2,}", " · ", byline).strip(" ·•|")
+    if len(byline) > 200:
+        byline = byline[:200].rsplit(" ", 1)[0] + "…"
+    return {"title": title, "url": url, "byline": byline, "snippet": snippet}
+
+
+def _strip_md_links(text: str) -> str:
+    return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+
+
+def list_index(html: str, url: str, text: str) -> Optional[Tuple[str, More]]:
+    """Rebuild a list page from its HTML when the extract lost the items.
+
+    Returns (index Markdown, note) or None. It replaces the extract only when
+    the page is made of a list, the extract is mostly that list, and the
+    extract dropped most of the items' titles, links or dates.
+    """
+    doc = _parse(html)
+    if doc is None:
+        return None
+    try:
+        items = _best_list(doc)
+        if not items:
+            return None
+        base = _base_url(doc, url)
+        parts = [p for p in (_item_parts(it, base) for it in items) if p]
+        if len(parts) < _LIST_MIN_ITEMS:
+            return None
+        plain = _norm(_strip_md_links(text)).lower()
+        n = len(parts)
+        lost: List[str] = []
+        if sum(1 for p in parts if p["title"][:60].lower() in plain) <= _LIST_MAX_KEPT * n:
+            lost.append("titles")
+        if sum(1 for p in parts if p["url"] in text or p["url"].split("?")[0] in text) < 0.5 * n:
+            lost.append("links")
+        dated = [p for p in parts if _DATEISH_RE.search(p["byline"])]
+        if len(dated) >= 0.5 * n:
+            kept_dates = sum(
+                1 for p in dated if (m := _DATEISH_RE.search(p["byline"])) and m.group(0).lower() in plain
+            )
+            if kept_dates < 0.5 * len(dated):
+                lost.append("dates")
+        if not lost:
+            return None
+        # The extract must be mostly this list; otherwise it is an article with a list under it.
+        item_text = " ".join(_norm(_visible_text(it)) for it in items).lower()
+        paras = [_norm(_strip_md_links(p)).lower() for p in re.split(r"\n\s*\n", text or "")]
+        paras = [p for p in paras if len(p) >= 30]
+        total = sum(len(p) for p in paras)
+        covered = sum(len(p) for p in paras if p[len(p) // 2 - 15 : len(p) // 2 + 15] in item_text)
+        if total and covered < _INDEX_MIN_COVERAGE * total:
+            return None
+        heading = next(
+            (h for h in doc.xpath("//h1") if _norm(h.text_content()) and not _in_chrome(h)
+             and not any(h is d or h in d.iterdescendants() for d in items)),
+            None,
+        )
+        title_el = doc.find(".//title")
+        head = _norm(heading.text_content()) if heading is not None else _norm(title_el.text_content() if title_el is not None else "")
+        lines: List[str] = [f"# {head}", ""] if head else []
+        for p in parts:
+            lines.append(f"- [{p['title']}]({p['url']})")
+            if p["byline"]:
+                lines.append(f"  {p['byline']}")
+            if p["snippet"]:
+                lines.append(f"  {p['snippet']}")
+            lines.append("")
+        what = ", ".join(lost[:-1]) + (" and " if len(lost) > 1 else "") + lost[-1]
+        note = More(
+            "index",
+            f"[list: {n} items rebuilt from the page; the extractor dropped their {what}]",
+        )
+        return "\n".join(lines).strip(), note
+    except Exception:  # noqa: BLE001 - never lose a read over the index
+        return None
+
+
 def annotate(text: str, found: List[More]) -> str:
     """Text with one note line per finding appended."""
     if not found:
@@ -660,7 +850,7 @@ def annotate(text: str, found: List[More]) -> str:
 
 def summary(found: List[More]) -> str:
     """Short stderr tick, e.g. ``more: next page, folded``."""
-    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count"}
+    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index"}
     seen: List[str] = []
     for m in found:
         name = names.get(m.kind, m.kind)
