@@ -52,7 +52,7 @@ Hare posts **one GitHub Review** (v2, the shape locked on Hare Bot #221). Author
 <!-- searchts-r1-review -->
 ```
 
-Then `## Summary` (what changed, substance first; `- ` lines grouped by kind when the diff does more than one thing), `**Intent:**` as one line of what the PR is trying to do (not the summary again), `**Hold:**` with its reason in plain sight, finding blocks (`#### 🔴 real` or `#### 🟡 skip`, file:line, **Issue**, **Fix:** yes / no / later plus the change in one sentence), checks inside `<details>`, and a Models table. The reviewer cell is `Hare (GitHub App) · purpose: review and report · \`model-id\``. Not a one-line skim. Do not say fine to merge. Do not add a pipe footer. The grader line `final~` was one training batch. It does not ship.
+Then the shape of Hare Bot's finals on #217, #220 and #221: `## Summary` (a one-line lead in the bot's voice that says what the PR is for; numbered `1. **kind** what changed` lines when the diff does more than one thing; then a plain CI line such as ``CI on `abc1234`: green.``), `### Findings` as blocks (`#### 🔴 real` or `#### 🟡 skip`, file:line, **Issue**, **Fix:** yes / no / later plus the change in one sentence), a `<details>` fold titled `🤖 checks & computer run`, and a Models table. No merge verdict in the body. The reviewer cell is `Hare (GitHub App) · purpose: review and report · \`model-id\``. Not a one-line skim. Do not say fine to merge. Do not add a pipe footer. The grader line `final~` was one training batch. It does not ship.
 
 2. **Inline on Files changed: real *and* skip.** Same review's `comments[]` = `{path, line, side: RIGHT, body}` on lines that exist in `gh pr diff`. Invented lines stay in the summary only, no bubble.
 
@@ -60,12 +60,12 @@ Then `## Summary` (what changed, substance first; `- ` lines grouped by kind whe
 
 ```
 <!-- searchts-r1-review -->
-🟡 **skip**: <one sentence>
+🟡 **skip**: <the finding in about 20 words>
 
 **Fix:** later. <the change in one sentence>
 ```
 
-   Use `🔴 **real**` when it is real. Every finding with a `path:line` on a + line gets its bubble. A short `suggestion` block is allowed only when it is the whole new text of that one line and safe to apply. No scores. No first person. No em dashes. No name line. The bot avatar is the identity.
+   Use `🔴 **real**` when it is real. Every finding with a `path:line` on a + line gets a bubble; findings on the same line share one bubble, real first. A short `suggestion` block is allowed only when it is the whole new text of that one line and safe to apply. No scores. No first person. No em dashes. No name line. The bot avatar is the identity.
 
 3. **Skip never holds merge.** Nits stay on the line. Intent = **hold** only if there is a **real** row **or** a required check is red / still pending.
 
@@ -80,24 +80,27 @@ Zero rows is only ok when the diff has nothing to question. The sentence is stil
 
 ## Summary
 
-What the diff does, substance first. Not the PR title.
+Two little armor plates for 0.13. Quiet. Useful.
 
-**Intent:** What the PR is trying to do, in one line.
+1. **Bing decode** only on bing.com and its subdomains.
+2. **MCP `out_dir`** refuses Windows device names.
 
-**Hold:** 1 real finding.
+CI on `e40ddfd`: green.
 
 ### Findings
 
-#### 🔴 real · `file.py:10`
+#### 🔴 real · `tests/test_mcp_server.py:356`
 
-**Issue:** one sentence
+**Issue:** The comment promises an exact refusal, but the assert only checks a prefix.
 
-**Fix:** yes. The change in one sentence.
+**Fix:** later. Assert the full message, including the offending `out_dir`.
 
 <details>
-<summary>checks</summary>
+<summary>🤖 checks & computer run</summary>
 
-Checks: `ok`
+- head `e40ddfd`
+- CI lint / typecheck / test: green
+- test-full / wheel-gate skipped by design
 
 </details>
 
