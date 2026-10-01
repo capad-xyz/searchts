@@ -356,6 +356,33 @@ def _curl(monkeypatch, html, final_url=URL):
     monkeypatch.setattr(unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (200, html, final_url, {}))
 
 
+def _hn_page(more_href: str) -> str:
+    rows = "".join(
+        f'<tr class="athing submission" id="{i}"><td class="title"><span class="rank">{i}.</span></td>'
+        f'<td class="title"><span class="titleline"><a href="https://example{i}.com/post">Story {i} about tools</a>'
+        f'</span></td></tr><tr><td colspan="2"></td><td class="subtext"><span class="score">{i} points</span> by '
+        f'<a href="user?id=u{i}" class="hnuser">u{i}</a> | <a href="item?id={i}">{i} comments</a></td></tr>'
+        for i in range(1, 31)
+    )
+    return (
+        '<html><head><title>Hacker News</title></head><body><center><table id="hnmain"><tr><td>'
+        f'<table>{rows}<tr class="morespace"></tr><tr><td colspan="2"></td><td class="title">'
+        f'<a href="{more_href}" class="morelink" rel="next">More</a></td></tr></table></td></tr></table></center></body></html>'
+    )
+
+
+@pytest.mark.parametrize(
+    "url, href, expected",
+    [
+        ("https://news.ycombinator.com/", "?p=2", "https://news.ycombinator.com/?p=2"),
+        ("https://news.ycombinator.com/news", "news?p=2", "https://news.ycombinator.com/news?p=2"),
+    ],
+)
+def test_hacker_news_more_link_is_the_next_page(url, href, expected):
+    found = more.detect(_hn_page(href), url, "text")
+    assert [(m.kind, m.url) for m in found if m.kind == "next-page"] == [("next-page", expected)]
+
+
 def test_fetch_carries_next_url_and_a_trailing_note(monkeypatch):
     html = _page("", head='<link rel="next" href="/blog/page/2/">')
     _curl(monkeypatch, html)
