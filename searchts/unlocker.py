@@ -923,7 +923,14 @@ def _finalize(
     from searchts import more, sanitize
 
     if result.page_html:
+        # F23f: a list page whose extract lost the items' titles, links or dates
+        # is rebuilt from the HTML before the notes are worked out.
+        rebuilt = more.list_index(result.page_html, result.final_url or "", result.text)
+        if rebuilt:
+            result.text = rebuilt[0]
         found = more.detect(result.page_html, result.final_url or "", result.text)
+        if rebuilt:
+            found.insert(0, rebuilt[1])
         if found:
             result.text = more.annotate(result.text, found)
             result.more = [m.as_dict() for m in found]
