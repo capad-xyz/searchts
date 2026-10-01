@@ -63,6 +63,19 @@ def test_django_weblog_gets_its_dates_back():
     assert "Upcoming Events" not in md  # the sidebar is not part of the list
 
 
+def test_byline_written_after_the_heading_is_kept():
+    cards = "".join(
+        f'<div class="card"><h3><a href="/p/{i}">Post number {i} on list pages</a></h3>'
+        f"by Writer {i} on Sep {i + 1}, 2026<p>A teaser for post {i} that runs long enough to be the snippet.</p></div>"
+        for i in range(10)
+    )
+    html = f"<html><body><main><h1>Blog</h1><div class=\"grid\">{cards}</div></main></body></html>"
+    text = "\n\n".join(f"Post number {i} on list pages A teaser for post {i} that runs long enough to be the snippet." for i in range(10))
+    rebuilt = more.list_index(html, "https://example.org/blog/", text)
+    assert rebuilt is not None
+    assert "  by Writer 3 on Sep 4, 2026" in rebuilt[0].splitlines()
+
+
 def test_fetch_puts_the_index_first_and_drops_the_partial_note(monkeypatch):
     html = (FIXTURES / "bing_results.html").read_text(encoding="utf-8")
     url = "https://www.bing.com/search?q=searchts"

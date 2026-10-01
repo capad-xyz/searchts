@@ -688,6 +688,10 @@ def _text_pieces(item) -> List[Tuple[Any, str]]:
         el = t.getparent()
         if el is None:
             continue
+        if getattr(t, "is_tail", False):
+            el = el.getparent()  # tail text belongs to the element around it
+            if el is None:
+                continue
         node = el
         skip = False
         while node is not None and node is not item.getparent():
