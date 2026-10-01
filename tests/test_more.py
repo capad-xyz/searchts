@@ -469,3 +469,34 @@ def test_a_thousand_links_stay_fast():
     started = time.monotonic()
     more.detect(html, URL, "t")
     assert time.monotonic() - started < 2.0
+
+
+# ── Bing redirect host check ─────────────────────────────────────────────────
+
+_EVIL = "a1aHR0cHM6Ly9ldmlsLmV4YW1wbGUv"  # "https://evil.example/"
+_PYPI = "a1aHR0cHM6Ly9weXBpLm9yZy9wcm9qZWN0L3NlYXJjaHRzLw"  # "https://pypi.org/project/searchts/"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"https://notbing.com/ck/a?!&&p=abc&u={_EVIL}&ntb=1",
+        f"https://bing.com.attacker.net/ck/a?!&&p=abc&u={_EVIL}&ntb=1",
+        f"https://www.bing.com.attacker.net/ck/a?!&&p=abc&u={_EVIL}&ntb=1",
+    ],
+)
+def test_lookalike_hosts_are_not_treated_as_bing(url):
+    assert more._clean_item_url(url) == url  # left as written, never decoded
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"https://bing.com/ck/a?!&&p=abc&u={_PYPI}&ntb=1",
+        f"https://www.bing.com/ck/a?!&&p=abc&u={_PYPI}&ntb=1",
+        f"https://WWW.Bing.com:443/ck/a?!&&p=abc&u={_PYPI}&ntb=1",
+    ],
+)
+def test_bing_and_its_subdomains_are_decoded(url):
+    assert more._clean_item_url(url) == "https://pypi.org/project/searchts/"
+
