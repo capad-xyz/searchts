@@ -97,12 +97,11 @@ Shape is #103 and #216. Do not invent a third.
 
 - Title: `type(scope): message`. Squash-merge, so the title is the commit on `main`. No status essay in the title.
 - Body, in this order: **What** (what changed, and what it does not do), **Why** (one short reason, skip if What already says it), **Test plan** (commands actually run, checked), **Checklist** (the fences for this PR). A table is fine when the change is a list.
-- **Models** table on every agent PR: Role, Model, Effort. Model is the model id (`grok-4.7`, `claude-opus-5-5`), not the product name. Role is who wrote. One writer still gets the table. Trailer under it:
+- **Models** table on every agent PR. One writer still gets the table. Columns: Platform, Role, Agent, Model, Effort. Platform is where it ran (`xAI chat`, `claude.ai`, `OpenCode`). Role is the job (`wrote`, `editor`). Agent is the name. Model is the id (`grok-4.7`, `claude-opus-5-5`). Effort stays in the table, not a second essay. Trailer under it, name is the agent:
 
 ```
 Co-authored-by: Name <email>
 ```
 
-Name is the agent. Effort stays in the table, not a second essay.
 - Never hand-edit version numbers. `docs` / `chore` / `test` do not cut a PyPI release.
-- New branch, PR to `main`, never push to `main`. One change per PR.
+- New branch, PR to `main`, never push to `main`. One change per PR, unless the plan or the ask says otherwise.
