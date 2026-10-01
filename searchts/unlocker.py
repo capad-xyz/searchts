@@ -173,7 +173,9 @@ def normalize(url: str) -> str:
     ``urllib.parse`` treats ``example.com:8080`` as scheme ``example.com``.
     Only a real ``://`` (or a blocked prefix like ``data:``) is a scheme.
     """
-    raw = (url or "").strip()
+    from searchts.ssrf import unwrap_link  # stdlib-only module, no import cycle
+
+    raw = unwrap_link(url)  # "<https://…>" / "[https://…]" pasted from chat (F22c)
     if not raw:
         raise ValueError("empty url")
     lower = raw.lower()
@@ -183,6 +185,8 @@ def normalize(url: str) -> str:
     if "://" in raw:
         parsed = urllib.parse.urlparse(raw)
         scheme = (parsed.scheme or "").lower()
+        if not scheme:
+            raise ValueError(f"not a URL: {raw!r}")
         if scheme not in ("http", "https"):
             raise ValueError(f"scheme '{scheme}://' is not allowed")
         return raw

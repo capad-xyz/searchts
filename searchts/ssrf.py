@@ -159,6 +159,19 @@ def _classify_host(host: str) -> Optional[str]:
     return _classify(ip)
 
 
+def unwrap_link(url: str) -> str:
+    """The link inside ``<…>`` or ``[…]``, as pasted from chat or Markdown (F22c).
+
+    The MCP guard and ``unlocker.normalize`` both call this, so the guard checks
+    the URL the fetch will use. One wrapper only, and only around something with
+    ``://``: ``[::1]`` and other text stay as they are.
+    """
+    raw = (url or "").strip()
+    if len(raw) > 2 and (raw[0], raw[-1]) in (("<", ">"), ("[", "]")) and "://" in raw:
+        return raw[1:-1].strip()
+    return raw
+
+
 def guard_mcp_url(url: str, *, resolve_dns: bool = True) -> Optional[str]:
     """Return an ``"Error: ..."`` string if `url` is unsafe for MCP, else None.
 
@@ -172,6 +185,7 @@ def guard_mcp_url(url: str, *, resolve_dns: bool = True) -> Optional[str]:
     an unresolvable name never becomes a hard block). A hostname that DOES
     resolve to a blocked IP fails closed. IP literals never touch DNS.
     """
+    url = unwrap_link(url)
     if not url:
         return None  # the tool's own "requires url" check owns the empty case
 
