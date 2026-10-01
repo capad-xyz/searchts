@@ -187,8 +187,13 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     assert hare_r1._csv_models("HARE_OR_MODEL", "a, b ,c") == ["a", "b", "c"]
     monkeypatch.setenv("HARE_OR_MODEL", "only-one")  # type: ignore[attr-defined]
     assert hare_r1._csv_models("HARE_OR_MODEL", "a,b") == ["only-one"]
+    assert "stealth/space-bunny-alpha" in hare_r1.HARE_OR_DEFAULT.split(",")
     assert "qwen/qwen3.8-27b:free" in hare_r1.HARE_OR_DEFAULT.split(",")
-    assert hare_r1.HARE_ZEN_DEFAULT == "ling-3.0-flash-fin-free"
+    assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stealth/space-bunny-alpha"
+    assert hare_r1.HARE_NOUS_DEFAULT.endswith("meituan/longcat-2.5-preview:free")
+    assert hare_r1.HARE_ZEN_DEFAULT.split(",")[0] == "space-bunny-free"
+    assert hare_r1.HARE_ZEN_DEFAULT.endswith("ling-3.0-flash-fin-free")
 
 
 def test_short_fail_hides_provider_json() -> None:

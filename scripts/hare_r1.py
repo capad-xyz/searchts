@@ -27,12 +27,22 @@ OR_BASE = "https://openrouter.ai/api/v1"
 ZEN_BASE = "https://opencode.ai/zen/v1"
 LLM_TIMEOUT_SEC = 60
 
-# Fixed list, not a router. Skip: openrouter/free, Lyria, GLM 5.2 (32k, no tools).
-HARE_NOUS_DEFAULT = "poolside/laguna-s-2.1,stepfun/step-3.7-flash"
-HARE_OR_DEFAULT = (
-    "poolside/laguna-s-2.1:free,qwen/qwen3.8-27b:free,nex-agi/nex-n2.5-pro:free"
+# Fixed list, not a router. Live 2026-10-01.
+# Dropped: nex-n2.5-pro:free (gone), unsuffixed Nous ids (paid).
+# Skip: openrouter/free, Lyria, Muse contributor-free (trains; Responses API).
+# Space Bunny leaves OpenRouter 2026-10-05. OR may retain prompts (not training).
+# Zen space-bunny-free is zero-retention.
+HARE_NOUS_DEFAULT = (
+    "stealth/space-bunny-alpha,"
+    "poolside/laguna-s-2.1:free,"
+    "meituan/longcat-2.5-preview:free"
 )
-HARE_ZEN_DEFAULT = "ling-3.0-flash-fin-free"
+HARE_OR_DEFAULT = (
+    "stealth/space-bunny-alpha,"
+    "poolside/laguna-s-2.1:free,"
+    "qwen/qwen3.8-27b:free"
+)
+HARE_ZEN_DEFAULT = "space-bunny-free,longcat-2.5-preview-free,ling-3.0-flash-fin-free"
 
 
 def _env(name: str, default: str = "") -> str:
