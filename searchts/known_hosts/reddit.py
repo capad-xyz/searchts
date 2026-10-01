@@ -617,7 +617,8 @@ def _post_links(attrs: Dict[str, str]) -> Tuple[str, List[str], bool]:
     href = (attrs.get("content-href") or "").strip()
     host = (urllib.parse.urlsplit(href).netloc or "").lower() if href else ""
     outbound = ""
-    if ptype == "link" and host and not host.endswith("reddit.com") and host not in _REDDIT_MEDIA_HOSTS:
+    on_reddit = host == "reddit.com" or host.endswith(".reddit.com") or host in _REDDIT_MEDIA_HOSTS
+    if ptype == "link" and host and not on_reddit:
         outbound = href
     media: List[str] = []
     if ptype in ("image", "gif", "video") and host in _REDDIT_MEDIA_HOSTS:

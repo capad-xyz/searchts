@@ -111,3 +111,15 @@ def test_media_post_without_a_url_says_so():
 )
 def test_posted_time_is_utc_or_left_out(raw, expected):
     assert reddit._posted({"created-timestamp": raw}) == expected
+
+
+@pytest.mark.parametrize(
+    "href, outbound",
+    [
+        ("https://notreddit.com/story", "https://notreddit.com/story"),
+        ("https://www.reddit.com/r/x/comments/1/a/", ""),
+        ("https://i.redd.it/abc123def.png", ""),
+    ],
+)
+def test_outbound_is_any_host_off_reddit(href, outbound):
+    assert reddit._post_links({"post-type": "link", "content-href": href})[0] == outbound
