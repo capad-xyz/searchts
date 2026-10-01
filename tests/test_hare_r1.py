@@ -121,7 +121,8 @@ def test_ghost_real_stays_in_table_and_holds() -> None:
     assert hare_r1.intent_for("ok", findings) == "hold"
     body = hare_r1.render_comment("nous:x", "low", "hold", findings, "ok", [])
     assert "foo.py:99" in body
-    assert "Intent: hold" in body
+    assert "Merge: hold" in body
+    assert "🔴" in body
 
 
 def test_extract_json_from_fence() -> None:
@@ -134,11 +135,13 @@ def test_comment_has_token_and_no_em_dash() -> None:
     body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [], "Adds a log row.")
     assert body.startswith(hare_r1.TOKEN)
     assert "\u2014" not in body
-    assert "Intent: ship" in body
+    assert "Intent: Adds a log row." in body
     assert "`nous:x`" in body
     assert "Adds a log row." in body
     assert "## Summary" in body
     assert "### Findings" in body
+    assert "<details>" in body
+    assert "Hare (GitHub App)" in body
     assert hare_r1.REVIEW_SHAPE == "v2"
     assert "**Name**" not in body
     assert "**Purpose**" not in body
@@ -165,6 +168,12 @@ def test_bubble_is_token_plus_label() -> None:
     assert "not the PR author" not in body
     assert "**skip**" in body
     assert "**Fix:**" in body
+    assert "🟡" in body
+    sug = hare_r1.bubble_body("real", "bad", "yes", "return 1")
+    assert "```suggestion" in sug
+    assert "return 1" in sug
+    long = hare_r1.bubble_body("real", "bad", "yes", "x\ny")
+    assert "```suggestion" not in long
 
 
 def test_run_nags_on_crash(monkeypatch: object) -> None:

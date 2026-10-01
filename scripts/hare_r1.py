@@ -244,16 +244,17 @@ def render_comment(
     check_notes: list[str],
     summary: str = "",
 ) -> str:
-    """v2 review body. Summary, then finding blocks. Not a one-line skim."""
+    """v2 review body. Summary, finding blocks, checks in details, Models table."""
     said = _no_em(summary.strip()) or "(model did not say what changed)"
     blocks: list[str] = []
     for f in findings:
         sev = "real" if f.get("sev") == "real" else "skip"
+        mark = "🔴" if sev == "real" else "🟡"
         loc = f"{f.get('path')}:{f.get('line')}" if f.get("line") is not None else str(f.get("path") or "-")
         issue = _no_em(str(f.get("issue") or "").strip() or "see bubble")
         fix = _no_em(str(f.get("fix") or "later"))
         blocks.append(
-            f"#### {sev} · `{loc}`\n\n**Issue:** {issue}\n\n**Fix:** {fix}."
+            f"#### {mark} {sev} · `{loc}`\n\n**Issue:** {issue}\n\n**Fix:** {fix}."
         )
     if not blocks:
         blocks.append("No line findings.")
@@ -263,10 +264,11 @@ def render_comment(
     elif intent == "hold" and check_state == "pending":
         why = "Required CI is still running."
     notes = "; ".join(check_notes[:6])
-    checks = f"Checks: `{check_state}`" + (f" ({notes})" if notes else "")
+    check_line = f"Checks: `{check_state}`" + (f" ({notes})" if notes else "")
     if why:
-        checks += f"\n{why}"
+        check_line += f"\n{why}"
     findings_md = "\n\n".join(blocks)
+    who = f"Hare (GitHub App) · purpose: review and report · `{model}`"
     return _no_em(
         f"""{TOKEN}
 
@@ -274,28 +276,38 @@ def render_comment(
 
 {said}
 
-Intent: {intent}
-Model: `{model}`
+Intent: {said}
 
 ### Findings
 
 {findings_md}
 
-{checks}
+<details>
+<summary>checks</summary>
+
+Merge: {intent}
+{check_line}
+
+</details>
 
 ## Models
 
 | Role | Model | Effort |
 | --- | --- | --- |
-| reviewer | `{model}` | {effort} |
+| reviewer | {who} | {effort} |
 """
     )
 
 
-def bubble_body(sev: str, issue: str, fix: str = "later") -> str:
+def bubble_body(sev: str, issue: str, fix: str = "later", suggestion: str = "") -> str:
     label = "real" if sev == "real" else "skip"
+    mark = "🔴" if label == "real" else "🟡"
     fix_s = _no_em(str(fix or "later"))
-    return _no_em(f"{BUBBLE_HEAD}\n**{label}**: {issue.strip()}\n\n**Fix:** {fix_s}.")
+    body = f"{BUBBLE_HEAD}\n{mark} **{label}**: {issue.strip()}\n\n**Fix:** {fix_s}."
+    sug = _no_em(str(suggestion or "").strip())
+    if sug and "\n" not in sug and len(sug) <= 200:
+        body += f"\n\n```suggestion\n{sug}\n```"
+    return _no_em(body)
 
 
 def chat_complete(base: str, key: str, model: str, messages: list[dict[str, str]]) -> str:
@@ -334,7 +346,7 @@ SYSTEM = """You are Hare, an automated PR reviewer for the searchts repo.
 Read AGENTS.md rules in the user message. Review and report. Do not fix.
 Voice: no em dashes. No first person. Emojis ok.
 Return ONLY a JSON object:
-{"effort":"low|medium|high","summary":"one sentence of what the diff does","findings":[{"sev":"real"|"skip","path":"file","line":123,"issue":"one sentence","fix":"yes|no|later"}]}
+{"effort":"low|medium|high","summary":"one sentence of what the diff does","findings":[{"sev":"real"|"skip","path":"file","line":123,"issue":"one sentence","fix":"yes|no|later","suggestion":"optional one-line replacement, omit if not a small safe edit"}]}
 summary is required. Read the diff. Do not copy the PR title.
 sev real = wrong behavior, fail-loud lie, ticks on stdout, MCP break, test that cannot fail, scope creep, PLAN intent miss.
 sev skip = a nit you actually saw (docs, style, a weak assertion). Write the row. Skip never holds merge.
@@ -663,7 +675,12 @@ def _hare_once(
             "path": f["path"],
             "line": f["line"],
             "side": "RIGHT",
-            "body": bubble_body(str(f["sev"]), str(f.get("issue") or ""), str(f.get("fix") or "later")),
+            "body": bubble_body(
+                str(f["sev"]),
+                str(f.get("issue") or ""),
+                str(f.get("fix") or "later"),
+                str(f.get("suggestion") or ""),
+            ),
         }
         for f in bubbles
     ]
