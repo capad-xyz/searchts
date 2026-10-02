@@ -2,6 +2,29 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.13.0](https://github.com/capad-xyz/searchts/compare/v0.12.0...v0.13.0) (2026-10-02)
+
+
+### Added
+
+* **cli:** searchts install --browser ([#201](https://github.com/capad-xyz/searchts/issues/201)) ([cabbf8a](https://github.com/capad-xyz/searchts/commit/cabbf8a82aa18c26cd23eef238ccf71b5843fce9))
+* rebuild list pages the extractor lost as an index (F23f) ([#213](https://github.com/capad-xyz/searchts/issues/213)) ([07e0ccc](https://github.com/capad-xyz/searchts/commit/07e0cccb74ad4be715e51beff93c64b8a9c76631))
+* Reddit HTML reads show post type, flair, time, links and media (F5e) ([#212](https://github.com/capad-xyz/searchts/issues/212)) ([92189f9](https://github.com/capad-xyz/searchts/commit/92189f9bced76521388c41e0730351acf7eab1de))
+* say when a page has more than the read returned (F23a) ([#206](https://github.com/capad-xyz/searchts/issues/206)) ([292df32](https://github.com/capad-xyz/searchts/commit/292df3252d17ac3affae73de9b9d7ad9b4ec1482))
+* say when the update nudge is still the old process (F19) ([#196](https://github.com/capad-xyz/searchts/issues/196)) ([687e3fa](https://github.com/capad-xyz/searchts/commit/687e3fa549aac5d47a4dd5ae2d1492e275b312bc))
+
+
+### Fixed
+
+* a short article is never replaced by a related list (F23f) ([#220](https://github.com/capad-xyz/searchts/issues/220)) ([8fb162f](https://github.com/capad-xyz/searchts/commit/8fb162f37f964e1451d6d4c1f75be9dee4fb3ed5))
+* accordion headings and code fences read cleanly (F23a) ([#209](https://github.com/capad-xyz/searchts/issues/209)) ([4d28794](https://github.com/capad-xyz/searchts/commit/4d287942dd44346ec27d3076c21ed27c96e86291))
+* Bing redirect decoding checks the exact host; MCP saves refuse Windows device names ([#217](https://github.com/capad-xyz/searchts/issues/217)) ([5a11144](https://github.com/capad-xyz/searchts/commit/5a111443bcc4efe9261483c01ede16fa64c70189))
+* **cli:** ship install --browser as plain source ([#202](https://github.com/capad-xyz/searchts/issues/202)) ([8bbe7f4](https://github.com/capad-xyz/searchts/commit/8bbe7f4310c5e7e571b2ce902263c5a34cfa707d))
+* code review hardening (SSRF, MCP saves, fail loud) ([#204](https://github.com/capad-xyz/searchts/issues/204)) ([1cf8148](https://github.com/capad-xyz/searchts/commit/1cf81484e0ac5d3a6060035b6a24dff82c6b8945))
+* doctor skips its own launcher on Windows; links pasted in [ ] or &lt; &gt; read (F11a, F22c) ([#219](https://github.com/capad-xyz/searchts/issues/219)) ([150821a](https://github.com/capad-xyz/searchts/commit/150821a7729a887ed89458cea5e230abb5cbba59))
+* Hacker News "More" counts as the next page (F23a) ([f2f09ff](https://github.com/capad-xyz/searchts/commit/f2f09fffae31aa5bb2be93e34626922c7056bb9b))
+* next-page notes for Bing-style Next links, not WordPress next posts (F23a) ([#207](https://github.com/capad-xyz/searchts/issues/207)) ([ff7fabc](https://github.com/capad-xyz/searchts/commit/ff7fabc0eca5970181da02917a80a39d97b20cc8))
+
 ## [0.12.0](https://github.com/capad-xyz/searchts/compare/v0.11.1...v0.12.0) (2026-09-29)
 
 
