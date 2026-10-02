@@ -341,6 +341,48 @@ def test_fetch_asset_refuses_unsafe_out_dir(monkeypatch, tmp_path, out_dir):
     assert out.startswith("Error:")
 
 
+@pytest.mark.parametrize(
+    ("out_dir", "part"),
+    [
+        ("con", "con"),
+        ("NUL", "NUL"),
+        ("aux", "aux"),
+        ("prn", "prn"),
+        ("com1", "com1"),
+        ("LPT1", "LPT1"),
+        ("notes/nul.txt", "nul.txt"),
+        ("lpt9.log/x", "lpt9.log"),
+        ("con.", "con."),
+        ("conout$", "conout$"),
+        ("com\u00b9", "com\u00b9"),
+    ],
+)
+def test_fetch_asset_refuses_windows_device_names(monkeypatch, tmp_path, out_dir, part):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "searchts.assets.get_asset",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+    out = fetch_asset("https://x.test/x.png", out_dir)
+    # The whole refusal, naming the offending part, so neither a crash inside
+    # get_asset nor a refusal of the wrong part can pass for it.
+    assert out == f"Error: out_dir may not use a Windows device name ({part!r}).", out
+
+
+@pytest.mark.parametrize("out_dir", ["console", "nullable", "auxiliary", "com10", "lpt0", "notes/conf"])
+def test_fetch_asset_allows_names_that_only_look_like_devices(monkeypatch, tmp_path, out_dir):
+    monkeypatch.chdir(tmp_path)
+
+    def fake_get_asset(url, out=None, **kw):
+        dest = Path(out) / "x.png"
+        dest.write_bytes(b"x")
+        return dest
+
+    monkeypatch.setattr("searchts.assets.get_asset", fake_get_asset)
+    out = fetch_asset("https://x.test/x.png", out_dir)
+    assert not out.startswith("Error:"), out
+
+
 def test_fetch_asset_refuses_symlink_escape(monkeypatch, tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()

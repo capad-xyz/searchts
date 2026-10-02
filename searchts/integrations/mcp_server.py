@@ -202,6 +202,18 @@ _AUTOSTART_PARTS = frozenset(
     {"startup", "autostart", "launchagents", "launchdaemons", "start menu"}
 )
 
+#: Windows device names. A folder can't be called one of these, with or without
+#: an extension ("nul.txt"), and a write to one goes to the device instead.
+_WINDOWS_RESERVED = frozenset(
+    {"con", "prn", "aux", "nul", "conin$", "conout$"}
+    | {f"{dev}{n}" for dev in ("com", "lpt") for n in "123456789\u00b9\u00b2\u00b3"}
+)
+
+
+def _windows_reserved(part: str) -> bool:
+    """True for "con", "NUL", "com1.log", "lpt1." and the like."""
+    return part.rstrip(" .").split(".")[0].strip().lower() in _WINDOWS_RESERVED
+
 
 #: Env var a user sets to move the MCP save folder (e.g. hosts that start the
 #: server with ``/`` as the working directory). The user's hand, not the model's.
@@ -241,8 +253,9 @@ def _mcp_out_dir(out_dir: str, default: str) -> Tuple[Optional[Path], Optional[s
     An MCP caller is a model that may have read a prompt-injected page, so its
     writes stay inside one base folder (the server's working directory, or
     ``$SEARCHTS_MCP_OUT_DIR`` when the user sets it): a relative folder, no
-    ``..``, no hidden (dot) folders such as ``.ssh``, and no autostart /
-    Startup folders. Returns ``(path, None)`` or ``(None, "Error: ...")``.
+    ``..``, no hidden (dot) folders such as ``.ssh``, no autostart /
+    Startup folders, and no Windows device names (``con``, ``nul``, ``com1``).
+    Returns ``(path, None)`` or ``(None, "Error: ...")``.
     The CLI is the user's own hand and keeps any path.
     """
     base = _mcp_out_base()
@@ -260,6 +273,8 @@ def _mcp_out_dir(out_dir: str, default: str) -> Tuple[Optional[Path], Optional[s
             return None, f"Error: out_dir may not use hidden folders like {part!r}."
         if part.lower() in _AUTOSTART_PARTS:
             return None, f"Error: out_dir may not target a startup folder ({part!r})."
+        if _windows_reserved(part):
+            return None, f"Error: out_dir may not use a Windows device name ({part!r})."
     target = (base / requested).resolve()
     if target != base and base not in target.parents:
         return None, f"Error: out_dir resolves outside {base} (got {raw!r})."

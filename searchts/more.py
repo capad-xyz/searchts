@@ -708,7 +708,9 @@ def _text_pieces(item) -> List[Tuple[Any, str]]:
 def _clean_item_url(url: str) -> str:
     """The real target of a search-engine redirect, without ``utm_*`` tags."""
     parts = urlsplit(url)
-    if parts.netloc.lower().endswith("bing.com") and parts.path.startswith("/ck/"):
+    host = (parts.hostname or "").lower()
+    # Only Bing itself: "notbing.com" and "bing.com.attacker.net" are not Bing.
+    if (host == "bing.com" or host.endswith(".bing.com")) and parts.path.startswith("/ck/"):
         u = dict(parse_qsl(parts.query)).get("u", "")
         if u.startswith("a1"):
             raw = u[2:] + "=" * (-len(u[2:]) % 4)
