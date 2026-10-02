@@ -342,18 +342,31 @@ def test_fetch_asset_refuses_unsafe_out_dir(monkeypatch, tmp_path, out_dir):
 
 
 @pytest.mark.parametrize(
-    "out_dir",
-    ["con", "NUL", "aux", "prn", "com1", "LPT1", "notes/nul.txt", "lpt9.log/x", "con.", "conout$", "com\u00b9"],
+    ("out_dir", "part"),
+    [
+        ("con", "con"),
+        ("NUL", "NUL"),
+        ("aux", "aux"),
+        ("prn", "prn"),
+        ("com1", "com1"),
+        ("LPT1", "LPT1"),
+        ("notes/nul.txt", "nul.txt"),
+        ("lpt9.log/x", "lpt9.log"),
+        ("con.", "con."),
+        ("conout$", "conout$"),
+        ("com\u00b9", "com\u00b9"),
+    ],
 )
-def test_fetch_asset_refuses_windows_device_names(monkeypatch, tmp_path, out_dir):
+def test_fetch_asset_refuses_windows_device_names(monkeypatch, tmp_path, out_dir, part):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         "searchts.assets.get_asset",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not run")),
     )
     out = fetch_asset("https://x.test/x.png", out_dir)
-    # The exact refusal, so a crash inside get_asset cannot pass for it.
-    assert out.startswith("Error: out_dir may not use a Windows device name"), out
+    # The whole refusal, naming the offending part, so neither a crash inside
+    # get_asset nor a refusal of the wrong part can pass for it.
+    assert out == f"Error: out_dir may not use a Windows device name ({part!r}).", out
 
 
 @pytest.mark.parametrize("out_dir", ["console", "nullable", "auxiliary", "com10", "lpt0", "notes/conf"])
