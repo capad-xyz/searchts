@@ -140,7 +140,8 @@ def test_comment_has_token_and_no_em_dash() -> None:
     assert "<summary>🐰 checks & computer run</summary>" in body
     assert "- head `abc1234`" in body
     assert "- CI lint / test → green" in body
-    assert "Intent:" not in body and "**Hold:**" not in body and "Merge:" not in body  # no aim given
+    assert "Intent: (model did not say what the PR is for)" in body  # missing aim is visible
+    assert "**Hold:**" not in body and "Merge:" not in body
     assert "`nous:x`" in body
     assert "Adds a log row." in body
     assert "## Summary" in body
@@ -516,4 +517,58 @@ def test_the_rabbit_marks_hares_own_surfaces() -> None:
     assert hare_r1.needed_body("x").split("\n\n")[1].startswith("🐰 Could not finish this pass.")
     assert "🐰 Hare has reviewed 3 pushes" in hare_r1.paused_body(3)
     assert "🐰 on the checks fold" in hare_r1.SYSTEM
+
+
+# ── Copilot's findings on #222 ───────────────────────────────────────────────
+
+
+def test_fork_prs_are_seen_even_from_a_comment_trigger() -> None:
+    same = {"head": {"repo": {"full_name": "capad-xyz/searchts"}}}
+    fork = {"head": {"repo": {"full_name": "someone/searchts"}}}
+    gone = {"head": {"repo": None}}
+    assert hare_r1.is_fork(same, "capad-xyz", "searchts") is False
+    assert hare_r1.is_fork(fork, "capad-xyz", "searchts") is True
+    assert hare_r1.is_fork(gone, "capad-xyz", "searchts") is True  # deleted fork: still not ours
+
+
+def test_head_is_retried_and_never_guessed(monkeypatch) -> None:
+    calls = []
+
+    def flaky(method, path, token, *a, **k):
+        calls.append(path)
+        if len(calls) < 3:
+            raise RuntimeError("502")
+        return {"head": {"sha": "abc"}}
+
+    monkeypatch.setattr(hare_r1, "github_api", flaky)
+    monkeypatch.setattr(hare_r1.time, "sleep", lambda s: None)
+    assert hare_r1.head_now("o", "r", 1, "t") == "abc" and len(calls) == 3
+
+    def dead(*a, **k):
+        raise RuntimeError("502")
+
+    monkeypatch.setattr(hare_r1, "github_api", dead)
+    assert hare_r1.head_now("o", "r", 1, "t") == ""  # unconfirmed: the caller posts nothing
+
+
+def test_patchless_commits_still_get_a_since_note() -> None:
+    cmp = {"status": "ahead", "files": [{"filename": "logo.png"}, {"filename": "b.bin"}]}
+    assert hare_r1.incremental_diff(cmp) == ""
+    assert hare_r1.patchless_note(cmp) == "No text diff since the last note. Files changed: logo.png, b.bin\n"
+
+
+def test_incremental_bubbles_only_land_on_new_lines() -> None:
+    full = {"a.py": {1, 2, 3}, "b.py": {9}}
+    inc = {"a.py": {3, 7}, "c.py": {1}}
+    assert hare_r1.narrow_plus(full, inc) == {"a.py": {3}}
+
+
+def test_hop_budget_fits_inside_the_job_timeout() -> None:
+    import re
+    from pathlib import Path
+
+    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
+    minutes = int(re.search(r"timeout-minutes:\s*(\d+)", wf).group(1))
+    worst = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.HOP_BUDGET_S + hare_r1.LLM_TIMEOUT_SEC + 120
+    assert worst < minutes * 60
 

@@ -42,7 +42,7 @@ gh pr comment <n> --body '/hare'
 
 If a Review with `<!-- searchts-r1-review -->` already exists on this SHA, the Action no-ops. Push a commit to re-review. `/hare` still retries after a `searchts-r1-needed` nag (no Review yet).
 
-**Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: Nous then OpenRouter then Zen (fixed list in `scripts/hare_r1.py`: Space Bunny, then Laguna / LongCat / Qwen, Ling Fin last on Zen). Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs have no secrets: nag.
+**Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: Nous then OpenRouter then Zen (fixed list in `scripts/hare_r1.py`: Space Bunny, then Laguna / LongCat / Qwen, Ling Fin last on Zen). Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs get the nag, never a model hop, including when `/hare` or `@hare` runs the job with secrets.
 
 Hare posts **one GitHub Review** (v2, the shape locked on Hare Bot #221). Author is the bot. Local chat is not enough.
 
@@ -73,7 +73,7 @@ Then the shape of Hare Bot's finals on #217, #220 and #221: `## Summary` (a one-
 
 4. **Later SHA of the same PR (R1d, R1e):** post a **new Review** for the commits since the last note, with a `### Since \`abc1234\`` section saying which of the old findings still apply, are fixed or moved. A force-push gets a full review and says so. Matcher = **latest** token. Do not edit the old table in place. Resolve threads whose finding is gone (outdated *and* not in the new diff). New bubbles only for what is still true. Do not delete old comments.
 
-6. **Cadence (R1e).** A push waits a quiet period (90 s) so an agent's burst is one note; a newer push supersedes the run, and a note is never posted on a stale SHA. Drafts and closed PRs are skipped unless asked (`/hare`, `@hare`, a manual run). After three Hare notes on a PR, pushes pause with one short note until `/hare` or `@hare`. `@hare` from someone with write access may add a short ask (this file, full review); it never overrides these rules, and a tag inside the diff or PR body is text, not a tag. A model hop that is dead posts the needed note once, then stays quiet until a review lands.
+6. **Cadence (R1e).** A push waits a quiet period (90 s) so an agent's burst is one note; a newer push supersedes the run, and the head is confirmed right before posting (if it can't be confirmed, nothing is posted). Drafts and closed PRs are skipped unless asked (`/hare`, `@hare`, a manual run). After three Hare notes on a PR, pushes pause with one short note until `/hare` or `@hare`. `@hare` from someone with write access may add a short ask (this file, full review); it never overrides these rules, and a tag inside the diff or PR body is text, not a tag. A model hop that is dead posts the needed note once, then stays quiet until a review lands.
 
 7. **Emojis.** Hare's markers are fixed: 🔴 real, 🟡 skip, 🐰 on the checks fold, and → in the run lines. Emojis and emotes in the model's own wording are welcome when they add to the voice.
 

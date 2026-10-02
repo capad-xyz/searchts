@@ -33,6 +33,8 @@ NOUS_BASE = "https://inference-api.nousresearch.com/v1"
 OR_BASE = "https://openrouter.ai/api/v1"
 ZEN_BASE = "https://opencode.ai/zen/v1"
 LLM_TIMEOUT_SEC = 60
+# Model hops stop after this, so the needed note posts before the job timeout.
+HOP_BUDGET_S = 360
 
 # Fixed list, not a router. Live 2026-10-01.
 # Dropped: nex-n2.5-pro:free (gone), unsuffixed Nous ids (paid).
@@ -337,7 +339,9 @@ def render_comment(
 {said}
 
 {_ci_line(check_state, check_notes, sha)}
-""" + (f"\nIntent: {_no_em(_plain(aim))}\n" if _plain(aim) else "") + (f"\n{since}\n" if since else "") + f"""
+
+Intent: {_no_em(_plain(aim)) or "(model did not say what the PR is for)"}
+""" + (f"\n{since}\n" if since else "") + f"""
 ### Findings
 
 {findings_md}
@@ -686,6 +690,35 @@ def needed_posted_since(comments: list[Any], notes: list[dict[str, Any]]) -> boo
     return False
 
 
+def is_fork(pr: dict[str, Any], owner: str, repo: str) -> bool:
+    """AGENTS.md R1c: fork PRs get no model hops. Comment triggers run with secrets, so check here."""
+    head_repo = str(((pr.get("head") or {}).get("repo") or {}).get("full_name") or "")
+    return head_repo.lower() != f"{owner}/{repo}".lower()
+
+
+def head_now(owner: str, repo: str, n: int, token: str, tries: int = 3, wait: float = 3.0) -> str:
+    """The PR head right now, or "" when it cannot be confirmed (then nothing is posted)."""
+    for i in range(tries):
+        try:
+            data = github_api("GET", f"/repos/{owner}/{repo}/pulls/{n}", token)
+            return str(data.get("head", {}).get("sha") or "")
+        except RuntimeError:
+            if i + 1 < tries:
+                time.sleep(wait)
+    return ""
+
+
+def patchless_note(compare: dict[str, Any]) -> str:
+    """Stand-in diff when the commits since the last note have no text patch (binary files, pure renames)."""
+    names = [str(f.get("filename") or "") for f in compare.get("files") or [] if f.get("filename")]
+    return "No text diff since the last note. Files changed: " + (", ".join(names[:30]) or "(none listed)") + "\n"
+
+
+def narrow_plus(full: dict[str, set[int]], inc: dict[str, set[int]]) -> dict[str, set[int]]:
+    """Bubble lines on an incremental run: in the new commits and in the PR diff (GitHub needs both)."""
+    return {p: full[p] & lines for p, lines in inc.items() if p in full and full[p] & lines}
+
+
 def deliver_review(
     owner: str,
     repo: str,
@@ -806,6 +839,9 @@ def _hare_once(
     pull = f"/repos/{owner}/{repo}/pulls/{n}"
     pr_data = github_api("GET", pull, token)
     sha = sha or pr_data.get("head", {}).get("sha") or ""
+    if is_fork(pr_data, owner, repo):
+        post_needed(owner, repo, n, token, "fork PR: Hare does not send fork code to model providers (AGENTS.md R1c).")
+        return 0
     if event == "pull_request" and QUIET_S > 0:
         # R1e: wait out an agent's burst. A newer push cancels this run or moves the head.
         time.sleep(QUIET_S)
@@ -853,20 +889,19 @@ def _hare_once(
     old: list[dict[str, str]] = []
     model_diff = diff
     last = notes[-1] if notes else None
-    base = str((last or {}).get("commit_id") or "")
-    if last and base and base != sha and "full review" not in ask.lower():
+    note_sha = str((last or {}).get("commit_id") or "")
+    if last and note_sha and note_sha != sha and "full review" not in ask.lower():
         try:
-            cmp = github_api("GET", f"/repos/{owner}/{repo}/compare/{base}...{sha}", token)
+            cmp = github_api("GET", f"/repos/{owner}/{repo}/compare/{note_sha}...{sha}", token)
         except RuntimeError:
             cmp = {}
         state = str(cmp.get("status") or "") if isinstance(cmp, dict) else ""
         if state == "ahead":
-            inc = incremental_diff(cmp)
-            if inc:
-                since, model_diff = base, inc
-                old = parse_old_findings(str(last.get("body") or ""))
-        elif state == "diverged":
-            since_md = render_since(base, [], {}, rewritten=True)
+            since = note_sha
+            model_diff = incremental_diff(cmp) or patchless_note(cmp)
+            old = parse_old_findings(str(last.get("body") or ""))
+        elif state in {"diverged", "behind"}:  # force-push, including back to an older commit
+            since_md = render_since(note_sha, [], {}, rewritten=True)
 
     agents = ""
     try:
@@ -896,7 +931,11 @@ def _hare_once(
     errs: list[str] = []
     parsed: dict[str, Any] | None = None
     used = ""
+    hops_start = time.time()
     for name, base, key, model in providers:
+        if time.time() - hops_start > HOP_BUDGET_S:
+            errs.append(f"hop budget ({HOP_BUDGET_S} s) spent before {name}:{model}")
+            break
         try:
             raw = chat_complete(base, key, model, messages)
             parsed = extract_json(raw)
@@ -932,7 +971,7 @@ def _hare_once(
             if isinstance(o, dict) and str(o.get("status") or "") in OLD_STATUS:
                 status[str(o.get("loc") or "")] = str(o["status"])
         since_md = render_since(since, old, status)
-    bubbles = filter_bubbles(findings, plus)
+    bubbles = filter_bubbles(findings, narrow_plus(plus, parse_plus_lines(model_diff)) if since else plus)
     intent = intent_for(check_state, findings)
     comment = render_comment(
         used, effort, intent, findings, check_state, check_notes, summary, sha, green_checks(runs), aim, since_md
@@ -942,11 +981,11 @@ def _hare_once(
         return 0
 
     review_comments = bubble_comments(bubbles)
-    try:  # R1e: a push during the review supersedes it; never post the stale SHA.
-        now = str(github_api("GET", pull, token).get("head", {}).get("sha") or "")
-    except RuntimeError:
-        now = sha
-    if now and now != sha:
+    now = head_now(owner, repo, n, token)  # R1e: never post on a stale SHA
+    if not now:
+        post_needed(owner, repo, n, token, "could not confirm the PR head before posting, so nothing was posted.")
+        return 0
+    if now != sha:
         print(f"hare skip: superseded, head moved {sha[:12]} -> {now[:12]}")
         return 0
     how = deliver_review(owner, repo, n, token, sha, comment, review_comments)
