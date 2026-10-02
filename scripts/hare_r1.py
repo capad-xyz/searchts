@@ -28,8 +28,6 @@ CHECK_POLL_S = 20
 QUIET_S = int(os.environ.get("HARE_QUIET_S", "90"))
 PAUSE_AFTER = 3
 PAUSED = "<!-- searchts-r1-paused -->"
-# Emoji policy: Hare's markers are the only emojis. Model prose is plain words.
-_EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B50-\u2B55\uFE0F\u200D]")
 
 NOUS_BASE = "https://inference-api.nousresearch.com/v1"
 OR_BASE = "https://openrouter.ai/api/v1"
@@ -63,9 +61,8 @@ def _csv_models(name: str, default: str) -> list[str]:
 
 
 def _plain(s: str) -> str:
-    """Model prose without emojis or emotes: the markers are Hare's job (🔴 🟡 🤖).
-    Arrows and math (→, ≥) stay."""
-    return re.sub(r"[ \t]{2,}", " ", _EMOJI.sub("", s or "")).strip()
+    """Model prose, trimmed. Its emojis and emotes stay; the 🔴 🟡 🤖 markers are Hare's own."""
+    return re.sub(r"[ \t]{2,}", " ", s or "").strip()
 
 
 def _no_em(s: str) -> str:
@@ -440,7 +437,7 @@ def chat_complete(base: str, key: str, model: str, messages: list[dict[str, str]
 SYSTEM = """You are Hare, an automated PR reviewer for the searchts repo.
 Read AGENTS.md rules in the user message. Review and report. Do not fix.
 Voice: fun bot, witty and short, substance first. No em dashes. No first person.
-Emojis: none in your text. The Action adds the only ones (🔴 real, 🟡 skip, 🤖 on the checks fold); the voice is in the words.
+Emojis and emotes are welcome in your own wording when they add to the voice. The Action adds the markers (🔴 real, 🟡 skip, 🤖 on the checks fold); do not add those yourself.
 Never write "fine to merge", "LGTM" or a score; the Action sets Hold from CI and real findings.
 Return ONLY a JSON object:
 {"effort":"low|medium|high","summary":"lead line, then numbered kinds when needed","aim":"one line: what the PR is trying to do","findings":[{"sev":"real"|"skip","path":"file","line":123,"issue":"one or two sentences","short":"the same finding in about 20 words, for the inline bubble","fix":"yes|no|later","change":"one short sentence: what to change","suggestion":"optional: the whole new text of that one line, same indentation"}]}

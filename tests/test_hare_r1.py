@@ -402,17 +402,15 @@ def test_intent_line_sits_under_the_ci_line() -> None:
     assert body.index("CI on `abc1234`") < body.index("Intent:") < body.index("### Findings")
 
 
-def test_model_prose_carries_no_emojis_but_keeps_arrows() -> None:
+def test_model_prose_keeps_its_emojis_and_emotes() -> None:
     f = hare_r1.normalize_findings(
-        [{"sev": "real", "path": "a.py", "line": 3, "issue": "Breaks ✅ the 🚀 build → twice", "short": "Breaks 🔥 it"}]
+        [{"sev": "real", "path": "a.py", "line": 3, "issue": "Breaks the 🚀 build → twice (╯°□°)╯", "short": "Breaks it 🔥"}]
     )
     body = hare_r1.render_comment("nous:x", "low", "hold", f, "ok", [], "Ships it 🎉 fast", "abc1234")
-    assert "🎉" not in body and "🚀" not in body and "✅" not in body
-    assert "Breaks the build → twice" in body
-    assert "🔴 real" in body and "🤖 checks" in body  # Hare's own markers stay
-    bubble = hare_r1.bubble_comments(f)[0]["body"]
-    assert "🔥" not in bubble and "🔴 **real**: Breaks it" in bubble
-    assert "Emojis: none in your text" in hare_r1.SYSTEM
+    assert "Ships it 🎉 fast" in body and "Breaks the 🚀 build → twice (╯°□°)╯" in body
+    assert "#### 🔴 real" in body and "🤖 checks" in body  # Hare's own markers are still there
+    assert "🔴 **real**: Breaks it 🔥" in hare_r1.bubble_comments(f)[0]["body"]
+    assert "Emojis and emotes are welcome" in hare_r1.SYSTEM
 
 
 # ── R1e cadence ──────────────────────────────────────────────────────────────
@@ -441,7 +439,7 @@ def test_hare_notes_ignore_other_reviews_and_sort_oldest_first() -> None:
 
 
 def test_ask_after_at_hare_is_short_and_plain() -> None:
-    assert hare_r1.ask_from("@hare full review please 🙏") == "full review please"
+    assert hare_r1.ask_from("@hare full review please 🙏") == "full review please 🙏"
     assert hare_r1.ask_from("hey @Hare: this file only") == "this file only"
     assert hare_r1.ask_from("/hare") == ""
     assert len(hare_r1.ask_from("@hare " + "x" * 500)) == 200
