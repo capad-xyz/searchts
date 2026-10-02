@@ -61,7 +61,6 @@ HARE_NOUS_DEFAULT = (
     "meituan/longcat-2.5-preview:free"
 )
 HARE_OR_DEFAULT = (
-    "stealth/space-bunny-alpha,"
     "poolside/laguna-s-2.1:free,"
     "qwen/qwen3.8-27b:free"
 )

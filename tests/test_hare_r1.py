@@ -206,7 +206,8 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     assert hare_r1._csv_models("HARE_OR_MODEL", "a, b ,c") == ["a", "b", "c"]
     monkeypatch.setenv("HARE_OR_MODEL", "only-one")  # type: ignore[attr-defined]
     assert hare_r1._csv_models("HARE_OR_MODEL", "a,b") == ["only-one"]
-    assert "stealth/space-bunny-alpha" in hare_r1.HARE_OR_DEFAULT.split(",")
+    assert "stealth/space-bunny-alpha" not in hare_r1.HARE_OR_DEFAULT.split(",")  # dropped: empty content
+    assert hare_r1.HARE_OR_DEFAULT.split(",")[0] == "poolside/laguna-s-2.1:free"
     assert "qwen/qwen3.8-27b:free" in hare_r1.HARE_OR_DEFAULT.split(",")
     assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
     assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stealth/space-bunny-alpha"
@@ -571,4 +572,15 @@ def test_hop_budget_fits_inside_the_job_timeout() -> None:
     minutes = int(re.search(r"timeout-minutes:\s*(\d+)", wf).group(1))
     worst = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.HOP_BUDGET_S + hare_r1.LLM_TIMEOUT_SEC + 120
     assert worst < minutes * 60
+
+
+def test_workflow_groq_models_match_the_live_default() -> None:
+    import re
+    from pathlib import Path
+
+    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
+    m = re.search(r"HARE_GROQ_MODEL:\s*(\S+)", wf)
+    assert m, "HARE_GROQ_MODEL missing from hare.yml"
+    # Retired on Groq free: llama-3.3-70b-versatile (16 Aug 2026), moonshotai/kimi-k2-instruct.
+    assert m.group(1) == hare_r1.HARE_GROQ_DEFAULT
 
