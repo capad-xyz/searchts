@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hare R1c doorbell: review a PR via Nous, then OpenRouter. Never required CI."""
+"""Hare R1c doorbell: review a PR via Groq, Gemini, Nous, then OpenRouter. Never required CI."""
 
 from __future__ import annotations
 
@@ -32,15 +32,31 @@ PAUSED = "<!-- searchts-r1-paused -->"
 NOUS_BASE = "https://inference-api.nousresearch.com/v1"
 OR_BASE = "https://openrouter.ai/api/v1"
 ZEN_BASE = "https://opencode.ai/zen/v1"
+GROQ_BASE = "https://api.groq.com/openai/v1"
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 LLM_TIMEOUT_SEC = 60
 # Model hops stop after this, so the needed note posts before the job timeout.
 HOP_BUDGET_S = 360
+# Reasoning models burn the whole budget thinking and return content None
+# (finish_reason length). Proven 2026-10-02 on the real PR 222 payload:
+# space-bunny-alpha ate 2500 and 8000 max_tokens with zero content.
+# So the budget is wide and OpenRouter hops cap reasoning effort.
+LLM_MAX_TOKENS = 8000
+OR_REASONING = {"effort": "low", "exclude": True}
 
-# Fixed list, not a router. Live 2026-10-01.
-# Dropped: nex-n2.5-pro:free (gone), unsuffixed Nous ids (paid).
+# Fixed list, not a router. Live 2026-10-02.
+# Dropped: nex-n2.5-pro:free (gone), unsuffixed Nous ids (paid),
+# OR space-bunny (leaves OpenRouter 2026-10-05).
+# Zen stays in code but CI passes no key (free tier is TUI-only,
+# API calls rejected), so those hops are skipped.
 # Skip: openrouter/free, Lyria, Muse contributor-free (trains; Responses API).
-# Space Bunny leaves OpenRouter 2026-10-05. OR may retain prompts (not training).
-# Zen space-bunny-free is zero-retention.
+# OR may retain prompts (not training).
+HARE_GROQ_DEFAULT = (
+    "llama-3.3-70b-versatile,"
+    "moonshotai/kimi-k2-instruct,"
+    "openai/gpt-oss-120b"
+)
+HARE_GEMINI_DEFAULT = "gemini-2.5-flash"
 HARE_NOUS_DEFAULT = (
     "stealth/space-bunny-alpha,"
     "poolside/laguna-s-2.1:free,"
@@ -406,13 +422,21 @@ def bubble_comments(bubbles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def chat_complete(base: str, key: str, model: str, messages: list[dict[str, str]]) -> str:
-    body = {
+def chat_complete(
+    base: str,
+    key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    reasoning: dict[str, Any] | None = None,
+) -> str:
+    body: dict[str, Any] = {
         "model": model,
         "messages": messages,
         "temperature": 0.1,
-        "max_tokens": 2500,
+        "max_tokens": LLM_MAX_TOKENS,
     }
+    if reasoning is not None:
+        body["reasoning"] = reasoning
     req = urllib.request.Request(
         f"{base.rstrip('/')}/chat/completions",
         data=json.dumps(body).encode(),
@@ -787,6 +811,10 @@ def run() -> int:
     nous_key = _env("SEARCHTS_HARE_API_KEY_NOUS")
     or_key = _env("SEARCHTS_HARE_API_KEY_OR")
     zen_key = _env("SEARCHTS_HARE_API_KEY_ZEN")
+    groq_key = _env("SEARCHTS_HARE_API_KEY_GROQ")
+    gemini_key = _env("SEARCHTS_HARE_API_KEY_GEMINI")
+    groq_models = _csv_models("HARE_GROQ_MODEL", HARE_GROQ_DEFAULT)
+    gemini_models = _csv_models("HARE_GEMINI_MODEL", HARE_GEMINI_DEFAULT)
     nous_models = _csv_models("HARE_NOUS_MODEL", HARE_NOUS_DEFAULT)
     or_models = _csv_models("HARE_OR_MODEL", HARE_OR_DEFAULT)
     zen_models = _csv_models("HARE_ZEN_MODEL", HARE_ZEN_DEFAULT)
@@ -805,6 +833,10 @@ def run() -> int:
             nous_key,
             or_key,
             zen_key,
+            groq_key,
+            gemini_key,
+            groq_models,
+            gemini_models,
             nous_models,
             or_models,
             zen_models,
@@ -826,11 +858,15 @@ def _hare_once(
     nous_key: str,
     or_key: str,
     zen_key: str,
+    groq_key: str,
+    gemini_key: str,
+    groq_models: list[str],
+    gemini_models: list[str],
     nous_models: list[str],
     or_models: list[str],
     zen_models: list[str],
 ) -> int:
-    if not nous_key and not or_key and not zen_key:
+    if not nous_key and not or_key and not zen_key and not groq_key and not gemini_key:
         post_needed(owner, repo, n, token, "no Hare API secrets on this run (forks have none).")
         return 0
 
@@ -916,28 +952,34 @@ def _hare_once(
     user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask)
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
 
-    providers: list[tuple[str, str, str, str]] = []
+    providers: list[tuple[str, str, str, str, dict[str, Any] | None]] = []
+    if groq_key:
+        for model in groq_models:
+            providers.append(("groq", GROQ_BASE, groq_key, model, None))
+    if gemini_key:
+        for model in gemini_models:
+            providers.append(("gemini", GEMINI_BASE, gemini_key, model, None))
     if nous_key:
         for model in nous_models:
-            providers.append(("nous", NOUS_BASE, nous_key, model))
+            providers.append(("nous", NOUS_BASE, nous_key, model, None))
     if or_key:
         for model in or_models:
-            providers.append(("openrouter", OR_BASE, or_key, model))
+            providers.append(("openrouter", OR_BASE, or_key, model, OR_REASONING))
     if zen_key:
         for model in zen_models:
-            providers.append(("zen", ZEN_BASE, zen_key, model))
+            providers.append(("zen", ZEN_BASE, zen_key, model, None))
 
     last_err = "no provider"
     errs: list[str] = []
     parsed: dict[str, Any] | None = None
     used = ""
     hops_start = time.time()
-    for name, base, key, model in providers:
+    for name, base, key, model, reasoning in providers:
         if time.time() - hops_start > HOP_BUDGET_S:
             errs.append(f"hop budget ({HOP_BUDGET_S} s) spent before {name}:{model}")
             break
         try:
-            raw = chat_complete(base, key, model, messages)
+            raw = chat_complete(base, key, model, messages, reasoning)
             parsed = extract_json(raw)
             if parsed is None:
                 raise RuntimeError("no JSON object in model output")
