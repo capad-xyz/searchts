@@ -137,7 +137,7 @@ def test_comment_has_token_and_no_em_dash() -> None:
     assert body.startswith(hare_r1.TOKEN)
     assert "\u2014" not in body
     assert "CI on `abc1234`: green." in body
-    assert "<summary>🤖 checks & computer run</summary>" in body
+    assert "<summary>🐰 checks & computer run</summary>" in body
     assert "- head `abc1234`" in body
     assert "- CI lint / test → green" in body
     assert "Intent:" not in body and "**Hold:**" not in body and "Merge:" not in body  # no aim given
@@ -408,7 +408,7 @@ def test_model_prose_keeps_its_emojis_and_emotes() -> None:
     )
     body = hare_r1.render_comment("nous:x", "low", "hold", f, "ok", [], "Ships it 🎉 fast", "abc1234")
     assert "Ships it 🎉 fast" in body and "Breaks the 🚀 build → twice (╯°□°)╯" in body
-    assert "#### 🔴 real" in body and "🤖 checks" in body  # Hare's own markers are still there
+    assert "#### 🔴 real" in body and "🐰 checks" in body  # Hare's own markers are still there
     assert "🔴 **real**: Breaks it 🔥" in hare_r1.bubble_comments(f)[0]["body"]
     assert "Emojis and emotes are welcome" in hare_r1.SYSTEM
 
@@ -508,4 +508,12 @@ def test_workflow_hears_at_hare_only_from_people_with_write_access() -> None:
     assert "'@hare'" in wf
     assert "author_association" in wf and "COLLABORATOR" in wf
     assert "HARE_ASK:" in wf
+
+
+def test_the_rabbit_marks_hares_own_surfaces() -> None:
+    body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [], "S.", "abc1234")
+    assert "<summary>🐰 checks & computer run</summary>" in body and "🤖" not in body
+    assert hare_r1.needed_body("x").split("\n\n")[1].startswith("🐰 Could not finish this pass.")
+    assert "🐰 Hare has reviewed 3 pushes" in hare_r1.paused_body(3)
+    assert "🐰 on the checks fold" in hare_r1.SYSTEM
 

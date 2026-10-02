@@ -61,7 +61,7 @@ def _csv_models(name: str, default: str) -> list[str]:
 
 
 def _plain(s: str) -> str:
-    """Model prose, trimmed. Its emojis and emotes stay; the 🔴 🟡 🤖 markers are Hare's own."""
+    """Model prose, trimmed. Its emojis and emotes stay; the 🔴 🟡 🐰 markers are Hare's own."""
     return re.sub(r"[ \t]{2,}", " ", s or "").strip()
 
 
@@ -343,7 +343,7 @@ def render_comment(
 {findings_md}
 
 <details>
-<summary>🤖 checks & computer run</summary>
+<summary>🐰 checks & computer run</summary>
 
 {runs_md}
 
@@ -437,7 +437,7 @@ def chat_complete(base: str, key: str, model: str, messages: list[dict[str, str]
 SYSTEM = """You are Hare, an automated PR reviewer for the searchts repo.
 Read AGENTS.md rules in the user message. Review and report. Do not fix.
 Voice: fun bot, witty and short, substance first. No em dashes. No first person.
-Emojis and emotes are welcome in your own wording when they add to the voice. The Action adds the markers (🔴 real, 🟡 skip, 🤖 on the checks fold); do not add those yourself.
+Emojis and emotes are welcome in your own wording when they add to the voice. The Action adds the markers (🔴 real, 🟡 skip, 🐰 on the checks fold); do not add those yourself.
 Never write "fine to merge", "LGTM" or a score; the Action sets Hold from CI and real findings.
 Return ONLY a JSON object:
 {"effort":"low|medium|high","summary":"lead line, then numbered kinds when needed","aim":"one line: what the PR is trying to do","findings":[{"sev":"real"|"skip","path":"file","line":123,"issue":"one or two sentences","short":"the same finding in about 20 words, for the inline bubble","fix":"yes|no|later","change":"one short sentence: what to change","suggestion":"optional: the whole new text of that one line, same indentation"}]}
@@ -532,7 +532,7 @@ def needed_body(why: str) -> str:
     hops = "\n".join(f"- {_short_fail(x)}" for x in parts)
     return _no_em(
         f"{NEEDED}\n\n"
-        "Could not finish this pass. Review hops were busy or blocked. "
+        "🐰 Could not finish this pass. Review hops were busy or blocked. "
         "This is not a review.\n\n"
         "Reply **`/hare`** to retry. Or Actions → hare → Run workflow "
         "(optional OpenRouter model override).\n\n"
@@ -624,7 +624,7 @@ def cadence_skip(event: str, pr: dict[str, Any], notes: list[dict[str, Any]]) ->
 
 def paused_body(count: int) -> str:
     return _no_em(
-        f"{PAUSED}\n\nHare has reviewed {count} pushes on this PR and is pausing here. "
+        f"{PAUSED}\n\n🐰 Hare has reviewed {count} pushes on this PR and is pausing here. "
         "Say `/hare` for another look, or `@hare` with a short ask (this file, full review).\n"
     )
 
