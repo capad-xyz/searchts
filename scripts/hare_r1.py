@@ -52,8 +52,6 @@ OR_REASONING = {"effort": "low", "exclude": True}
 # Skip: openrouter/free, Lyria, Muse contributor-free (trains; Responses API).
 # OR may retain prompts (not training).
 HARE_GROQ_DEFAULT = (
-    "llama-3.3-70b-versatile,"
-    "moonshotai/kimi-k2-instruct,"
     "openai/gpt-oss-120b"
 )
 HARE_GEMINI_DEFAULT = "gemini-2.5-flash"
