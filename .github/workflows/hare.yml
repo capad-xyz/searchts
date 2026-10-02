@@ -1,7 +1,9 @@
 name: hare
 
 # R1c doorbell + R1b identity. Not a required check. Secrets exist only on same-repo PRs.
-# /hare on a PR comment (humans only) retries. workflow_dispatch retries with an optional model.
+# /hare on a PR comment (humans only) retries. @hare from someone with write access may add a
+# short ask (this file, full review). workflow_dispatch retries with an optional model.
+# R1e cadence (quiet period, supersede, pause, notes since the last one) lives in scripts/hare_r1.py.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -39,12 +41,14 @@ jobs:
        github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request &&
-       contains(github.event.comment.body, '/hare') &&
+       (contains(github.event.comment.body, '/hare') ||
+        (contains(github.event.comment.body, '@hare') &&
+         contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))) &&
        github.event.comment.user.login != 'searchts-hare[bot]' &&
        github.event.comment.user.login != 'github-actions[bot]') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15  # 90 s quiet period + up to 8 min of CI wait + model hops
     # Always green: a dead brain posts searchts-r1-needed instead of failing CI.
     continue-on-error: true
     steps:
@@ -85,6 +89,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Only an ask from someone with write access reaches the prompt. Read as data, never run.
+          HARE_ASK: ${{ contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) && github.event.comment.body || '' }}
           SEARCHTS_HARE_API_KEY_NOUS: ${{ secrets.SEARCHTS_HARE_API_KEY_NOUS }}
           SEARCHTS_HARE_API_KEY_OR: ${{ secrets.SEARCHTS_HARE_API_KEY_OR }}
           SEARCHTS_HARE_API_KEY_ZEN: ${{ secrets.SEARCHTS_HARE_API_KEY_ZEN }}
