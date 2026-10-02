@@ -820,6 +820,11 @@ def list_index(html: str, url: str, text: str) -> Optional[Tuple[str, More]]:
         paras = [p for p in paras if len(p) >= 30]
         total = sum(len(p) for p in paras)
         covered = sum(len(p) for p in paras if p[len(p) // 2 - 15 : len(p) // 2 + 15] in item_text)
+        if not total and _norm(text or ""):
+            # Every paragraph is short (a brief post, a caption): nothing proves the
+            # extract is this list, so an article next to a related grid stays an article.
+            # Only an extract with no text at all is replaced outright.
+            return None
         if total and covered < _INDEX_MIN_COVERAGE * total:
             return None
         heading = next(
