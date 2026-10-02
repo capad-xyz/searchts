@@ -1,10 +1,6 @@
 # Unlocker benchmark
 
-Two suites, two honest pass rates:
-
-- **Smoke** — the ladder against open pages (a regression canary, not proof).
-- **Walled** — a real pass rate against vendors that restrict bots. Failures
-  here are expected and honest, not a defect.
+> Two suites, two honest pass rates. **Smoke** exercises the ladder on open pages; **Walled** is a real pass rate against vendors that restrict bots (Reddit, LinkedIn, Cloudflare/DataDome-class, X, Booking). A low walled rate is truth, not a trophy.
 
 > Run from a residential connection for a representative number: from a datacenter IP (CI, cloud VM) the curl_cffi tier is blocked more often than a real user sees.
 
@@ -12,63 +8,66 @@ See [how to interpret this scorecard](https://github.com/capad-xyz/searchts/blob
 
 ## Smoke
 
-Read **12/12** pages (**100%**), keyless, on this machine's own IP.
+Read **12/12** pages (**100%**).
 
-> This is the smoke suite: open pages that exercise the ladder. It is NOT a
-> claim about hard bot-walls — see the Walled section for that.
+## Smoke — which tier carried it
 
-- `curl_cffi`: 5
-- `Jina Reader`: 1
-- `stealth-browser`: 1
+- `curl_cffi`: 7
 - `share:chatgpt`: 1
 - `share:claude`: 1
 - `share:gemini`: 1
 - `share:grok`: 1
 - `share:poe`: 1
 
-### Smoke — by category
+## Smoke — by category
 
 - `ai-share`: 5/5 (100%)
 - `cloudflare-fronted`: 1/1 (100%)
 - `control`: 1/1 (100%)
 - `open`: 5/5 (100%)
 
-### Smoke — per page
+## Smoke — per page
 
 | Page | Category | Read | Tier | Chars | Secs |
 |------|----------|:----:|------|------:|-----:|
-| example | control | yes | `Jina Reader` | 367 | 12.39 |
-| wikipedia | open | yes | `curl_cffi` | 43818 | 3.63 |
-| mdn | open | yes | `curl_cffi` | 12408 | 4.01 |
-| hacker-news | open | yes | `curl_cffi` | 4075 | 2.85 |
-| cloudflare-docs | cloudflare-fronted | yes | `curl_cffi` | 6939 | 0.53 |
-| python-docs | open | yes | `curl_cffi` | 27285 | 1.25 |
-| httpbin-html | open | yes | `stealth-browser` | 35 | 6.13 |
-| chatgpt-share | ai-share | yes | `share:chatgpt` | 2149 | 3.79 |
-| claude-share | ai-share | yes | `share:claude` | 11260 | 1.55 |
-| gemini-share | ai-share | yes | `share:gemini` | 35780 | 1.23 |
-| grok-share | ai-share | yes | `share:grok` | 41610 | 0.79 |
-| poe-share | ai-share | yes | `share:poe` | 8934 | 1.97 |
+| example | control | yes | `curl_cffi` | 156 | 0.77 |
+| wikipedia | open | yes | `curl_cffi` | 43801 | 0.8 |
+| mdn | open | yes | `curl_cffi` | 15136 | 0.57 |
+| hacker-news | open | yes | `curl_cffi` | 4076 | 0.4 |
+| cloudflare-docs | cloudflare-fronted | yes | `curl_cffi` | 7378 | 0.17 |
+| python-docs | open | yes | `curl_cffi` | 32545 | 0.5 |
+| httpbin-html | open | yes | `curl_cffi` | 3566 | 0.5 |
+| chatgpt-share | ai-share | yes | `share:chatgpt` | 2149 | 1.5 |
+| claude-share | ai-share | yes | `share:claude` | 11260 | 0.34 |
+| gemini-share | ai-share | yes | `share:gemini` | 35780 | 0.3 |
+| grok-share | ai-share | yes | `share:grok` | 41610 | 0.18 |
+| poe-share | ai-share | yes | `share:poe` | 8934 | 0.42 |
 
 ## Walled
 
-**Not yet measured.** This suite (Reddit hot, a public Reddit comments thread, the
-LinkedIn login wall, a Cloudflare-fronted vendor site, a DataDome-class site, X,
-and Booking) is a real pass-rate against vendors that restrict bots. Expected
-failures are part of the result — there is no 100% trophy here.
+Read **2/7** pages (**29%**). — failures are expected on real bot-walls; a low rate is honest, not a defect.
 
-When **F5c** is in, a `reddit-hot` pass is a listing index (several post titles
-and absolute permalinks), not one article that clears 500 characters. A
-Trafilatura single-card extract of that hot page is still a miss.
-`reddit-comments` stays a thread. Do not write that rate in by hand.
+## Walled — which tier carried it
 
-To measure it for real, run from a residential IP (a datacenter IP would
-understate the rate):
+- `stealth-browser`: 2
 
-```bash
-python -m benchmarks.run --suite all --out docs/
-```
+## Walled — by category
 
-That writes both suite scorecards — including the real walled numbers and the
-expected failures — under this section. Do not hand-edit a fake walled rate into
-this file.
+- `booking`: 0/1 (0%)
+- `cloudflare-fronted`: 0/1 (0%)
+- `datadome`: 0/1 (0%)
+- `linkedin`: 0/1 (0%)
+- `reddit`: 2/2 (100%)
+- `twitter`: 0/1 (0%)
+
+## Walled — per page
+
+| Page | Category | Read | Tier | Chars | Secs |
+|------|----------|:----:|------|------:|-----:|
+| reddit-hot | reddit | yes | `stealth-browser` | 29921 | 10.38 |
+| reddit-comments | reddit | yes | `stealth-browser` | 7110 | 10.48 |
+| linkedin-feed | linkedin | no | — | 0 | 4.38 |
+| g2-cloudflare | cloudflare-fronted | no | — | 0 | 18.63 |
+| datadome-co | datadome | no | — | 0 | 19.42 |
+| x-home | twitter | no | — | 0 | 1.47 |
+| booking-home | booking | no | — | 0 | 4.8 |

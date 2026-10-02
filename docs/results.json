@@ -1,0 +1,297 @@
+{
+  "generated": "2026-10-02T202426Z",
+  "summary": {
+    "total": 19,
+    "passed": 14,
+    "pass_rate": 0.7368421052631579,
+    "by_tier": {
+      "curl_cffi": 7,
+      "share:chatgpt": 1,
+      "share:claude": 1,
+      "share:gemini": 1,
+      "share:grok": 1,
+      "share:poe": 1,
+      "stealth-browser": 2
+    },
+    "by_category": {
+      "control": {
+        "passed": 1,
+        "total": 1
+      },
+      "open": {
+        "passed": 5,
+        "total": 5
+      },
+      "cloudflare-fronted": {
+        "passed": 1,
+        "total": 2
+      },
+      "ai-share": {
+        "passed": 5,
+        "total": 5
+      },
+      "reddit": {
+        "passed": 2,
+        "total": 2
+      },
+      "linkedin": {
+        "passed": 0,
+        "total": 1
+      },
+      "datadome": {
+        "passed": 0,
+        "total": 1
+      },
+      "twitter": {
+        "passed": 0,
+        "total": 1
+      },
+      "booking": {
+        "passed": 0,
+        "total": 1
+      }
+    },
+    "by_suite": {
+      "smoke": {
+        "total": 12,
+        "passed": 12,
+        "pass_rate": 1.0
+      },
+      "walled": {
+        "total": 7,
+        "passed": 2,
+        "pass_rate": 0.2857142857142857
+      }
+    }
+  },
+  "results": [
+    {
+      "name": "example",
+      "url": "https://example.com",
+      "category": "control",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "curl_cffi",
+      "status": 200,
+      "chars": 156,
+      "seconds": 0.77,
+      "error": null
+    },
+    {
+      "name": "wikipedia",
+      "url": "https://en.wikipedia.org/wiki/Web_scraping",
+      "category": "open",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "curl_cffi",
+      "status": 200,
+      "chars": 43801,
+      "seconds": 0.8,
+      "error": null
+    },
+    {
+      "name": "mdn",
+      "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP",
+      "category": "open",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "curl_cffi",
+      "status": 200,
+      "chars": 15136,
+      "seconds": 0.57,
+      "error": null
+    },
+    {
+      "name": "hacker-news",
+      "url": "https://news.ycombinator.com/news",
+      "category": "open",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "curl_cffi",
+      "status": 200,
+      "chars": 4076,
+      "seconds": 0.4,
+      "error": null
+    },
+    {
+      "name": "cloudflare-docs",
+      "url": "https://developers.cloudflare.com/",
+      "category": "cloudflare-fronted",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "curl_cffi",
+      "status": 200,
+      "chars": 7378,
+      "seconds": 0.17,
+      "error": null
+    },
+    {
+      "name": "python-docs",
+      "url": "https://docs.python.org/3/library/json.html",
+      "category": "open",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "curl_cffi",
+      "status": 200,
+      "chars": 32545,
+      "seconds": 0.5,
+      "error": null
+    },
+    {
+      "name": "httpbin-html",
+      "url": "https://httpbin.org/html",
+      "category": "open",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "curl_cffi",
+      "status": 200,
+      "chars": 3566,
+      "seconds": 0.5,
+      "error": null
+    },
+    {
+      "name": "chatgpt-share",
+      "url": "https://chatgpt.com/share/67a4266c-dbcc-800f-9b92-f0a8a6480e16",
+      "category": "ai-share",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "share:chatgpt",
+      "status": 200,
+      "chars": 2149,
+      "seconds": 1.5,
+      "error": null
+    },
+    {
+      "name": "claude-share",
+      "url": "https://claude.ai/share/805ee3e5-eb74-43b6-8036-03615b303f6d",
+      "category": "ai-share",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "share:claude",
+      "status": 200,
+      "chars": 11260,
+      "seconds": 0.34,
+      "error": null
+    },
+    {
+      "name": "gemini-share",
+      "url": "https://gemini.google.com/share/6d141b742a13",
+      "category": "ai-share",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "share:gemini",
+      "status": 200,
+      "chars": 35780,
+      "seconds": 0.3,
+      "error": null
+    },
+    {
+      "name": "grok-share",
+      "url": "https://grok.com/share/bGVnYWN5_b8625806-94b3-4886-bc4c-0e559a77139e",
+      "category": "ai-share",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "share:grok",
+      "status": 200,
+      "chars": 41610,
+      "seconds": 0.18,
+      "error": null
+    },
+    {
+      "name": "poe-share",
+      "url": "https://poe.com/s/XBaS4nMuAk8YAWevOFmi",
+      "category": "ai-share",
+      "suite": "smoke",
+      "ok": true,
+      "backend": "share:poe",
+      "status": 200,
+      "chars": 8934,
+      "seconds": 0.42,
+      "error": null
+    },
+    {
+      "name": "reddit-hot",
+      "url": "https://www.reddit.com/r/MachineLearning/hot/",
+      "category": "reddit",
+      "suite": "walled",
+      "ok": true,
+      "backend": "stealth-browser",
+      "status": 200,
+      "chars": 29921,
+      "seconds": 10.38,
+      "error": null
+    },
+    {
+      "name": "reddit-comments",
+      "url": "https://www.reddit.com/r/MachineLearning/comments/5z8110/d_a_super_harsh_guide_to_machine_learning/",
+      "category": "reddit",
+      "suite": "walled",
+      "ok": true,
+      "backend": "stealth-browser",
+      "status": 200,
+      "chars": 7110,
+      "seconds": 10.48,
+      "error": null
+    },
+    {
+      "name": "linkedin-feed",
+      "url": "https://www.linkedin.com/feed/",
+      "category": "linkedin",
+      "suite": "walled",
+      "ok": false,
+      "backend": null,
+      "status": null,
+      "chars": 0,
+      "seconds": 4.38,
+      "error": "all backends failed for https://www.linkedin.com/feed/ -> curl_cffi: login-wall; Jina Reader: HTTPError: HTTP Error 403: Forbidden; stealth-browser: login-wall"
+    },
+    {
+      "name": "g2-cloudflare",
+      "url": "https://www.g2.com/",
+      "category": "cloudflare-fronted",
+      "suite": "walled",
+      "ok": false,
+      "backend": null,
+      "status": null,
+      "chars": 0,
+      "seconds": 18.63,
+      "error": "all backends failed for https://www.g2.com/ -> curl_cffi: http-403; Jina Reader: HTTPError: HTTP Error 403: Forbidden; stealth-browser: http-403"
+    },
+    {
+      "name": "datadome-co",
+      "url": "https://datadome.co/",
+      "category": "datadome",
+      "suite": "walled",
+      "ok": false,
+      "backend": null,
+      "status": null,
+      "chars": 0,
+      "seconds": 19.42,
+      "error": "all backends failed for https://datadome.co/ -> curl_cffi: http-403; Jina Reader: HTTPError: HTTP Error 403: Forbidden; stealth-browser: http-403"
+    },
+    {
+      "name": "x-home",
+      "url": "https://x.com/",
+      "category": "twitter",
+      "suite": "walled",
+      "ok": false,
+      "backend": null,
+      "status": null,
+      "chars": 0,
+      "seconds": 1.47,
+      "error": "all backends failed for https://x.com/ -> curl_cffi: thin-106b; Jina Reader: HTTPError: HTTP Error 403: Forbidden; stealth-browser: thin-0b"
+    },
+    {
+      "name": "booking-home",
+      "url": "https://www.booking.com/",
+      "category": "booking",
+      "suite": "walled",
+      "ok": false,
+      "backend": null,
+      "status": null,
+      "chars": 0,
+      "seconds": 4.8,
+      "error": "all backends failed for https://www.booking.com/ -> curl_cffi: challenge; Jina Reader: HTTPError: HTTP Error 403: Forbidden; stealth-browser: thin-84b"
+    }
+  ]
+}
