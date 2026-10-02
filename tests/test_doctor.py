@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """Tests for doctor module."""
 
+import os
+import sys
+
 import pytest
 
 import searchts.doctor as doctor
@@ -185,6 +188,26 @@ class TestDoctor:
             '"searchts.exe","4242","Console","1","9 K"\n'
         )
         assert doctor.windows_searchts_pids(runner=lambda: csv, platform="win32") == [4242]
+
+    def test_lock_pids_leave_out_every_launcher_above_this_command(self, monkeypatch):
+        """pipx on Windows: searchts.exe -> venv python.exe -> python.exe (F11a)."""
+        monkeypatch.setattr(doctor.os, "getpid", lambda: 111)
+        monkeypatch.setattr(doctor.os, "getppid", lambda: 222)
+        monkeypatch.setattr(doctor, "_windows_parent_map", lambda: {111: 222, 222: 333, 333: 50})
+        csv = (
+            '"searchts.exe","333","Console","1","9 K"\n'
+            '"searchts.exe","4242","Console","1","9 K"\n'
+        )
+        assert doctor.windows_searchts_pids(runner=lambda: csv, platform="win32") == [4242]
+
+    def test_ancestor_walk_survives_a_loop_and_a_missing_parent(self):
+        assert doctor._ancestor_pids(1, {1: 2, 2: 3, 3: 2}) == {2, 3}
+        assert doctor._ancestor_pids(1, {}) == set()
+        assert doctor._ancestor_pids(1, {1: 1}) == set()
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="Windows process snapshot")
+    def test_parent_map_knows_this_process(self):
+        assert doctor._windows_parent_map().get(os.getpid()) == os.getppid()
 
     def test_lock_note_lists_pids_and_does_not_kill(self):
         csv = '"searchts.exe","4242","Console","1","20,000 K"\n"other.exe","9","Console","1","1 K"\n'

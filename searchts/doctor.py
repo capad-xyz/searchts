@@ -86,6 +86,64 @@ def _name_msg(r: dict, escape) -> str:
     return text
 
 
+def _windows_parent_map() -> Dict[int, int]:
+    """PID -> parent PID for every process (one Toolhelp snapshot). Empty off Windows or on error."""
+    if sys.platform != "win32":
+        return {}
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class _Entry(ctypes.Structure):  # PROCESSENTRY32W
+            _fields_ = [
+                ("dwSize", wintypes.DWORD),
+                ("cntUsage", wintypes.DWORD),
+                ("th32ProcessID", wintypes.DWORD),
+                ("th32DefaultHeapID", ctypes.c_size_t),
+                ("th32ModuleID", wintypes.DWORD),
+                ("cntThreads", wintypes.DWORD),
+                ("th32ParentProcessID", wintypes.DWORD),
+                ("pcPriClassBase", wintypes.LONG),
+                ("dwFlags", wintypes.DWORD),
+                ("szExeFile", wintypes.WCHAR * 260),
+            ]
+
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+        k32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+        k32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_Entry)]
+        k32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(_Entry)]
+        k32.CloseHandle.argtypes = [wintypes.HANDLE]
+        snap = k32.CreateToolhelp32Snapshot(0x2, 0)  # TH32CS_SNAPPROCESS
+        if not snap or snap == ctypes.c_void_p(-1).value:
+            return {}
+        parents: Dict[int, int] = {}
+        try:
+            entry = _Entry()
+            entry.dwSize = ctypes.sizeof(_Entry)
+            ok = k32.Process32FirstW(snap, ctypes.byref(entry))
+            while ok:
+                parents[int(entry.th32ProcessID)] = int(entry.th32ParentProcessID)
+                ok = k32.Process32NextW(snap, ctypes.byref(entry))
+        finally:
+            k32.CloseHandle(snap)
+        return parents
+    except Exception:  # noqa: BLE001 - fall back to this process and its parent
+        return {}
+
+
+def _ancestor_pids(pid: int, parents: Dict[int, int]) -> set:
+    """Every process above `pid`. A pipx ``searchts.exe`` starts the venv's
+    ``python.exe``, which starts the real one, so the launcher is the
+    grandparent, not the parent (F11a)."""
+    found: set = set()
+    cur = parents.get(pid)
+    while cur and cur not in found and cur != pid and len(found) < 64:
+        found.add(cur)
+        cur = parents.get(cur)
+    return found
+
+
 def windows_searchts_pids(
     *,
     runner: Optional[Callable[[], str]] = None,
@@ -94,11 +152,16 @@ def windows_searchts_pids(
 ) -> list[int]:
     """PIDs whose image is searchts.exe, other than this command. Does not kill.
 
-    Empty off Windows. The ``searchts.exe`` that launched this very command
-    (our parent) and this process are left out by default: telling someone to
-    quit the command they are running is noise.
+    Empty off Windows. This process and every process above it (the
+    ``searchts.exe`` launcher may be the parent or the grandparent) are left
+    out by default: telling someone to quit the command they are running is
+    noise.
     """
-    skip = set(exclude) if exclude is not None else {os.getpid(), os.getppid()}
+    if exclude is not None:
+        skip = set(exclude)
+    else:
+        me = os.getpid()
+        skip = {me, os.getppid()} | _ancestor_pids(me, _windows_parent_map())
     if (platform if platform is not None else sys.platform) != "win32":
         return []
 
