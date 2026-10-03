@@ -49,7 +49,7 @@ LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "300"))
 # reaches a live hop; two full hangs spend it, and that is the case the Nous
 # effort knob is there to prevent.
 HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "600"))
-LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "16000"))
+LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "32000"))
 NOUS_REASONING = {"effort": "none"}
 OR_REASONING = {"effort": "low", "exclude": True}
 # `/hare deep`: thinking on, one notch. docs/hare-thinking-ab.md measured thinking
