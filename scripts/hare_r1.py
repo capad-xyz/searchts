@@ -125,21 +125,24 @@ GEMINI_REASONING = {"reasoning_effort": "low"}
 # OR may retain prompts (not training).
 HARE_GROQ_DEFAULT = "openai/gpt-oss-120b"
 HARE_GEMINI_DEFAULT = "gemini-3.1-flash-lite,gemini-3.5-flash"
+# The ledger on 2026-10-04 (docs/hare-ledger.md, 82 notes): laguna answered 18
+# times on OpenRouter and found nothing once; on Nous, 1 finding in 4. Groq
+# found something on all 10 of its notes, Gemini on 3 of 3, qwen on 5 of 12.
+# So laguna leaves OpenRouter (it only cost a 300 s wait before the next hop)
+# and goes last on Nous. Space Bunny is free until 2026-10-05, so for its last
+# day it goes first on Nous and second on OpenRouter: a miss is instant, a hit
+# is a free review. The next catalog pass drops it.
 HARE_NOUS_DEFAULT = (
-    "poolside/laguna-s-2.1:free,"
+    "stealth/space-bunny-alpha,"
     "meituan/longcat-2.5-preview:free,"
-    # Last, not first: the empty-content failure above was measured against this
-    # slug on OpenRouter, not on Nous, so it is not dropped on a guess. Nous
-    # hops now send effort none, so a miss here is cheap, but it keeps the
-    # order the measurement earned.
-    "stealth/space-bunny-alpha"
+    "poolside/laguna-s-2.1:free"
 )
 HARE_OR_DEFAULT = (
     "qwen/qwen3.8-27b:free,"
+    "stealth/space-bunny-alpha,"
     "thinkingmachines/inkling-small:free,"
     "thinkingmachines/inkling:free,"
-    "google/gemma-4-31b-it:free,"
-    "poolside/laguna-s-2.1:free"
+    "google/gemma-4-31b-it:free"
 )
 HARE_ZEN_DEFAULT = "space-bunny-free"
 

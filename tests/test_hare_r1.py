@@ -213,18 +213,19 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     assert hare_r1._csv_models("HARE_OR_MODEL", "a, b ,c") == ["a", "b", "c"]
     monkeypatch.setenv("HARE_OR_MODEL", "only-one")  # type: ignore[attr-defined]
     assert hare_r1._csv_models("HARE_OR_MODEL", "a,b") == ["only-one"]
-    assert "stealth/space-bunny-alpha" not in hare_r1.HARE_OR_DEFAULT.split(",")  # dropped: empty content
-    # qwen3.8-27b:free is first: the one OpenRouter hop that answered live (PR 234,
-    # 2026-10-03) while laguna sat ahead of it and did not. Laguna stays, last.
+    # The ledger (2026-10-04): laguna answered 18 times on OpenRouter and never
+    # found anything, so it is off that list; qwen stays first. Space Bunny is
+    # free until 2026-10-05 and sits second on OpenRouter and first on Nous for
+    # its last day.
     assert hare_r1.HARE_OR_DEFAULT.split(",")[0] == "qwen/qwen3.8-27b:free"
-    assert hare_r1.HARE_OR_DEFAULT.split(",")[-1] == "poolside/laguna-s-2.1:free"
+    assert hare_r1.HARE_OR_DEFAULT.split(",")[1] == "stealth/space-bunny-alpha"
+    assert "poolside/laguna-s-2.1:free" not in hare_r1.HARE_OR_DEFAULT.split(",")
+    assert len(hare_r1.HARE_OR_DEFAULT.split(",")) >= 4  # not one model: diversity is data
     # Two Zen slugs are TUI-only by policy (403 FreeTierError from Actions).
     assert hare_r1.HARE_ZEN_DEFAULT.split(",") == ["space-bunny-free"]
     assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
-    # space-bunny-alpha stays on Nous but goes last: the empty-content failure
-    # was measured on OpenRouter, and a Nous hop carries no reasoning control.
-    assert hare_r1.HARE_NOUS_DEFAULT.endswith("stealth/space-bunny-alpha")
-    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "poolside/laguna-s-2.1:free"
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stealth/space-bunny-alpha"
+    assert hare_r1.HARE_NOUS_DEFAULT.endswith("poolside/laguna-s-2.1:free")
     assert hare_r1.HARE_ZEN_DEFAULT.split(",")[0] == "space-bunny-free"
 
 
