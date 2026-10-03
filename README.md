@@ -132,7 +132,7 @@ claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 # Keep (after pipx install "searchts[mcp]"):
 #   claude mcp add searchts -- searchts mcp serve
 # Desktop / Cursor JSON: `searchts mcp install`  (or uvx the same serve command)
-# First read: Wikipedia — example.com is thinner than _MIN_CHARS and looks like a failed install.
+# First read: Wikipedia shows more than example.com, which is one short paragraph.
 
 # 2) Slash command: type /searchts <url-or-query> in Claude Code
 searchts skill install        # writes ~/.claude/commands/searchts.md

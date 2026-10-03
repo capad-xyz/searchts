@@ -63,7 +63,7 @@ searchts --version
 searchts doctor
 ```
 
-First read after update: Wikipedia, not `example.com`.
+First read after update: Wikipedia shows the most; `example.com` is one short paragraph.
 
 ```bash
 searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace

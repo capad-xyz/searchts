@@ -35,7 +35,7 @@ claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 
 If the agent host cannot see pipx's bin directory, use the `uvx` one-liner above, or point `command` at `pipx which searchts`. `pip install "searchts[mcp]"` is venv / packaging only.
 
-Ask the agent to `read https://en.wikipedia.org/wiki/Ada_Lovelace` — `example.com` is thinner than `_MIN_CHARS` and looks like a failed install.
+Ask the agent to `read https://en.wikipedia.org/wiki/Ada_Lovelace`. `example.com` works too, but it is one short paragraph.
 
 For Cursor / Claude Desktop, add to your MCP config (see also `config/mcporter.json`):
 

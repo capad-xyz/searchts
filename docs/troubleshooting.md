@@ -10,7 +10,7 @@ One read path: `unlocker.fetch`. Fail loud on thin pages, challenges, and login 
 
 ## Looks like a broken install
 
-**`example.com` is thin.** Use Wikipedia:
+**`example.com` is one short paragraph.** That is the whole page, not a broken install (older versions called it thin and started a browser). For a fuller first read, use Wikipedia:
 
 ```bash
 searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace

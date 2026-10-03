@@ -72,7 +72,7 @@ searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace
 
 Doctor is **read-only**. It probes optional CLIs on PATH (`gh`, …). Those are not how `read` works. Reddit/LinkedIn often **fail loud**. That is honesty, not a broken install.
 
-`example.com` is thinner than `_MIN_CHARS` and looks like a failed install. Use Wikipedia.
+`example.com` reads as one short paragraph, the whole page. Wikipedia shows more of what a read returns.
 
 Skill (optional, not doctor): `searchts skill install`
 
