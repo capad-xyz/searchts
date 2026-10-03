@@ -96,7 +96,7 @@ jobs:
           SEARCHTS_HARE_API_KEY_GROQ: ${{ secrets.SEARCHTS_HARE_API_KEY_GROQ }}
           SEARCHTS_HARE_API_KEY_GEMINI: ${{ secrets.SEARCHTS_HARE_API_KEY_GEMINI }}
           HARE_GROQ_MODEL: openai/gpt-oss-120b
-          HARE_GEMINI_MODEL: gemini-2.5-flash
+          HARE_GEMINI_MODEL: gemini-3.1-flash-lite,gemini-3.5-flash
           HARE_NOUS_MODEL: poolside/laguna-s-2.1:free,meituan/longcat-2.5-preview:free,stealth/space-bunny-alpha
-          HARE_OR_MODEL: ${{ github.event.inputs.or_model || 'poolside/laguna-s-2.1:free,qwen/qwen3.8-27b:free' }}
+          HARE_OR_MODEL: ${{ github.event.inputs.or_model || 'qwen/qwen3.8-27b:free,thinkingmachines/inkling-small:free,thinkingmachines/inkling:free,google/gemma-4-31b-it:free,poolside/laguna-s-2.1:free' }}
         run: python scripts/hare_r1.py
