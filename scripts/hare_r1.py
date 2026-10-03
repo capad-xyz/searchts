@@ -43,6 +43,12 @@ HOP_BUDGET_S = 360
 # So the budget is wide and OpenRouter hops cap reasoning effort.
 LLM_MAX_TOKENS = 8000
 OR_REASONING = {"effort": "low", "exclude": True}
+# Gemini's OpenAI-compatibility layer maps a top-level reasoning_effort onto the
+# thinking budget: "low" is 1024 tokens for the 2.5 models. Without it, 2.5 Flash
+# spends the shared 8000-token output budget thinking and returns empty content,
+# which is the failure this whole chain exists to escape. This is NOT the
+# OpenRouter shape (a nested "reasoning" object), so the hop carries its own.
+GEMINI_REASONING = {"reasoning_effort": "low"}
 
 # Fixed list, not a router. Live 2026-10-02.
 # Dropped: nex-n2.5-pro:free (gone), unsuffixed Nous ids (paid),
@@ -56,9 +62,14 @@ HARE_GROQ_DEFAULT = (
 )
 HARE_GEMINI_DEFAULT = "gemini-2.5-flash"
 HARE_NOUS_DEFAULT = (
-    "stealth/space-bunny-alpha,"
     "poolside/laguna-s-2.1:free,"
-    "meituan/longcat-2.5-preview:free"
+    "meituan/longcat-2.5-preview:free,"
+    # Last, not first: the empty-content failure above was measured against this
+    # slug on OpenRouter, not on Nous, so it is not dropped on a guess. But Nous
+    # hops carry no reasoning control, so if it fails here it burns up to
+    # LLM_TIMEOUT_S of HOP_BUDGET_S before the chain moves on. Try it after the
+    # two with no such history.
+    "stealth/space-bunny-alpha"
 )
 HARE_OR_DEFAULT = (
     "poolside/laguna-s-2.1:free,"
@@ -424,7 +435,7 @@ def chat_complete(
     key: str,
     model: str,
     messages: list[dict[str, str]],
-    reasoning: dict[str, Any] | None = None,
+    request_options: dict[str, Any] | None = None,
 ) -> str:
     body: dict[str, Any] = {
         "model": model,
@@ -432,8 +443,8 @@ def chat_complete(
         "temperature": 0.1,
         "max_tokens": LLM_MAX_TOKENS,
     }
-    if reasoning is not None:
-        body["reasoning"] = reasoning
+    if request_options:
+        body.update(request_options)
     req = urllib.request.Request(
         f"{base.rstrip('/')}/chat/completions",
         data=json.dumps(body).encode(),
@@ -846,6 +857,40 @@ def run() -> int:
         return 0
 
 
+def build_provider_chain(
+    keys: dict[str, str],
+    models: dict[str, list[str]],
+) -> list[tuple[str, str, str, str, dict[str, Any]]]:
+    """The fixed hop list, in order, as (name, base, key, model, request options).
+
+    A missing key drops that provider entirely rather than falling through to
+    the next one with the wrong credential. The order is the contract
+    (PLAN.md R1c), so this stays a pure function and a test pins the order.
+    """
+    bases = {
+        "groq": GROQ_BASE,
+        "gemini": GEMINI_BASE,
+        "nous": NOUS_BASE,
+        "openrouter": OR_BASE,
+        "zen": ZEN_BASE,
+    }
+    options: dict[str, dict[str, Any]] = {
+        "groq": {},
+        "gemini": GEMINI_REASONING,
+        "nous": {},
+        "openrouter": {"reasoning": OR_REASONING},
+        "zen": {},
+    }
+    chain: list[tuple[str, str, str, str, dict[str, Any]]] = []
+    for name in ("groq", "gemini", "nous", "openrouter", "zen"):
+        key = keys.get(name, "")
+        if not key:
+            continue
+        for model in models.get(name, []):
+            chain.append((name, bases[name], key, model, dict(options[name])))
+    return chain
+
+
 def _hare_once(
     owner: str,
     repo: str,
@@ -949,34 +994,34 @@ def _hare_once(
     user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask)
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
 
-    providers: list[tuple[str, str, str, str, dict[str, Any] | None]] = []
-    if groq_key:
-        for model in groq_models:
-            providers.append(("groq", GROQ_BASE, groq_key, model, None))
-    if gemini_key:
-        for model in gemini_models:
-            providers.append(("gemini", GEMINI_BASE, gemini_key, model, None))
-    if nous_key:
-        for model in nous_models:
-            providers.append(("nous", NOUS_BASE, nous_key, model, None))
-    if or_key:
-        for model in or_models:
-            providers.append(("openrouter", OR_BASE, or_key, model, OR_REASONING))
-    if zen_key:
-        for model in zen_models:
-            providers.append(("zen", ZEN_BASE, zen_key, model, None))
+    providers = build_provider_chain(
+        {
+            "groq": groq_key,
+            "gemini": gemini_key,
+            "nous": nous_key,
+            "openrouter": or_key,
+            "zen": zen_key,
+        },
+        {
+            "groq": groq_models,
+            "gemini": gemini_models,
+            "nous": nous_models,
+            "openrouter": or_models,
+            "zen": zen_models,
+        },
+    )
 
     last_err = "no provider"
     errs: list[str] = []
     parsed: dict[str, Any] | None = None
     used = ""
     hops_start = time.time()
-    for name, base, key, model, reasoning in providers:
+    for name, base, key, model, request_options in providers:
         if time.time() - hops_start > HOP_BUDGET_S:
             errs.append(f"hop budget ({HOP_BUDGET_S} s) spent before {name}:{model}")
             break
         try:
-            raw = chat_complete(base, key, model, messages, reasoning)
+            raw = chat_complete(base, key, model, messages, request_options)
             parsed = extract_json(raw)
             if parsed is None:
                 raise RuntimeError("no JSON object in model output")
