@@ -139,7 +139,7 @@ def render(hare: dict[str, Any], bot: dict[str, Any], built: str) -> str:
         f"| Real findings | {hare['real']} | {bot['real']} |",
         f"| Skip findings | {hare['skip']} | {bot['skip']} |",
         f"| Real done | {hare['real_done']} ({hare['done_means']}) | {bot['real_done']} ({bot['done_means']}) |",
-        f"| Minutes per note | {cell(hare['minutes'])} | {cell(bot['minutes'])} |",
+        f"| Minutes per note | {cell(hare['minutes'])} (model call time, from the cost line) | {cell(bot['minutes'])} (wall clock, start to submit) |",
         f"| Tokens per note | from the cost line, see the ledger | {cell(bot.get('tokens_est'))} (its own chars/4 estimate) |",
         "",
         "The two Real done columns are different kinds of number and are not a hit-rate comparison. "

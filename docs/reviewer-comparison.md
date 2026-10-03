@@ -13,7 +13,7 @@ Built 2026-10-03.
 | Real findings | 5 | 15 |
 | Skip findings | 24 | 16 |
 | Real done | 0 (fixed or resolved, learned from later notes and threads) | 14 (marked fix: yes in its own log, not checked against the repo) |
-| Minutes per note | 0.7 | 3.9 |
+| Minutes per note | 0.7 (model call time, from the cost line) | 3.9 (wall clock, start to submit) |
 | Tokens per note | from the cost line, see the ledger | 12482 (its own chars/4 estimate) |
 
 The two Real done columns are different kinds of number and are not a hit-rate comparison. Notes with nothing is where Hare's count is padded: a hop that answered but found nothing still posts a note.
