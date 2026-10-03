@@ -640,9 +640,11 @@ def test_provider_chain_is_the_fixed_order() -> None:
     keys = {"groq": "g", "gemini": "m", "nous": "n", "openrouter": "o", "zen": "z"}
     models = {"groq": ["g1"], "gemini": ["m1"], "nous": ["n1", "n2"], "openrouter": ["o1"], "zen": ["z1"]}
     chain = hare_r1.build_provider_chain(keys, models)
-    assert [hop[0] for hop in chain] == ["groq", "gemini", "nous", "nous", "openrouter", "zen"]
-    assert [hop[3] for hop in chain] == ["g1", "m1", "n1", "n2", "o1", "z1"]
-    assert [hop[2] for hop in chain] == ["g", "m", "n", "n", "o", "z"]
+    # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is
+    # fast and misses things. OpenRouter's qwen leads, then Nous, then Gemini.
+    assert [hop[0] for hop in chain] == ["groq", "openrouter", "nous", "nous", "gemini", "zen"]
+    assert [hop[3] for hop in chain] == ["g1", "o1", "n1", "n2", "m1", "z1"]
+    assert [hop[2] for hop in chain] == ["g", "o", "n", "n", "m", "z"]
 
 
 def test_provider_chain_drops_a_provider_with_no_key() -> None:
@@ -686,9 +688,9 @@ def test_hop_loop_sends_every_provider_its_own_options() -> None:
         except RuntimeError:
             continue
 
-    assert [c[0] for c in calls] == ["g1", "m1", "n1"]
-    assert [c[1] for c in calls] == ["g", "m", "n"]
-    assert [c[2] for c in calls] == [{}, {"reasoning_effort": "low"}, {"reasoning": {"effort": "none"}}]
+    assert [c[0] for c in calls] == ["g1", "o1", "n1"]
+    assert [c[1] for c in calls] == ["g", "o", "n"]
+    assert [c[2] for c in calls] == [{}, {"reasoning": {"effort": "low", "exclude": True}}, {"reasoning": {"effort": "none"}}]
     assert parsed == {"summary": "ok", "findings": []}
 
 

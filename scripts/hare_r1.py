@@ -1349,7 +1349,11 @@ def build_provider_chain(
         options["nous"] = {"reasoning": {"effort": HARE_REASONING}}
         options["openrouter"] = {"reasoning": {"effort": HARE_REASONING, "exclude": True}}
     chain: list[tuple[str, str, str, str, dict[str, Any]]] = []
-    for name in ("groq", "gemini", "nous", "openrouter", "zen"):
+    # Gemini goes after OpenRouter and Nous (owner's call, 2026-10-04): Flash-Lite
+    # answers fast and misses things, so it is the fallback, not the default.
+    # Groq stays first: it 413s on a big prompt in under a second, so it costs
+    # nothing when it cannot take the diff.
+    for name in ("groq", "openrouter", "nous", "gemini", "zen"):
         key = keys.get(name, "")
         if not key:
             continue
