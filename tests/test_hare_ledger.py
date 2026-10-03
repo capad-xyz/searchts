@@ -214,11 +214,11 @@ def test_compare_reviewers_reads_the_repo_files(tmp_path) -> None:
         encoding="utf-8",
     )
     hare = compare_reviewers.hare_side(json.loads((tmp_path / "hare-ledger.json").read_text()))
-    assert hare == {"notes": 1, "prs": 1, "real": 2, "skip": 1, "real_done": 1, "done_means": hare["done_means"], "minutes": 0.5}
+    assert hare == {"notes": 1, "notes_with_findings": 0, "prs": 1, "real": 2, "skip": 1, "real_done": 1, "done_means": hare["done_means"], "minutes": 0.5}
     passes = compare_reviewers.bot_passes(tmp_path)
     assert passes["https://x/pull/7#pullrequestreview-1"]["minutes"] == 4.2  # the JSONL row wins over the markdown
     assert passes["https://x/pull/8#pullrequestreview-2"] == {"pr": 8, "minutes": 2.0, "tokens_est": 6000, "real": 1, "skip": 1, "real_fix_yes": 0}
     bot = compare_reviewers.bot_side(passes)
-    assert bot["notes"] == 2 and bot["real"] == 2 and bot["real_done"] == 1 and bot["minutes"] == 3.1 and bot["tokens_est"] == 9000
+    assert bot["notes"] == 2 and bot["notes_with_findings"] == 2 and bot["real"] == 2 and bot["real_done"] == 1 and bot["minutes"] == 3.1 and bot["tokens_est"] == 9000
     md = compare_reviewers.render(hare, bot, "2026-10-04")
-    assert "| Real findings | 2 | 2 |" in md and "not a hit-rate comparison" in md and "\u2014" not in md
+    assert "| Real findings | 2 | 2 |" in md and "| Notes with nothing | 1 | 0 |" in md and "not a hit-rate comparison" in md and "\u2014" not in md

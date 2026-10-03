@@ -44,6 +44,7 @@ def hare_side(ledger: dict[str, Any]) -> dict[str, Any]:
             secs.append(float(m.group(1)))
     return {
         "notes": len(notes),
+        "notes_with_findings": sum(1 for n in notes if n.get("findings")),
         "prs": len({e.get("pr") for e in entries}),
         "real": len(reals),
         "skip": len(fs) - len(reals),
@@ -107,6 +108,7 @@ def bot_side(passes: dict[str, dict[str, Any]]) -> dict[str, Any]:
     toks = [p["tokens_est"] for p in passes.values() if p.get("tokens_est")]
     return {
         "notes": len(passes),
+        "notes_with_findings": sum(1 for p in passes.values() if p["real"] or p["skip"]),
         "prs": len({p.get("pr") for p in passes.values()}),
         "real": sum(p["real"] for p in passes.values()),
         "skip": sum(p["skip"] for p in passes.values()),
@@ -132,13 +134,16 @@ def render(hare: dict[str, Any], bot: dict[str, Any], built: str) -> str:
         "| --- | --- | --- |",
         f"| PRs | {hare['prs']} | {bot['prs']} |",
         f"| Notes | {hare['notes']} | {bot['notes']} |",
+        f"| Notes with a finding | {hare['notes_with_findings']} | {bot['notes_with_findings']} |",
+        f"| Notes with nothing | {hare['notes'] - hare['notes_with_findings']} | {bot['notes'] - bot['notes_with_findings']} |",
         f"| Real findings | {hare['real']} | {bot['real']} |",
         f"| Skip findings | {hare['skip']} | {bot['skip']} |",
         f"| Real done | {hare['real_done']} ({hare['done_means']}) | {bot['real_done']} ({bot['done_means']}) |",
         f"| Minutes per note | {cell(hare['minutes'])} | {cell(bot['minutes'])} |",
         f"| Tokens per note | from the cost line, see the ledger | {cell(bot.get('tokens_est'))} (its own chars/4 estimate) |",
         "",
-        "The two Real done columns are different kinds of number and are not a hit-rate comparison.",
+        "The two Real done columns are different kinds of number and are not a hit-rate comparison. "
+        "Notes with nothing is where Hare's count is padded: a hop that answered but found nothing still posts a note.",
     ]
     return "\n".join(lines) + "\n"
 
