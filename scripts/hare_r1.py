@@ -52,6 +52,13 @@ HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "600"))
 LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "16000"))
 NOUS_REASONING = {"effort": "none"}
 OR_REASONING = {"effort": "low", "exclude": True}
+# `/hare deep`: thinking on, one notch. docs/hare-thinking-ab.md measured thinking
+# with no knob at 6 of 6 empty on the free hops at any budget, so deep is the
+# lowest effort that still reasons, not an open budget. Untested until the first
+# deep run; that run is the test.
+DEEP_NOUS_REASONING = {"effort": "low"}
+DEEP_OR_REASONING = {"effort": "medium", "exclude": True}
+DEEP_GEMINI_REASONING = {"reasoning_effort": "medium"}
 # Gemini's OpenAI-compatibility layer maps a top-level reasoning_effort onto the
 # thinking budget: "low" is 1024 tokens for the 2.5 models. Without it, 2.5 Flash
 # spends the shared output budget thinking and returns empty content, which is
@@ -793,6 +800,12 @@ def paused_body(count: int) -> str:
     )
 
 
+def wants_deep(comment: str) -> bool:
+    """`/hare deep` or `@hare deep` (or `think`): thinking on for this one pass."""
+    m = re.search(r"(?:^|\s)[/@]hare\b[:,]?\s*(.*)", comment or "", re.I | re.S)
+    return bool(m and re.search(r"\b(deep|think)\b", m.group(1), re.I))
+
+
 def ask_from(comment: str) -> str:
     """The short instruction after @hare. The workflow only passes it on from people with write access."""
     m = re.search(r"@hare\b[:,]?\s*(.*)", comment or "", re.I | re.S)
@@ -988,6 +1001,7 @@ def run() -> int:
 def build_provider_chain(
     keys: dict[str, str],
     models: dict[str, list[str]],
+    deep: bool = False,
 ) -> list[tuple[str, str, str, str, dict[str, Any]]]:
     """The fixed hop list, in order, as (name, base, key, model, request options).
 
@@ -1004,9 +1018,9 @@ def build_provider_chain(
     }
     options: dict[str, dict[str, Any]] = {
         "groq": {},
-        "gemini": GEMINI_REASONING,
-        "nous": {"reasoning": NOUS_REASONING},
-        "openrouter": {"reasoning": OR_REASONING},
+        "gemini": DEEP_GEMINI_REASONING if deep else GEMINI_REASONING,
+        "nous": {"reasoning": DEEP_NOUS_REASONING if deep else NOUS_REASONING},
+        "openrouter": {"reasoning": DEEP_OR_REASONING if deep else OR_REASONING},
         "zen": {},
     }
     chain: list[tuple[str, str, str, str, dict[str, Any]]] = []
@@ -1042,6 +1056,7 @@ def _hare_once(
 
     event = _env("GITHUB_EVENT_NAME")
     ask = ask_from(_env("HARE_ASK")) if event == "issue_comment" else ""
+    deep = wants_deep(_env("HARE_ASK")) if event == "issue_comment" else False
     pull = f"/repos/{owner}/{repo}/pulls/{n}"
     pr_data = github_api("GET", pull, token)
     sha = sha or pr_data.get("head", {}).get("sha") or ""
@@ -1137,6 +1152,7 @@ def _hare_once(
             "openrouter": or_models,
             "zen": zen_models,
         },
+        deep=deep,
     )
 
     last_err = "no provider"
@@ -1153,7 +1169,7 @@ def _hare_once(
             parsed = extract_json(raw)
             if parsed is None:
                 raise RuntimeError("no JSON object in model output")
-            used = f"{name}:{model}"
+            used = f"{name}:{model}" + (" · deep" if deep else "")
             break
         except Exception as e:
             errs.append(f"{name}:{model}: {e}")

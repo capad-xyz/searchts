@@ -829,3 +829,19 @@ def test_a_failed_knob_retry_keeps_its_body(monkeypatch) -> None:
     with pytest.raises(RuntimeError) as e:
         hare_r1.chat_complete("https://x.test/v1", "k", "m", [], {"reasoning": {"effort": "none"}})
     assert "404" in str(e.value) and "model gone" in str(e.value) and "without reasoning knob" in str(e.value)
+
+
+def test_hare_deep_turns_thinking_on_one_notch() -> None:
+    assert hare_r1.wants_deep("/hare deep")
+    assert hare_r1.wants_deep("@hare deep, and look at the tests")
+    assert hare_r1.wants_deep("/hare think")
+    assert not hare_r1.wants_deep("/hare")
+    assert not hare_r1.wants_deep("the deep end of the pool")  # no tag, no deep
+    keys = {"nous": "n", "openrouter": "o", "gemini": "m"}
+    models = {"nous": ["n1"], "openrouter": ["o1"], "gemini": ["m1"]}
+    opts = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models, deep=True)}
+    assert opts["nous"] == {"reasoning": {"effort": "low"}}
+    assert opts["openrouter"] == {"reasoning": {"effort": "medium", "exclude": True}}
+    assert opts["gemini"] == {"reasoning_effort": "medium"}
+    quiet = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models)}
+    assert quiet["nous"] == {"reasoning": {"effort": "none"}}
