@@ -2,17 +2,19 @@
  "built": "2026-10-03",
  "repo": "capad-xyz/searchts",
  "summary": {
-  "prs": 56,
-  "notes": 95,
+  "prs": 58,
+  "notes": 98,
   "real": 20,
-  "skip": 41,
+  "skip": 42,
   "real_fates": {
    "open": 20
   },
   "real_fixed_or_resolved": 0,
   "hops": {
+   "nous:poolside/laguna-s-2.1:free": 3,
+   "openrouter:qwen/qwen3.8-27b:free": 11,
    "groq:openai/gpt-oss-120b": 10,
-   "openrouter:qwen/qwen3.8-27b:free": 10,
+   "groq:openai/gpt-oss-120b · deep": 1,
    "hare-bot:Grok": 18,
    "gemini:gemini-3.1-flash-lite": 3,
    "gemini:gemini-3.1-flash-lite · deep": 1,
@@ -21,17 +23,16 @@
    "openrouter:poolside/laguna-s-2.1:free": 18,
    "openrouter:stealth/space-bunny-alpha": 1,
    "nous:stealth/space-bunny-alpha": 2,
-   "openrouter:nex-agi/nex-n2.5-pro:free": 24,
-   "nous:poolside/laguna-s-2.1:free": 2
+   "openrouter:nex-agi/nex-n2.5-pro:free": 24
   },
   "scores": 0,
   "score_avg": null,
-  "cut_notes": 0,
+  "cut_notes": 1,
   "by_reviewer": {
    "hare": {
-    "notes": 77,
+    "notes": 80,
     "real": 5,
-    "skip": 22,
+    "skip": 23,
     "real_fixed_or_resolved": 0,
     "avg_minutes": null
    },
@@ -45,6 +46,94 @@
   }
  },
  "entries": [
+  {
+   "pr": 250,
+   "title": "ci(hare): what the reviews found on #245 to #249",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T23:04:39Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/250#pullrequestreview-5403335077",
+     "by": "hare",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "about 26,646 prompt + 17,211 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 312 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_r1.py:1063",
+     "by": "hare",
+     "sev": "skip",
+     "issue": "The test comment says 'the later, smaller findings list won' but the test actually verifies the smaller restart does NOT win (99 is excluded). The comment is misleading.",
+     "fate": "open",
+     "first": "2026-10-03T23:04:39Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 251,
+   "title": "docs(hare): Hare Bot's pass log for 2026-10-04, and three lines it caught",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T23:03:46Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/251#pullrequestreview-5403330357",
+     "by": "hare",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "13,023 prompt + 3,780 answer + 3,620 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 33 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 232,
+   "title": "chore(main): release 0.14.0",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T16:45:19Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5401711247",
+     "by": "hare",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-03T23:01:30Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5403316547",
+     "by": "hare",
+     "hop": "groq:openai/gpt-oss-120b · deep",
+     "effort": "low",
+     "cost": "4,526 prompt + 1,118 answer + 784 reasoning tokens on `groq:openai/gpt-oss-120b · deep`, 3 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md",
+     "by": "hare",
+     "sev": "skip",
+     "issue": "Extra blank lines around the new version heading make the changelog look untidy.",
+     "fate": "open",
+     "first": "2026-10-03T16:45:19Z"
+    }
+   ],
+   "scores": []
+  },
   {
    "pr": 248,
    "title": "ci(hare): low scores with a reason become rules in AGENTS.md",
@@ -79,9 +168,21 @@
      "effort": "medium",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 4.2,
      "tokens_est": 12000,
+     "chars_est": 47000,
+     "chars": {
+      "diff": 13838,
+      "title": 60,
+      "body": 1606,
+      "commits": 1188,
+      "reviews": 3231,
+      "threads": 367,
+      "issue_comments": 2650,
+      "ci_text": 303,
+      "source_slices": 24125
+     },
      "findings": 3
     }
    ],
@@ -153,9 +254,21 @@
      "effort": "medium",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 3.8,
      "tokens_est": 5000,
+     "chars_est": 20000,
+     "chars": {
+      "diff": 2750,
+      "title": 49,
+      "body": 856,
+      "commits": 361,
+      "reviews": 1062,
+      "threads": 210,
+      "issue_comments": 2650,
+      "ci_text": 310,
+      "source_slices": 11641
+     },
      "findings": 1
     }
    ],
@@ -203,8 +316,9 @@
      "effort": "medium",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 3.25,
+     "chars": {},
      "findings": 1
     }
    ],
@@ -244,9 +358,21 @@
      "effort": "medium",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 5.7,
      "tokens_est": 12000,
+     "chars_est": 48000,
+     "chars": {
+      "diff": 5950,
+      "title": 66,
+      "body": 1173,
+      "commit_message": 657,
+      "reviews": 1231,
+      "threads": 246,
+      "issue_comments_approx": 3200,
+      "ci_text": 315,
+      "source_slices": 34682
+     },
      "findings": 1
     }
    ],
@@ -294,9 +420,21 @@
      "effort": "high",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 3.3,
      "tokens_est": 25000,
+     "chars_est": 99000,
+     "chars": {
+      "diff": 58501,
+      "title": 46,
+      "body": 2315,
+      "commit_message": 768,
+      "reviews": 1180,
+      "threads": 332,
+      "issue_comments": 2650,
+      "ci_text": 382,
+      "source_slices": 33320
+     },
      "findings": 3
     }
    ],
@@ -368,9 +506,21 @@
      "effort": "medium",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 5.1,
      "tokens_est": 15000,
+     "chars_est": 60000,
+     "chars": {
+      "diff": 22970,
+      "title": 69,
+      "body": 2112,
+      "commit_messages": 2967,
+      "review_body": 1008,
+      "thread_body": 238,
+      "issue_comment_body": 2650,
+      "ci_text": 302,
+      "source_slices": 27195
+     },
      "findings": 2
     },
     {
@@ -434,9 +584,21 @@
      "effort": "medium",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 3.8,
      "tokens_est": 17000,
+     "chars_est": 67000,
+     "chars": {
+      "diff": 14647,
+      "title": 71,
+      "body": 1855,
+      "commits": 692,
+      "reviews": 0,
+      "threads": 0,
+      "issue_comments": 2651,
+      "ci_text": 319,
+      "source_slices": 46338
+     },
      "findings": 1
     }
    ],
@@ -466,9 +628,19 @@
      "effort": "medium",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 3.75,
      "tokens_est": 15000,
+     "chars_est": 59000,
+     "chars": {
+      "diff": 14788,
+      "title": 83,
+      "body": 1109,
+      "commits": 435,
+      "issue_comments": 2650,
+      "ci_text": 310,
+      "source_slices": 39589
+     },
      "findings": 0
     }
    ],
@@ -489,9 +661,21 @@
      "effort": "low",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 2.9,
      "tokens_est": 9500,
+     "chars_est": 38000,
+     "chars": {
+      "diff": 1722,
+      "title": 47,
+      "body": 515,
+      "commit_message": 280,
+      "reviews": 0,
+      "threads": 0,
+      "issue_comments": 2650,
+      "ci_text": 330,
+      "source_slices": 32433
+     },
      "findings": 0
     }
    ],
@@ -609,9 +793,19 @@
      "effort": "medium",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 2.0,
      "tokens_est": 11000,
+     "chars_est": 45000,
+     "chars": {
+      "diff": 5884,
+      "title": 59,
+      "body": 2186,
+      "commit_message": 731,
+      "review_body": 1121,
+      "issue_comment_body": 2650,
+      "source_slices": 32121
+     },
      "findings": 2
     },
     {
@@ -693,9 +887,19 @@
      "effort": "high",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 1.0,
      "tokens_est": 6800,
+     "chars_est": 27000,
+     "chars": {
+      "diff": 18611,
+      "title": 47,
+      "body": 3085,
+      "commit_message": 862,
+      "conversation_hare": 766,
+      "conversation_coderabbit_approx": 2500,
+      "ci_text_approx": 1500
+     },
      "findings": 3
     },
     {
@@ -803,8 +1007,11 @@
      "effort": "high",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "minutes": 8.0,
+     "chars": {
+      "title": 70
+     },
      "findings": 8
     }
    ],
@@ -914,7 +1121,7 @@
      "effort": "medium",
      "cost": "",
      "cut": "",
-     "log": "hare-bot-log-2026-10-04.md",
+     "log": "hare-bot-log-2026-10-04.jsonl",
      "tokens_est": 9000,
      "findings": 0
     },
@@ -1041,35 +1248,6 @@
      "issue": "The hop loop (Groq, then Gemini, then Nous, then OpenRouter with `OR_REASONING`, then Zen) is still only covered by constant and workflow asserts. A regression in order, or in attaching `OR_REASONING` only to OpenRouter, would not fail a test.",
      "fate": "open",
      "first": "2026-10-03T11:24:22Z"
-    }
-   ],
-   "scores": []
-  },
-  {
-   "pr": 232,
-   "title": "chore(main): release 0.14.0",
-   "state": "open",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T16:45:19Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5401711247",
-     "by": "hare",
-     "hop": "groq:openai/gpt-oss-120b",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "findings": 1
-    }
-   ],
-   "findings": [
-    {
-     "loc": "CHANGELOG.md",
-     "by": "hare",
-     "sev": "skip",
-     "issue": "Extra blank lines before the new version heading make the changelog look untidy.",
-     "fate": "open",
-     "first": "2026-10-03T16:45:19Z"
     }
    ],
    "scores": []

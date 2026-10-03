@@ -203,3 +203,19 @@ def test_the_ledger_counts_hare_bot_too(tmp_path) -> None:
     assert by["hare-bot"] == {"notes": 1, "real": 1, "skip": 1, "real_fixed_or_resolved": 0, "avg_minutes": 4.2}
     md = hare_ledger.render_md([e], hare_ledger.summarize([e]), "2026-10-04")
     assert "| Hare Bot (Grok Bot) | 1 | 1 | 1 | 0 | 4.2 |" in md
+
+
+def test_the_jsonl_log_wins_over_the_markdown_for_the_same_pass(tmp_path) -> None:
+    (tmp_path / "hare-bot-log-2026-10-04.md").write_text(
+        "- Review: https://x/pull/7#pullrequestreview-1\n- Clock: a to b (9.9 min)\n- Token estimate: about 1\n"
+        "- Review: https://x/pull/8#pullrequestreview-2\n- Clock: a to b (2.0 min)\n- Token estimate: about 3,000\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "hare-bot-log-2026-10-04.jsonl").write_text(
+        json.dumps({"type": "meta"}) + "\n"
+        + json.dumps({"type": "review", "review_url": "https://x/pull/7#pullrequestreview-1", "minutes": 5.1, "estimate_tokens": 15000, "estimate_chars": 60000, "chars": {"diff": 22970, "body": 2112}}) + "\n",
+        encoding="utf-8",
+    )
+    log = hare_ledger.read_bot_logs(tmp_path)
+    assert log["https://x/pull/7#pullrequestreview-1"] == {"log": "hare-bot-log-2026-10-04.jsonl", "minutes": 5.1, "tokens_est": 15000, "chars_est": 60000, "chars": {"diff": 22970, "body": 2112}}
+    assert log["https://x/pull/8#pullrequestreview-2"] == {"log": "hare-bot-log-2026-10-04.md", "minutes": 2.0, "tokens_est": 3000}
