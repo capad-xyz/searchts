@@ -1028,3 +1028,33 @@ def test_the_fold_says_when_a_review_was_cut(monkeypatch) -> None:
     line += "\n- cut at the budget (seam) after 4 findings, finished by one continuation call"
     body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [], "S.", "abc1234", [], "", "", line)
     assert "cut at the budget (seam) after 4 findings" in body
+
+
+def test_repair_json_counts_strings_by_the_escape_walk_not_raw_quotes() -> None:
+    # One escaped quote inside a closed finding made the raw count odd and the
+    # old repair appended a quote to text that was fine (Hare Bot, #244).
+    cut = '{"summary":"S.","findings":[{"sev":"skip","path":"a.py","line":1,"issue":"says \\"hi\\"","short":"s","fix":"later","change":"c"},{"sev":"re'
+    fixed = json.loads(hare_r1.repair_json(cut))
+    assert fixed["findings"][0]["issue"] == 'says "hi"' and len(fixed["findings"]) == 1
+
+
+def test_a_restart_never_shrinks_the_review(monkeypatch) -> None:
+    monkeypatch.setattr(hare_r1, "LLM_MAX_TOKENS", 100)
+    body = '{"summary":"S.","findings":[' + ",".join(_finding(i) for i in range(1, 9)) + "]}"
+    pieces = [body[i : i + 3] for i in range(0, len(body), 3)]
+
+    def fake_urlopen(req, timeout=0):
+        b = json.loads(req.data)
+        if b.get("stream"):
+            return _Stream(pieces)
+        # The continuation restarts from scratch with one finding: it must lose.
+        return _Resp({"choices": [{"finish_reason": "stop", "message": {"content": '{"summary":"S.","findings":[' + _finding(99) + "]}"}}]})
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+    data = json.loads(hare_r1.chat_complete("https://x.test/v1", "k", "m", [{"role": "user", "content": "x"}]))
+    assert len(data["findings"]) > 1 and 99 not in [f["line"] for f in data["findings"]]
+    assert not hare_r1.LAST_CUT["continued"]
+
+
+def test_the_timeout_short_line_says_the_tier_that_timed_out() -> None:
+    assert hare_r1._short_fail("nous:m: LLM timeout after 600s https://n/v1 (raise HARE_LLM_TIMEOUT_S)") == "nous: no answer within 600s"
