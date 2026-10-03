@@ -27,6 +27,9 @@ import hare_r1  # noqa: E402
 
 LEDGER_JSON = "hare-ledger.json"
 LEDGER_MD = "hare-ledger.md"
+RULES_START = "<!-- hare-ledger:rules -->"
+RULES_END = "<!-- /hare-ledger:rules -->"
+LOW_SCORE = 2
 # A finding's fate, from the signals we have. "fixed" and "moved" come from a
 # later note's Since line, "resolved" from the review thread, "open" otherwise.
 FATES = ("fixed", "moved", "resolved", "still applies", "open")
@@ -172,6 +175,51 @@ def prior_findings(ledger: dict[str, Any], paths: set[str], limit: int = 12) -> 
     return out[:limit]
 
 
+def proposed_rules(ledger: dict[str, Any]) -> list[str]:
+    """R2c: every low score with a reason becomes a rule line, newest first,
+    deduplicated on the reason. The owner wrote the reason; Hare only files it."""
+    seen: set[str] = set()
+    out: list[str] = []
+    fb = [(e["pr"], s) for e in ledger.get("entries", []) for s in e.get("scores", []) if s.get("text") and s.get("score", 5) <= LOW_SCORE]
+    fb.sort(key=lambda x: x[1].get("at", ""), reverse=True)
+    for pr, sc in fb:
+        key = sc["text"].strip().rstrip(".").lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(f"- {sc['text'].strip().rstrip('.')}. (#{pr}, scored {sc['score']}/5 on {sc.get('at', '')[:10]})")
+    return out
+
+
+def rules_block(rules: list[str]) -> str:
+    body = "\n".join(rules) if rules else "- (none yet: a `/hare score 1..5 <why>` of 2 or less with a reason lands here)"
+    return (
+        f"{RULES_START}\n"
+        "**What the owner said Hare missed (from the ledger, PLAN R2c).** Each line is the reason behind a low score, filed by "
+        "`scripts/hare_ledger.py` from `/hare score`. Hare reads these as rules for the next note. Each ledger run rewrites "
+        "this block, so to retire a line, edit or delete the score comment it came from.\n\n"
+        f"{body}\n"
+        f"{RULES_END}"
+    )
+
+
+def apply_rules(agents: str, rules: list[str]) -> str:
+    """AGENTS.md with the rules block replaced, or added after the Hare section's
+    first paragraph when there is none. Everything else untouched."""
+    block = rules_block(rules)
+    if RULES_START in agents and RULES_END in agents:
+        a = agents.index(RULES_START)
+        b = agents.index(RULES_END) + len(RULES_END)
+        return agents[:a] + block + agents[b:]
+    anchor = "## R1 "
+    k = agents.find(anchor)
+    if k < 0:
+        return agents.rstrip("\n") + "\n\n" + block + "\n"
+    nl = agents.find("\n\n", k)
+    nl = len(agents) if nl < 0 else nl
+    return agents[:nl] + "\n\n" + block + agents[nl:]
+
+
 def _threads(owner: str, repo: str, n: int, token: str) -> list[dict[str, Any]]:
     query = """
     query($owner:String!,$name:String!,$n:Int!) {
@@ -212,6 +260,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default="docs", help="directory for hare-ledger.json and hare-ledger.md")
     ap.add_argument("--max-prs", type=int, default=200)
+    ap.add_argument("--agents", default="AGENTS.md", help="write the rules block into this file (R2c); empty to skip")
     args = ap.parse_args(argv)
     token = os.environ.get("GITHUB_TOKEN", "")
     full = os.environ.get("GITHUB_REPOSITORY", "")
@@ -226,6 +275,12 @@ def main(argv: list[str] | None = None) -> int:
     (out / LEDGER_MD).write_text(render_md(ledger["entries"], ledger["summary"], ledger["built"]), encoding="utf-8")
     s = ledger["summary"]
     print(f"hare ledger: {s['prs']} PRs, {s['notes']} notes, {s['real']} real, {s['skip']} skip, {s['scores']} scores -> {out / LEDGER_MD}")
+    if args.agents and Path(args.agents).exists():
+        before = Path(args.agents).read_text(encoding="utf-8")
+        after = apply_rules(before, proposed_rules(ledger))
+        if after != before:
+            Path(args.agents).write_text(after, encoding="utf-8")
+            print(f"hare ledger: {len(proposed_rules(ledger))} rule(s) written to {args.agents}")
     return 0
 
 

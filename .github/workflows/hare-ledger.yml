@@ -24,22 +24,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: python scripts/hare_ledger.py --out docs/
+        run: python scripts/hare_ledger.py --out docs/ --agents AGENTS.md
       - name: Open a PR when it changed
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if git diff --quiet -- docs/hare-ledger.json docs/hare-ledger.md; then
+          if git diff --quiet -- docs/hare-ledger.json docs/hare-ledger.md AGENTS.md; then
             echo "ledger unchanged"; exit 0
           fi
           branch="chore/hare-ledger-$(date -u +%Y-%m-%d)"
           git config user.name "searchts-hare[bot]"
           git config user.email "searchts-hare[bot]@users.noreply.github.com"
           git checkout -B "$branch"
-          git add docs/hare-ledger.json docs/hare-ledger.md
+          git add docs/hare-ledger.json docs/hare-ledger.md AGENTS.md
           git commit -m "chore(hare): ledger $(date -u +%Y-%m-%d)"
           git push -f origin "$branch"
           gh pr create --base main --head "$branch" \
             --title "chore(hare): ledger $(date -u +%Y-%m-%d)" \
-            --body "$(printf '## What\n\nThe findings ledger, rebuilt from Hare notes, Since lines, resolved threads and /hare score comments (PLAN R2b).\n\n## Checklist\n\n- [x] chore: does not move the package version\n\n## Models\n\n| Role | Model | Effort | Purpose |\n| --- | --- | --- | --- |\n| wrote | scripts/hare_ledger.py (no model) | low | AI wrote it |\n')" \
+            --body "$(printf '## What\n\nThe findings ledger, rebuilt from Hare notes, Since lines, resolved threads and /hare score comments (PLAN R2b), and the rules block in AGENTS.md from low scores with a reason (R2c).\n\n## Checklist\n\n- [x] chore: does not move the package version\n\n## Models\n\n| Role | Model | Effort | Purpose |\n| --- | --- | --- | --- |\n| wrote | scripts/hare_ledger.py (no model) | low | AI wrote it |\n')" \
             || echo "PR already open for $branch"

@@ -116,3 +116,25 @@ def test_the_ledger_primes_the_next_note(tmp_path, monkeypatch) -> None:
     assert "## Ledger" in hare_r1.build_user("A", "t", "b", diff, "ok", ledger=block)
     monkeypatch.setattr(hare_r1, "LEDGER_PATH", str(tmp_path / "missing.json"))
     assert hare_r1.ledger_block(diff) == ""
+
+
+def test_low_scores_with_a_reason_become_rules_in_agents_md() -> None:
+    ledger = {"entries": [
+        {"pr": 7, "scores": [{"score": 2, "text": "thin on the tests", "at": "2026-10-03T22:00:00Z"}, {"score": 5, "text": "good", "at": "2026-10-03T23:00:00Z"}]},
+        {"pr": 9, "scores": [{"score": 1, "text": "Thin on the tests.", "at": "2026-10-04T10:00:00Z"}, {"score": 2, "text": "", "at": "2026-10-04T11:00:00Z"}]},
+        {"pr": 11, "scores": [{"score": 2, "text": "missed the error path", "at": "2026-10-05T10:00:00Z"}]},
+    ]}
+    rules = hare_ledger.proposed_rules(ledger)
+    assert rules == [
+        "- missed the error path. (#11, scored 2/5 on 2026-10-05)",
+        "- Thin on the tests. (#9, scored 1/5 on 2026-10-04)",
+    ]  # newest first, duplicates folded on the reason, no reason means no rule, high scores are not rules
+    agents = "# AGENTS\n\n## R1 - Hare\n\nFirst paragraph.\n\nSecond paragraph.\n"
+    once = hare_ledger.apply_rules(agents, rules)
+    assert once.count(hare_ledger.RULES_START) == 1 and "missed the error path" in once
+    assert once.index("First paragraph.") < once.index(hare_ledger.RULES_START) < once.index("Second paragraph.")
+    twice = hare_ledger.apply_rules(once, ["- only this one. (#12, scored 1/5 on 2026-10-06)"])
+    assert twice.count(hare_ledger.RULES_START) == 1 and "missed the error path" not in twice and "only this one" in twice
+    assert "Second paragraph." in twice and "\u2014" not in twice
+    empty = hare_ledger.apply_rules(agents, [])
+    assert "none yet" in empty
