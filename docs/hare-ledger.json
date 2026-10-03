@@ -2,20 +2,19 @@
  "built": "2026-10-03",
  "repo": "capad-xyz/searchts",
  "summary": {
-  "prs": 58,
-  "notes": 98,
-  "real": 20,
-  "skip": 42,
+  "prs": 53,
+  "notes": 82,
+  "real": 5,
+  "skip": 24,
   "real_fates": {
-   "open": 20
+   "open": 5
   },
   "real_fixed_or_resolved": 0,
   "hops": {
-   "nous:poolside/laguna-s-2.1:free": 3,
-   "openrouter:qwen/qwen3.8-27b:free": 11,
+   "nous:poolside/laguna-s-2.1:free": 4,
+   "openrouter:qwen/qwen3.8-27b:free": 12,
    "groq:openai/gpt-oss-120b": 10,
    "groq:openai/gpt-oss-120b · deep": 1,
-   "hare-bot:Grok": 18,
    "gemini:gemini-3.1-flash-lite": 3,
    "gemini:gemini-3.1-flash-lite · deep": 1,
    "gemini:gemini-3.5-flash": 1,
@@ -27,25 +26,55 @@
   },
   "scores": 0,
   "score_avg": null,
-  "cut_notes": 1,
-  "by_reviewer": {
-   "hare": {
-    "notes": 80,
-    "real": 5,
-    "skip": 23,
-    "real_fixed_or_resolved": 0,
-    "avg_minutes": null
-   },
-   "hare-bot": {
-    "notes": 18,
-    "real": 15,
-    "skip": 19,
-    "real_fixed_or_resolved": 0,
-    "avg_minutes": 3.9
-   }
-  }
+  "cut_notes": 1
  },
  "entries": [
+  {
+   "pr": 252,
+   "title": "ci(hare): the ledger counts Hare Bot too, and reads its pass log",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T23:13:21Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/252#pullrequestreview-5403400702",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "41,516 prompt + 2,531 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 43 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 253,
+   "title": "ci(hare): Hare Bot's JSONL pass log, the structured record the ledger prefers",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T23:09:17Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/253#pullrequestreview-5403365112",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "20,472 prompt + 3,880 answer + 3,512 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 34 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "docs/hare-ledger.md:5",
+     "sev": "skip",
+     "issue": "\"1 notes cut at the budget\" should be \"1 note\". Pre-existing pluralisation bug in the generator, now visible in the committed output.",
+     "fate": "open",
+     "first": "2026-10-03T23:09:17Z"
+    }
+   ],
+   "scores": []
+  },
   {
    "pr": 250,
    "title": "ci(hare): what the reviews found on #245 to #249",
@@ -55,7 +84,6 @@
     {
      "at": "2026-10-03T23:04:39Z",
      "url": "https://github.com/capad-xyz/searchts/pull/250#pullrequestreview-5403335077",
-     "by": "hare",
      "hop": "nous:poolside/laguna-s-2.1:free",
      "effort": "medium",
      "cost": "about 26,646 prompt + 17,211 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 312 s",
@@ -66,7 +94,6 @@
    "findings": [
     {
      "loc": "tests/test_hare_r1.py:1063",
-     "by": "hare",
      "sev": "skip",
      "issue": "The test comment says 'the later, smaller findings list won' but the test actually verifies the smaller restart does NOT win (99 is excluded). The comment is misleading.",
      "fate": "open",
@@ -84,7 +111,6 @@
     {
      "at": "2026-10-03T23:03:46Z",
      "url": "https://github.com/capad-xyz/searchts/pull/251#pullrequestreview-5403330357",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "low",
      "cost": "13,023 prompt + 3,780 answer + 3,620 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 33 s",
@@ -104,7 +130,6 @@
     {
      "at": "2026-10-03T16:45:19Z",
      "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5401711247",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b",
      "effort": "low",
      "cost": "",
@@ -114,7 +139,6 @@
     {
      "at": "2026-10-03T23:01:30Z",
      "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5403316547",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b · deep",
      "effort": "low",
      "cost": "4,526 prompt + 1,118 answer + 784 reasoning tokens on `groq:openai/gpt-oss-120b · deep`, 3 s",
@@ -125,7 +149,6 @@
    "findings": [
     {
      "loc": "CHANGELOG.md",
-     "by": "hare",
      "sev": "skip",
      "issue": "Extra blank lines around the new version heading make the changelog look untidy.",
      "fate": "open",
@@ -143,7 +166,6 @@
     {
      "at": "2026-10-03T22:35:27Z",
      "url": "https://github.com/capad-xyz/searchts/pull/248#pullrequestreview-5403154898",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b",
      "effort": "medium",
      "cost": "6,683 prompt + 1,574 answer + 1,300 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
@@ -153,43 +175,16 @@
     {
      "at": "2026-10-03T22:38:41Z",
      "url": "https://github.com/capad-xyz/searchts/pull/248#pullrequestreview-5403175301",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "medium",
      "cost": "8,554 prompt + 4,211 answer + 3,780 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 72 s",
      "cut": "",
      "findings": 2
-    },
-    {
-     "at": "2026-10-03T22:44:38Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/248#pullrequestreview-5403213965",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 4.2,
-     "tokens_est": 12000,
-     "chars_est": 47000,
-     "chars": {
-      "diff": 13838,
-      "title": 60,
-      "body": 1606,
-      "commits": 1188,
-      "reviews": 3231,
-      "threads": 367,
-      "issue_comments": 2650,
-      "ci_text": 303,
-      "source_slices": 24125
-     },
-     "findings": 3
     }
    ],
    "findings": [
     {
      "loc": "scripts/hare_ledger.py",
-     "by": "hare",
      "sev": "real",
      "issue": "apply_rules uses an anchor string \"## R1 \" that does not match the actual header \"## R1 - Hare\" (contains an em dash). The rules block will be appended to the end of the file rather than inserted after the Hare section, breaking the intended placement.",
      "fate": "open",
@@ -197,35 +192,10 @@
     },
     {
      "loc": ".github/workflows/hare-ledger.yml:27",
-     "by": "hare",
      "sev": "skip",
      "issue": "PR title says 'become rules in AGENTS.md' but the change moves them to HARE.md. Minor title/body mismatch.",
      "fate": "open",
      "first": "2026-10-03T22:38:41Z"
-    },
-    {
-     "loc": "AGENTS.md:26",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "This block says each ledger run rewrites it and that a low score lands here. The workflow passes `--rules HARE.md`, and `apply_rules` only replaces the markers in that file. This copy stays on \"(none yet)\" with a rewrite claim that is no longer true, while Hare still reads AGENTS.md in full beside HARE.md. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T22:44:38Z"
-    },
-    {
-     "loc": "HARE.md:9",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "The header says resolving or editing the score comment drops the rule on the next run. `proposed_rules` keeps every issue comment that is still `/hare score` 2 or less with a reason. Those comments have no resolved state, and an edit drops the line only when the score or the reason is gone. The generated block on line 17 already says edit or delete. This header sits outside the markers, so the run never corrects it.",
-     "fate": "open",
-     "first": "2026-10-03T22:44:38Z"
-    },
-    {
-     "loc": ".github/workflows/hare-ledger.yml:44",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "The PR title still says the rules land in AGENTS.md. This workflow body, and the script, write HARE.md. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T22:44:38Z"
     }
    ],
    "scores": []
@@ -239,55 +209,20 @@
     {
      "at": "2026-10-03T22:31:56Z",
      "url": "https://github.com/capad-xyz/searchts/pull/247#pullrequestreview-5403132309",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b",
      "effort": "medium",
      "cost": "5,155 prompt + 1,515 answer + 1,309 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
      "cut": "",
-     "findings": 1
-    },
-    {
-     "at": "2026-10-03T22:44:12Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/247#pullrequestreview-5403210947",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 3.8,
-     "tokens_est": 5000,
-     "chars_est": 20000,
-     "chars": {
-      "diff": 2750,
-      "title": 49,
-      "body": 856,
-      "commits": 361,
-      "reviews": 1062,
-      "threads": 210,
-      "issue_comments": 2650,
-      "ci_text": 310,
-      "source_slices": 11641
-     },
      "findings": 1
     }
    ],
    "findings": [
     {
      "loc": "scripts/hare_r1.py:1355",
-     "by": "hare",
      "sev": "real",
      "issue": "The provider chain order is changed (groq → openrouter → nous → gemini → zen) without a corresponding PLAN entry, violating scope‑control rules.",
      "fate": "open",
      "first": "2026-10-03T22:31:56Z"
-    },
-    {
-     "loc": "scripts/hare_r1.py:1356",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "The new tuple is the owner's order, and the tests pin it. `build_provider_chain` still calls that order the PLAN.md R1c contract, but the failover line there still walks Groq, Gemini, Nous, then OpenRouter, and the module docstring still says Groq, Gemini, Nous, then OpenRouter. The checklist already leaves that PLAN line for the next fold. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T22:44:12Z"
     }
    ],
    "scores": []
@@ -301,37 +236,14 @@
     {
      "at": "2026-10-03T22:39:49Z",
      "url": "https://github.com/capad-xyz/searchts/pull/249#pullrequestreview-5403182955",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "low",
      "cost": "8,878 prompt + 1,850 answer + 1,715 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 9 s",
      "cut": "",
      "findings": 0
-    },
-    {
-     "at": "2026-10-03T22:43:49Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/249#pullrequestreview-5403208505",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 3.25,
-     "chars": {},
-     "findings": 1
     }
    ],
-   "findings": [
-    {
-     "loc": "PLAN.md:523",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "The log says that night's Flash-Lite cost lines came from streamed calls. The ledger has two, both on #244. The 17 s note posted at 22:09:53Z is the review of the PR that added `HARE_STREAM` (#244, merged 22:09:39Z). Hare runs `scripts/hare_r1.py` from the base, and #243 has no `HARE_STREAM`, so that call did not stream. The `· deep` run at 18 s (22:20:13Z) is after #244 was on main, so that one did.",
-     "fate": "open",
-     "first": "2026-10-03T22:43:49Z"
-    }
-   ],
+   "findings": [],
    "scores": []
   },
   {
@@ -343,55 +255,20 @@
     {
      "at": "2026-10-03T22:23:18Z",
      "url": "https://github.com/capad-xyz/searchts/pull/245#pullrequestreview-5403071728",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b",
      "effort": "medium",
      "cost": "5,379 prompt + 1,306 answer + 1,045 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
      "cut": "",
-     "findings": 1
-    },
-    {
-     "at": "2026-10-03T22:36:32Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/245#pullrequestreview-5403161779",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 5.7,
-     "tokens_est": 12000,
-     "chars_est": 48000,
-     "chars": {
-      "diff": 5950,
-      "title": 66,
-      "body": 1173,
-      "commit_message": 657,
-      "reviews": 1231,
-      "threads": 246,
-      "issue_comments_approx": 3200,
-      "ci_text": 315,
-      "source_slices": 34682
-     },
      "findings": 1
     }
    ],
    "findings": [
     {
      "loc": "scripts/hare_r1.py:842",
-     "by": "hare",
      "sev": "real",
      "issue": "When `tail` starts with a JSON object but the restart isn’t longer than the kept findings, `stitched` is never assigned, leading to an UnboundLocalError later.",
      "fate": "open",
      "first": "2026-10-03T22:23:18Z"
-    },
-    {
-     "loc": "scripts/hare_r1.py:840",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "The restart check is only `lstrip().startswith(\"{\")`. A fenced review, or one with a sentence in front, still takes the concatenate branch, and `extract_json` then keeps that later findings list. A 3-finding partial plus a fenced one-finding tail comes back as line 99, with `continued` set.",
-     "fate": "open",
-     "first": "2026-10-03T22:36:32Z"
     }
    ],
    "scores": []
@@ -405,43 +282,16 @@
     {
      "at": "2026-10-03T22:29:33Z",
      "url": "https://github.com/capad-xyz/searchts/pull/246#pullrequestreview-5403115893",
-     "by": "hare",
      "hop": "gemini:gemini-3.1-flash-lite",
      "effort": "medium",
      "cost": "28,829 prompt + 248 answer + 0 reasoning tokens on `gemini:gemini-3.1-flash-lite`, 13 s",
      "cut": "",
      "findings": 2
-    },
-    {
-     "at": "2026-10-03T22:33:59Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/246#pullrequestreview-5403145293",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "high",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 3.3,
-     "tokens_est": 25000,
-     "chars_est": 99000,
-     "chars": {
-      "diff": 58501,
-      "title": 46,
-      "body": 2315,
-      "commit_message": 768,
-      "reviews": 1180,
-      "threads": 332,
-      "issue_comments": 2650,
-      "ci_text": 382,
-      "source_slices": 33320
-     },
-     "findings": 3
     }
    ],
    "findings": [
     {
      "loc": "scripts/hare_ledger.py:126",
-     "by": "hare",
      "sev": "skip",
      "issue": "The `render_md` function calculates a percentage using integer division, which is safe due to the `if summary['real']` check, but it could be cleaner.",
      "fate": "open",
@@ -449,35 +299,10 @@
     },
     {
      "loc": "scripts/hare_r1.py:1113",
-     "by": "hare",
      "sev": "skip",
      "issue": "The `ledger_block` function imports `hare_ledger` inside the function to avoid circular imports. This is a standard workaround but worth noting.",
      "fate": "open",
      "first": "2026-10-03T22:29:33Z"
-    },
-    {
-     "loc": "scripts/hare_ledger.py:81",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "Resolved threads are keyed by path only, then every still-open finding on that path is marked `resolved`. The GraphQL query already selects `line`, and that field is unused. One resolved Hare thread on a file (including a thread resolved because the line left the diff) changes the fate of every other open finding on the same file. Those fates feed the hit rate and the prompt line that says not to raise a resolved finding again. `test_pr_rows_follows_a_finding_from_note_to_note` has only one finding on `scripts/b.py`, so the path-wide match stays green.",
-     "fate": "open",
-     "first": "2026-10-03T22:33:59Z"
-    },
-    {
-     "loc": "scripts/hare_ledger.py:46",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "`note_meta` only reads a Models row whose slug is in backticks. The ledger committed here has 72 notes and 17 hops. Older notes still use `**ship** · \\`slug\\` · effort low` (the notes on #221 are that shape), so the hop table does not say which hop answered for most notes.",
-     "fate": "open",
-     "first": "2026-10-03T22:33:59Z"
-    },
-    {
-     "loc": ".github/workflows/hare-ledger.yml:45",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "`gh pr create` is followed by `|| echo`, so any create failure, not only an already-open PR, leaves the step green after the force-push.",
-     "fate": "open",
-     "first": "2026-10-03T22:33:59Z"
     }
    ],
    "scores": []
@@ -491,7 +316,6 @@
     {
      "at": "2026-10-03T22:09:53Z",
      "url": "https://github.com/capad-xyz/searchts/pull/244#pullrequestreview-5402987918",
-     "by": "hare",
      "hop": "gemini:gemini-3.1-flash-lite",
      "effort": "high",
      "cost": "11,670 prompt + 183 answer + 0 reasoning tokens on `gemini:gemini-3.1-flash-lite`, 17 s",
@@ -499,34 +323,8 @@
      "findings": 1
     },
     {
-     "at": "2026-10-03T22:17:01Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/244#pullrequestreview-5403024630",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 5.1,
-     "tokens_est": 15000,
-     "chars_est": 60000,
-     "chars": {
-      "diff": 22970,
-      "title": 69,
-      "body": 2112,
-      "commit_messages": 2967,
-      "review_body": 1008,
-      "thread_body": 238,
-      "issue_comment_body": 2650,
-      "ci_text": 302,
-      "source_slices": 27195
-     },
-     "findings": 2
-    },
-    {
      "at": "2026-10-03T22:20:13Z",
      "url": "https://github.com/capad-xyz/searchts/pull/244#pullrequestreview-5403046663",
-     "by": "hare",
      "hop": "gemini:gemini-3.1-flash-lite · deep",
      "effort": "high",
      "cost": "11,685 prompt + 165 answer + 0 reasoning tokens on `gemini:gemini-3.1-flash-lite · deep`, 18 s",
@@ -537,149 +335,19 @@
    "findings": [
     {
      "loc": "scripts/hare_r1.py:67",
-     "by": "hare",
      "sev": "skip",
      "issue": "The new constants are defined but not grouped with existing HARE_ settings.",
      "fate": "open",
      "first": "2026-10-03T22:09:53Z"
     },
     {
-     "loc": "scripts/hare_r1.py:612",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "`repair_json` treats an odd raw quote count as an open string. One escaped quote inside an already closed finding makes that count odd, so a quote is appended onto text that was fine and the fallback does not parse. When the continuation fails, the hop still has no JSON object and the kept findings are thrown away.",
-     "fate": "open",
-     "first": "2026-10-03T22:17:01Z"
-    },
-    {
-     "loc": "scripts/hare_r1.py:840",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "A continuation that starts with `{` replaces the partial instead of stitching. The fresh budget is 800 tokens, so that restart cannot hold the findings the cut just kept, and the short object is what gets posted.",
-     "fate": "open",
-     "first": "2026-10-03T22:17:01Z"
-    },
-    {
      "loc": "scripts/hare_r1.py:845",
-     "by": "hare",
      "sev": "skip",
      "issue": "The `LAST_USAGE` update logic for the continuation call assumes `prompt_tokens` is always present in the tail usage.",
      "fate": "open",
      "first": "2026-10-03T22:20:13Z"
     }
    ],
-   "scores": []
-  },
-  {
-   "pr": 243,
-   "title": "ci(hare): start at once, size the spend to the diff, print what it cost",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T22:15:37Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/243#pullrequestreview-5403015854",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 3.8,
-     "tokens_est": 17000,
-     "chars_est": 67000,
-     "chars": {
-      "diff": 14647,
-      "title": 71,
-      "body": 1855,
-      "commits": 692,
-      "reviews": 0,
-      "threads": 0,
-      "issue_comments": 2651,
-      "ci_text": 319,
-      "source_slices": 46338
-     },
-     "findings": 1
-    }
-   ],
-   "findings": [
-    {
-     "loc": "scripts/hare_r1.py:743",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "A big diff now calls with `BIG_LLM_TIMEOUT_SEC` (600s), and `_post` records that number, but the needed-note short line still says `no answer within 300s` from `LLM_TIMEOUT_SEC`. A timeout on the new tier understates the wait by half.",
-     "fate": "open",
-     "first": "2026-10-03T22:15:37Z"
-    }
-   ],
-   "scores": []
-  },
-  {
-   "pr": 241,
-   "title": "docs(plan): fold 2026-10-04: Hare answers, thinking off by default, deep on request",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T22:15:25Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/241#pullrequestreview-5403014502",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 3.75,
-     "tokens_est": 15000,
-     "chars_est": 59000,
-     "chars": {
-      "diff": 14788,
-      "title": 83,
-      "body": 1109,
-      "commits": 435,
-      "issue_comments": 2650,
-      "ci_text": 310,
-      "source_slices": 39589
-     },
-     "findings": 0
-    }
-   ],
-   "findings": [],
-   "scores": []
-  },
-  {
-   "pr": 242,
-   "title": "ci(hare): answer budget 32000, the owner's call",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T22:14:40Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/242#pullrequestreview-5403009947",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 2.9,
-     "tokens_est": 9500,
-     "chars_est": 38000,
-     "chars": {
-      "diff": 1722,
-      "title": 47,
-      "body": 515,
-      "commit_message": 280,
-      "reviews": 0,
-      "threads": 0,
-      "issue_comments": 2650,
-      "ci_text": 330,
-      "source_slices": 32433
-     },
-     "findings": 0
-    }
-   ],
-   "findings": [],
    "scores": []
   },
   {
@@ -691,7 +359,6 @@
     {
      "at": "2026-10-03T21:03:59Z",
      "url": "https://github.com/capad-xyz/searchts/pull/240#pullrequestreview-5402735598",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b",
      "effort": "low",
      "cost": "",
@@ -702,7 +369,6 @@
    "findings": [
     {
      "loc": "scripts/hare_r1.py:53",
-     "by": "hare",
      "sev": "skip",
      "issue": "Added comment lines exceed typical 80‑character line length limits.",
      "fate": "open",
@@ -720,7 +386,6 @@
     {
      "at": "2026-10-03T20:46:25Z",
      "url": "https://github.com/capad-xyz/searchts/pull/239#pullrequestreview-5402654046",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b",
      "effort": "low",
      "cost": "",
@@ -731,7 +396,6 @@
    "findings": [
     {
      "loc": "CONTRIBUTING.md",
-     "by": "hare",
      "sev": "skip",
      "issue": "The example Models table inside the new section shows a \"medium\" effort for a \"wrote\" role, while the PR’s own Models table uses \"low\"; the inconsistency could confuse contributors.",
      "fate": "open",
@@ -749,7 +413,6 @@
     {
      "at": "2026-10-03T20:32:04Z",
      "url": "https://github.com/capad-xyz/searchts/pull/238#pullrequestreview-5402613253",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b",
      "effort": "low",
      "cost": "",
@@ -760,7 +423,6 @@
    "findings": [
     {
      "loc": "docs/hare-thinking-ab.md",
-     "by": "hare",
      "sev": "skip",
      "issue": "The file does not end with a newline, violating the repository's trailing‑newline style rule.",
      "fate": "open",
@@ -778,7 +440,6 @@
     {
      "at": "2026-10-03T19:02:27Z",
      "url": "https://github.com/capad-xyz/searchts/pull/236#pullrequestreview-5402309069",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b",
      "effort": "low",
      "cost": "",
@@ -786,32 +447,8 @@
      "findings": 1
     },
     {
-     "at": "2026-10-03T20:02:57Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/236#pullrequestreview-5402506750",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 2.0,
-     "tokens_est": 11000,
-     "chars_est": 45000,
-     "chars": {
-      "diff": 5884,
-      "title": 59,
-      "body": 2186,
-      "commit_message": 731,
-      "review_body": 1121,
-      "issue_comment_body": 2650,
-      "source_slices": 32121
-     },
-     "findings": 2
-    },
-    {
      "at": "2026-10-03T20:31:44Z",
      "url": "https://github.com/capad-xyz/searchts/pull/236#pullrequestreview-5402612414",
-     "by": "hare",
      "hop": "gemini:gemini-3.5-flash",
      "effort": "low",
      "cost": "",
@@ -821,7 +458,6 @@
     {
      "at": "2026-10-03T20:55:03Z",
      "url": "https://github.com/capad-xyz/searchts/pull/236#pullrequestreview-5402698164",
-     "by": "hare",
      "hop": "gemini:gemini-3.1-flash-lite",
      "effort": "low",
      "cost": "",
@@ -832,31 +468,13 @@
    "findings": [
     {
      "loc": ".github/workflows/hare.yml",
-     "by": "hare",
      "sev": "skip",
      "issue": "HARE_GROQ_MODEL env var now contains two models separated by a comma, but the variable name implies a single model; could be confusing for future maintainers.",
      "fate": "open",
      "first": "2026-10-03T19:02:27Z"
     },
     {
-     "loc": "scripts/hare_r1.py:81",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "The new note says Nous hops now send effort none, so a miss is cheap. `build_provider_chain` still gives Nous `{}`, and `test_each_provider_carries_its_own_request_options` pins that. A dead `stealth/space-bunny-alpha` still waits out `LLM_TIMEOUT_SEC` (60s), which is the cost the deleted sentence named. The catalog test still says a Nous hop carries no reasoning control, and that matches the code.",
-     "fate": "open",
-     "first": "2026-10-03T20:02:57Z"
-    },
-    {
-     "loc": ".github/workflows/hare.yml:101",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "The new OpenRouter list is the `||` fallback inside a `${{ }}` expression. `_workflow_env` treats any `${{` as unpinned, so `test_workflow_model_overrides_do_not_undo_the_python_defaults` never compares this fallback to `HARE_OR_DEFAULT`. The two strings match in this commit. A later edit of only one side stays green.",
-     "fate": "open",
-     "first": "2026-10-03T20:02:57Z"
-    },
-    {
      "loc": "scripts/hare_r1.py:74",
-     "by": "hare",
      "sev": "skip",
      "issue": "Setting HARE_GROQ_DEFAULT to an empty string is fine, but ensure the parser doesn't try to request an empty model name.",
      "fate": "open",
@@ -864,7 +482,6 @@
     },
     {
      "loc": "tests/test_hare_r1.py:64",
-     "by": "hare",
      "sev": "skip",
      "issue": "The regex only looks for single quotes. Double-quoted fallbacks in workflow expressions will be missed.",
      "fate": "open",
@@ -880,32 +497,8 @@
    "files": [],
    "notes": [
     {
-     "at": "2026-10-03T20:02:17Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/235#pullrequestreview-5402501651",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "high",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 1.0,
-     "tokens_est": 6800,
-     "chars_est": 27000,
-     "chars": {
-      "diff": 18611,
-      "title": 47,
-      "body": 3085,
-      "commit_message": 862,
-      "conversation_hare": 766,
-      "conversation_coderabbit_approx": 2500,
-      "ci_text_approx": 1500
-     },
-     "findings": 3
-    },
-    {
      "at": "2026-10-03T20:40:48Z",
      "url": "https://github.com/capad-xyz/searchts/pull/235#pullrequestreview-5402636639",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "medium",
      "cost": "",
@@ -915,7 +508,6 @@
     {
      "at": "2026-10-03T20:54:39Z",
      "url": "https://github.com/capad-xyz/searchts/pull/235#pullrequestreview-5402695590",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b",
      "effort": "low",
      "cost": "",
@@ -925,32 +517,7 @@
    ],
    "findings": [
     {
-     "loc": "scripts/hare_r1.py:527",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "The reasoning-knob retry calls `_post` outside the `HTTPError` wrapper. A second 400/404/422 escapes as a bare `HTTPError` (`HTTP Error 400: bad` with no body), so the nag loses the cause on the path this PR adds to name errors.",
-     "fate": "open",
-     "first": "2026-10-03T20:02:17Z"
-    },
-    {
-     "loc": "scripts/hare_r1.py:48",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "Every Nous hop is pinned to `effort: none`. That is the fast pass. Right for ending empty answers; the usual good review still wants reasoning on when the provider can return content.",
-     "fate": "open",
-     "first": "2026-10-03T20:02:17Z"
-    },
-    {
-     "loc": "scripts/hare_r1.py:983",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "`nous` now sends a reasoning knob, but the `HARE_NOUS_DEFAULT` comment above still says Nous hops carry no reasoning control and uses that to justify putting space-bunny last.",
-     "fate": "open",
-     "first": "2026-10-03T20:02:17Z"
-    },
-    {
      "loc": ".github/workflows/hare.yml:51",
-     "by": "hare",
      "sev": "skip",
      "issue": "The PR body says 'Job timeout 20 → 25 min' and claims 'the existing test checks the sum', but the diff sets 30 and no test asserts the workflow timeout.",
      "fate": "still applies",
@@ -958,7 +525,6 @@
     },
     {
      "loc": "scripts/hare_r1.py:49",
-     "by": "hare",
      "sev": "skip",
      "issue": "The comment says the budget 'has to hold two hung hops and still reach a live one', but 2 × 300 s = 600 s = the entire budget, so a third hop never starts.",
      "fate": "fixed",
@@ -966,7 +532,6 @@
     },
     {
      "loc": "scripts/hare_r1.py:45",
-     "by": "hare",
      "sev": "skip",
      "issue": "The new budget comment says two full hangs spend the 600 s budget, which contradicts the intended guarantee that the budget should hold two hung hops and still allow a live hop.",
      "fate": "open",
@@ -974,7 +539,6 @@
     },
     {
      "loc": "scripts/hare_r1.py:71",
-     "by": "hare",
      "sev": "skip",
      "issue": "The model‑list comment was re‑phrased but now splits a sentence across lines, reducing readability.",
      "fate": "open",
@@ -992,33 +556,16 @@
     {
      "at": "2026-10-03T20:30:48Z",
      "url": "https://github.com/capad-xyz/searchts/pull/237#pullrequestreview-5402609700",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "medium",
      "cost": "",
      "cut": "",
      "findings": 3
-    },
-    {
-     "at": "2026-10-03T20:35:39Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/237#pullrequestreview-5402622302",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "high",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "minutes": 8.0,
-     "chars": {
-      "title": 70
-     },
-     "findings": 8
     }
    ],
    "findings": [
     {
      "loc": "scripts/hare_r1.py:272",
-     "by": "hare",
      "sev": "real",
      "issue": "The fence regex uses `\\\\` (literal backslash) instead of triple backticks. The fence path is dead code; the test passes only because `json_objects` covers the same case. A future maintainer who trusts the fence path will be surprised.",
      "fate": "open",
@@ -1026,7 +573,6 @@
     },
     {
      "loc": "tests/test_hare_r1.py:789",
-     "by": "hare",
      "sev": "skip",
      "issue": "`test_hare_once_accepts_an_ordered_hop_override` inspects `co_varnames` rather than calling the function with a `hop_override` and asserting the provider list is honoured. It will pass even if the parameter is ignored at runtime.",
      "fate": "open",
@@ -1034,75 +580,10 @@
     },
     {
      "loc": "scripts/hare_local.py:172",
-     "by": "hare",
      "sev": "skip",
      "issue": "Setting `os.environ[\"GITHUB_EVENT_NAME\"]` mutates the process globally. If any imported module reads that variable at import time or in a later call, it will see the spoofed value. A `contextlib` or explicit parameter would be safer, but the current scope (single script, single call) makes the risk low.",
      "fate": "open",
      "first": "2026-10-03T20:30:48Z"
-    },
-    {
-     "loc": "scripts/hare_r1.py:977",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "This is the body the Groq hop receives. The Action pins `openai/gpt-oss-120b`. Groq's knob is top-level `reasoning_effort`, and for gpt-oss the allowed values are low, medium, and high (`none` is Qwen-only). A nested `reasoning` object is the OpenRouter shape this file already says Gemini must not use. If Groq ignores it, the first hop stays on default medium reasoning and can spend the hop budget before Nous, which is the hop the writeup measured. If Groq rejects it, the first hop 400s. The tests that pin `{\"reasoning\": {\"effort\": \"none\"}}` for Groq have to move with the fix. Zen is given the same unmeasured object, and the Action sends no Zen key.",
-     "fate": "open",
-     "first": "2026-10-03T20:35:39Z"
-    },
-    {
-     "loc": "scripts/hare_r1.py:295",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "The fence pattern matches backslashes, not markdown fences, so that branch never sees a fenced JSON block. Brace scanning still finds a simple object inside the fence, which is why the fence test stays green. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T20:35:39Z"
-    },
-    {
-     "loc": "docs/hare-thinking-ab.md:8",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "This line says both arms ran on the same PRs. Thinking on is 231, 233, 227, 230, 221, 224. Thinking off is 234, 224, 222, 221, 223, 217, 218. Only 221 and 224 sit in both. The six empty thinking-on runs still stand. The pairing does not.",
-     "fate": "open",
-     "first": "2026-10-03T20:35:39Z"
-    },
-    {
-     "loc": "scripts/hare_r1.py:544",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "The new `except TimeoutError` does not see a urllib timeout. `urlopen` wraps that timeout in `urllib.error.URLError`, so the named \"LLM timeout after Ns\" message never runs. The hop loop still catches the URLError and moves on.",
-     "fate": "open",
-     "first": "2026-10-03T20:35:39Z"
-    },
-    {
-     "loc": "scripts/hare_local.py:81",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "`--model` and the default key walk only know nous, zen, and openrouter, so the local loop cannot run the Groq or Gemini hops the Action tries first. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T20:35:39Z"
-    },
-    {
-     "loc": "tests/test_hare_r1.py:784",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "`test_hare_once_accepts_an_ordered_hop_override` only checks that the name `hop_override` exists. It stays green if the parameter is ignored. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T20:35:39Z"
-    },
-    {
-     "loc": "scripts/hare_local.py:7",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "The module doc shows `--skip-checks`. The parser only has `--wait-checks`, and skipping checks is already the default. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T20:35:39Z"
-    },
-    {
-     "loc": "scripts/hare_r1.py:232",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "The new docstring contains a real tab and a form feed, so it reads \"in ext\" and \"a ind\". (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T20:35:39Z"
     }
    ],
    "scores": []
@@ -1114,21 +595,8 @@
    "files": [],
    "notes": [
     {
-     "at": "2026-10-03T17:11:01Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/234#pullrequestreview-5401811255",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "log": "hare-bot-log-2026-10-04.jsonl",
-     "tokens_est": 9000,
-     "findings": 0
-    },
-    {
      "at": "2026-10-03T17:58:56Z",
      "url": "https://github.com/capad-xyz/searchts/pull/234#pullrequestreview-5401971087",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "medium",
      "cost": "",
@@ -1139,7 +607,6 @@
    "findings": [
     {
      "loc": "scripts/hare_r1.py:52",
-     "by": "hare",
      "sev": "skip",
      "issue": "`OR_REASONING` carries `\"exclude\": True`, which is not a documented OpenRouter `reasoning` field. The 400-retry in `chat_complete` self-heals, but every OpenRouter hop will pay one extra round-trip on first contact.",
      "fate": "open",
@@ -1147,7 +614,6 @@
     },
     {
      "loc": "scripts/hare_local.py:193",
-     "by": "hare",
      "sev": "skip",
      "issue": "File has no trailing newline (the diff shows `\\ No newline at end of file`). POSIX text files should end with one.",
      "fate": "open",
@@ -1165,7 +631,6 @@
     {
      "at": "2026-10-03T16:55:21Z",
      "url": "https://github.com/capad-xyz/searchts/pull/233#pullrequestreview-5401750523",
-     "by": "hare",
      "hop": "groq:openai/gpt-oss-120b",
      "effort": "low",
      "cost": "",
@@ -1176,7 +641,6 @@
    "findings": [
     {
      "loc": "scripts/hare_r1.py:1082",
-     "by": "hare",
      "sev": "real",
      "issue": "The new `print(f\"hare dead {dead}\")` writes to stdout, but the repo policy (P4.6) mandates that any diagnostic output must go to stderr, never stdout.",
      "fate": "open",
@@ -1186,45 +650,14 @@
    "scores": []
   },
   {
-   "pr": 228,
-   "title": "fix: a short page that is the whole page reads without a browser (F25)",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T16:54:00Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/228#pullrequestreview-5401746905",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "findings": 0
-    }
-   ],
-   "findings": [],
-   "scores": []
-  },
-  {
    "pr": 224,
    "title": "feat(hare): Groq plus Gemini hops, wider token budget",
    "state": "merged",
    "files": [],
    "notes": [
     {
-     "at": "2026-10-03T11:24:22Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/224#pullrequestreview-5400515943",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "high",
-     "cost": "",
-     "cut": "",
-     "findings": 2
-    },
-    {
      "at": "2026-10-03T16:48:47Z",
      "url": "https://github.com/capad-xyz/searchts/pull/224#pullrequestreview-5401730407",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "medium",
      "cost": "",
@@ -1232,24 +665,7 @@
      "findings": 0
     }
    ],
-   "findings": [
-    {
-     "loc": "scripts/hare_r1.py:958",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "Gemini hops still send no thinking control. `OR_REASONING` is OpenRouter-only. Flash defaults to dynamic thinking and can burn the shared 8000-token budget, then return empty content. Failover continues; the hop is still wasted.",
-     "fate": "open",
-     "first": "2026-10-03T11:24:22Z"
-    },
-    {
-     "loc": "scripts/hare_r1.py:952",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "The hop loop (Groq, then Gemini, then Nous, then OpenRouter with `OR_REASONING`, then Zen) is still only covered by constant and workflow asserts. A regression in order, or in attaching `OR_REASONING` only to OpenRouter, would not fail a test.",
-     "fate": "open",
-     "first": "2026-10-03T11:24:22Z"
-    }
-   ],
+   "findings": [],
    "scores": []
   },
   {
@@ -1261,7 +677,6 @@
     {
      "at": "2026-10-03T15:52:18Z",
      "url": "https://github.com/capad-xyz/searchts/pull/230#pullrequestreview-5401527176",
-     "by": "hare",
      "hop": "nous:meituan/longcat-2.5-preview:free",
      "effort": "low",
      "cost": "",
@@ -1272,7 +687,6 @@
    "findings": [
     {
      "loc": "pyproject.toml:5",
-     "by": "hare",
      "sev": "skip",
      "issue": "The project description was rewritten in a release PR, but the PR body and CHANGELOG only mention the F25 fix. Undocumented scope.",
      "fate": "open",
@@ -1280,130 +694,10 @@
     },
     {
      "loc": "server.json:5",
-     "by": "hare",
      "sev": "skip",
      "issue": "server.json description also changed to new copy, same undocumented scope as pyproject.toml.",
      "fate": "open",
      "first": "2026-10-03T15:52:18Z"
-    }
-   ],
-   "scores": []
-  },
-  {
-   "pr": 225,
-   "title": "docs(plan): fold 2026-10-03: benchmark numbers, Reddit to 0.15, reach rules",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T11:23:32Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/225#pullrequestreview-5400513282",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "high",
-     "cost": "",
-     "cut": "",
-     "findings": 3
-    }
-   ],
-   "findings": [
-    {
-     "loc": "PLAN.md:297",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "F5f sits between F5e and F5e's shipped children (OP Read more through listing cards), so those checks read as unfinished F5f scope. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T11:23:32Z"
-    },
-    {
-     "loc": "PLAN.md:397",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "Reach rules gate Show HN on F25 (0.13.1) plus the P3.7c scorecard commit, but the Distribution order line under it still says Show HN only after P3.7c (F22 shipped). Two gates on one page. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T11:23:32Z"
-    },
-    {
-     "loc": "PLAN.md:83",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "The measured child is clear, but the P3.7c parent above still says numbers are not-yet-measured while the checkbox stays open for the scorecard commit. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T11:23:32Z"
-    }
-   ],
-   "scores": []
-  },
-  {
-   "pr": 227,
-   "title": "docs(scorecard): walled scorecard from a home connection",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T11:32:07Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/227#pullrequestreview-5400537896",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "high",
-     "cost": "",
-     "cut": "",
-     "findings": 2
-    }
-   ],
-   "findings": [
-    {
-     "loc": "docs/scorecard.md:48",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "The walled headline finishes the rate sentence, then glues on a dash clause. That is the renderer, not a hand typo, so editing only this file would not stick.",
-     "fate": "open",
-     "first": "2026-10-03T11:32:07Z"
-    },
-    {
-     "loc": "PLAN.md:82",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "P3.7c is still unchecked and still says the scorecard is not yet measured, which this file now contradicts.",
-     "fate": "open",
-     "first": "2026-10-03T11:32:07Z"
-    }
-   ],
-   "scores": []
-  },
-  {
-   "pr": 226,
-   "title": "docs: walled scorecard from a datacenter box (P3.7c)",
-   "state": "closed",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T11:23:52Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/226#pullrequestreview-5400514700",
-     "by": "hare-bot",
-     "hop": "hare-bot:Grok",
-     "effort": "high",
-     "cost": "",
-     "cut": "",
-     "findings": 2
-    }
-   ],
-   "findings": [
-    {
-     "loc": "docs/scorecard.md:5",
-     "by": "hare-bot",
-     "sev": "real",
-     "issue": "Line 5 still only says to run from a residential connection. The committed 2/7 sits under that tip with no line that this file is the datacenter run from 2026-10-02T202426Z, so a reader of the scorecard alone can take 2/7 as the home rate. P3.7c still wants a residential or home IP. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T11:23:52Z"
-    },
-    {
-     "loc": "docs/results.json:297",
-     "by": "hare-bot",
-     "sev": "skip",
-     "issue": "The file still ends on `}` with no trailing newline, matching how the bench writer dumps JSON today. (already raised in a thread)",
-     "fate": "open",
-     "first": "2026-10-03T11:23:52Z"
     }
    ],
    "scores": []
@@ -1417,7 +711,6 @@
     {
      "at": "2026-09-23T14:59:11Z",
      "url": "https://github.com/capad-xyz/searchts/pull/126#pullrequestreview-5292723973",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1437,7 +730,6 @@
     {
      "at": "2026-10-02T00:41:31Z",
      "url": "https://github.com/capad-xyz/searchts/pull/223#pullrequestreview-5387166296",
-     "by": "hare",
      "hop": "openrouter:stealth/space-bunny-alpha",
      "effort": "low",
      "cost": "",
@@ -1457,7 +749,6 @@
     {
      "at": "2026-10-01T21:22:47Z",
      "url": "https://github.com/capad-xyz/searchts/pull/221#pullrequestreview-5385703123",
-     "by": "hare",
      "hop": "nous:stealth/space-bunny-alpha",
      "effort": "low",
      "cost": "",
@@ -1467,7 +758,6 @@
     {
      "at": "2026-10-01T21:25:01Z",
      "url": "https://github.com/capad-xyz/searchts/pull/221#pullrequestreview-5385728572",
-     "by": "hare",
      "hop": "nous:meituan/longcat-2.5-preview:free",
      "effort": "low",
      "cost": "",
@@ -1487,7 +777,6 @@
     {
      "at": "2026-09-23T14:59:48Z",
      "url": "https://github.com/capad-xyz/searchts/pull/125#pullrequestreview-5292732244",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1507,7 +796,6 @@
     {
      "at": "2026-09-23T14:59:32Z",
      "url": "https://github.com/capad-xyz/searchts/pull/124#pullrequestreview-5292728645",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1527,7 +815,6 @@
     {
      "at": "2026-09-30T00:42:03Z",
      "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5360177603",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1537,7 +824,6 @@
     {
      "at": "2026-09-30T11:13:03Z",
      "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5365389944",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "low",
      "cost": "",
@@ -1547,7 +833,6 @@
     {
      "at": "2026-09-30T13:25:08Z",
      "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5366799906",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "low",
      "cost": "",
@@ -1557,7 +842,6 @@
     {
      "at": "2026-09-30T13:46:53Z",
      "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5367063052",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1567,7 +851,6 @@
     {
      "at": "2026-10-01T00:51:54Z",
      "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5373676975",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1577,7 +860,6 @@
     {
      "at": "2026-10-01T01:17:20Z",
      "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5373825807",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1587,7 +869,6 @@
     {
      "at": "2026-10-01T01:20:53Z",
      "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5373844854",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1597,7 +878,6 @@
     {
      "at": "2026-10-02T00:51:36Z",
      "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5387217684",
-     "by": "hare",
      "hop": "nous:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1617,7 +897,6 @@
     {
      "at": "2026-10-01T20:56:52Z",
      "url": "https://github.com/capad-xyz/searchts/pull/220#pullrequestreview-5385417531",
-     "by": "hare",
      "hop": "nous:stealth/space-bunny-alpha",
      "effort": "low",
      "cost": "",
@@ -1637,7 +916,6 @@
     {
      "at": "2026-10-01T16:16:30Z",
      "url": "https://github.com/capad-xyz/searchts/pull/216#pullrequestreview-5382199773",
-     "by": "hare",
      "hop": "nous:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1657,7 +935,6 @@
     {
      "at": "2026-10-01T01:32:09Z",
      "url": "https://github.com/capad-xyz/searchts/pull/214#pullrequestreview-5373911285",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1677,7 +954,6 @@
     {
      "at": "2026-09-30T16:34:39Z",
      "url": "https://github.com/capad-xyz/searchts/pull/209#pullrequestreview-5369157767",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "medium",
      "cost": "",
@@ -1697,7 +973,6 @@
     {
      "at": "2026-09-30T11:15:01Z",
      "url": "https://github.com/capad-xyz/searchts/pull/199#pullrequestreview-5365410751",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1717,7 +992,6 @@
     {
      "at": "2026-09-30T10:47:48Z",
      "url": "https://github.com/capad-xyz/searchts/pull/201#pullrequestreview-5365147505",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "medium",
      "cost": "",
@@ -1737,7 +1011,6 @@
     {
      "at": "2026-09-29T19:42:14Z",
      "url": "https://github.com/capad-xyz/searchts/pull/193#pullrequestreview-5357512833",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1747,7 +1020,6 @@
     {
      "at": "2026-09-29T22:36:11Z",
      "url": "https://github.com/capad-xyz/searchts/pull/193#pullrequestreview-5359357730",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "low",
      "cost": "",
@@ -1767,7 +1039,6 @@
     {
      "at": "2026-09-24T21:39:43Z",
      "url": "https://github.com/capad-xyz/searchts/pull/185#pullrequestreview-5310554697",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1787,7 +1058,6 @@
     {
      "at": "2026-09-24T21:13:43Z",
      "url": "https://github.com/capad-xyz/searchts/pull/184#pullrequestreview-5310294612",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1807,7 +1077,6 @@
     {
      "at": "2026-09-23T16:55:13Z",
      "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5294035977",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1817,7 +1086,6 @@
     {
      "at": "2026-09-23T17:31:45Z",
      "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5294505917",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1827,7 +1095,6 @@
     {
      "at": "2026-09-23T18:27:22Z",
      "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5295102307",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1837,7 +1104,6 @@
     {
      "at": "2026-09-23T19:57:44Z",
      "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5296095652",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -1847,7 +1113,6 @@
     {
      "at": "2026-09-24T05:19:22Z",
      "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5300123567",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1857,7 +1122,6 @@
     {
      "at": "2026-09-24T05:34:54Z",
      "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5300214089",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1877,7 +1141,6 @@
     {
      "at": "2026-09-24T05:24:21Z",
      "url": "https://github.com/capad-xyz/searchts/pull/181#pullrequestreview-5300152484",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1897,7 +1160,6 @@
     {
      "at": "2026-09-24T05:16:50Z",
      "url": "https://github.com/capad-xyz/searchts/pull/180#pullrequestreview-5300109279",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1917,7 +1179,6 @@
     {
      "at": "2026-09-23T17:18:58Z",
      "url": "https://github.com/capad-xyz/searchts/pull/175#pullrequestreview-5294346486",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1937,7 +1198,6 @@
     {
      "at": "2026-09-23T16:51:59Z",
      "url": "https://github.com/capad-xyz/searchts/pull/171#pullrequestreview-5293994614",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1957,7 +1217,6 @@
     {
      "at": "2026-09-23T16:44:25Z",
      "url": "https://github.com/capad-xyz/searchts/pull/173#pullrequestreview-5293907452",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1967,7 +1226,6 @@
     {
      "at": "2026-09-23T16:51:58Z",
      "url": "https://github.com/capad-xyz/searchts/pull/173#pullrequestreview-5293994537",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -1987,7 +1245,6 @@
     {
      "at": "2026-09-23T16:29:44Z",
      "url": "https://github.com/capad-xyz/searchts/pull/172#pullrequestreview-5293756175",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2007,7 +1264,6 @@
     {
      "at": "2026-09-23T15:04:27Z",
      "url": "https://github.com/capad-xyz/searchts/pull/38#pullrequestreview-5292790759",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2027,7 +1283,6 @@
     {
      "at": "2026-09-23T11:45:27Z",
      "url": "https://github.com/capad-xyz/searchts/pull/170#pullrequestreview-5290508086",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -2047,7 +1302,6 @@
     {
      "at": "2026-09-23T11:36:33Z",
      "url": "https://github.com/capad-xyz/searchts/pull/169#pullrequestreview-5290428333",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2057,7 +1311,6 @@
     {
      "at": "2026-09-23T11:41:05Z",
      "url": "https://github.com/capad-xyz/searchts/pull/169#pullrequestreview-5290468363",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2077,7 +1330,6 @@
     {
      "at": "2026-09-23T11:32:52Z",
      "url": "https://github.com/capad-xyz/searchts/pull/168#pullrequestreview-5290396028",
-     "by": "hare",
      "hop": "openrouter:qwen/qwen3.8-27b:free",
      "effort": "low",
      "cost": "",
@@ -2097,7 +1349,6 @@
     {
      "at": "2026-09-23T09:33:25Z",
      "url": "https://github.com/capad-xyz/searchts/pull/165#pullrequestreview-5289220805",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2107,7 +1358,6 @@
     {
      "at": "2026-09-23T09:57:25Z",
      "url": "https://github.com/capad-xyz/searchts/pull/165#pullrequestreview-5289472315",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2127,7 +1377,6 @@
     {
      "at": "2026-09-23T09:40:51Z",
      "url": "https://github.com/capad-xyz/searchts/pull/166#pullrequestreview-5289298242",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -2147,7 +1396,6 @@
     {
      "at": "2026-09-21T20:08:58Z",
      "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5271330930",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2157,7 +1405,6 @@
     {
      "at": "2026-09-22T10:50:03Z",
      "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5277012990",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2167,7 +1414,6 @@
     {
      "at": "2026-09-23T06:54:18Z",
      "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5287805509",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2177,7 +1423,6 @@
     {
      "at": "2026-09-23T07:11:07Z",
      "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5287928651",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2187,7 +1432,6 @@
     {
      "at": "2026-09-23T08:31:47Z",
      "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5288630428",
-     "by": "hare",
      "hop": "openrouter:poolside/laguna-s-2.1:free",
      "effort": "low",
      "cost": "",
@@ -2197,7 +1441,6 @@
     {
      "at": "2026-09-23T08:34:53Z",
      "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5288657272",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2217,7 +1460,6 @@
     {
      "at": "2026-09-22T18:42:13Z",
      "url": "https://github.com/capad-xyz/searchts/pull/160#pullrequestreview-5282182278",
-     "by": "hare",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
@@ -2237,7 +1479,6 @@
     {
      "at": "2026-09-08T09:28:23Z",
      "url": "https://github.com/capad-xyz/searchts/pull/141#pullrequestreview-5139883044",
-     "by": "hare",
      "hop": "",
      "effort": "",
      "cost": "",
@@ -2257,7 +1498,6 @@
     {
      "at": "2026-09-06T17:48:09Z",
      "url": "https://github.com/capad-xyz/searchts/pull/134#pullrequestreview-5126121187",
-     "by": "hare",
      "hop": "",
      "effort": "",
      "cost": "",
@@ -2267,7 +1507,6 @@
     {
      "at": "2026-09-06T17:53:23Z",
      "url": "https://github.com/capad-xyz/searchts/pull/134#pullrequestreview-5126132310",
-     "by": "hare",
      "hop": "",
      "effort": "",
      "cost": "",

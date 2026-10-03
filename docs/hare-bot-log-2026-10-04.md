@@ -1,6 +1,6 @@
 # Hare Bot review log, 2026-10-04
 
-Intent: So Hare can see what each Hare Bot pass found, what it cost, and which GitHub review it is. A record of those passes, not a new review.
+Intent: So the owner can see what each Hare Bot pass found, what it cost, and which GitHub review it is. A record of those passes, not a new review.
 
 Times are Asia/Calcutta. Token figures are named review-input characters divided by 4. There is no meter. A blank estimate means the inputs were not counted. Do not treat output length as input.
 

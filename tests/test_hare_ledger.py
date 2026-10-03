@@ -180,42 +180,45 @@ BOT_NOTE = """<!-- harebot:review head=a747bad8d161ac4107b54023b174aa144a447970 
 """
 
 
-def test_the_ledger_counts_hare_bot_too(tmp_path) -> None:
-    assert hare_ledger.reviewer_of(NOTE_1) == "hare" and hare_ledger.reviewer_of(BOT_NOTE) == "hare-bot" and hare_ledger.reviewer_of("x") == ""
-    assert [f["loc"] for f in hare_ledger.findings_of(BOT_NOTE)] == ["scripts/hare_r1.py:527", "scripts/hare_r1.py:48"]
-    assert [f["loc"] for f in hare_ledger.findings_of(NOTE_1)] == ["scripts/a.py:12", "docs/x.md:3"]  # the App's blank line still parses
-    meta = hare_ledger.note_meta(BOT_NOTE)
-    assert meta["hop"] == "hare-bot:Grok" and meta["effort"] == "medium"
-    (tmp_path / "hare-bot-log-2026-10-04.md").write_text(
-        "# log\n\n### #7 title\n\n- Review: https://x/pull/7#pullrequestreview-1\n- Clock: 2026-10-04 01:31 to 01:35 (4.2 min)\n- Token estimate: about 12,000 from about 47000 characters.\n",
-        encoding="utf-8",
-    )
-    log = hare_ledger.read_bot_logs(tmp_path)
-    assert log == {"https://x/pull/7#pullrequestreview-1": {"log": "hare-bot-log-2026-10-04.md", "minutes": 4.2, "tokens_est": 12000}}
+def test_the_ledger_is_hare_only(tmp_path) -> None:
+    """Another reviewer's note on the same PR is not Hare's business: not a
+    note, not a finding, not a row. The comparison lives in
+    scripts/compare_reviewers.py, outside Hare."""
+    assert hare_ledger.is_hare(NOTE_1) and not hare_ledger.is_hare(BOT_NOTE) and not hare_ledger.is_hare("x")
+    assert [f["loc"] for f in hare_ledger.findings_of(NOTE_1)] == ["scripts/a.py:12", "docs/x.md:3"]
     reviews = [
         {"body": NOTE_1, "submitted_at": "2026-10-03T20:00:00Z", "html_url": "u1"},
-        {"body": BOT_NOTE, "submitted_at": "2026-10-03T20:30:00Z", "html_url": "https://x/pull/7#pullrequestreview-1"},
+        {"body": BOT_NOTE, "submitted_at": "2026-10-03T20:30:00Z", "html_url": "u2"},
     ]
-    e = hare_ledger.pr_rows({"number": 7, "state": "open"}, reviews, [], [], log)
-    assert [n["by"] for n in e["notes"]] == ["hare", "hare-bot"] and e["notes"][1]["minutes"] == 4.2
-    by = hare_ledger.by_reviewer([e])
-    assert by["hare"] == {"notes": 1, "real": 1, "skip": 1, "real_fixed_or_resolved": 0, "avg_minutes": None}
-    assert by["hare-bot"] == {"notes": 1, "real": 1, "skip": 1, "real_fixed_or_resolved": 0, "avg_minutes": 4.2}
-    md = hare_ledger.render_md([e], hare_ledger.summarize([e]), "2026-10-04")
-    assert "| Hare Bot (Grok Bot) | 1 | 1 | 1 | 0 | 4.2 |" in md
+    e = hare_ledger.pr_rows({"number": 7, "state": "open"}, reviews, [], [])
+    assert len(e["notes"]) == 1 and e["notes"][0]["url"] == "u1"
+    assert sorted(f["loc"] for f in e["findings"]) == ["docs/x.md:3", "scripts/a.py:12"]
+    assert "hare_r1.py:527" not in json.dumps(e)
+    assert "by_reviewer" not in hare_ledger.summarize([e])
+    assert "Hare Bot" not in hare_ledger.render_md([e], hare_ledger.summarize([e]), "2026-10-04")
 
 
-def test_the_jsonl_log_wins_over_the_markdown_for_the_same_pass(tmp_path) -> None:
+def test_compare_reviewers_reads_the_repo_files(tmp_path) -> None:
+    import compare_reviewers
+
+    (tmp_path / "hare-ledger.json").write_text(json.dumps({"entries": [
+        {"pr": 7, "notes": [{"cost": "100 prompt + 5 answer + 0 reasoning tokens on `x`, 30 s"}],
+         "findings": [{"sev": "real", "fate": "fixed"}, {"sev": "real", "fate": "open"}, {"sev": "skip", "fate": "open"}]},
+    ]}), encoding="utf-8")
+    (tmp_path / "hare-bot-log-2026-10-04.jsonl").write_text(json.dumps({
+        "type": "review", "pr": 7, "review_url": "https://x/pull/7#pullrequestreview-1", "minutes": 4.2, "estimate_tokens": 12000,
+        "findings": [{"sev": "real", "fix": "yes"}, {"sev": "skip", "fix": "later"}],
+    }) + "\n", encoding="utf-8")
     (tmp_path / "hare-bot-log-2026-10-04.md").write_text(
-        "- Review: https://x/pull/7#pullrequestreview-1\n- Clock: a to b (9.9 min)\n- Token estimate: about 1\n"
-        "- Review: https://x/pull/8#pullrequestreview-2\n- Clock: a to b (2.0 min)\n- Token estimate: about 3,000\n",
+        "### #7\n\n- Review: https://x/pull/7#pullrequestreview-1\n- Clock: a (9.9 min)\n\n### #8\n\n- Review: https://x/pull/8#pullrequestreview-2\n- Clock: a (2.0 min)\n- Token estimate: about 6,000 from about 24000 characters.\n- real `a.py:1` Fix no. x\n- skip `a.py:2` Fix later. y\n",
         encoding="utf-8",
     )
-    (tmp_path / "hare-bot-log-2026-10-04.jsonl").write_text(
-        json.dumps({"type": "meta"}) + "\n"
-        + json.dumps({"type": "review", "review_url": "https://x/pull/7#pullrequestreview-1", "minutes": 5.1, "estimate_tokens": 15000, "estimate_chars": 60000, "chars": {"diff": 22970, "body": 2112}}) + "\n",
-        encoding="utf-8",
-    )
-    log = hare_ledger.read_bot_logs(tmp_path)
-    assert log["https://x/pull/7#pullrequestreview-1"] == {"log": "hare-bot-log-2026-10-04.jsonl", "minutes": 5.1, "tokens_est": 15000, "chars_est": 60000, "chars": {"diff": 22970, "body": 2112}}
-    assert log["https://x/pull/8#pullrequestreview-2"] == {"log": "hare-bot-log-2026-10-04.md", "minutes": 2.0, "tokens_est": 3000}
+    hare = compare_reviewers.hare_side(json.loads((tmp_path / "hare-ledger.json").read_text()))
+    assert hare == {"notes": 1, "prs": 1, "real": 2, "skip": 1, "real_done": 1, "done_means": hare["done_means"], "minutes": 0.5}
+    passes = compare_reviewers.bot_passes(tmp_path)
+    assert passes["https://x/pull/7#pullrequestreview-1"]["minutes"] == 4.2  # the JSONL row wins over the markdown
+    assert passes["https://x/pull/8#pullrequestreview-2"] == {"pr": 8, "minutes": 2.0, "tokens_est": 6000, "real": 1, "skip": 1, "real_fix_yes": 0}
+    bot = compare_reviewers.bot_side(passes)
+    assert bot["notes"] == 2 and bot["real"] == 2 and bot["real_done"] == 1 and bot["minutes"] == 3.1 and bot["tokens_est"] == 9000
+    md = compare_reviewers.render(hare, bot, "2026-10-04")
+    assert "| Real findings | 2 | 2 |" in md and "not a hit-rate comparison" in md and "\u2014" not in md
