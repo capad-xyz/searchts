@@ -809,3 +809,15 @@ def test_the_nag_names_the_cause_instead_of_calling_every_hop_busy() -> None:
     busy = hare_r1.needed_body("openrouter:b: LLM 429 rate-limited")
     assert "busy or blocked" in busy
     assert "did not answer" in hare_r1.needed_body("zen:c: LLM empty choices https://z/v1 c")
+
+
+def test_a_failed_knob_retry_keeps_its_body(monkeypatch) -> None:
+    def fake_urlopen(req, timeout=0):
+        body = json.loads(req.data)
+        text = b'{"error":"reasoning not supported"}' if "reasoning" in body else b'{"error":"model gone"}'
+        raise hare_r1.urllib.error.HTTPError(req.full_url, 400 if "reasoning" in body else 404, "x", {}, io.BytesIO(text))
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+    with pytest.raises(RuntimeError) as e:
+        hare_r1.chat_complete("https://x.test/v1", "k", "m", [], {"reasoning": {"effort": "none"}})
+    assert "404" in str(e.value) and "model gone" in str(e.value) and "without reasoning knob" in str(e.value)

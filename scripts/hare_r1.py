@@ -45,7 +45,9 @@ LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "300"))
 # Model hops stop after this, so the needed note posts before the job timeout.
 # Live on PR 235 (2026-10-03): three Nous hops hung for the whole 60 s each and
 # spent a 360 s budget before the one OpenRouter hop that answers got its turn.
-# The budget has to hold two hung hops and still reach a live one.
+# 600 s holds one full 300 s hang plus the quick failures around it and still
+# reaches a live hop; two full hangs spend it, and that is the case the Nous
+# effort knob is there to prevent.
 HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "600"))
 LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "16000"))
 NOUS_REASONING = {"effort": "none"}
@@ -72,10 +74,9 @@ HARE_NOUS_DEFAULT = (
     "poolside/laguna-s-2.1:free,"
     "meituan/longcat-2.5-preview:free,"
     # Last, not first: the empty-content failure above was measured against this
-    # slug on OpenRouter, not on Nous, so it is not dropped on a guess. But Nous
-    # hops carry no reasoning control, so if it fails here it burns up to
-    # LLM_TIMEOUT_S of HOP_BUDGET_S before the chain moves on. Try it after the
-    # two with no such history.
+    # slug on OpenRouter, not on Nous, so it is not dropped on a guess. Nous
+    # hops now send effort none, so a miss here is cheap, but it keeps the
+    # order the measurement earned.
     "stealth/space-bunny-alpha"
 )
 HARE_OR_DEFAULT = (
@@ -523,13 +524,16 @@ def chat_complete(
         payload = _post(req, LLM_TIMEOUT_SEC)
     except urllib.error.HTTPError as e:
         err = e.read().decode("utf-8", errors="replace")
-        if "reasoning" in body and e.code in {400, 404, 422} and "reason" in err.lower():
-            # A gateway that does not know the reasoning knob must not cost the hop.
-            retry = {k: v for k, v in body.items() if k != "reasoning"}
-            req.data = json.dumps(retry).encode()
-            payload = _post(req, LLM_TIMEOUT_SEC)
-        else:
+        if not ("reasoning" in body and e.code in {400, 404, 422} and "reason" in err.lower()):
             raise RuntimeError(f"LLM {e.code} {base} {model}: {err[:400]}") from e
+        # A gateway that does not know the reasoning knob must not cost the hop.
+        # The retry can fail too, and that failure has to keep its body.
+        req.data = json.dumps({k: v for k, v in body.items() if k != "reasoning"}).encode()
+        try:
+            payload = _post(req, LLM_TIMEOUT_SEC)
+        except urllib.error.HTTPError as e2:
+            err2 = e2.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"LLM {e2.code} {base} {model} (without reasoning knob): {err2[:400]}") from e2
     choices = payload.get("choices") or []
     if not choices:
         raise RuntimeError(f"LLM empty choices {base} {model}")
