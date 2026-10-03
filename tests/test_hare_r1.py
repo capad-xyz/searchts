@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -6,8 +7,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import hare_r1  # noqa: E402
 
 
-def test_llm_timeout_is_one_minute() -> None:
-    assert hare_r1.LLM_TIMEOUT_SEC == 60
+def test_llm_timeout_outlasts_a_real_hop() -> None:
+    # 60 s cut off a live hop: measured 63 s on the 53 KB PR 222 payload even with
+    # reasoning off. The knob that makes hops fast is effort=none, not a big timer.
+    assert hare_r1.LLM_TIMEOUT_SEC >= 120
+    assert hare_r1.LLM_MAX_TOKENS >= 16_000
 
 
 def test_classify_skips_full_matrix_and_hare_job() -> None:
@@ -638,7 +642,11 @@ def test_each_provider_carries_its_own_request_options() -> None:
     # Neither shape leaks into the other hop, and the rest carry nothing.
     assert opts["gemini"] == {"reasoning_effort": "low"}
     assert opts["openrouter"] == {"reasoning": {"effort": "low", "exclude": True}}
-    assert opts["groq"] == {} and opts["nous"] == {} and opts["zen"] == {}
+    # effort=none on every reasoning-capable hop: 0 reasoning tokens measured, where
+    # no control spent the whole 32000 and returned nothing. See docs/hare-thinking-ab.md.
+    assert opts["nous"] == {"reasoning": {"effort": "none"}}
+    assert opts["groq"] == {"reasoning": {"effort": "none"}}
+    assert opts["zen"] == {"reasoning": {"effort": "none"}}
 
 
 def test_hop_loop_sends_every_provider_its_own_options() -> None:
@@ -664,7 +672,7 @@ def test_hop_loop_sends_every_provider_its_own_options() -> None:
 
     assert [c[0] for c in calls] == ["g1", "m1", "n1"]
     assert [c[1] for c in calls] == ["g", "m", "n"]
-    assert [c[2] for c in calls] == [{}, {"reasoning_effort": "low"}, {}]
+    assert [c[2] for c in calls] == [{"reasoning": {"effort": "none"}}, {"reasoning_effort": "low"}, {"reasoning": {"effort": "none"}}]
     assert parsed == {"summary": "ok", "findings": []}
 
 
@@ -683,3 +691,102 @@ def test_dead_hops_are_printed_on_success() -> None:
     tail = src[:ok_at]
     assert 'print(f"hare dead {dead}")' in tail, "dead hops are never printed on the success path"
     assert src.index("for dead in errs:") < ok_at
+
+
+def test_json_objects_finds_the_review_behind_quoted_braces() -> None:
+    """The live failure: prose first, a quoted `${{ secrets.X }}` from the diff,
+    then the review object. find('{')..rfind('}') swallowed the whole thing."""
+    review = {
+        "effort": "low",
+        "summary": "Adds two hops.",
+        "findings": [{"sev": "skip", "path": "scripts/hare_r1.py", "line": 52, "issue": "paren"}],
+    }
+    text = (
+        "Looking at this PR, the goal is to add Groq and Gemini hops.\n\n"
+        "The workflow removes `SEARCHTS_HARE_API_KEY_ZEN` and sets\n"
+        "${{ secrets.SEARCHTS_HARE_API_KEY_GROQ }} instead.\n\n"
+        'Then it says {"reasoning_effort": "low"} in the prose.\n\n'
+        f"Final answer:\n{json.dumps(review)}"
+    )
+    assert hare_r1.extract_json(text) == review
+
+
+def test_json_objects_recovers_past_an_unclosed_brace() -> None:
+    """One unbalanced region is prose. It must not hide a later valid object."""
+    review = {"summary": "still found", "findings": []}
+    text = "prose with an odd \" quote and { braces that never close\n" + json.dumps(review)
+    assert any(o.get("summary") == "still found" for o in hare_r1.json_objects(text))
+    assert hare_r1.extract_json(text) is not None
+
+
+def test_json_objects_recovers_a_review_wrapped_in_braces() -> None:
+    """A balanced span that is not an object still contains the real review.
+
+    Raised on #234: `{not json <review> }`. Skipping to the end of the span on a
+    failed parse dropped the review sitting inside it.
+    """
+    review = {"summary": "wrapped", "findings": []}
+    assert hare_r1.extract_json("{not json at all " + json.dumps(review) + " }") == review
+
+
+def test_extract_json_prefers_the_later_review_over_an_earlier_echo() -> None:
+    """A model echoing the schema looks like findings:[]. The answer concludes the
+    reply, so the later object wins. See extract_json for why."""
+    echo = {"findings": [], "summary": "example"}
+    real = {"effort": "high", "summary": "One real bug.", "findings": [{"sev": "real"}]}
+    got = hare_r1.extract_json("Schema: " + json.dumps(echo) + "\n\nMy review: " + json.dumps(real))
+    assert got is not None
+    assert got["effort"] == "high"
+    assert got["findings"] == [{"sev": "real"}]
+
+
+def test_extract_json_still_handles_a_clean_fence_and_empty() -> None:
+    assert hare_r1.extract_json('```json\n{"summary":"s","findings":[]}\n```') == {
+        "summary": "s",
+        "findings": [],
+    }
+    assert hare_r1.extract_json("") is None
+    assert hare_r1.extract_json("no json at all") is None
+
+
+def test_short_fail_names_the_token_budget_only_when_it_was_the_budget() -> None:
+    dry = "nous:x: LLM empty content https://x x: finish_reason=length reasoning_tokens=32000 (raise HARE_MAX_TOKENS)"
+    said = hare_r1._short_fail(dry)
+    assert "token budget" in said
+    assert "ran out of tokens" in hare_r1.needed_body(f"{dry} | {dry}")
+
+    stop = "nous:x: LLM empty content https://x x: finish_reason=stop max_tokens=32000"
+    other = hare_r1._short_fail(stop)
+    assert other == "nous: empty answer"
+    assert "token budget" not in other
+    assert "not the token budget" in hare_r1.needed_body(f"{stop} | {stop}")
+
+
+def test_short_fail_names_a_prose_answer() -> None:
+    assert "not in JSON" in hare_r1._short_fail("nous:x: no JSON object in model output")
+
+
+def test_every_reasoning_capable_hop_carries_effort_none() -> None:
+    """The fix this whole branch exists for: Nous, Groq and Zen all reasoned the
+    entire budget away. Measured 0 reasoning tokens with effort=none; measured
+    32000 spent and nothing returned without it. docs/hare-thinking-ab.md."""
+    keys = {"groq": "g", "gemini": "m", "nous": "n", "openrouter": "o", "zen": "z"}
+    models = {k: [k + "1"] for k in keys}
+    opts = {hop[0]: hop[4] for hop in hare_r1.build_provider_chain(keys, models)}
+    assert opts["nous"] == {"reasoning": {"effort": "none"}}
+    assert opts["groq"] == {"reasoning": {"effort": "none"}}
+    assert opts["zen"] == {"reasoning": {"effort": "none"}}
+    assert opts["gemini"] == {"reasoning_effort": "low"}
+
+
+def test_hare_once_accepts_an_ordered_hop_override() -> None:
+    assert "hop_override" in hare_r1._hare_once.__code__.co_varnames
+    assert set(hare_r1.REASONING_BY_PROVIDER) == {"groq", "gemini", "nous", "openrouter", "zen"}
+
+
+def test_a_manual_run_counts_as_an_ask() -> None:
+    """A scoped ask arrives with a comment, but workflow_dispatch and the local
+    runner are asks too, so HARE_ASK cannot be read for issue_comment only."""
+    src = Path(hare_r1.__file__).read_text(encoding="utf-8")
+    assert 'if event != "pull_request" else ""' in src
+    assert 'if event == "issue_comment" else ""' not in src

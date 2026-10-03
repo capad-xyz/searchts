@@ -34,21 +34,38 @@ OR_BASE = "https://openrouter.ai/api/v1"
 ZEN_BASE = "https://opencode.ai/zen/v1"
 GROQ_BASE = "https://api.groq.com/openai/v1"
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
-LLM_TIMEOUT_SEC = 60
+LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "180"))
 # Model hops stop after this, so the needed note posts before the job timeout.
-HOP_BUDGET_S = 360
+HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "600"))
 # Reasoning models burn the whole budget thinking and return content None
 # (finish_reason length). Proven 2026-10-02 on the real PR 222 payload:
 # space-bunny-alpha ate 2500 and 8000 max_tokens with zero content.
-# So the budget is wide and OpenRouter hops cap reasoning effort.
-LLM_MAX_TOKENS = 8000
+# Measured again 2026-10-03 on PR 221, 224, 227, 230, 231 and 233: 32000 was also
+# eaten whole, so a wider budget alone does not fix it. The knob below is the fix.
+LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "32000"))
 OR_REASONING = {"effort": "low", "exclude": True}
 # Gemini's OpenAI-compatibility layer maps a top-level reasoning_effort onto the
 # thinking budget: "low" is 1024 tokens for the 2.5 models. Without it, 2.5 Flash
-# spends the shared 8000-token output budget thinking and returns empty content,
-# which is the failure this whole chain exists to escape. This is NOT the
-# OpenRouter shape (a nested "reasoning" object), so the hop carries its own.
+# spends the shared output budget thinking and returns empty content, which is the
+# failure this whole chain exists to escape. This is NOT the OpenRouter shape (a
+# nested "reasoning" object), so the hop carries its own.
 GEMINI_REASONING = {"reasoning_effort": "low"}
+# effort=none is what makes a Nous hop answer at all: 0 reasoning tokens on every
+# PR measured, where the same hop with no reasoning control spent 32000 tokens
+# thinking and returned nothing. See docs/hare-thinking-ab.md.
+NOUS_REASONING = {"effort": "none"}
+GROQ_REASONING = {"effort": "none"}
+ZEN_REASONING = {"effort": "none"}
+# One lookup so a caller that assembles its own hop list can reach the same knobs
+# the chain uses. Prefer PROVIDER_REQUEST_OPTIONS, which is what actually goes in
+# the body; the inner values here are only for reading.
+REASONING_BY_PROVIDER = {
+    "groq": GROQ_REASONING,
+    "gemini": GEMINI_REASONING,
+    "nous": NOUS_REASONING,
+    "openrouter": OR_REASONING,
+    "zen": ZEN_REASONING,
+}
 
 # Fixed list, not a router. Live 2026-10-02.
 # Dropped: nex-n2.5-pro:free (gone), unsuffixed Nous ids (paid),
@@ -211,23 +228,86 @@ def parse_plus_lines(diff: str) -> dict[str, set[int]]:
     return out
 
 
+def json_objects(text: str) -> list[dict[str, Any]]:
+    """Every top-level {...} in 	ext, by brace matching that respects strings.
+
+    A model asked for JSON only often answers with prose first, and that prose
+    quotes the diff, so a ind("{")..rfind("}") slice can straddle a stray brace
+    from a quoted ${{ secrets.X }} and throw away a perfectly good review. On the
+    real PR 222 payload that discarded a complete review with a real finding in it.
+
+    Two ways to survive it: a span that never closes is prose, so skip its first
+    brace and try the next; and a span that closes but does not parse may still
+    wrap the real review, so resume one character later rather than past the span.
+    """
+    out: list[dict[str, Any]] = []
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] != "{":
+            i += 1
+            continue
+        depth, instr, esc, closed = 0, False, False, False
+        j = i
+        while j < n:
+            ch = text[j]
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                instr = not instr
+            elif not instr:
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        closed = True
+                        break
+            j += 1
+        if closed:
+            try:
+                val = json.loads(text[i : j + 1])
+            except json.JSONDecodeError:
+                val = None
+            if isinstance(val, dict):
+                out.append(val)
+                i = j + 1
+            else:
+                i += 1
+        else:
+            i += 1
+    return out
+
+
 def extract_json(text: str) -> dict[str, Any] | None:
+    """The review object out of whatever the model said.
+
+    Search from the end: in every live capture the answer concludes the reply,
+    whereas an echoed schema sits earlier and would be taken for a review with zero
+    findings. Taking a trailing afterthought is the cheap mistake here; posting an
+    empty review under the bot's name is not.
+    """
     text = text.strip()
     if not text:
         return None
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
-    blob = fence.group(1) if fence else None
-    if blob is None:
-        start, end = text.find("{"), text.rfind("}")
-        if start >= 0 and end > start:
-            blob = text[start : end + 1]
-    if not blob:
-        return None
-    try:
-        data = json.loads(blob)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
+    cands: list[dict[str, Any]] = []
+    fence = re.search(r"\\(?:json)?\s*(\{.*\})\s*\\", text, re.S)
+    if fence:
+        try:
+            val = json.loads(fence.group(1))
+        except json.JSONDecodeError:
+            val = None
+        if isinstance(val, dict):
+            cands.append(val)
+    cands.extend(json_objects(text))
+    for c in reversed(cands):
+        if "summary" in c and "findings" in c:
+            return c
+    for c in reversed(cands):
+        if "summary" in c or "findings" in c:
+            return c
+    return cands[-1] if cands else None
 
 
 def normalize_findings(findings: list[Any]) -> list[dict[str, Any]]:
@@ -461,12 +541,27 @@ def chat_complete(
     except urllib.error.HTTPError as e:
         err = e.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"LLM {e.code} {base} {model}: {err[:400]}") from e
+    except TimeoutError as e:
+        raise RuntimeError(
+            f"LLM timeout after {LLM_TIMEOUT_SEC}s {base} {model} (raise HARE_LLM_TIMEOUT_S)"
+        ) from e
     choices = payload.get("choices") or []
     if not choices:
         raise RuntimeError(f"LLM empty choices {base} {model}")
-    content = choices[0].get("message", {}).get("content") or ""
+    choice = choices[0]
+    content = (choice.get("message") or {}).get("content") or ""
     if not str(content).strip():
-        raise RuntimeError(f"LLM empty content {base} {model}")
+        # Name the cause. A bare "empty content" reads as a dead key, and it is not:
+        # this line is only reachable after a 200 with a real completion in it.
+        finish = str(choice.get("finish_reason") or "?")
+        usage = payload.get("usage") or {}
+        spent = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+        detail = f"finish_reason={finish} max_tokens={LLM_MAX_TOKENS}"
+        if spent is not None:
+            detail += f" reasoning_tokens={spent}"
+        if finish == "length":
+            detail += " (raise HARE_MAX_TOKENS)"
+        raise RuntimeError(f"LLM empty content {base} {model}: {detail}")
     return str(content)
 
 
@@ -558,6 +653,14 @@ def _short_fail(part: str) -> str:
         return f"{name}: free tier is TUI-only"
     if "404" in p or "unavailable" in low:
         return f"{name}: model not available"
+    # Only blame the budget when the detail shows it. A finish_reason=stop with no
+    # reasoning tokens is a different fault and must not read as a budget problem.
+    if "empty content" in low:
+        if "finish_reason=length" in low or "raise hare_max_tokens" in low:
+            return f"{name}: empty answer (reasoning ate the token budget)"
+        return f"{name}: empty answer"
+    if "no json object" in low:
+        return f"{name}: answered, but not in JSON"
     short = p.split("{", 1)[0].strip().rstrip(":")
     return (short or name)[:160]
 
@@ -566,10 +669,23 @@ def needed_body(why: str) -> str:
     """Graceful nag. Raw errors stay behind a details fold. Offer /hare retry."""
     parts = [x.strip() for x in why.split(" | ") if x.strip()] or [why.strip()]
     hops = "\n".join(f"- {_short_fail(x)}" for x in parts)
+    # One dead hop is a busy provider. Every hop dead the same way is a config bug,
+    # so the headline says which instead of shrugging with "busy or blocked".
+    real = [_short_fail(x) for x in parts]
+    if real and all("token budget" in r for r in real):
+        lead = (
+            "Every review hop ran out of tokens before answering. This is the "
+            "budget, not a busy provider."
+        )
+    elif real and all("not in JSON" in r for r in real):
+        lead = "Every review hop answered in prose, not JSON. The parser wants an object."
+    elif real and all(r.endswith("empty answer") for r in real):
+        lead = "Every review hop came back with no answer at all, and it was not the token budget."
+    else:
+        lead = "Could not finish this pass. Review hops were busy or blocked. This is not a review."
     return _no_em(
         f"{NEEDED}\n\n"
-        "🐰 Could not finish this pass. Review hops were busy or blocked. "
-        "This is not a review.\n\n"
+        f"🐰 {lead}\n\n"
         "Reply **`/hare`** to retry. Or Actions → hare → Run workflow "
         "(optional OpenRouter model override).\n\n"
         "<details>\n<summary>What failed</summary>\n\n"
@@ -857,6 +973,15 @@ def run() -> int:
         return 0
 
 
+PROVIDER_REQUEST_OPTIONS: dict[str, dict[str, Any]] = {
+    "groq": {"reasoning": GROQ_REASONING},
+    "gemini": GEMINI_REASONING,
+    "nous": {"reasoning": NOUS_REASONING},
+    "openrouter": {"reasoning": OR_REASONING},
+    "zen": {"reasoning": ZEN_REASONING},
+}
+
+
 def build_provider_chain(
     keys: dict[str, str],
     models: dict[str, list[str]],
@@ -866,6 +991,12 @@ def build_provider_chain(
     A missing key drops that provider entirely rather than falling through to
     the next one with the wrong credential. The order is the contract
     (PLAN.md R1c), so this stays a pure function and a test pins the order.
+
+    PROVIDER_REQUEST_OPTIONS is the single source for the per-hop body. A caller
+    that assembles its own chain (scripts/hare_local.py) must read it from here:
+    the reasoning knob belongs under a "reasoning" key, and putting the inner
+    object at the top level is silently ignored, which sends the hop back to
+    spending the whole budget thinking.
     """
     bases = {
         "groq": GROQ_BASE,
@@ -874,13 +1005,7 @@ def build_provider_chain(
         "openrouter": OR_BASE,
         "zen": ZEN_BASE,
     }
-    options: dict[str, dict[str, Any]] = {
-        "groq": {},
-        "gemini": GEMINI_REASONING,
-        "nous": {},
-        "openrouter": {"reasoning": OR_REASONING},
-        "zen": {},
-    }
+    options = PROVIDER_REQUEST_OPTIONS
     chain: list[tuple[str, str, str, str, dict[str, Any]]] = []
     for name in ("groq", "gemini", "nous", "openrouter", "zen"):
         key = keys.get(name, "")
@@ -907,13 +1032,14 @@ def _hare_once(
     nous_models: list[str],
     or_models: list[str],
     zen_models: list[str],
+    hop_override: list[tuple[str, str, str, str, dict[str, Any]]] | None = None,
 ) -> int:
-    if not nous_key and not or_key and not zen_key and not groq_key and not gemini_key:
+    if not (hop_override or (nous_key or or_key or zen_key or groq_key or gemini_key)):
         post_needed(owner, repo, n, token, "no Hare API secrets on this run (forks have none).")
         return 0
 
     event = _env("GITHUB_EVENT_NAME")
-    ask = ask_from(_env("HARE_ASK")) if event == "issue_comment" else ""
+    ask = ask_from(_env("HARE_ASK")) if event != "pull_request" else ""
     pull = f"/repos/{owner}/{repo}/pulls/{n}"
     pr_data = github_api("GET", pull, token)
     sha = sha or pr_data.get("head", {}).get("sha") or ""
@@ -994,8 +1120,12 @@ def _hare_once(
     user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask)
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
 
-    providers = build_provider_chain(
-        {
+    if hop_override is not None:
+        # scripts/hare_local.py asked for a specific order. Honour it as given.
+        providers = list(hop_override)
+    else:
+        providers = build_provider_chain(
+            {
             "groq": groq_key,
             "gemini": gemini_key,
             "nous": nous_key,

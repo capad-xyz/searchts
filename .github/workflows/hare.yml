@@ -48,7 +48,11 @@ jobs:
        github.event.comment.user.login != 'github-actions[bot]') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20  # 90 s quiet + 8 min CI wait + 6 min hop budget (+1 call) + slack
+    # Worst case is QUIET_S 90 + CHECK_WAIT_S 480 + HOP_BUDGET_S 600 + one call's
+    # timeout 180 + slack 120, which is 24.5 min. This is the backstop for a dead
+    # provider, not the expected review time: with effort=none a measured review
+    # lands in 9 to 63 s. Do not raise this to make a slow hop look healthy.
+    timeout-minutes: 30
     # Always green: a dead brain posts searchts-r1-needed instead of failing CI.
     continue-on-error: true
     steps:
