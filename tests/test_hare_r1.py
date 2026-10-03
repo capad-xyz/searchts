@@ -1,4 +1,7 @@
+import io
+import json
 import sys
+import urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -6,8 +9,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import hare_r1  # noqa: E402
 
 
-def test_llm_timeout_is_one_minute() -> None:
-    assert hare_r1.LLM_TIMEOUT_SEC == 60
+def test_llm_timeout_outlasts_a_reasoning_hop() -> None:
+    # 60 s cut off every live hop: these models think for minutes before they
+    # answer, so a short timeout cannot coexist with a real token budget.
+    assert hare_r1.LLM_TIMEOUT_SEC >= 300
+    assert hare_r1.LLM_MAX_TOKENS >= 16_000
+    assert hare_r1.HOP_BUDGET_S > hare_r1.LLM_TIMEOUT_SEC
 
 
 def test_classify_skips_full_matrix_and_hare_job() -> None:
@@ -233,6 +240,75 @@ def test_short_fail_hides_provider_json() -> None:
     assert hare_r1._short_fail(zen) == "zen: free tier is TUI-only"
 
 
+def test_short_fail_names_the_token_budget_not_busy() -> None:
+    empty = (
+        "nous:poolside/laguna-s-2.1:free: LLM empty content https://x poolside/laguna-s-2.1:free: "
+        "finish_reason=length max_tokens=32000 reasoning_tokens=32000 (raise HARE_MAX_TOKENS)"
+    )
+    assert "empty answer" in hare_r1._short_fail(empty)
+    assert "reasoning ate the token budget" in hare_r1._short_fail(empty)
+    assert "HARE_MAX_TOKENS" not in hare_r1._short_fail(empty)
+    assert "not in JSON" in hare_r1._short_fail("nous:x: no JSON object in model output")
+
+
+def test_needed_body_says_the_budget_when_every_hop_ran_dry() -> None:
+    why = " | ".join(
+        f"nous:{m}: LLM empty content https://x {m}: finish_reason=length reasoning_tokens=32000"
+        for m in ("poolside/laguna-s-2.1:free", "meituan/longcat-2.5-preview:free")
+    ) + " | zen:space-bunny-free: LLM empty content https://x space-bunny-free: finish_reason=length"
+    body = hare_r1.needed_body(why)
+    assert "ran out of tokens" in body
+    assert "not a busy provider" in body
+    assert "busy or blocked" not in body
+    assert body.startswith(hare_r1.NEEDED)
+    assert "/hare" in body
+
+
+def test_extract_json_survives_prose_that_quotes_braces() -> None:
+    """The live failure: prose first, a quoted `${{ secrets.X }}` from the diff,
+    then the review object. A find('{')..rfind('}') slice swallowed the whole thing."""
+    review = {
+        "effort": "low",
+        "summary": "Adds two hops.",
+        "findings": [{"sev": "skip", "path": "scripts/hare_r1.py", "line": 52, "issue": "paren"}],
+    }
+    text = (
+        "Looking at this PR, the goal is to add Groq and Gemini hops.\n\n"
+        "The workflow removes `SEARCHTS_HARE_API_KEY_ZEN` and sets\n"
+        "${{ secrets.SEARCHTS_HARE_API_KEY_GROQ }} instead.\n\n"
+        'Then it says {"reasoning_effort": "low"} in the prose.\n\n'
+        f"Final answer:\n{json.dumps(review)}"
+    )
+    assert hare_r1.extract_json(text) == review
+
+
+def test_extract_json_picks_the_review_object_not_a_stray_one() -> None:
+    review = {"effort": "high", "summary": "One real bug.", "findings": []}
+    text = '{"note":{"reasoning_effort":"low"}}\nand then\n' + json.dumps(review)
+    got = hare_r1.extract_json(text)
+    assert got is not None
+    assert got["effort"] == "high"
+    assert "note" not in got
+
+
+def test_json_objects_recovers_past_an_unclosed_brace() -> None:
+    """One unbalanced region is prose. It must not hide a later valid object."""
+    review = {"summary": "still found", "findings": []}
+    text = "prose with an odd \" quote and { braces that never close\n" + json.dumps(review)
+    objs = hare_r1.json_objects(text)
+    assert any(o.get("summary") == "still found" for o in objs)
+    assert hare_r1.extract_json(text) is not None
+
+
+def test_extract_json_still_handles_a_clean_fence_and_empty() -> None:
+    assert hare_r1.extract_json('```json\n{"summary":"s","findings":[]}\n```') == {
+        "summary": "s",
+        "findings": [],
+    }
+    assert hare_r1.extract_json("") is None
+    assert hare_r1.extract_json("no json at all") is None
+
+
 def test_needed_body_is_graceful_and_offers_retry() -> None:
     why = (
         "nous:x: LLM 401 {\"status\":401} | "
@@ -249,6 +325,58 @@ def test_needed_body_is_graceful_and_offers_retry() -> None:
     assert "rate limited" in body
     assert "TUI-only" in body
     assert "\u2014" not in body
+
+
+def test_chat_complete_sends_the_reasoning_knob(monkeypatch: object) -> None:
+    seen: list[dict] = []
+
+    def fake(base: str, key: str, body: dict) -> dict:
+        seen.append(body)
+        return {"choices": [{"message": {"content": '{"summary":"s","findings":[]}'}}]}
+
+    monkeypatch.setattr(hare_r1, "_post", fake)
+    got = hare_r1.chat_complete("b", "k", "m", [], {"effort": "none"})
+    assert json.loads(got)["summary"] == "s"
+    assert seen[0]["reasoning"] == {"effort": "none"}
+    assert seen[0]["max_tokens"] == hare_r1.LLM_MAX_TOKENS
+
+
+def test_chat_complete_drops_the_knob_a_gateway_rejects(monkeypatch: object) -> None:
+    seen: list[dict] = []
+
+    def fake(base: str, key: str, body: dict) -> dict:
+        seen.append(body)
+        if "reasoning" in body:
+            raise urllib.error.HTTPError(
+                "u", 400, "Bad Request", {}, io.BytesIO(b'{"error":"unknown field reasoning"}')
+            )
+        return {"choices": [{"message": {"content": "ok"}}]}
+
+    monkeypatch.setattr(hare_r1, "_post", fake)
+    assert hare_r1.chat_complete("b", "k", "m", [], {"effort": "none"}) == "ok"
+    assert len(seen) == 2
+    assert "reasoning" in seen[0]
+    assert "reasoning" not in seen[1]
+
+
+def test_chat_complete_names_why_the_answer_was_empty(monkeypatch: object) -> None:
+    def fake(base: str, key: str, body: dict) -> dict:
+        return {
+            "choices": [{"finish_reason": "length", "message": {"content": ""}}],
+            "usage": {"completion_tokens_details": {"reasoning_tokens": 32000}},
+        }
+
+    monkeypatch.setattr(hare_r1, "_post", fake)
+    try:
+        hare_r1.chat_complete("b", "k", "m", [])
+    except RuntimeError as e:
+        msg = str(e)
+    else:
+        raise AssertionError("expected an empty-content failure")
+    assert "empty content" in msg
+    assert "finish_reason=length" in msg
+    assert "reasoning_tokens=32000" in msg
+    assert "HARE_MAX_TOKENS" in msg
 
 
 def test_deliver_review_posts_pr_review(monkeypatch: object) -> None:

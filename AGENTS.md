@@ -44,6 +44,19 @@ If a Review with `<!-- searchts-r1-review -->` already exists on this SHA, the A
 
 **Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: Nous then OpenRouter then Zen (fixed list in `scripts/hare_r1.py`: Space Bunny, then Laguna / LongCat / Qwen, Ling Fin last on Zen). Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs get the nag, never a model hop, including when `/hare` or `@hare` runs the job with secrets.
 
+**Drive it locally (`scripts/hare_local.py`).** The Action is the product path; this is the terminal loop, on the same free keys, with no wait and no CI minute. Dry run by default, so it costs nothing and writes nothing:
+
+```
+python scripts/hare_local.py <pr>                          # print the review
+python scripts/hare_local.py <pr> --model nous:poolside/laguna-s-2.1:free
+python scripts/hare_local.py <pr> --post                   # post as your gh user, not the bot
+python scripts/hare_local.py <pr> --skip-checks            # do not wait on CI
+```
+
+Keys come from `SEARCHTS_HARE_API_KEY_*`, else from `~/.local/share/opencode/auth.json`. `--post` authors the review as you, which AGENTS.md forbids for the bot path, so keep it for a PR you are deliberately driving yourself.
+
+**Hops are reasoning models.** Reasoning tokens come out of the same `max_tokens` budget, so a small budget buys zero answer: the model thinks to the wall, returns `finish_reason=length` with empty content, and every hop dies at once. `NOUS_REASONING` sends `effort=none` (measured 0 reasoning tokens vs 12000), `LLM_MAX_TOKENS` is the floor for gateways that ignore it, and `HARE_LLM_TIMEOUT_S` outlasts a real hop. Tune with `HARE_MAX_TOKENS`, `HARE_LLM_TIMEOUT_S`, `HARE_HOP_BUDGET_S`. Models answer prose-then-JSON, so `extract_json` scans brace-aware and picks the object carrying `summary` / `findings`; a quoted `${{ secrets.X }}` from the diff used to throw the whole review away.
+
 Hare posts **one GitHub Review** (v2, the shape locked on Hare Bot #221). Author is the bot. Local chat is not enough.
 
 1. **PR review** (`POST .../pulls/{n}/reviews`, event `COMMENT`). Body starts **exactly**:

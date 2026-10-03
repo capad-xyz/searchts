@@ -48,7 +48,9 @@ jobs:
        github.event.comment.user.login != 'github-actions[bot]') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 20  # 90 s quiet + 8 min CI wait + 6 min hop budget (+1 call) + slack
+    # 90 s quiet + 8 min CI wait + 15 min hop budget (+1 call) + slack.
+    # A reasoning hop needs minutes; the old 20 min cap killed the job mid-call.
+    timeout-minutes: 40
     # Always green: a dead brain posts searchts-r1-needed instead of failing CI.
     continue-on-error: true
     steps:
