@@ -439,7 +439,10 @@ def test_pushes_skip_drafts_closed_prs_and_pause_after_three_notes() -> None:
     assert hare_r1.cadence_skip("pull_request", {"draft": True, "state": "open"}, []) == "draft"
     assert hare_r1.cadence_skip("pull_request", {"draft": False, "state": "closed"}, []) == "closed"
     three = [_note("a", "1"), _note("b", "2"), _note("c", "3")]
-    assert hare_r1.cadence_skip("pull_request", open_pr, three) == "paused"
+    # Pause-after-N is off by default (owner's call, 2026-10-04): every push gets a
+    # note and the note prints its cost. A number in HARE_PAUSE_AFTER turns it on.
+    assert hare_r1.PAUSE_AFTER == 0
+    assert hare_r1.cadence_skip("pull_request", open_pr, three) == ""
     assert hare_r1.cadence_skip("pull_request", open_pr, three[:2]) == ""
     # Asked: /hare, @hare and a manual run review drafts and paused PRs too.
     assert hare_r1.cadence_skip("issue_comment", {"draft": True, "state": "open"}, three) == ""
@@ -582,8 +585,12 @@ def test_hop_budget_fits_inside_the_job_timeout() -> None:
 
     wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
     minutes = int(re.search(r"timeout-minutes:\s*(\d+)", wf).group(1))
-    worst = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.HOP_BUDGET_S + hare_r1.LLM_TIMEOUT_SEC + 120
-    assert worst < minutes * 60
+    # A normal diff is bounded by the script to the locked 20 min; the YAML cap is
+    # the backstop for a very big diff, which gets the big ceilings.
+    normal = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.HOP_BUDGET_S + hare_r1.LLM_TIMEOUT_SEC + 120
+    big = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.BIG_HOP_BUDGET_S + hare_r1.BIG_LLM_TIMEOUT_SEC + 120
+    assert normal < 20 * 60
+    assert big < minutes * 60
 
 
 def _workflow_env(name: str) -> str:
@@ -845,3 +852,44 @@ def test_hare_deep_turns_thinking_on_one_notch() -> None:
     assert opts["gemini"] == {"reasoning_effort": "medium"}
     quiet = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models)}
     assert quiet["nous"] == {"reasoning": {"effort": "none"}}
+
+
+# ── cadence (owner's call, 2026-10-04) ────────────────────────────────────────
+
+
+def test_the_hop_starts_at_once_and_the_quiet_is_short() -> None:
+    assert hare_r1.CHECK_WAIT_S == 0  # CI is read once at post time; the CI line says still running
+    assert hare_r1.QUIET_S == 30  # cancel-in-progress supersedes; the quiet covers one agent's burst
+
+
+def test_budgets_follow_the_diff_size() -> None:
+    small = "\n".join(["+a"] * 10 + ["-b"] * 10)
+    big = "\n".join(["+++ b/x.py", "--- a/x.py"] + ["+line"] * 900 + ["-line"] * 200)
+    assert hare_r1.diff_lines(small) == 20
+    assert hare_r1.diff_lines(big) == 1100  # file headers do not count
+    assert hare_r1.budgets_for(small) == (hare_r1.LLM_TIMEOUT_SEC, hare_r1.HOP_BUDGET_S, False)
+    assert hare_r1.budgets_for(big) == (hare_r1.BIG_LLM_TIMEOUT_SEC, hare_r1.BIG_HOP_BUDGET_S, True)
+
+
+def test_every_note_prints_what_it_cost() -> None:
+    usage = {"prompt_tokens": 24310, "completion_tokens": 1204, "completion_tokens_details": {"reasoning_tokens": 0}}
+    line = hare_r1.cost_line(usage, "nous:poolside/laguna-s-2.1:free", 31.4)
+    assert line == "- cost: 24,310 prompt + 1,204 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 31 s"
+    assert hare_r1.cost_line({}, "zen:x", 9.0) == "- cost: not reported by `zen:x`, 9 s"
+    body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [], "S.", "abc1234", [], "", "", line)
+    assert line in body and body.index(line) > body.index("checks & computer run")
+
+
+def test_the_owner_can_cap_reasoning_for_the_quiet_pass(monkeypatch) -> None:
+    keys = {"nous": "n", "openrouter": "o", "gemini": "m"}
+    models = {"nous": ["n1"], "openrouter": ["o1"], "gemini": ["m1"]}
+    monkeypatch.setattr(hare_r1, "HARE_REASONING", "low")
+    opts = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models)}
+    assert opts["nous"] == {"reasoning": {"effort": "low"}}
+    assert opts["openrouter"] == {"reasoning": {"effort": "low", "exclude": True}}
+    assert opts["gemini"] == {"reasoning_effort": "low"}
+    deep = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models, deep=True)}
+    assert deep["openrouter"] == {"reasoning": {"effort": "medium", "exclude": True}}  # deep ignores the cap
+    monkeypatch.setattr(hare_r1, "HARE_REASONING", "lots")
+    quiet = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models)}
+    assert quiet["nous"] == {"reasoning": {"effort": "none"}}  # a word not on the list is ignored
