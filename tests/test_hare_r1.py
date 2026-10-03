@@ -599,8 +599,8 @@ def _workflow_env(name: str) -> str:
     if "${{" in value:
         # `${{ inputs.x || 'literal' }}`: the literal after `||` is what runs when
         # nobody overrides, so it is the pin. An expression with no fallback is "".
-        fb = re.search(r"\|\|\s*'([^']*)'", value)
-        return fb.group(1) if fb else ""
+        fb = re.search(r"""\|\|\s*(['"])(.*?)\1""", value)
+        return fb.group(2) if fb else ""
     return value
 
 

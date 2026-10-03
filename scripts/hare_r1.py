@@ -68,13 +68,14 @@ GEMINI_REASONING = {"reasoning_effort": "low"}
 # answered, so last). Left out: apodex-1.1-mini:free (new 2026-10-01, no
 # record), nemotron-3-ultra:free (cannot think below medium), the health,
 # safety, tiny and translation models, space-bunny-alpha (gone 2026-10-05).
-# Groq: out of the default chain. Live on PR 235 (2026-10-03) gpt-oss-120b
-# returned 413: the free tier caps a request at 8k tokens and Hare's prompt
-# (AGENTS.md plus the diff) is three times that. Back when the prompt is
-# trimmed for it or the key is paid; the code path stays.
-# Gemini: gemini-2.5-flash returned 404 on the same run, ahead of its October
-# 16 shutdown date. Google names 3.5 Flash and 3.1 Flash-Lite as the
-# replacements; free-tier access to them is unverified until a run says.
+# Groq: gpt-oss-120b stays first. It answered the reviews on PR 239 and 240
+# (2026-10-03) and returned 413 on PR 235, whose prompt was three times the
+# free tier's 8k-token request cap. A 413 is instant and costs nothing, so a
+# big diff just falls through to the next hop.
+# Gemini: gemini-2.5-flash returned 404 on 2026-10-03, ahead of its October 16
+# shutdown date. gemini-3.1-flash-lite answered the review on PR 236 the same
+# night, so it goes first; 3.5 Flash is Google's other named replacement and
+# stays second, unverified.
 # Zen: longcat and ling return 403 FreeTierError outside the OpenCode TUI by
 # policy (measured 2026-10-03), so only space-bunny-free stays. CI passes no
 # Zen key anyway.
@@ -82,8 +83,8 @@ GEMINI_REASONING = {"reasoning_effort": "low"}
 # public list); unchanged, space-bunny-alpha last for the reason below.
 # Skip: openrouter/free, Lyria, Muse contributor-free (trains; Responses API).
 # OR may retain prompts (not training).
-HARE_GROQ_DEFAULT = ""
-HARE_GEMINI_DEFAULT = "gemini-3.5-flash,gemini-3.1-flash-lite"
+HARE_GROQ_DEFAULT = "openai/gpt-oss-120b"
+HARE_GEMINI_DEFAULT = "gemini-3.1-flash-lite,gemini-3.5-flash"
 HARE_NOUS_DEFAULT = (
     "poolside/laguna-s-2.1:free,"
     "meituan/longcat-2.5-preview:free,"
