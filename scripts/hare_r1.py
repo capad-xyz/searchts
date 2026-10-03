@@ -561,8 +561,9 @@ LAST_USAGE: dict[str, Any] = {}
 LAST_CUT: dict[str, Any] = {}
 
 
-def _walk(text: str) -> tuple[list[str], int]:
-    """Bracket stack after `text` and the index just past the last seam.
+def _walk(text: str) -> tuple[list[str], int, bool]:
+    """Bracket stack after `text`, the index just past the last seam, and
+    whether a string is still open at the end.
 
     A seam is a `}` that closes an item of the findings array (depth 2 inside
     the top object). Strings are skipped so braces in prose do not count.
@@ -588,30 +589,29 @@ def _walk(text: str) -> tuple[list[str], int]:
                 stack.pop()
             if ch == "}" and len(stack) == 2 and stack[1] == "[":
                 seam = i + 1
-    return stack, seam
+    return stack, seam, in_str
 
 
 def at_seam(text: str) -> bool:
     """True when the text ends right after a closed finding (whitespace aside)."""
-    stack, seam = _walk(text)
+    stack, seam, _ = _walk(text)
     return seam > 0 and not text[seam:].strip()
 
 
 def repair_json(text: str) -> str:
     """Close a cut answer: drop the half-written finding, close what is open."""
-    stack, seam = _walk(text)
+    stack, seam, open_str = _walk(text)
     if seam > 0:
         text = text[:seam]
-        stack, _ = _walk(text)
     else:
         # No finding closed yet: cut back to the findings array's opening.
         k = text.rfind("[")
         if k > 0:
             text = text[: k + 1]
-            stack, _ = _walk(text)
-    if text.count('"') % 2 == 1:  # a string was open
+    stack, _, open_str = _walk(text)
+    if open_str:  # the escape walk says so; a raw quote count cannot (Hare Bot, #244)
         text += '"'
-        stack, _ = _walk(text)
+        stack, _, _ = _walk(text)
     return text.rstrip().rstrip(",") + "".join("}" if ch == "{" else "]" for ch in reversed(stack))
 
 
@@ -837,7 +837,15 @@ def wrap_up(req: urllib.request.Request, body: dict[str, Any], partial: str, tim
             else:
                 LAST_USAGE["prompt_tokens"] = int(LAST_USAGE["prompt_tokens"]) + int(tail_usage.get("prompt_tokens") or 0)
             LAST_USAGE["completion_tokens"] = int(LAST_USAGE.get("completion_tokens") or 0) + int(tail_usage.get("completion_tokens") or 0)
-            stitched = partial + tail if not tail.lstrip().startswith("{") else tail
+            if tail.lstrip().startswith("{"):
+                # A restart, not a continuation. An 800-token restart cannot hold
+                # the findings the cut kept, so it only wins if it holds more.
+                restart = extract_json(tail)
+                kept_obj = extract_json(repair_json(partial)) or {}
+                if restart and len(restart.get("findings") or []) > len(kept_obj.get("findings") or []):
+                    stitched = tail
+            else:
+                stitched = partial + tail
     except Exception as e:  # the continuation is best effort
         print(f"hare wrap-up: continuation failed: {str(e)[:160]}")
     out = stitched if stitched and extract_json(stitched) is not None else repair_json(partial)
@@ -955,7 +963,8 @@ def _short_fail(part: str) -> str:
     if "no json object" in low:
         return f"{name}: answered, but not in JSON"
     if "timeout after" in low:
-        return f"{name}: no answer within {LLM_TIMEOUT_SEC}s"
+        m = re.search(r"timeout after (\d+)s", low)
+        return f"{name}: no answer within {m.group(1) if m else LLM_TIMEOUT_SEC}s"
     if "hop budget" in low:
         return p[:160]
     short = p.split("{", 1)[0].strip().rstrip(":")
