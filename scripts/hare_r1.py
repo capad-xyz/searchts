@@ -67,6 +67,21 @@ BIG_HOP_BUDGET_S = int(os.environ.get("HARE_BIG_HOP_BUDGET_S", "1200"))
 # defaults below. /hare deep ignores it and uses the deep set.
 HARE_REASONING = os.environ.get("HARE_REASONING", "").strip().lower()
 REASONING_WORDS = frozenset({"none", "minimal", "low", "medium", "high"})
+# Near the limit, wrap up instead of throwing the answer away. The hop streams,
+# so the script holds a live meter. Past SEAM_FRAC of the budget it stops the
+# stream at the next seam (a closed finding), keeps the valid partial, and asks
+# the model once to finish the JSON in a small fresh budget. A hop still
+# thinking at THINK_CUT_FRAC with no answer started is cut there rather than
+# waited on for the empty answer.
+HARE_STREAM = os.environ.get("HARE_STREAM", "1") != "0"
+SEAM_FRAC = float(os.environ.get("HARE_SEAM_FRAC", "0.8"))
+THINK_CUT_FRAC = float(os.environ.get("HARE_THINK_CUT_FRAC", "0.6"))
+WRAP_UP_TOKENS = int(os.environ.get("HARE_WRAP_UP_TOKENS", "800"))
+WRAP_UP = (
+    "Your answer was cut at the token budget. Finish the JSON from exactly where "
+    "it stopped: close the open structures and return only the remaining "
+    "characters. No new findings, no prose, no repeat of what is already written."
+)
 NOUS_REASONING = {"effort": "none"}
 OR_REASONING = {"effort": "low", "exclude": True}
 # `/hare deep`: thinking on, one notch. docs/hare-thinking-ab.md measured thinking
@@ -541,6 +556,169 @@ def bubble_comments(bubbles: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 LAST_USAGE: dict[str, Any] = {}
+# What the last call did at the limit: {"cut": bool, "kept": findings kept,
+# "continued": bool, "why": "seam"|"think"|"length"}. The fold prints it.
+LAST_CUT: dict[str, Any] = {}
+
+
+def _walk(text: str) -> tuple[list[str], int]:
+    """Bracket stack after `text` and the index just past the last seam.
+
+    A seam is a `}` that closes an item of the findings array (depth 2 inside
+    the top object). Strings are skipped so braces in prose do not count.
+    """
+    stack: list[str] = []
+    in_str = esc = False
+    seam = -1
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if stack:
+                stack.pop()
+            if ch == "}" and len(stack) == 2 and stack[1] == "[":
+                seam = i + 1
+    return stack, seam
+
+
+def at_seam(text: str) -> bool:
+    """True when the text ends right after a closed finding (whitespace aside)."""
+    stack, seam = _walk(text)
+    return seam > 0 and not text[seam:].strip()
+
+
+def repair_json(text: str) -> str:
+    """Close a cut answer: drop the half-written finding, close what is open."""
+    stack, seam = _walk(text)
+    if seam > 0:
+        text = text[:seam]
+        stack, _ = _walk(text)
+    else:
+        # No finding closed yet: cut back to the findings array's opening.
+        k = text.rfind("[")
+        if k > 0:
+            text = text[: k + 1]
+            stack, _ = _walk(text)
+    if text.count('"') % 2 == 1:  # a string was open
+        text += '"'
+        stack, _ = _walk(text)
+    return text.rstrip().rstrip(",") + "".join("}" if ch == "{" else "]" for ch in reversed(stack))
+
+
+def _sse(req: urllib.request.Request, timeout: int, max_tokens: int) -> tuple[str, str, dict[str, Any], str]:
+    """Stream one completion. Returns (content, finish_reason, usage, cut).
+
+    cut is "" (ran to the end), "seam" (stopped at a closed finding past
+    SEAM_FRAC of the budget) or "think" (reasoning past THINK_CUT_FRAC with no
+    answer). The caller decides what to do with a cut.
+    """
+    content: list[str] = []
+    chars = 0
+    answer_chunks = 0
+    think_chunks = 0
+    finish = ""
+    usage: dict[str, Any] = {}
+    cut = ""
+    started = time.time()
+    seam_tokens = int(max_tokens * SEAM_FRAC)
+    think_tokens = int(max_tokens * THINK_CUT_FRAC)
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        ctype = str(resp.headers.get("Content-Type") or "")
+        if "text/event-stream" not in ctype:
+            payload = json.loads(resp.read())
+            choice = (payload.get("choices") or [{}])[0] or {}
+            text = (choice.get("message") or {}).get("content") or ""
+            return str(text), str(choice.get("finish_reason") or ""), payload.get("usage") or {}, ""
+        for raw in resp:
+            line = raw.decode("utf-8", errors="replace").strip()
+            if not line.startswith("data:"):
+                continue
+            data = line[5:].strip()
+            if data == "[DONE]":
+                break
+            try:
+                chunk = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            if chunk.get("usage"):
+                usage = chunk["usage"]
+            for choice in chunk.get("choices") or []:
+                delta = choice.get("delta") or {}
+                if delta.get("reasoning") or delta.get("reasoning_content"):
+                    think_chunks += 1
+                piece = delta.get("content") or ""
+                if piece:
+                    content.append(piece)
+                    chars += len(piece)
+                    answer_chunks += 1
+                if choice.get("finish_reason"):
+                    finish = str(choice["finish_reason"])
+            answer_est = max(answer_chunks, chars // 4)
+            if not content and max(think_chunks, 0) >= think_tokens:
+                cut = "think"
+                break
+            if content and answer_est >= seam_tokens and at_seam("".join(content)):
+                cut = "seam"
+                break
+            if time.time() - started > timeout:
+                cut = "seam" if at_seam("".join(content)) else "length"
+                break
+    if cut and not usage:
+        # The usage chunk comes last and the cut came first: the meter stands in.
+        usage = {"completion_tokens": max(answer_chunks, chars // 4) + think_chunks, "estimated": True}
+    return "".join(content), finish, usage, cut
+
+
+def _err_body(e: urllib.error.HTTPError) -> bytes:
+    """The error body, readable more than once (HTTPError.read is one-shot)."""
+    cached = getattr(e, "hare_body", None)
+    if cached is None:
+        cached = e.read()
+        e.hare_body = cached  # type: ignore[attr-defined]
+    return cached
+
+
+def _call(req: urllib.request.Request, body: dict[str, Any], timeout: int) -> tuple[str, str, dict[str, Any], str]:
+    """One call, streamed when HARE_STREAM, with the usual knob and stream fallbacks."""
+    if HARE_STREAM:
+        body = dict(body, stream=True, stream_options={"include_usage": True})
+    req.data = json.dumps(body).encode()
+    try:
+        if HARE_STREAM:
+            try:
+                return _sse(req, timeout, int(body.get("max_tokens") or LLM_MAX_TOKENS))
+            except urllib.error.HTTPError:
+                raise
+            except (TimeoutError, urllib.error.URLError) as e:
+                if isinstance(e, urllib.error.URLError) and "timed out" not in str(e.reason).lower():
+                    raise RuntimeError(f"LLM network error {req.full_url}: {e.reason}") from e
+                raise RuntimeError(f"LLM timeout after {timeout}s {req.full_url} (raise HARE_LLM_TIMEOUT_S)") from e
+        payload = _post(req, timeout)
+    except urllib.error.HTTPError as e:
+        raw = _err_body(e)
+        low = raw.decode("utf-8", errors="replace").lower()
+        if HARE_STREAM and e.code in {400, 422} and "stream" in low and "reason" not in low:
+            # A gateway that does not stream, or rejects stream_options: plain call.
+            plain = {k: v for k, v in body.items() if k not in {"stream", "stream_options"}}
+            req.data = json.dumps(plain).encode()
+            payload = _post(req, timeout)
+        else:
+            raise
+    else:
+        pass
+    choice = (payload.get("choices") or [{}])[0] or {}
+    text = (choice.get("message") or {}).get("content") or ""
+    return str(text), str(choice.get("finish_reason") or ""), payload.get("usage") or {}, ""
 
 
 def diff_lines(diff: str) -> int:
@@ -570,7 +748,8 @@ def cost_line(usage: dict[str, Any], hop: str, seconds: float) -> str:
     reasoning = int((u.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0)
     if not (prompt or answer):
         return f"- cost: not reported by `{hop}`, {seconds:.0f} s"
-    return f"- cost: {prompt:,} prompt + {answer:,} answer + {reasoning:,} reasoning tokens on `{hop}`, {seconds:.0f} s"
+    about = "about " if u.get("estimated") else ""
+    return f"- cost: {about}{prompt:,} prompt + {answer:,} answer + {reasoning:,} reasoning tokens on `{hop}`, {seconds:.0f} s"
 
 
 def chat_complete(
@@ -600,36 +779,70 @@ def chat_complete(
     req.add_header("User-Agent", "searchts-hare/1")
     req.add_header("HTTP-Referer", "https://github.com/capad-xyz/searchts")
     req.add_header("X-Title", "searchts-hare")
+    LAST_CUT.clear()
     try:
-        payload = _post(req, timeout)
+        content, finish, usage, cut = _call(req, body, timeout)
     except urllib.error.HTTPError as e:
-        err = e.read().decode("utf-8", errors="replace")
+        err = _err_body(e).decode("utf-8", errors="replace")
         if not ("reasoning" in body and e.code in {400, 404, 422} and "reason" in err.lower()):
             raise RuntimeError(f"LLM {e.code} {base} {model}: {err[:400]}") from e
         # A gateway that does not know the reasoning knob must not cost the hop.
         # The retry can fail too, and that failure has to keep its body.
-        req.data = json.dumps({k: v for k, v in body.items() if k != "reasoning"}).encode()
+        plain = {k: v for k, v in body.items() if k != "reasoning"}
         try:
-            payload = _post(req, timeout)
+            content, finish, usage, cut = _call(req, plain, timeout)
         except urllib.error.HTTPError as e2:
-            err2 = e2.read().decode("utf-8", errors="replace")
+            err2 = _err_body(e2).decode("utf-8", errors="replace")
             raise RuntimeError(f"LLM {e2.code} {base} {model} (without reasoning knob): {err2[:400]}") from e2
     LAST_USAGE.clear()
-    LAST_USAGE.update(payload.get("usage") or {})
-    choices = payload.get("choices") or []
-    if not choices:
-        raise RuntimeError(f"LLM empty choices {base} {model}")
-    choice = choices[0] if isinstance(choices[0], dict) else {}
-    content = (choice.get("message") or {}).get("content") or ""
+    LAST_USAGE.update(usage or {})
+    if cut == "think":
+        raise RuntimeError(
+            f"LLM thinking cut {base} {model} (reasoning past {int(THINK_CUT_FRAC * 100)}% of max_tokens={LLM_MAX_TOKENS} with no answer)"
+        )
     if not str(content).strip():
-        finish = str(choice.get("finish_reason") or "?")
-        usage = payload.get("usage") or {}
-        spent = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
-        detail = f"finish_reason={finish}, max_tokens={LLM_MAX_TOKENS}"
+        spent = ((usage or {}).get("completion_tokens_details") or {}).get("reasoning_tokens")
+        detail = f"finish_reason={finish or '?'}, max_tokens={LLM_MAX_TOKENS}"
         if spent is not None:
             detail += f", reasoning_tokens={spent}"
         raise RuntimeError(f"LLM empty content {base} {model} ({detail})")
-    return str(content)
+    content = str(content)
+    if cut == "seam" or cut == "length" or finish == "length":
+        content = wrap_up(req, body, content, timeout, cut or "length")
+    return content
+
+
+def wrap_up(req: urllib.request.Request, body: dict[str, Any], partial: str, timeout: int, why: str) -> str:
+    """Finish a cut answer: one small continuation call, then repair whatever we hold.
+
+    The partial is posted either way; this never throws a review away.
+    """
+    kept = len(json_objects(repair_json(partial)) and (extract_json(repair_json(partial)) or {}).get("findings") or [])
+    stitched = ""
+    try:
+        follow = dict(body, max_tokens=WRAP_UP_TOKENS)
+        follow.pop("stream", None)
+        follow.pop("stream_options", None)
+        follow["messages"] = list(body["messages"]) + [
+            {"role": "assistant", "content": partial},
+            {"role": "user", "content": WRAP_UP},
+        ]
+        req.data = json.dumps(follow).encode()
+        payload = _post(req, min(timeout, 120))
+        tail = str(((payload.get("choices") or [{}])[0] or {}).get("message", {}).get("content") or "")
+        if tail.strip():
+            tail_usage = payload.get("usage") or {}
+            if not LAST_USAGE.get("prompt_tokens"):
+                LAST_USAGE["prompt_tokens"] = int(tail_usage.get("prompt_tokens") or 0)  # same prompt plus the partial
+            else:
+                LAST_USAGE["prompt_tokens"] = int(LAST_USAGE["prompt_tokens"]) + int(tail_usage.get("prompt_tokens") or 0)
+            LAST_USAGE["completion_tokens"] = int(LAST_USAGE.get("completion_tokens") or 0) + int(tail_usage.get("completion_tokens") or 0)
+            stitched = partial + tail if not tail.lstrip().startswith("{") else tail
+    except Exception as e:  # the continuation is best effort
+        print(f"hare wrap-up: continuation failed: {str(e)[:160]}")
+    out = stitched if stitched and extract_json(stitched) is not None else repair_json(partial)
+    LAST_CUT.update({"cut": True, "why": why, "kept": kept, "continued": bool(stitched and out is stitched)})
+    return out
 
 
 def _post(req: urllib.request.Request, timeout: int) -> dict[str, Any]:
@@ -733,6 +946,8 @@ def _short_fail(part: str) -> str:
         return f"{name}: free tier is TUI-only"
     if "404" in p or "unavailable" in low:
         return f"{name}: model not available"
+    if "thinking cut" in low:
+        return f"{name}: still thinking at {int(THINK_CUT_FRAC * 100)}% of the budget, cut"
     if "empty content" in low:
         if "finish_reason=length" in low:
             return f"{name}: ran out of tokens while thinking, answered nothing"
@@ -1237,6 +1452,9 @@ def _hare_once(
                 raise RuntimeError("no JSON object in model output")
             used = f"{name}:{model}" + (" · deep" if deep else "")
             cost = cost_line(LAST_USAGE, used, time.time() - call_start)
+            if LAST_CUT.get("cut"):
+                how = "finished by one continuation call" if LAST_CUT.get("continued") else "closed by the script"
+                cost += f"\n- cut at the budget ({LAST_CUT.get('why')}) after {LAST_CUT.get('kept', 0)} findings, {how}"
             break
         except Exception as e:
             errs.append(f"{name}:{model}: {e}")
