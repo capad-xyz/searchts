@@ -59,15 +59,27 @@ OR_REASONING = {"effort": "low", "exclude": True}
 # shape (a nested "reasoning" object), so the hop carries its own.
 GEMINI_REASONING = {"reasoning_effort": "low"}
 
-# Fixed list, not a router. Live 2026-10-02.
-# Dropped: nex-n2.5-pro:free (gone), unsuffixed Nous ids (paid),
-# OR space-bunny (leaves OpenRouter 2026-10-05).
-# Zen stays in code but CI passes no key (free tier is TUI-only,
-# API calls rejected), so those hops are skipped.
+# Fixed list, not a router. Read against the live catalogs 2026-10-04:
+# OpenRouter /api/v1/models (pricing 0/0), Groq docs/models, Zen by probe.
+# OpenRouter free that review code, best coding index first: qwen3.8-27b:free
+# (68; answered live on PR 234), inkling-small:free (53) and inkling:free (52),
+# both with reasoning effort none on the menu, gemma-4-31b-it:free (43,
+# thinking off by default), laguna-s-2.1:free (no score; sat first and never
+# answered, so last). Left out: apodex-1.1-mini:free (new 2026-10-01, no
+# record), nemotron-3-ultra:free (cannot think below medium), the health,
+# safety, tiny and translation models, space-bunny-alpha (gone 2026-10-05).
+# Groq: gpt-oss-120b stays; qwen/qwen3.8-27b is on Groq too, the same model
+# that answered on OpenRouter, so it is the second Groq hop.
+# Zen: longcat and ling return 403 FreeTierError outside the OpenCode TUI by
+# policy (measured 2026-10-03), so only space-bunny-free stays. CI passes no
+# Zen key anyway.
+# Nous: unverifiable from here (free tier is gated live in the Portal, no
+# public list); unchanged, space-bunny-alpha last for the reason below.
 # Skip: openrouter/free, Lyria, Muse contributor-free (trains; Responses API).
 # OR may retain prompts (not training).
 HARE_GROQ_DEFAULT = (
-    "openai/gpt-oss-120b"
+    "openai/gpt-oss-120b,"
+    "qwen/qwen3.8-27b"
 )
 HARE_GEMINI_DEFAULT = "gemini-2.5-flash"
 HARE_NOUS_DEFAULT = (
@@ -80,10 +92,13 @@ HARE_NOUS_DEFAULT = (
     "stealth/space-bunny-alpha"
 )
 HARE_OR_DEFAULT = (
-    "poolside/laguna-s-2.1:free,"
-    "qwen/qwen3.8-27b:free"
+    "qwen/qwen3.8-27b:free,"
+    "thinkingmachines/inkling-small:free,"
+    "thinkingmachines/inkling:free,"
+    "google/gemma-4-31b-it:free,"
+    "poolside/laguna-s-2.1:free"
 )
-HARE_ZEN_DEFAULT = "space-bunny-free,longcat-2.5-preview-free,ling-3.0-flash-fin-free"
+HARE_ZEN_DEFAULT = "space-bunny-free"
 
 
 def _env(name: str, default: str = "") -> str:
