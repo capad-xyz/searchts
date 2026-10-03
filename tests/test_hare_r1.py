@@ -751,6 +751,8 @@ def test_extract_json_fence_with_nested_braces_still_parses() -> None:
 
 
 class _Resp:
+    headers = {"Content-Type": "application/json"}
+
     def __init__(self, payload: dict) -> None:
         self._b = json.dumps(payload).encode()
 
@@ -893,3 +895,136 @@ def test_the_owner_can_cap_reasoning_for_the_quiet_pass(monkeypatch) -> None:
     monkeypatch.setattr(hare_r1, "HARE_REASONING", "lots")
     quiet = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models)}
     assert quiet["nous"] == {"reasoning": {"effort": "none"}}  # a word not on the list is ignored
+
+
+# ── wrap up at the limit, never throw the answer away ─────────────────────────
+
+
+class _Stream:
+    """A fake SSE response: one content delta per item, usage on the last chunk."""
+
+    headers = {"Content-Type": "text/event-stream"}
+
+    def __init__(self, pieces: list[str], reasoning: int = 0, usage: dict | None = None, finish: str = "stop") -> None:
+        lines = []
+        for _ in range(reasoning):
+            lines.append(b'data: {"choices":[{"delta":{"reasoning":"hm"}}]}\n')
+        for p in pieces:
+            lines.append(("data: " + json.dumps({"choices": [{"delta": {"content": p}}]}) + "\n").encode())
+        lines.append(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": finish}], "usage": usage or {}}) + "\n").encode())
+        lines.append(b"data: [DONE]\n")
+        self._lines = lines
+        self.closed = False
+
+    def __iter__(self):
+        return iter(self._lines)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        self.closed = True
+        return False
+
+
+def _finding(i: int) -> str:
+    return json.dumps({"sev": "skip", "path": "a.py", "line": i, "issue": f"i{i}", "short": "s", "fix": "later", "change": "c"})
+
+
+def test_a_stream_that_runs_to_the_end_is_the_answer(monkeypatch) -> None:
+    answer = '{"effort":"low","summary":"S.","aim":"a","findings":[' + _finding(1) + "]}"
+    pieces = [answer[i : i + 7] for i in range(0, len(answer), 7)]
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", lambda req, timeout=0: _Stream(pieces, usage={"prompt_tokens": 10, "completion_tokens": 40}))
+    out = hare_r1.chat_complete("https://x.test/v1", "k", "m", [])
+    assert json.loads(out)["findings"][0]["line"] == 1
+    assert hare_r1.LAST_USAGE == {"prompt_tokens": 10, "completion_tokens": 40}
+    assert not hare_r1.LAST_CUT.get("cut")
+
+
+def test_repair_json_drops_the_half_finding_and_closes_what_is_open() -> None:
+    cut = '{"summary":"S.","findings":[' + _finding(1) + "," + _finding(2) + ',{"sev":"real","path":"b.py","iss'
+    fixed = json.loads(hare_r1.repair_json(cut))
+    assert [f["line"] for f in fixed["findings"]] == [1, 2]
+    # Nothing closed yet: an empty findings list, not a crash.
+    assert json.loads(hare_r1.repair_json('{"summary":"S.","findings":[{"sev":"re'))["findings"] == []
+    assert hare_r1.at_seam('{"summary":"S.","findings":[' + _finding(1))
+    assert not hare_r1.at_seam('{"summary":"S.","findings":[' + _finding(1) + ',{"sev"')
+
+
+def test_past_the_seam_the_stream_stops_and_one_continuation_finishes_it(monkeypatch) -> None:
+    # Budget 100, seam at 80 tokens: the stream is cut after the finding that lands
+    # past 80 chunks, and a second (plain) call closes the JSON.
+    monkeypatch.setattr(hare_r1, "LLM_MAX_TOKENS", 100)
+    head = '{"effort":"low","summary":"S.","aim":"a","findings":['
+    body = head + ",".join(_finding(i) for i in range(1, 9)) + "," + _finding(9) + "]}"
+    pieces = [body[i : i + 3] for i in range(0, len(body), 3)]  # ~3 chars a chunk: many chunks
+    calls: list[dict] = []
+
+    def fake_urlopen(req, timeout=0):
+        b = json.loads(req.data)
+        calls.append(b)
+        if b.get("stream"):
+            return _Stream(pieces, usage={"prompt_tokens": 100, "completion_tokens": 90})
+        assert b["messages"][-1]["content"] == hare_r1.WRAP_UP and b["messages"][-2]["role"] == "assistant"
+        assert b["max_tokens"] == hare_r1.WRAP_UP_TOKENS and "stream" not in b
+        return _Resp({"choices": [{"finish_reason": "stop", "message": {"content": "]}"}}], "usage": {"prompt_tokens": 100, "completion_tokens": 2}})
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+    out = hare_r1.chat_complete("https://x.test/v1", "k", "m", [{"role": "user", "content": "x"}])
+    data = json.loads(out)
+    assert len(calls) == 2 and data["summary"] == "S."
+    assert 1 <= len(data["findings"]) < 9  # cut at a seam, not at the wall
+    assert hare_r1.LAST_CUT["cut"] and hare_r1.LAST_CUT["why"] == "seam" and hare_r1.LAST_CUT["continued"]
+    assert hare_r1.LAST_USAGE["completion_tokens"] >= 80 and hare_r1.LAST_USAGE["prompt_tokens"] == 100  # the meter stands in for the cut call, plus the tail
+    assert hare_r1.LAST_USAGE.get("estimated")
+
+
+def test_a_cut_answer_is_kept_even_when_the_continuation_fails(monkeypatch) -> None:
+    monkeypatch.setattr(hare_r1, "LLM_MAX_TOKENS", 100)
+    body = '{"summary":"S.","findings":[' + ",".join(_finding(i) for i in range(1, 9)) + "]}"
+    pieces = [body[i : i + 3] for i in range(0, len(body), 3)]
+
+    def fake_urlopen(req, timeout=0):
+        b = json.loads(req.data)
+        if b.get("stream"):
+            return _Stream(pieces)
+        raise hare_r1.urllib.error.HTTPError(req.full_url, 500, "down", {}, io.BytesIO(b"{}"))
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+    data = json.loads(hare_r1.chat_complete("https://x.test/v1", "k", "m", [{"role": "user", "content": "x"}]))
+    assert data["summary"] == "S." and len(data["findings"]) >= 1
+    assert hare_r1.LAST_CUT["cut"] and not hare_r1.LAST_CUT["continued"]
+
+
+def test_a_hop_still_thinking_at_the_cut_line_is_cut_and_named(monkeypatch) -> None:
+    monkeypatch.setattr(hare_r1, "LLM_MAX_TOKENS", 100)
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", lambda req, timeout=0: _Stream([], reasoning=70))
+    with pytest.raises(RuntimeError) as e:
+        hare_r1.chat_complete("https://x.test/v1", "k", "m", [])
+    assert "thinking cut" in str(e.value)
+    assert hare_r1._short_fail(f"nous:m: {e.value}") == "nous: still thinking at 60% of the budget, cut"
+
+
+def test_a_gateway_that_does_not_stream_still_answers(monkeypatch) -> None:
+    # JSON back on a stream request: read as one answer. A 400 naming stream: plain retry.
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", lambda req, timeout=0: _Resp({"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]}))
+    assert hare_r1.chat_complete("https://x.test/v1", "k", "m", []) == "{}"
+    seen: list[dict] = []
+
+    def picky(req, timeout=0):
+        b = json.loads(req.data)
+        seen.append(b)
+        if b.get("stream"):
+            raise hare_r1.urllib.error.HTTPError(req.full_url, 400, "x", {}, io.BytesIO(b'{"error":"stream_options is not supported"}'))
+        return _Resp({"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]})
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", picky)
+    assert hare_r1.chat_complete("https://x.test/v1", "k", "m", []) == "{}"
+    assert len(seen) == 2 and "stream" not in seen[1]
+
+
+def test_the_fold_says_when_a_review_was_cut(monkeypatch) -> None:
+    line = hare_r1.cost_line({"prompt_tokens": 1, "completion_tokens": 2}, "nous:x", 3)
+    line += "\n- cut at the budget (seam) after 4 findings, finished by one continuation call"
+    body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [], "S.", "abc1234", [], "", "", line)
+    assert "cut at the budget (seam) after 4 findings" in body
