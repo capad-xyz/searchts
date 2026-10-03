@@ -1075,6 +1075,12 @@ def _hare_once(
     how = deliver_review(owner, repo, n, token, sha, comment, review_comments)
     if how != "needed":
         resolve_stale_threads(owner, repo, n, token, plus)
+    # The dead hops used to vanish on success: errs only reached the nag when
+    # every provider failed, so the log could not say why Gemini or Groq was
+    # skipped. A review landing on the last hop looks identical to one landing on
+    # the first. P4.6: say what happened.
+    for dead in errs:
+        print(f"hare dead {dead}")
     print(f"hare ok model={used} intent={intent} bubbles={len(review_comments)} deliver={how}")
     return 0
 

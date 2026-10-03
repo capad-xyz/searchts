@@ -672,3 +672,14 @@ def test_the_slug_with_the_documented_empty_content_is_not_first_on_nous() -> No
     nous = hare_r1.HARE_NOUS_DEFAULT.split(",")
     assert "stealth/space-bunny-alpha" in nous
     assert nous[-1] == "stealth/space-bunny-alpha"
+
+
+def test_dead_hops_are_printed_on_success() -> None:
+    """A review landing on the last hop must not look like one landing on the first."""
+    import inspect
+
+    src = inspect.getsource(hare_r1._hare_once)
+    ok_at = src.index('print(f"hare ok model=')
+    tail = src[:ok_at]
+    assert 'print(f"hare dead {dead}")' in tail, "dead hops are never printed on the success path"
+    assert src.index("for dead in errs:") < ok_at
