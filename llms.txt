@@ -1,6 +1,6 @@
 # searchts
 
-> Keyless local reader for agents. Fetch a URL or admit you can't. One read path (`unlocker.fetch`). Fail loud on thin pages, challenges, and login walls.
+> Keyless web reader for AI agents, built because Claude's own fetch kept coming back empty. Fetch a URL or admit you can't. One read path (`unlocker.fetch`). Fail loud on thin pages, challenges, and login walls.
 
 PyPI: https://pypi.org/project/searchts/ · Repo: https://github.com/capad-xyz/searchts
 

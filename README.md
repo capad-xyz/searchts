@@ -2,7 +2,9 @@
 
 <!-- mcp-name: io.github.capad-xyz/searchts -->
 
-**The missing layer between AI and the web.** A Python CLI and library that lets an AI agent read and search the internet, fronted by a fully open-source "unlocker" that gets through common bot-walls with no paid proxy and no API key.
+**A keyless web reader for AI agents. It reads the page, or it tells your agent plainly that it can't.**
+
+When Claude, Cursor or another agent fetches a web page, it often comes back with nothing: a bot wall, a page that only fills in after JavaScript runs, or a block for not looking like a browser. searchts is the reader your agent calls instead. It's open source and free, needs no API key, and works as an MCP server, a CLI or a Python library.
 
 [![CI](https://github.com/capad-xyz/searchts/actions/workflows/pytest.yml/badge.svg)](https://github.com/capad-xyz/searchts/actions/workflows/pytest.yml)
 [![PyPI](https://img.shields.io/pypi/v/searchts.svg)](https://pypi.org/project/searchts/)
@@ -16,9 +18,16 @@
   <a href="https://github.com/capad-xyz/searchts/releases/download/v0.7.0/searchts-demo-v5.mp4">▶ Watch the full 1-minute demo</a>
 </p>
 
-## Why searchts?
+## Why it exists
 
-- Reads pages behind common bot walls
+I built searchts because Claude kept running into walls when I asked it to read the web for me. The trigger was a Devpost hackathon page and its terms: the page wasn't even walled, and Claude still couldn't read it.
+
+The first versions, which I built with Claude, failed the other way. When they couldn't get a page, they handed back whatever they got, and the agent summarised a loading screen as if it were the article. So searchts has one rule above the rest: return the real page, or fail loudly and say why. It never hands your agent a fake read.
+
+## What it does
+
+- Reads pages your agent's own fetch can't: browser-fingerprint checks, JavaScript-only pages and some bot walls
+- Fails loudly on the walls it can't pass (login walls, DataDome, some Cloudflare setups) and says which tier failed and why
 - Reads complete ChatGPT / Claude / Gemini / Grok / Poe / DeepSeek / Perplexity / Copilot shared conversations
 - Works with Claude, Codex, and MCP agents
 - Extracts clean Markdown, ready to feed a model
@@ -29,7 +38,7 @@
 
 ## Why it's free
 
-AI agents constantly need to read web pages, but the naive way they fetch is trivially blocked by modern anti-bot systems (Cloudflare, PerimeterX, DataDome). Paid unlocker services solve this, but the thing they really charge for is a large pool of clean residential IP addresses. `searchts` runs on your own machine, from your own connection, at personal volume, so it sidesteps that cost and gets through most of those walls for free.
+Paid unlockers mostly charge for pools of residential IP addresses. searchts doesn't need one: the fetch and browser tiers run on your machine, from your own connection, at personal volume. The one hosted tier, Jina Reader, is free and can be turned off. That gets it past fingerprint checks and JavaScript-only pages. It doesn't get past every wall, and the [scorecard](docs/scorecard.md) shows which ones it can't.
 
 ## The unlocker
 
@@ -41,7 +50,7 @@ AI agents constantly need to read web pages, but the naive way they fetch is tri
 
 If no tier comes back with real content, an optional human-in-the-loop step opens a real browser so you can clear the page once and continue. That covers interactive CAPTCHAs and soft walls alike: a login page served as HTTP 200 is not a challenge, but it is still a page only a human gets past. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
 
-**Walls (F12 playbook, not a bypass):** fail loud on login/challenge/thin. Do not cut a release that claims Reddit/LinkedIn now read (**N7**). Order: stealth already retries `page.content` after a navigation race (**P3.11**) → next is a persistent Chromium profile so clearance can survive across reads (**F1**, not shipped) → then `--human` / device session for extras only (**F7**, never silent, never inside `read_url`). Never paid residential as default (**N1**). Never a keyed commercial unlocker as default (**N3**).
+**What it won't do.** searchts isn't a wall-bypass service. Pages behind a login (LinkedIn, X), DataDome and some Cloudflare setups fail loudly, with the reason. It won't route your traffic through paid residential proxies or a keyed commercial unlocker by default, and a release never claims a site reads until it does.
 
 ## AI-chat share links
 

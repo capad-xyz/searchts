@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.capad-xyz/searchts",
   "title": "searchts",
-  "description": "Keyless web access for AI agents: read bot-walled pages as Markdown, search, grab assets",
+  "description": "Keyless web reader for AI agents: reads the page as Markdown, or says plainly it can't",
   "repository": {
     "url": "https://github.com/capad-xyz/searchts",
     "source": "github"
