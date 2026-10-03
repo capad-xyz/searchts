@@ -596,7 +596,12 @@ def _workflow_env(name: str) -> str:
     if not m:  # no override at all, so the Python default is what runs
         return ""
     value = m.group(1).strip().strip("'\"")
-    return "" if "${{" in value else value
+    if "${{" in value:
+        # `${{ inputs.x || 'literal' }}`: the literal after `||` is what runs when
+        # nobody overrides, so it is the pin. An expression with no fallback is "".
+        fb = re.search(r"\|\|\s*'([^']*)'", value)
+        return fb.group(1) if fb else ""
+    return value
 
 
 def test_workflow_groq_models_match_the_live_default() -> None:
