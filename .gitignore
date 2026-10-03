@@ -22,3 +22,6 @@ DEVLOG.md
 benchmarks/cases.local.json
 benchmarks/results/
 docs/results.json
+
+# local demo renders (large videos/backgrounds; small web copy lives in site/)
+demo/
