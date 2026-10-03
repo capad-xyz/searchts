@@ -34,6 +34,7 @@ LOW_SCORE = 2
 # ledger counts both reviewers so they can be compared on the same PRs.
 HAREBOT_MARK = "<!-- harebot:review"
 BOT_LOG_GLOB = "hare-bot-log-*.md"
+BOT_LOG_JSONL = "hare-bot-log-*.jsonl"
 # A finding's fate, from the signals we have. "fixed" and "moved" come from a
 # later note's Since line, "resolved" from the review thread, "open" otherwise.
 FATES = ("fixed", "moved", "resolved", "still applies", "open")
@@ -102,12 +103,35 @@ def read_bot_logs(docs: Path) -> dict[str, dict[str, Any]]:
     minutes on the clock and its token estimate. Hare Bot has no meter, so the
     log is the only cost record it leaves."""
     out: dict[str, dict[str, Any]] = {}
+    # The JSONL is the structured record (one row per pass, a chars breakdown per
+    # input); it wins over the markdown for the same review URL.
+    for f in sorted(docs.glob(BOT_LOG_JSONL)):
+        for line in f.read_text(encoding="utf-8").splitlines():
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if row.get("type") != "review" or not row.get("review_url"):
+                continue
+            rec: dict[str, Any] = {"log": f.name}
+            if row.get("minutes") is not None:
+                rec["minutes"] = float(row["minutes"])
+            if row.get("estimate_tokens") is not None:
+                rec["tokens_est"] = int(row["estimate_tokens"])
+            if row.get("estimate_chars") is not None:
+                rec["chars_est"] = int(row["estimate_chars"])
+            if isinstance(row.get("chars"), dict):
+                rec["chars"] = {k: int(v) for k, v in row["chars"].items() if isinstance(v, (int, float))}
+            out[row["review_url"]] = rec
     for f in sorted(docs.glob(BOT_LOG_GLOB)):
         url = ""
         for line in f.read_text(encoding="utf-8").splitlines():
             m = re.match(r"- Review: (https://\S+)", line)
             if m:
                 url = m.group(1)
+                if url in out:  # the JSONL already has this pass
+                    url = ""
+                    continue
                 out[url] = {"log": f.name}
                 continue
             if not url:
