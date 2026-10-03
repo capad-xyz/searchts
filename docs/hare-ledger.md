@@ -2,37 +2,61 @@
 
 Every finding Hare posted here, what became of it, and what the owner said. Built by `scripts/hare_ledger.py` from the notes, the Since lines, resolved threads and `/hare score` comments. PLAN R2b.
 
-Built 2026-10-03. 45 PRs, 72 notes, 3 real and 19 skip findings, 0 notes cut at the budget.
+Built 2026-10-03. 56 PRs, 95 notes, 20 real and 41 skip findings, 0 notes cut at the budget.
 
-**Hit rate:** 0 of 3 real findings fixed or resolved (0%).
+**Hit rate:** 0 of 20 real findings fixed or resolved (0%).
 **Owner scores:** 0 given.
 
 | Hop | Notes |
 | --- | --- |
-| `groq:openai/gpt-oss-120b` | 8 |
-| `openrouter:qwen/qwen3.8-27b:free` | 4 |
-| `gemini:gemini-3.1-flash-lite` | 2 |
+| `openrouter:nex-agi/nex-n2.5-pro:free` | 24 |
+| `hare-bot:Grok` | 18 |
+| `openrouter:poolside/laguna-s-2.1:free` | 18 |
+| `groq:openai/gpt-oss-120b` | 10 |
+| `openrouter:qwen/qwen3.8-27b:free` | 10 |
+| `gemini:gemini-3.1-flash-lite` | 3 |
+| `nous:meituan/longcat-2.5-preview:free` | 2 |
+| `nous:stealth/space-bunny-alpha` | 2 |
+| `nous:poolside/laguna-s-2.1:free` | 2 |
 | `gemini:gemini-3.1-flash-lite · deep` | 1 |
 | `gemini:gemini-3.5-flash` | 1 |
-| `nous:meituan/longcat-2.5-preview:free` | 1 |
+| `openrouter:stealth/space-bunny-alpha` | 1 |
+
+## By reviewer
+
+| Reviewer | Notes | Real | Skip | Real fixed or resolved | Minutes per note |
+| --- | --- | --- | --- | --- | --- |
+| Hare (App) | 77 | 5 | 22 | 0 | no log |
+| Hare Bot (Grok Bot) | 18 | 15 | 19 | 0 | 3.9 |
 
 ## By PR
 
 | PR | Notes | Real | Skip | Fates of real | Scores |
 | --- | --- | --- | --- | --- | --- |
-| #245 | 1 | 1 | 0 | open 1 |  |
-| #244 | 2 | 0 | 2 |  |  |
+| #249 | 2 | 1 | 0 | open 1 |  |
+| #248 | 3 | 3 | 2 | open 3 |  |
+| #247 | 2 | 1 | 1 | open 1 |  |
+| #246 | 2 | 2 | 3 | open 2 |  |
+| #245 | 2 | 2 | 0 | open 2 |  |
+| #244 | 3 | 2 | 2 | open 2 |  |
+| #243 | 1 | 0 | 1 |  |  |
+| #242 | 1 | 0 | 0 |  |  |
+| #241 | 1 | 0 | 0 |  |  |
 | #240 | 1 | 0 | 1 |  |  |
 | #239 | 1 | 0 | 1 |  |  |
 | #238 | 1 | 0 | 1 |  |  |
-| #237 | 1 | 1 | 2 | open 1 |  |
-| #236 | 3 | 0 | 3 |  |  |
-| #235 | 2 | 0 | 4 |  |  |
-| #234 | 1 | 0 | 2 |  |  |
+| #237 | 2 | 3 | 8 | open 3 |  |
+| #236 | 4 | 1 | 4 | open 1 |  |
+| #235 | 3 | 1 | 6 | open 1 |  |
+| #234 | 2 | 0 | 2 |  |  |
 | #233 | 1 | 1 | 0 | open 1 |  |
 | #232 | 1 | 0 | 1 |  |  |
 | #230 | 1 | 0 | 2 |  |  |
-| #224 | 1 | 0 | 0 |  |  |
+| #228 | 1 | 0 | 0 |  |  |
+| #227 | 1 | 0 | 2 |  |  |
+| #226 | 1 | 1 | 1 | open 1 |  |
+| #225 | 1 | 2 | 1 | open 2 |  |
+| #224 | 2 | 0 | 2 |  |  |
 | #223 | 1 | 0 | 0 |  |  |
 | #221 | 2 | 0 | 0 |  |  |
 | #220 | 1 | 0 | 0 |  |  |

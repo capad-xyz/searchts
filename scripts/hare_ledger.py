@@ -30,6 +30,10 @@ LEDGER_MD = "hare-ledger.md"
 RULES_START = "<!-- hare-ledger:rules -->"
 RULES_END = "<!-- /hare-ledger:rules -->"
 LOW_SCORE = 2
+# Hare Bot (the Grok Bot template) posts as the owner with its own marker. The
+# ledger counts both reviewers so they can be compared on the same PRs.
+HAREBOT_MARK = "<!-- harebot:review"
+BOT_LOG_GLOB = "hare-bot-log-*.md"
 # A finding's fate, from the signals we have. "fixed" and "moved" come from a
 # later note's Since line, "resolved" from the review thread, "open" otherwise.
 FATES = ("fixed", "moved", "resolved", "still applies", "open")
@@ -43,12 +47,35 @@ def score_from(comment: str) -> tuple[int | None, str]:
     return int(m.group(1)), hare_r1._no_em(hare_r1._plain(m.group(2)))[:200]
 
 
+def reviewer_of(body: str) -> str:
+    """"hare" for the App's notes, "hare-bot" for Hare Bot's, "" for anything else."""
+    if hare_r1.TOKEN in (body or ""):
+        return "hare"
+    if HAREBOT_MARK in (body or ""):
+        return "hare-bot"
+    return ""
+
+
+def findings_of(body: str) -> list[dict[str, str]]:
+    """Finding blocks of either reviewer: the App puts a blank line before
+    **Issue:**, Hare Bot does not."""
+    out: list[dict[str, str]] = []
+    pat = r"^#### (?:🔴|🟡) (real|skip) · `([^`]+)`\s*\n\s*(?:\n\s*)?\*\*Issue:\*\* (.+)$"
+    for m in re.finditer(pat, body or "", re.M):
+        out.append({"sev": m.group(1), "loc": m.group(2), "issue": m.group(3).strip()})
+    return out
+
+
 def note_meta(body: str) -> dict[str, Any]:
     """Hop, effort, cost and cut from one note's fold and Models row."""
     out: dict[str, Any] = {"hop": "", "effort": "", "cost": "", "cut": ""}
     m = re.search(r"\| reviewer \|[^|]*`([^`]+)`[^|]*\| (\w+) \|", body or "")
     if m:
         out["hop"], out["effort"] = m.group(1), m.group(2)
+    elif reviewer_of(body) == "hare-bot":
+        m = re.search(r"\| reviewer \| Hare Bot[^|]*· (\S+) \| (\w+) \|", body or "")
+        if m:
+            out["hop"], out["effort"] = f"hare-bot:{m.group(1)}", m.group(2)
     else:  # the v1 note shape: **ship** · `nous:slug` · effort low
         m = re.search(r"\*\*(?:ship|hold)\*\* · `([^`]+)` · effort (\w+)", body or "")
         if m:
@@ -70,21 +97,53 @@ def since_statuses(body: str) -> dict[str, str]:
     return out
 
 
-def pr_rows(pr: dict[str, Any], reviews: list[dict[str, Any]], comments: list[dict[str, Any]], threads: list[dict[str, Any]]) -> dict[str, Any]:
+def read_bot_logs(docs: Path) -> dict[str, dict[str, Any]]:
+    """Hare Bot's own pass logs (docs/hare-bot-log-*.md), keyed by review URL:
+    minutes on the clock and its token estimate. Hare Bot has no meter, so the
+    log is the only cost record it leaves."""
+    out: dict[str, dict[str, Any]] = {}
+    for f in sorted(docs.glob(BOT_LOG_GLOB)):
+        url = ""
+        for line in f.read_text(encoding="utf-8").splitlines():
+            m = re.match(r"- Review: (https://\S+)", line)
+            if m:
+                url = m.group(1)
+                out[url] = {"log": f.name}
+                continue
+            if not url:
+                continue
+            m = re.match(r"- Clock: .*\(([\d.]+) min\)", line)
+            if m:
+                out[url]["minutes"] = float(m.group(1))
+            m = re.match(r"- Token estimate: about ([\d,]+)", line)
+            if m:
+                out[url]["tokens_est"] = int(m.group(1).replace(",", ""))
+    return out
+
+
+def pr_rows(pr: dict[str, Any], reviews: list[dict[str, Any]], comments: list[dict[str, Any]], threads: list[dict[str, Any]], bot_log: dict[str, dict[str, Any]] | None = None) -> dict[str, Any]:
     """One PR's ledger entry from its reviews, comments and review threads."""
-    notes = hare_r1.hare_notes(reviews)
+    bot_log = bot_log or {}
+    notes = [r for r in reviews if isinstance(r, dict) and reviewer_of(str(r.get("body") or ""))]
+    notes.sort(key=lambda r: str(r.get("submitted_at") or ""))
     findings: dict[str, dict[str, Any]] = {}
     note_rows: list[dict[str, Any]] = []
     for note in notes:
         body = str(note.get("body") or "")
+        who = reviewer_of(body)
         meta = note_meta(body)
         for st_loc, st in since_statuses(body).items():
-            if st_loc in findings and st != "not checked":
-                findings[st_loc]["fate"] = st
-        for f in hare_r1.parse_old_findings(body):
-            row = findings.setdefault(f["loc"], {"loc": f["loc"], "sev": f["sev"], "issue": f["issue"], "fate": "open", "first": note.get("submitted_at", "")})
+            key = f"{who}:{st_loc}"
+            if key in findings and st != "not checked":
+                findings[key]["fate"] = st
+        found = findings_of(body)
+        for f in found:
+            key = f"{who}:{f['loc']}"
+            row = findings.setdefault(key, {"loc": f["loc"], "by": who, "sev": f["sev"], "issue": f["issue"], "fate": "open", "first": note.get("submitted_at", "")})
             row["sev"], row["issue"] = f["sev"], f["issue"]
-        note_rows.append({"at": note.get("submitted_at", ""), "url": note.get("html_url", ""), **meta, "findings": len(hare_r1.parse_old_findings(body))})
+        url = note.get("html_url", "")
+        extra = bot_log.get(url, {}) if who == "hare-bot" else {}
+        note_rows.append({"at": note.get("submitted_at", ""), "url": url, "by": who, **meta, **extra, "findings": len(found)})
     # A resolved Hare thread marks the one finding on that path AND line (Hare
     # Bot, #246): one resolved thread on a file must not resolve every finding
     # on the file. GitHub moves the line as the diff moves, so `originalLine`
@@ -95,8 +154,8 @@ def pr_rows(pr: dict[str, Any], reviews: list[dict[str, Any]], comments: list[di
             for ln in (t.get("line"), t.get("originalLine")):
                 if ln:
                     resolved.add(f"{t.get('path', '')}:{ln}")
-    for loc, row in findings.items():
-        if row["fate"] == "open" and loc in resolved:
+    for row in findings.values():
+        if row["fate"] == "open" and row["loc"] in resolved:
             row["fate"] = "resolved"
     scores = []
     for c in comments:
@@ -112,6 +171,25 @@ def pr_rows(pr: dict[str, Any], reviews: list[dict[str, Any]], comments: list[di
         "findings": list(findings.values()),
         "scores": scores,
     }
+
+
+def by_reviewer(entries: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """The same counts per reviewer, so the App and Hare Bot can be compared."""
+    out: dict[str, dict[str, Any]] = {}
+    for who in ("hare", "hare-bot"):
+        notes = [n for e in entries for n in e["notes"] if n.get("by") == who]
+        fs = [f for e in entries for f in e["findings"] if f.get("by") == who]
+        reals = [f for f in fs if f["sev"] == "real"]
+        fates = Counter(f["fate"] for f in reals)
+        mins = [n["minutes"] for n in notes if n.get("minutes")]
+        out[who] = {
+            "notes": len(notes),
+            "real": len(reals),
+            "skip": len(fs) - len(reals),
+            "real_fixed_or_resolved": fates.get("fixed", 0) + fates.get("resolved", 0),
+            "avg_minutes": round(sum(mins) / len(mins), 1) if mins else None,
+        }
+    return out
 
 
 def summarize(entries: list[dict[str, Any]]) -> dict[str, Any]:
@@ -132,6 +210,7 @@ def summarize(entries: list[dict[str, Any]]) -> dict[str, Any]:
         "scores": len(scores),
         "score_avg": round(sum(scores) / len(scores), 2) if scores else None,
         "cut_notes": cuts,
+        "by_reviewer": by_reviewer(entries),
     }
 
 
@@ -154,6 +233,11 @@ def render_md(entries: list[dict[str, Any]], summary: dict[str, Any], built: str
     ]
     for hop, n in sorted(summary["hops"].items(), key=lambda kv: -kv[1]):
         lines.append(f"| `{hop}` | {n} |")
+    lines += ["", "## By reviewer", "", "| Reviewer | Notes | Real | Skip | Real fixed or resolved | Minutes per note |", "| --- | --- | --- | --- | --- | --- |"]
+    for who, r in summary.get("by_reviewer", {}).items():
+        label = "Hare (App)" if who == "hare" else "Hare Bot (Grok Bot)"
+        mins = f"{r['avg_minutes']}" if r.get("avg_minutes") is not None else "no log"
+        lines.append(f"| {label} | {r['notes']} | {r['real']} | {r['skip']} | {r['real_fixed_or_resolved']} | {mins} |")
     lines += ["", "## By PR", "", "| PR | Notes | Real | Skip | Fates of real | Scores |", "| --- | --- | --- | --- | --- | --- |"]
     for e in sorted(entries, key=lambda e: -int(e["pr"] or 0)):
         reals = [f for f in e["findings"] if f["sev"] == "real"]
@@ -259,8 +343,9 @@ def _threads(owner: str, repo: str, n: int, token: str) -> list[dict[str, Any]]:
     return [t for t in nodes if hare_r1.TOKEN in str((((t.get("comments") or {}).get("nodes") or [{}])[0] or {}).get("body") or "")]
 
 
-def build(owner: str, repo: str, token: str, max_prs: int = 200) -> dict[str, Any]:
+def build(owner: str, repo: str, token: str, max_prs: int = 200, docs: Path | None = None) -> dict[str, Any]:
     entries: list[dict[str, Any]] = []
+    bot_log = read_bot_logs(docs) if docs else {}
     page = 1
     while len(entries) < max_prs:
         prs = hare_r1.github_api("GET", f"/repos/{owner}/{repo}/pulls?state=all&sort=updated&direction=desc&per_page=50&page={page}", token)
@@ -269,10 +354,10 @@ def build(owner: str, repo: str, token: str, max_prs: int = 200) -> dict[str, An
         for pr in prs:
             n = int(pr["number"])
             reviews = hare_r1.github_api("GET", f"/repos/{owner}/{repo}/pulls/{n}/reviews?per_page=100", token)
-            if not any(hare_r1.TOKEN in str(r.get("body") or "") for r in reviews):
+            if not any(reviewer_of(str(r.get("body") or "")) for r in reviews):
                 continue
             comments = hare_r1.github_api("GET", f"/repos/{owner}/{repo}/issues/{n}/comments?per_page=100", token)
-            entry = pr_rows(pr, reviews, comments, _threads(owner, repo, n, token))
+            entry = pr_rows(pr, reviews, comments, _threads(owner, repo, n, token), bot_log)
             entries.append(entry)
         page += 1
     from datetime import datetime, timezone
@@ -293,8 +378,8 @@ def main(argv: list[str] | None = None) -> int:
         print("hare ledger: GITHUB_TOKEN and GITHUB_REPOSITORY are required", file=sys.stderr)
         return 2
     owner, repo = full.split("/", 1)
-    ledger = build(owner, repo, token, args.max_prs)
     out = Path(args.out)
+    ledger = build(owner, repo, token, args.max_prs, out)
     out.mkdir(parents=True, exist_ok=True)
     (out / LEDGER_JSON).write_text(json.dumps(ledger, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
     (out / LEDGER_MD).write_text(render_md(ledger["entries"], ledger["summary"], ledger["built"]), encoding="utf-8")
