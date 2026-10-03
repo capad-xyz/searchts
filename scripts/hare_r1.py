@@ -10,6 +10,7 @@ import re
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 TOKEN = "<!-- searchts-r1-review -->"
@@ -897,10 +898,13 @@ def build_user(
     since: str = "",
     old: list[dict[str, str]] | None = None,
     ask: str = "",
+    ledger: str = "",
 ) -> str:
     if len(diff) > MAX_DIFF:
         diff = diff[:MAX_DIFF] + "\n...[truncated]..."
     extra = ""
+    if ledger:
+        extra += ledger + "\n\n"
     if since:
         rows = "\n".join(f"- {o['sev']} `{o['loc']}`: {o['issue']}" for o in (old or [])) or "- (none)"
         extra += (
@@ -1087,10 +1091,46 @@ def wants_deep(comment: str) -> bool:
     return bool(m and re.search(r"\b(deep|think)\b", m.group(1), re.I))
 
 
+def is_score(comment: str) -> bool:
+    """`/hare score 1..5 <why>`: the owner's verdict on a note. Recorded by the
+    ledger (scripts/hare_ledger.py), not a request for another review."""
+    return bool(re.search(r"(?:^|\s)[/@]hare\s+score\s+[1-5]\b", comment or "", re.I))
+
+
 def ask_from(comment: str) -> str:
     """The short instruction after @hare. The workflow only passes it on from people with write access."""
     m = re.search(r"@hare\b[:,]?\s*(.*)", comment or "", re.I | re.S)
     return _no_em(_plain(m.group(1)))[:200] if m else ""
+
+
+LEDGER_PATH = os.environ.get("HARE_LEDGER", "docs/hare-ledger.json")
+
+
+def ledger_block(diff: str) -> str:
+    """What the ledger knows that bears on this diff: the owner's recent scores
+    and earlier findings on these files, with their fate. Memory in the repo,
+    not in a vendor (PLAN R2b). Empty when there is no ledger yet."""
+    try:
+        data = json.loads(Path(LEDGER_PATH).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    try:
+        import hare_ledger
+    except ImportError:
+        return ""
+    paths = {m.group(1) for m in re.finditer(r"^\+\+\+ b/(\S+)", diff or "", re.M)}
+    fb = hare_ledger.owner_feedback(data)
+    prior = hare_ledger.prior_findings(data, paths)
+    if not fb and not prior:
+        return ""
+    lines = ["## Ledger (what the owner said about earlier notes, and earlier findings on these files)"]
+    if fb:
+        lines.append("Owner scores, newest first. A low score with a reason is a rule for this note:")
+        lines += [f"- {x}" for x in fb]
+    if prior:
+        lines.append("Earlier findings on files in this diff. Do not raise a fixed or resolved one again unless the code regressed:")
+        lines += [f"- {x}" for x in prior]
+    return "\n".join(lines)
 
 
 def parse_old_findings(body: str) -> list[dict[str, str]]:
@@ -1342,6 +1382,9 @@ def _hare_once(
     event = _env("GITHUB_EVENT_NAME")
     ask = ask_from(_env("HARE_ASK")) if event == "issue_comment" else ""
     deep = wants_deep(_env("HARE_ASK")) if event == "issue_comment" else False
+    if event == "issue_comment" and is_score(_env("HARE_ASK")):
+        print("hare: score recorded for the ledger; not a review")  # R2b
+        return 0
     pull = f"/repos/{owner}/{repo}/pulls/{n}"
     pr_data = github_api("GET", pull, token)
     sha = sha or pr_data.get("head", {}).get("sha") or ""
@@ -1419,7 +1462,7 @@ def _hare_once(
     runs = wait_checks(owner, repo, sha, token)
     check_state, check_notes = classify_checks(runs)
     checks_txt = f"{check_state}: " + ", ".join(check_notes[:12])
-    user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask)
+    user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask, ledger_block(model_diff))
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
 
     providers = build_provider_chain(

@@ -1,0 +1,1291 @@
+{
+ "built": "2026-10-03",
+ "repo": "capad-xyz/searchts",
+ "summary": {
+  "prs": 45,
+  "notes": 72,
+  "real": 3,
+  "skip": 19,
+  "real_fates": {
+   "open": 3
+  },
+  "real_fixed_or_resolved": 0,
+  "hops": {
+   "groq:openai/gpt-oss-120b": 8,
+   "gemini:gemini-3.1-flash-lite": 2,
+   "gemini:gemini-3.1-flash-lite · deep": 1,
+   "gemini:gemini-3.5-flash": 1,
+   "openrouter:qwen/qwen3.8-27b:free": 4,
+   "nous:meituan/longcat-2.5-preview:free": 1
+  },
+  "scores": 0,
+  "score_avg": null,
+  "cut_notes": 0
+ },
+ "entries": [
+  {
+   "pr": 245,
+   "title": "ci(hare): repair walks strings, a restart never shrinks the review",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T22:23:18Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/245#pullrequestreview-5403071728",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "medium",
+     "cost": "5,379 prompt + 1,306 answer + 1,045 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:842",
+     "sev": "real",
+     "issue": "When `tail` starts with a JSON object but the restart isn’t longer than the kept findings, `stitched` is never assigned, leading to an UnboundLocalError later.",
+     "fate": "open",
+     "first": "2026-10-03T22:23:18Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 244,
+   "title": "ci(hare): near the limit, wrap up instead of throwing the answer away",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T22:09:53Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/244#pullrequestreview-5402987918",
+     "hop": "gemini:gemini-3.1-flash-lite",
+     "effort": "high",
+     "cost": "11,670 prompt + 183 answer + 0 reasoning tokens on `gemini:gemini-3.1-flash-lite`, 17 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-03T22:20:13Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/244#pullrequestreview-5403046663",
+     "hop": "gemini:gemini-3.1-flash-lite · deep",
+     "effort": "high",
+     "cost": "11,685 prompt + 165 answer + 0 reasoning tokens on `gemini:gemini-3.1-flash-lite · deep`, 18 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:67",
+     "sev": "skip",
+     "issue": "The new constants are defined but not grouped with existing HARE_ settings.",
+     "fate": "open",
+     "first": "2026-10-03T22:09:53Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py:845",
+     "sev": "skip",
+     "issue": "The `LAST_USAGE` update logic for the continuation call assumes `prompt_tokens` is always present in the tail usage.",
+     "fate": "open",
+     "first": "2026-10-03T22:20:13Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 240,
+   "title": "ci(hare): /hare deep turns thinking on, one notch",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T21:03:59Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/240#pullrequestreview-5402735598",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:53",
+     "sev": "skip",
+     "issue": "Added comment lines exceed typical 80‑character line length limits.",
+     "fate": "open",
+     "first": "2026-10-03T21:03:59Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 239,
+   "title": "docs: AI use is fine if the Models section names the slug",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T20:46:25Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/239#pullrequestreview-5402654046",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CONTRIBUTING.md",
+     "sev": "skip",
+     "issue": "The example Models table inside the new section shows a \"medium\" effort for a \"wrote\" role, while the PR’s own Models table uses \"low\"; the inconsistency could confuse contributors.",
+     "fate": "open",
+     "first": "2026-10-03T20:46:25Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 238,
+   "title": "docs(hare): thinking off vs thinking on, measured on seven PRs",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T20:32:04Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/238#pullrequestreview-5402613253",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "docs/hare-thinking-ab.md",
+     "sev": "skip",
+     "issue": "The file does not end with a newline, violating the repository's trailing‑newline style rule.",
+     "fate": "open",
+     "first": "2026-10-03T20:32:04Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 236,
+   "title": "chore(hare): refresh the free catalogs against what answers",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T19:02:27Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/236#pullrequestreview-5402309069",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-03T20:31:44Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/236#pullrequestreview-5402612414",
+     "hop": "gemini:gemini-3.5-flash",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-03T20:55:03Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/236#pullrequestreview-5402698164",
+     "hop": "gemini:gemini-3.1-flash-lite",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": ".github/workflows/hare.yml",
+     "sev": "skip",
+     "issue": "HARE_GROQ_MODEL env var now contains two models separated by a comma, but the variable name implies a single model; could be confusing for future maintainers.",
+     "fate": "open",
+     "first": "2026-10-03T19:02:27Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py:74",
+     "sev": "skip",
+     "issue": "Setting HARE_GROQ_DEFAULT to an empty string is fine, but ensure the parser doesn't try to request an empty model name.",
+     "fate": "open",
+     "first": "2026-10-03T20:31:44Z"
+    },
+    {
+     "loc": "tests/test_hare_r1.py:64",
+     "sev": "skip",
+     "issue": "The regex only looks for single quotes. Double-quoted fallbacks in workflow expressions will be missed.",
+     "fate": "open",
+     "first": "2026-10-03T20:55:03Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 235,
+   "title": "ci(hare): a hop answers, or says why it did not",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T20:40:48Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/235#pullrequestreview-5402636639",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "",
+     "cut": "",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-03T20:54:39Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/235#pullrequestreview-5402695590",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": ".github/workflows/hare.yml:51",
+     "sev": "skip",
+     "issue": "The PR body says 'Job timeout 20 → 25 min' and claims 'the existing test checks the sum', but the diff sets 30 and no test asserts the workflow timeout.",
+     "fate": "still applies",
+     "first": "2026-10-03T20:40:48Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py:49",
+     "sev": "skip",
+     "issue": "The comment says the budget 'has to hold two hung hops and still reach a live one', but 2 × 300 s = 600 s = the entire budget, so a third hop never starts.",
+     "fate": "fixed",
+     "first": "2026-10-03T20:40:48Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py:45",
+     "sev": "skip",
+     "issue": "The new budget comment says two full hangs spend the 600 s budget, which contradicts the intended guarantee that the budget should hold two hung hops and still allow a live hop.",
+     "fate": "open",
+     "first": "2026-10-03T20:54:39Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py:71",
+     "sev": "skip",
+     "issue": "The model‑list comment was re‑phrased but now splits a sentence across lines, reducing readability.",
+     "fate": "open",
+     "first": "2026-10-03T20:54:39Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 237,
+   "title": "fix(hare): make the reasoning hop answer, and stop losing the answer",
+   "state": "closed",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T20:30:48Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/237#pullrequestreview-5402609700",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "",
+     "cut": "",
+     "findings": 3
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:272",
+     "sev": "real",
+     "issue": "The fence regex uses `\\\\` (literal backslash) instead of triple backticks. The fence path is dead code; the test passes only because `json_objects` covers the same case. A future maintainer who trusts the fence path will be surprised.",
+     "fate": "open",
+     "first": "2026-10-03T20:30:48Z"
+    },
+    {
+     "loc": "tests/test_hare_r1.py:789",
+     "sev": "skip",
+     "issue": "`test_hare_once_accepts_an_ordered_hop_override` inspects `co_varnames` rather than calling the function with a `hop_override` and asserting the provider list is honoured. It will pass even if the parameter is ignored at runtime.",
+     "fate": "open",
+     "first": "2026-10-03T20:30:48Z"
+    },
+    {
+     "loc": "scripts/hare_local.py:172",
+     "sev": "skip",
+     "issue": "Setting `os.environ[\"GITHUB_EVENT_NAME\"]` mutates the process globally. If any imported module reads that variable at import time or in a later call, it will see the spoofed value. A `contextlib` or explicit parameter would be safer, but the current scope (single script, single call) makes the risk low.",
+     "fate": "open",
+     "first": "2026-10-03T20:30:48Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 234,
+   "title": "ci(hare): a reasoning hop now answers instead of dying silently",
+   "state": "closed",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T17:58:56Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/234#pullrequestreview-5401971087",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:52",
+     "sev": "skip",
+     "issue": "`OR_REASONING` carries `\"exclude\": True`, which is not a documented OpenRouter `reasoning` field. The 400-retry in `chat_complete` self-heals, but every OpenRouter hop will pay one extra round-trip on first contact.",
+     "fate": "open",
+     "first": "2026-10-03T17:58:56Z"
+    },
+    {
+     "loc": "scripts/hare_local.py:193",
+     "sev": "skip",
+     "issue": "File has no trailing newline (the diff shows `\\ No newline at end of file`). POSIX text files should end with one.",
+     "fate": "open",
+     "first": "2026-10-03T17:58:56Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 233,
+   "title": "chore(hare): print the hops that died, not just the one that worked",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T16:55:21Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/233#pullrequestreview-5401750523",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:1082",
+     "sev": "real",
+     "issue": "The new `print(f\"hare dead {dead}\")` writes to stdout, but the repo policy (P4.6) mandates that any diagnostic output must go to stderr, never stdout.",
+     "fate": "open",
+     "first": "2026-10-03T16:55:21Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 224,
+   "title": "feat(hare): Groq plus Gemini hops, wider token budget",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T16:48:47Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/224#pullrequestreview-5401730407",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 232,
+   "title": "chore(main): release 0.14.0",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T16:45:19Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5401711247",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md",
+     "sev": "skip",
+     "issue": "Extra blank lines before the new version heading make the changelog look untidy.",
+     "fate": "open",
+     "first": "2026-10-03T16:45:19Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 230,
+   "title": "chore(main): release 0.13.1",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T15:52:18Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/230#pullrequestreview-5401527176",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "pyproject.toml:5",
+     "sev": "skip",
+     "issue": "The project description was rewritten in a release PR, but the PR body and CHANGELOG only mention the F25 fix. Undocumented scope.",
+     "fate": "open",
+     "first": "2026-10-03T15:52:18Z"
+    },
+    {
+     "loc": "server.json:5",
+     "sev": "skip",
+     "issue": "server.json description also changed to new copy, same undocumented scope as pyproject.toml.",
+     "fate": "open",
+     "first": "2026-10-03T15:52:18Z"
+    }
+   ],
+   "scores": []
+  },
+  {
+   "pr": 126,
+   "title": "chore: bump types-requests from 2.32.4.20260107 to 2.33.0.20260712",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T14:59:11Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/126#pullrequestreview-5292723973",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 223,
+   "title": "docs(plan): R2, Hare as a product with its own identity",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-02T00:41:31Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/223#pullrequestreview-5387166296",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 221,
+   "title": "docs: spell the PR shape from #103 and #115",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-01T21:22:47Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/221#pullrequestreview-5385703123",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-01T21:25:01Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/221#pullrequestreview-5385728572",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 125,
+   "title": "chore: bump types-pyyaml from 6.0.12.20260724 to 6.0.12.20260815",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T14:59:48Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/125#pullrequestreview-5292732244",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 124,
+   "title": "chore: bump yt-dlp from 2026.7.4 to 2026.8.19",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T14:59:32Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/124#pullrequestreview-5292728645",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 198,
+   "title": "chore(main): release 0.13.0",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-30T00:42:03Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5360177603",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-30T11:13:03Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5365389944",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-30T13:25:08Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5366799906",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-30T13:46:53Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5367063052",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-01T00:51:54Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5373676975",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-01T01:17:20Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5373825807",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-01T01:20:53Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5373844854",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-02T00:51:36Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5387217684",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 220,
+   "title": "fix: a short article is never replaced by a related list (F23f)",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-01T20:56:52Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/220#pullrequestreview-5385417531",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 216,
+   "title": "chore: refresh Hare free catalogs",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-01T16:16:30Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/216#pullrequestreview-5382199773",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 214,
+   "title": "docs: note 0.13's read changes in README and PLAN",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-01T01:32:09Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/214#pullrequestreview-5373911285",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 209,
+   "title": "fix: accordion buttons inside a heading read as that heading (F23a)",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-30T16:34:39Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/209#pullrequestreview-5369157767",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 199,
+   "title": "docs(plan): fold distribution verdict (F22, P3.7c, X7/LI1)",
+   "state": "closed",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-30T11:15:01Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/199#pullrequestreview-5365410751",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 201,
+   "title": "feat(cli): searchts install --browser",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-30T10:47:48Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/201#pullrequestreview-5365147505",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 193,
+   "title": "chore(main): release 0.12.0",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-29T19:42:14Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/193#pullrequestreview-5357512833",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-29T22:36:11Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/193#pullrequestreview-5359357730",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 185,
+   "title": "docs: P1.5 closed + Windows one-install note",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-24T21:39:43Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/185#pullrequestreview-5310554697",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 184,
+   "title": "chore(main): release 0.11.1",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-24T21:13:43Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/184#pullrequestreview-5310294612",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 174,
+   "title": "chore(main): release 0.11.0",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T16:55:13Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5294035977",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-23T17:31:45Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5294505917",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-23T18:27:22Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5295102307",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-23T19:57:44Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5296095652",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-24T05:19:22Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5300123567",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-24T05:34:54Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/174#pullrequestreview-5300214089",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 181,
+   "title": "docs: tests stay, the user runs the live check",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-24T05:24:21Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/181#pullrequestreview-5300152484",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 180,
+   "title": "docs: the next U1 session is manual",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-24T05:16:50Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/180#pullrequestreview-5300109279",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 175,
+   "title": "docs: new reach rule, Laguna called read_url first",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T17:18:58Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/175#pullrequestreview-5294346486",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 171,
+   "title": "docs: first U1 session failed",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T16:51:59Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/171#pullrequestreview-5293994614",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 173,
+   "title": "fix: call read_url first, a login form is not the page",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T16:44:25Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/173#pullrequestreview-5293907452",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-23T16:51:58Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/173#pullrequestreview-5293994537",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 172,
+   "title": "docs: no searchts mcp stop",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T16:29:44Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/172#pullrequestreview-5293756175",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 38,
+   "title": "feat(site): searchts.capad.fyi landing page + Cloudflare Pages deploy",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T15:04:27Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/38#pullrequestreview-5292790759",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 170,
+   "title": "docs: F11 note is not a fix",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T11:45:27Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/170#pullrequestreview-5290508086",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 169,
+   "title": "docs: U1 harness protocol, not a closed gate",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T11:36:33Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/169#pullrequestreview-5290428333",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-23T11:41:05Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/169#pullrequestreview-5290468363",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 168,
+   "title": "docs: F11 Windows editable install vs a live searchts.exe",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T11:32:52Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/168#pullrequestreview-5290396028",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 165,
+   "title": "chore(main): release 0.10.1",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T09:33:25Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/165#pullrequestreview-5289220805",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-23T09:57:25Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/165#pullrequestreview-5289472315",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 166,
+   "title": "docs: F18 paid searchts is hosted read first",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T09:40:51Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/166#pullrequestreview-5289298242",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 156,
+   "title": "chore(main): release 0.10.0",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-21T20:08:58Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5271330930",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-22T10:50:03Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5277012990",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-23T06:54:18Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5287805509",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-23T07:11:07Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5287928651",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-23T08:31:47Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5288630428",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-23T08:34:53Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/156#pullrequestreview-5288657272",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 160,
+   "title": "docs: 0.9.0 hammer catalog (P1.4)",
+   "state": "closed",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-22T18:42:13Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/160#pullrequestreview-5282182278",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 141,
+   "title": "docs: F8b — llms.txt and update copy match F8",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-08T09:28:23Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/141#pullrequestreview-5139883044",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  },
+  {
+   "pr": 134,
+   "title": "docs: Hare posts a review; inline = real rows only",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-06T17:48:09Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/134#pullrequestreview-5126121187",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-09-06T17:53:23Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/134#pullrequestreview-5126132310",
+     "hop": "",
+     "effort": "",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": []
+  }
+ ]
+}

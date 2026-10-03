@@ -1,0 +1,45 @@
+name: hare-ledger
+
+# R2b: the findings ledger, rebuilt weekly from Hare's own notes and the owner's
+# /hare score comments, and offered as a PR. No hidden memory.
+on:
+  schedule:
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the ledger
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python scripts/hare_ledger.py --out docs/
+      - name: Open a PR when it changed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet -- docs/hare-ledger.json docs/hare-ledger.md; then
+            echo "ledger unchanged"; exit 0
+          fi
+          branch="chore/hare-ledger-$(date -u +%Y-%m-%d)"
+          git config user.name "searchts-hare[bot]"
+          git config user.email "searchts-hare[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add docs/hare-ledger.json docs/hare-ledger.md
+          git commit -m "chore(hare): ledger $(date -u +%Y-%m-%d)"
+          git push -f origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore(hare): ledger $(date -u +%Y-%m-%d)" \
+            --body "$(printf '## What\n\nThe findings ledger, rebuilt from Hare notes, Since lines, resolved threads and /hare score comments (PLAN R2b).\n\n## Checklist\n\n- [x] chore: does not move the package version\n\n## Models\n\n| Role | Model | Effort | Purpose |\n| --- | --- | --- | --- |\n| wrote | scripts/hare_ledger.py (no model) | low | AI wrote it |\n')" \
+            || echo "PR already open for $branch"
