@@ -34,20 +34,29 @@ OR_BASE = "https://openrouter.ai/api/v1"
 ZEN_BASE = "https://opencode.ai/zen/v1"
 GROQ_BASE = "https://api.groq.com/openai/v1"
 GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
-LLM_TIMEOUT_SEC = 60
+# A hop's answer must fit, or the tokens it spent are thrown away. Reasoning
+# models spend max_tokens thinking and return content "" with
+# finish_reason=length: measured 2026-10-02 (PR 222 payload, space-bunny-alpha,
+# 2500 and 8000) and 2026-10-03 (12000 on PR 224, still empty). So where the
+# gateway honours the knob, the hop is told not to think: Nous with
+# effort=none answered the same payload with 0 reasoning tokens. Where it does
+# not, the budget is the floor. A 60 s call cut off the hops that did answer.
+LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "300"))
 # Model hops stop after this, so the needed note posts before the job timeout.
-HOP_BUDGET_S = 360
-# Reasoning models burn the whole budget thinking and return content None
-# (finish_reason length). Proven 2026-10-02 on the real PR 222 payload:
-# space-bunny-alpha ate 2500 and 8000 max_tokens with zero content.
-# So the budget is wide and OpenRouter hops cap reasoning effort.
-LLM_MAX_TOKENS = 8000
+# Live on PR 235 (2026-10-03): three Nous hops hung for the whole 60 s each and
+# spent a 360 s budget before the one OpenRouter hop that answers got its turn.
+# 600 s holds one full 300 s hang plus the quick failures around it and still
+# reaches a live hop; two full hangs spend it, and that is the case the Nous
+# effort knob is there to prevent.
+HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "600"))
+LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "16000"))
+NOUS_REASONING = {"effort": "none"}
 OR_REASONING = {"effort": "low", "exclude": True}
 # Gemini's OpenAI-compatibility layer maps a top-level reasoning_effort onto the
 # thinking budget: "low" is 1024 tokens for the 2.5 models. Without it, 2.5 Flash
-# spends the shared 8000-token output budget thinking and returns empty content,
-# which is the failure this whole chain exists to escape. This is NOT the
-# OpenRouter shape (a nested "reasoning" object), so the hop carries its own.
+# spends the shared output budget thinking and returns empty content, which is
+# the failure this whole chain exists to escape. This is NOT the OpenRouter
+# shape (a nested "reasoning" object), so the hop carries its own.
 GEMINI_REASONING = {"reasoning_effort": "low"}
 
 # Fixed list, not a router. Live 2026-10-02.
@@ -65,10 +74,9 @@ HARE_NOUS_DEFAULT = (
     "poolside/laguna-s-2.1:free,"
     "meituan/longcat-2.5-preview:free,"
     # Last, not first: the empty-content failure above was measured against this
-    # slug on OpenRouter, not on Nous, so it is not dropped on a guess. But Nous
-    # hops carry no reasoning control, so if it fails here it burns up to
-    # LLM_TIMEOUT_S of HOP_BUDGET_S before the chain moves on. Try it after the
-    # two with no such history.
+    # slug on OpenRouter, not on Nous, so it is not dropped on a guess. Nous
+    # hops now send effort none, so a miss here is cheap, but it keeps the
+    # order the measurement earned.
     "stealth/space-bunny-alpha"
 )
 HARE_OR_DEFAULT = (
@@ -211,23 +219,80 @@ def parse_plus_lines(diff: str) -> dict[str, set[int]]:
     return out
 
 
+def json_objects(text: str) -> list[dict[str, Any]]:
+    """Every JSON object in the text, in order.
+
+    Models answer prose then JSON, and the prose quotes the diff. A slice from
+    the first "{" to the last "}" put a quoted ``${{ secrets... }}`` at the
+    front and threw a finished review away (PR 222). This walks braces, skips
+    the ones inside strings, and when a closed span is not JSON it looks inside
+    it, so an object wrapped in prose braces is still found.
+    """
+    out: list[dict[str, Any]] = []
+    i, n = 0, len(text)
+    while True:
+        start = text.find("{", i)
+        if start < 0:
+            return out
+        depth, in_str, esc, end = 0, False, False, -1
+        for j in range(start, n):
+            ch = text[j]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = j
+                    break
+        if end < 0:
+            i = start + 1  # never closed: the objects after it still count
+            continue
+        try:
+            data = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            i = start + 1  # closed but not JSON: look inside it
+            continue
+        if isinstance(data, dict):
+            out.append(data)
+        i = end + 1
+
+
 def extract_json(text: str) -> dict[str, Any] | None:
+    """The review object in a model answer, or None.
+
+    A fenced block wins when it parses. Otherwise the last object carrying
+    ``findings`` (then ``summary``) is the answer; earlier ones are the model
+    sketching. With neither key anywhere, the first object.
+    """
     text = text.strip()
     if not text:
         return None
     fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S)
-    blob = fence.group(1) if fence else None
-    if blob is None:
-        start, end = text.find("{"), text.rfind("}")
-        if start >= 0 and end > start:
-            blob = text[start : end + 1]
-    if not blob:
+    if fence:
+        try:
+            data = json.loads(fence.group(1))
+        except json.JSONDecodeError:
+            data = None
+        if isinstance(data, dict):
+            return data
+    objs = json_objects(text)
+    if not objs:
         return None
-    try:
-        data = json.loads(blob)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
+    for key in ("findings", "summary"):
+        hits = [o for o in objs if key in o]
+        if hits:
+            return hits[-1]
+    return objs[0]
 
 
 def normalize_findings(findings: list[Any]) -> list[dict[str, Any]]:
@@ -456,18 +521,46 @@ def chat_complete(
     req.add_header("HTTP-Referer", "https://github.com/capad-xyz/searchts")
     req.add_header("X-Title", "searchts-hare")
     try:
-        with urllib.request.urlopen(req, timeout=LLM_TIMEOUT_SEC) as resp:
-            payload = json.loads(resp.read())
+        payload = _post(req, LLM_TIMEOUT_SEC)
     except urllib.error.HTTPError as e:
         err = e.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"LLM {e.code} {base} {model}: {err[:400]}") from e
+        if not ("reasoning" in body and e.code in {400, 404, 422} and "reason" in err.lower()):
+            raise RuntimeError(f"LLM {e.code} {base} {model}: {err[:400]}") from e
+        # A gateway that does not know the reasoning knob must not cost the hop.
+        # The retry can fail too, and that failure has to keep its body.
+        req.data = json.dumps({k: v for k, v in body.items() if k != "reasoning"}).encode()
+        try:
+            payload = _post(req, LLM_TIMEOUT_SEC)
+        except urllib.error.HTTPError as e2:
+            err2 = e2.read().decode("utf-8", errors="replace")
+            raise RuntimeError(f"LLM {e2.code} {base} {model} (without reasoning knob): {err2[:400]}") from e2
     choices = payload.get("choices") or []
     if not choices:
         raise RuntimeError(f"LLM empty choices {base} {model}")
-    content = choices[0].get("message", {}).get("content") or ""
+    choice = choices[0] if isinstance(choices[0], dict) else {}
+    content = (choice.get("message") or {}).get("content") or ""
     if not str(content).strip():
-        raise RuntimeError(f"LLM empty content {base} {model}")
+        finish = str(choice.get("finish_reason") or "?")
+        usage = payload.get("usage") or {}
+        spent = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+        detail = f"finish_reason={finish}, max_tokens={LLM_MAX_TOKENS}"
+        if spent is not None:
+            detail += f", reasoning_tokens={spent}"
+        raise RuntimeError(f"LLM empty content {base} {model} ({detail})")
     return str(content)
+
+
+def _post(req: urllib.request.Request, timeout: int) -> dict[str, Any]:
+    """One HTTP call. A timeout names itself instead of surfacing as a socket error."""
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError:
+        raise
+    except (TimeoutError, urllib.error.URLError) as e:
+        if isinstance(e, urllib.error.URLError) and "timed out" not in str(e.reason).lower():
+            raise RuntimeError(f"LLM network error {req.full_url}: {e.reason}") from e
+        raise RuntimeError(f"LLM timeout after {timeout}s {req.full_url} (raise HARE_LLM_TIMEOUT_S)") from e
 
 
 SYSTEM = """You are Hare, an automated PR reviewer for the searchts repo.
@@ -558,6 +651,16 @@ def _short_fail(part: str) -> str:
         return f"{name}: free tier is TUI-only"
     if "404" in p or "unavailable" in low:
         return f"{name}: model not available"
+    if "empty content" in low:
+        if "finish_reason=length" in low:
+            return f"{name}: ran out of tokens while thinking, answered nothing"
+        return f"{name}: answered nothing"
+    if "no json object" in low:
+        return f"{name}: answered, but not in JSON"
+    if "timeout after" in low:
+        return f"{name}: no answer within {LLM_TIMEOUT_SEC}s"
+    if "hop budget" in low:
+        return p[:160]
     short = p.split("{", 1)[0].strip().rstrip(":")
     return (short or name)[:160]
 
@@ -566,9 +669,16 @@ def needed_body(why: str) -> str:
     """Graceful nag. Raw errors stay behind a details fold. Offer /hare retry."""
     parts = [x.strip() for x in why.split(" | ") if x.strip()] or [why.strip()]
     hops = "\n".join(f"- {_short_fail(x)}" for x in parts)
+    low = why.lower()
+    if "finish_reason=length" in low:
+        cause = "Review hops ran out of tokens while thinking, not a busy provider."
+    elif "429" in why or "rate limit" in low or "5xx" in low or "503" in why or "502" in why:
+        cause = "Review hops were busy or blocked."
+    else:
+        cause = "Review hops did not answer."
     return _no_em(
         f"{NEEDED}\n\n"
-        "🐰 Could not finish this pass. Review hops were busy or blocked. "
+        f"🐰 Could not finish this pass. {cause} "
         "This is not a review.\n\n"
         "Reply **`/hare`** to retry. Or Actions → hare → Run workflow "
         "(optional OpenRouter model override).\n\n"
@@ -877,7 +987,7 @@ def build_provider_chain(
     options: dict[str, dict[str, Any]] = {
         "groq": {},
         "gemini": GEMINI_REASONING,
-        "nous": {},
+        "nous": {"reasoning": NOUS_REASONING},
         "openrouter": {"reasoning": OR_REASONING},
         "zen": {},
     }
