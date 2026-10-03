@@ -868,7 +868,7 @@ def _post(req: urllib.request.Request, timeout: int) -> dict[str, Any]:
 
 
 SYSTEM = """You are Hare, an automated PR reviewer for the searchts repo.
-Read AGENTS.md rules in the user message. Review and report. Do not fix.
+Read AGENTS.md rules in the user message, and HARE.md: that is the owner's own list of what Hare missed before. Review and report. Do not fix.
 Voice: fun bot, witty and short, substance first. No em dashes. No first person.
 Emojis and emotes are welcome in your own wording when they add to the voice. The Action adds the markers (🔴 real, 🟡 skip, 🐰 on the checks fold); do not add those yourself.
 Never write "fine to merge", "LGTM" or a score; the Action sets Hold from CI and real findings.
@@ -899,10 +899,13 @@ def build_user(
     old: list[dict[str, str]] | None = None,
     ask: str = "",
     ledger: str = "",
+    hare_md: str = "",
 ) -> str:
     if len(diff) > MAX_DIFF:
         diff = diff[:MAX_DIFF] + "\n...[truncated]..."
     extra = ""
+    if hare_md:
+        extra += f"## HARE.md (the owner's rules for Hare on this repo)\n{hare_md[:8_000]}\n\n"
     if ledger:
         extra += ledger + "\n\n"
     if since:
@@ -1462,11 +1465,18 @@ def _hare_once(
         agents = base64.b64decode(file.get("content") or "").decode("utf-8", errors="replace")
     except Exception:
         agents = "(AGENTS.md unread)"
+    hare_md = ""
+    try:  # HARE.md: the owner's rules for Hare, from the base branch (R2c). Optional.
+        base_ref = str((pr_data.get("base") or {}).get("sha") or "main")
+        file = github_api("GET", f"/repos/{owner}/{repo}/contents/HARE.md?ref={base_ref}", token)
+        hare_md = base64.b64decode(file.get("content") or "").decode("utf-8", errors="replace")
+    except Exception:
+        hare_md = ""
 
     runs = wait_checks(owner, repo, sha, token)
     check_state, check_notes = classify_checks(runs)
     checks_txt = f"{check_state}: " + ", ".join(check_notes[:12])
-    user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask, ledger_block(model_diff))
+    user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask, ledger_block(model_diff), hare_md)
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
 
     providers = build_provider_chain(

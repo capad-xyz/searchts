@@ -203,21 +203,34 @@ def rules_block(rules: list[str]) -> str:
     )
 
 
-def apply_rules(agents: str, rules: list[str]) -> str:
-    """AGENTS.md with the rules block replaced, or added after the Hare section's
-    first paragraph when there is none. Everything else untouched."""
+HARE_MD_HEAD = """# HARE.md
+
+Hare's own file on this repo. AGENTS.md is the contract every agent signs; this
+is what Hare has learned here. Hare reads both before every note.
+
+Two kinds of line live here. Rules the owner wrote by hand, anywhere outside the
+marked block. And the marked block, which `scripts/hare_ledger.py` rewrites on
+the weekly ledger run from `/hare score 1..5 <why>` comments: a score of 2 or
+less with a reason becomes a line. To retire one, resolve or edit the score
+comment it came from; the next run drops it.
+
+## Owner's rules
+
+- (none yet)
+
+"""
+
+
+def apply_rules(hare_md: str, rules: list[str]) -> str:
+    """HARE.md with the rules block replaced, or a fresh HARE.md when the file
+    is empty. Everything the owner wrote outside the block is untouched."""
     block = rules_block(rules)
-    if RULES_START in agents and RULES_END in agents:
-        a = agents.index(RULES_START)
-        b = agents.index(RULES_END) + len(RULES_END)
-        return agents[:a] + block + agents[b:]
-    anchor = "## R1 "
-    k = agents.find(anchor)
-    if k < 0:
-        return agents.rstrip("\n") + "\n\n" + block + "\n"
-    nl = agents.find("\n\n", k)
-    nl = len(agents) if nl < 0 else nl
-    return agents[:nl] + "\n\n" + block + agents[nl:]
+    if RULES_START in hare_md and RULES_END in hare_md:
+        a = hare_md.index(RULES_START)
+        b = hare_md.index(RULES_END) + len(RULES_END)
+        return hare_md[:a] + block + hare_md[b:]
+    base = hare_md if hare_md.strip() else HARE_MD_HEAD
+    return base.rstrip("\n") + "\n\n" + block + "\n"
 
 
 def _threads(owner: str, repo: str, n: int, token: str) -> list[dict[str, Any]]:
@@ -260,7 +273,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", default="docs", help="directory for hare-ledger.json and hare-ledger.md")
     ap.add_argument("--max-prs", type=int, default=200)
-    ap.add_argument("--agents", default="AGENTS.md", help="write the rules block into this file (R2c); empty to skip")
+    ap.add_argument("--rules", default="HARE.md", help="write the rules block into this file (R2c); empty to skip")
     args = ap.parse_args(argv)
     token = os.environ.get("GITHUB_TOKEN", "")
     full = os.environ.get("GITHUB_REPOSITORY", "")
@@ -275,12 +288,12 @@ def main(argv: list[str] | None = None) -> int:
     (out / LEDGER_MD).write_text(render_md(ledger["entries"], ledger["summary"], ledger["built"]), encoding="utf-8")
     s = ledger["summary"]
     print(f"hare ledger: {s['prs']} PRs, {s['notes']} notes, {s['real']} real, {s['skip']} skip, {s['scores']} scores -> {out / LEDGER_MD}")
-    if args.agents and Path(args.agents).exists():
-        before = Path(args.agents).read_text(encoding="utf-8")
+    if args.rules:
+        before = Path(args.rules).read_text(encoding="utf-8") if Path(args.rules).exists() else ""
         after = apply_rules(before, proposed_rules(ledger))
         if after != before:
-            Path(args.agents).write_text(after, encoding="utf-8")
-            print(f"hare ledger: {len(proposed_rules(ledger))} rule(s) written to {args.agents}")
+            Path(args.rules).write_text(after, encoding="utf-8")
+            print(f"hare ledger: {len(proposed_rules(ledger))} rule(s) written to {args.rules}")
     return 0
 
 
