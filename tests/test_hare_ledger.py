@@ -87,7 +87,10 @@ def test_pr_rows_follows_a_finding_from_note_to_note() -> None:
         {"body": "not hare", "submitted_at": "2026-10-03T20:01:00Z"},
         {"body": NOTE_2, "submitted_at": "2026-10-03T21:00:00Z", "html_url": "u2"},
     ]
-    comments = [{"body": "/hare score 2 thin on the tests", "user": {"login": "owner"}, "created_at": "2026-10-03T22:00:00Z"}]
+    comments = [
+        {"body": "/hare score 2 thin on the tests", "user": {"login": "owner"}, "created_at": "2026-10-03T22:00:00Z"},
+        {"body": hare_r1.needed_body("no hop answered"), "user": {"login": "searchts-hare[bot]"}, "created_at": "2026-10-03T19:00:00Z"},
+    ]
     threads = [{"isResolved": True, "path": "scripts/b.py", "line": 7, "comments": {"nodes": [{"body": hare_r1.TOKEN}]}}]
     e = hare_ledger.pr_rows({"number": 7, "title": "t", "merged_at": "x", "state": "closed"}, reviews, comments, threads)
     fates = {f["loc"]: f["fate"] for f in e["findings"]}
@@ -96,6 +99,7 @@ def test_pr_rows_follows_a_finding_from_note_to_note() -> None:
     assert e["scores"] == [{"score": 2, "text": "thin on the tests", "by": "owner", "at": "2026-10-03T22:00:00Z"}]
     s = hare_ledger.summarize([e])
     assert s["real"] == 1 and s["real_fixed_or_resolved"] == 1 and s["score_avg"] == 2.0 and s["cut_notes"] == 1
+    assert e["needed"] == 1 and s["needed"] == 1  # the needed comment is a failed hop, not a note
     md = hare_ledger.render_md([e], s, "2026-10-04")
     assert "1 of 1 real findings fixed or resolved (100%)" in md and "| #7 | 2 | 1 | 2 |" in md and "thin on the tests" in md
     assert "\u2014" not in md
@@ -214,7 +218,7 @@ def test_compare_reviewers_reads_the_repo_files(tmp_path) -> None:
         encoding="utf-8",
     )
     hare = compare_reviewers.hare_side(json.loads((tmp_path / "hare-ledger.json").read_text()))
-    assert hare == {"notes": 1, "notes_with_findings": 0, "prs": 1, "real": 2, "skip": 1, "real_done": 1, "done_means": hare["done_means"], "minutes": 0.5}
+    assert hare == {"notes": 1, "notes_with_findings": 0, "needed": 0, "prs": 1, "real": 2, "skip": 1, "real_done": 1, "done_means": hare["done_means"], "minutes": 0.5}
     passes = compare_reviewers.bot_passes(tmp_path)
     assert passes["https://x/pull/7#pullrequestreview-1"]["minutes"] == 4.2  # the JSONL row wins over the markdown
     assert passes["https://x/pull/8#pullrequestreview-2"] == {"pr": 8, "minutes": 2.0, "tokens_est": 6000, "real": 1, "skip": 1, "real_fix_yes": 0}

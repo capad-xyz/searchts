@@ -45,6 +45,7 @@ def hare_side(ledger: dict[str, Any]) -> dict[str, Any]:
     return {
         "notes": len(notes),
         "notes_with_findings": sum(1 for n in notes if n.get("findings")),
+        "needed": sum(int(e.get("needed") or 0) for e in entries),
         "prs": len({e.get("pr") for e in entries}),
         "real": len(reals),
         "skip": len(fs) - len(reals),
@@ -136,6 +137,7 @@ def render(hare: dict[str, Any], bot: dict[str, Any], built: str) -> str:
         f"| Notes | {hare['notes']} | {bot['notes']} |",
         f"| Notes with a finding | {hare['notes_with_findings']} | {bot['notes_with_findings']} |",
         f"| Notes with nothing | {hare['notes'] - hare['notes_with_findings']} | {bot['notes'] - bot['notes_with_findings']} |",
+        f"| Runs where no hop answered | {hare['needed']} | not logged |",
         f"| Real findings | {hare['real']} | {bot['real']} |",
         f"| Skip findings | {hare['skip']} | {bot['skip']} |",
         f"| Real done | {hare['real_done']} ({hare['done_means']}) | {bot['real_done']} ({bot['done_means']}) |",
