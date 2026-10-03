@@ -157,3 +157,49 @@ def test_a_resolved_thread_resolves_one_finding_not_the_whole_file() -> None:
 def test_note_meta_reads_the_v1_note_shape_too() -> None:
     v1 = f"{hare_r1.TOKEN}\n\n**ship** · `nous:stealth/space-bunny-alpha` · effort low\n\nExpands the guidance.\n"
     assert hare_ledger.note_meta(v1)["hop"] == "nous:stealth/space-bunny-alpha" and hare_ledger.note_meta(v1)["effort"] == "low"
+
+
+BOT_NOTE = """<!-- harebot:review head=a747bad8d161ac4107b54023b174aa144a447970 -->
+🐰 **Hare Bot** · review and report
+
+### Findings
+
+#### 🔴 real · `scripts/hare_r1.py:527`
+**Issue:** The retry escapes bare.
+**Fix:** yes
+
+#### 🟡 skip · `scripts/hare_r1.py:48`
+**Issue:** Nous pinned to effort none.
+**Fix:** later
+
+## Models
+
+| Role | Model | Effort |
+| --- | --- | --- |
+| reviewer | Hare Bot (Grok Bot) · purpose: checked the diff · Grok | medium |
+"""
+
+
+def test_the_ledger_counts_hare_bot_too(tmp_path) -> None:
+    assert hare_ledger.reviewer_of(NOTE_1) == "hare" and hare_ledger.reviewer_of(BOT_NOTE) == "hare-bot" and hare_ledger.reviewer_of("x") == ""
+    assert [f["loc"] for f in hare_ledger.findings_of(BOT_NOTE)] == ["scripts/hare_r1.py:527", "scripts/hare_r1.py:48"]
+    assert [f["loc"] for f in hare_ledger.findings_of(NOTE_1)] == ["scripts/a.py:12", "docs/x.md:3"]  # the App's blank line still parses
+    meta = hare_ledger.note_meta(BOT_NOTE)
+    assert meta["hop"] == "hare-bot:Grok" and meta["effort"] == "medium"
+    (tmp_path / "hare-bot-log-2026-10-04.md").write_text(
+        "# log\n\n### #7 title\n\n- Review: https://x/pull/7#pullrequestreview-1\n- Clock: 2026-10-04 01:31 to 01:35 (4.2 min)\n- Token estimate: about 12,000 from about 47000 characters.\n",
+        encoding="utf-8",
+    )
+    log = hare_ledger.read_bot_logs(tmp_path)
+    assert log == {"https://x/pull/7#pullrequestreview-1": {"log": "hare-bot-log-2026-10-04.md", "minutes": 4.2, "tokens_est": 12000}}
+    reviews = [
+        {"body": NOTE_1, "submitted_at": "2026-10-03T20:00:00Z", "html_url": "u1"},
+        {"body": BOT_NOTE, "submitted_at": "2026-10-03T20:30:00Z", "html_url": "https://x/pull/7#pullrequestreview-1"},
+    ]
+    e = hare_ledger.pr_rows({"number": 7, "state": "open"}, reviews, [], [], log)
+    assert [n["by"] for n in e["notes"]] == ["hare", "hare-bot"] and e["notes"][1]["minutes"] == 4.2
+    by = hare_ledger.by_reviewer([e])
+    assert by["hare"] == {"notes": 1, "real": 1, "skip": 1, "real_fixed_or_resolved": 0, "avg_minutes": None}
+    assert by["hare-bot"] == {"notes": 1, "real": 1, "skip": 1, "real_fixed_or_resolved": 0, "avg_minutes": 4.2}
+    md = hare_ledger.render_md([e], hare_ledger.summarize([e]), "2026-10-04")
+    assert "| Hare Bot (Grok Bot) | 1 | 1 | 1 | 0 | 4.2 |" in md
