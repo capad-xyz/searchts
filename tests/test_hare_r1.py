@@ -576,15 +576,42 @@ def test_hop_budget_fits_inside_the_job_timeout() -> None:
     assert worst < minutes * 60
 
 
-def test_workflow_groq_models_match_the_live_default() -> None:
+def _workflow_env(name: str) -> str:
+    """The literal a HARE_*_MODEL line pins, or "" when it is absent or an expression."""
     import re
     from pathlib import Path
 
     wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
-    m = re.search(r"HARE_GROQ_MODEL:\s*(\S+)", wf)
-    assert m, "HARE_GROQ_MODEL missing from hare.yml"
+    m = re.search(rf"^\s*{name}:\s*(.+?)\s*$", wf, re.MULTILINE)
+    if not m:  # no override at all, so the Python default is what runs
+        return ""
+    value = m.group(1).strip().strip("'\"")
+    return "" if "${{" in value else value
+
+
+def test_workflow_groq_models_match_the_live_default() -> None:
     # Retired on Groq free: llama-3.3-70b-versatile (16 Aug 2026), moonshotai/kimi-k2-instruct.
-    assert m.group(1) == hare_r1.HARE_GROQ_DEFAULT
+    assert _workflow_env("HARE_GROQ_MODEL") == hare_r1.HARE_GROQ_DEFAULT
+
+
+def test_workflow_model_overrides_do_not_undo_the_python_defaults() -> None:
+    """An env override re-asserts the order in CI, which is where the code runs.
+
+    This has already drifted twice: the retired Groq models and the OpenRouter
+    space-bunny hop both came back through this file while the Python default
+    was correct. Lock every literal against its default so it cannot again.
+    """
+    for env_name, default in (
+        ("HARE_GROQ_MODEL", hare_r1.HARE_GROQ_DEFAULT),
+        ("HARE_GEMINI_MODEL", hare_r1.HARE_GEMINI_DEFAULT),
+        ("HARE_NOUS_MODEL", hare_r1.HARE_NOUS_DEFAULT),
+        ("HARE_OR_MODEL", hare_r1.HARE_OR_DEFAULT),
+        ("HARE_ZEN_MODEL", hare_r1.HARE_ZEN_DEFAULT),
+    ):
+        pinned = _workflow_env(env_name)
+        if not pinned:  # absent or an expression, so it defers to the default
+            continue
+        assert pinned == default, f"{env_name} pins {pinned!r} but the default is {default!r}"
 
 
 def test_provider_chain_is_the_fixed_order() -> None:
