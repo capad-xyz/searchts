@@ -202,7 +202,9 @@ def normalize(url: str) -> str:
 # ISO-8601 UTC timestamp (P3.3); entries older than _MEMORY_TTL_SECONDS (default
 # 24h) are expired — ignored on promotion and dropped on load/save. A remembered
 # backend that fails (block/thin/exception) before a clean win is unpinned so
-# later fetches aren't stuck on a dead rung.
+# later fetches aren't stuck on a dead rung. A pin lasts the TTL from the walk
+# that earned it: winning again on the remembered rung does not extend it, so a
+# wrong pin (example.com sent to the browser, F25) heals within a day.
 
 #: Same config dir as searchts.config.Config (~/.searchts).
 _CACHE_DIR = Path.home() / ".searchts"
@@ -559,6 +561,85 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     t = re.sub(r"[ \t]+", " ", t)
     t = re.sub(r"\n\s*\n+", "\n\n", t)
     return t.strip()
+
+
+# ── F25: a short page that is the whole page ──────────────────────────────────
+#: Below this a short extract is a stub, not a page (example.com keeps 156).
+_WHOLE_MIN_CHARS = 60
+#: Visible text the extract may leave out and still be the whole page, such as
+#: a "Learn more" link or a footer line.
+_WHOLE_SLACK = 80
+#: Inline script above this many characters is an app, not a short static page.
+_WHOLE_INLINE_JS = 5_000
+#: Mount nodes that client-side apps fill after load.
+_APP_ROOT_IDS = frozenset({"root", "app", "__next", "__nuxt", "___gatsby", "svelte", "main-app"})
+#: App state shipped in a script: the content lives there, not in the HTML.
+_APP_STATE_MARKERS = (
+    "__NEXT_DATA__", "__NUXT__", "__INITIAL_STATE__", "__APOLLO_STATE__",
+    "__PRELOADED_STATE__", "__remixContext", "__sveltekit",
+)
+_NEEDS_JS = re.compile(
+    r"\b(?:enable|turn on|requires?|needs?)\s+javascript\b"
+    r"|\bjavascript\s+(?:is\s+)?(?:required|disabled|needed|off)\b",
+    re.I,
+)
+
+
+def _plain_len(markdown: str) -> int:
+    """Visible length of an extract: link targets and Markdown marks do not count."""
+    t = re.sub(r"\]\([^)]*\)", "]", markdown or "")
+    t = re.sub(r"[\[\]#*_>`|]", "", t)
+    return len(re.sub(r"\s+", " ", t).strip())
+
+
+def whole_short_page(html: str, text: str) -> bool:
+    """True when a short extract is everything the page shows as served (F25).
+
+    Thin means "the page has more than the extract". example.com serves one
+    paragraph and a link, so its 156-character extract is a read, not a reason
+    to start a browser or pin the domain to one. Anything that looks like an
+    app stays thin: an empty mount node, a noscript "enable JavaScript" notice,
+    app state in a script, a module script or more than two external ones,
+    lots of inline script, a frame, or visible text the extract left out.
+    """
+    if len((text or "").strip()) < _WHOLE_MIN_CHARS or len(re.findall(r"\w+", text)) < 8:
+        return False
+    if not html or not re.search(r"<(?:html|body)\b", html, re.I):
+        return False
+    if any(marker in html for marker in _APP_STATE_MARKERS):
+        return False
+    try:
+        import lxml.html
+
+        doc = lxml.html.fromstring(re.sub(r"^\s*<\?xml[^>]*\?>", "", html))
+    except Exception:  # noqa: BLE001 - HTML we cannot parse is not one we can vouch for
+        return False
+    external = inline = 0
+    for el in doc.iter():
+        tag = el.tag.lower() if isinstance(el.tag, str) else ""
+        if tag in ("iframe", "frame", "frameset", "app-root"):
+            return False
+        if tag == "script":
+            if (el.get("type") or "").strip().lower() == "module":
+                return False
+            if el.get("src"):
+                external += 1
+            else:
+                inline += len(el.text or "")
+        elif tag == "noscript":
+            if _NEEDS_JS.search(el.text_content() or ""):
+                return False
+        elif (el.get("id") or "").strip().lower() in _APP_ROOT_IDS:
+            if len(re.sub(r"\s+", " ", el.text_content() or "").strip()) < 40:
+                return False
+    if external > 2 or inline > _WHOLE_INLINE_JS:
+        return False
+    body = doc.find(".//body")
+    root = body if body is not None else doc
+    for el in root.xpath(".//script|.//style|.//noscript|.//template|.//svg"):
+        el.drop_tree()
+    visible = len(re.sub(r"\s+", " ", root.text_content() or "").strip())
+    return visible <= _plain_len(text) + _WHOLE_SLACK
 
 
 # ── backend fetchers: each returns (status, body, final_url, headers) or raises ──
@@ -962,7 +1043,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     use_memory:
         When True (and SEARCHTS_NO_MEMORY is unset), a backend previously
         recorded as the winner for this URL's registrable domain is moved to the
-        FRONT of the ladder, and a fresh clean win is persisted for next time.
+        FRONT of the ladder, and a clean win on any other rung is persisted for
+        next time. A win on the remembered rung does not extend its TTL.
     allow_thin:
         When True and no rung met ``min_chars``, return the longest non-blocked
         body instead of raising. Default False: thin/challenge leftovers are
@@ -1146,10 +1228,21 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     remembered = None
                 continue
 
-            if len(text) >= min_chars:
-                if memory_on and domain:
-                    remember(domain, backend)  # record the winner for next time
-                _tick(f"  {backend}: ok ({len(text)} chars)")
+            # F25: a short page that is the whole page, as curl got it, is a
+            # read. Starting a browser for it was slow, failed without the
+            # browser extra, and pinned the domain to the browser.
+            whole = (
+                len(text) < min_chars
+                and backend == "curl_cffi"
+                and status is not None and 200 <= status < 300
+                and whole_short_page(body, text)
+            )
+            if len(text) >= min_chars or whole:
+                if memory_on and domain and backend != remembered:
+                    # A win on the remembered rung does not extend its pin, so a
+                    # pin earned by mistake heals once _MEMORY_TTL_SECONDS pass.
+                    remember(domain, backend)
+                _tick(f"  {backend}: ok ({len(text)} chars{', whole page' if whole else ''})")
                 # clean win, stop here — sanitize untrusted content before return
                 return _finalize(
                     FetchResult(
