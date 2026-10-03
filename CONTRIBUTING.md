@@ -77,31 +77,31 @@ Every PR an agent touched gets a **Models** section, at the bottom of the body. 
 ```markdown
 ## Models
 
-| Role | Model | Effort |
-| --- | --- | --- |
-| wrote | Grok 4.7, xAI chat | medium |
-| edited | claude-opus-5-5 | high |
+| Role | Model | Effort | Purpose |
+| --- | --- | --- | --- |
+| wrote | Grok 4.7, xAI chat | medium | AI wrote it |
+| edited | claude-opus-5-5 | high | AI edited it |
 ```
 
-The Model cell is the slug, or the agent and the model together. Prefer the API slug when you have one: `openai/gpt-oss-120b`, `gemini-2.5-flash`, `poolside/laguna-s-2.1:free`, `qwen/qwen3.8-27b:free`. A product name alone (`Claude`, `Grok`) is not enough. Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one word: `low`, `medium`, or `high`. Not a second essay.
+The Model cell is the slug, or the agent and the model together. Prefer the API slug when you have one: `openai/gpt-oss-120b`, `gemini-2.5-flash`, `poolside/laguna-s-2.1:free`, `qwen/qwen3.8-27b:free`. A product name alone (`Claude`, `Grok`) is not enough. Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one word: `low`, `medium`, or `high`. Not a second essay. Purpose is one short line: `AI wrote it`, `AI edited it`, `AI reviewed it`. Say that an AI did it.
 
-A comment an agent posts uses the same line, signed as whoever is writing:
+A comment an agent posts uses the same table, signed as whoever is writing:
 
 ```markdown
 — searchts Remote Chat #2
 
-| Role | Model | Effort |
-| --- | --- | --- |
-| wrote | Grok 4.7, xAI chat | medium |
+| Role | Model | Effort | Purpose |
+| --- | --- | --- | --- |
+| wrote | Grok 4.7, xAI chat | medium | AI wrote it |
 ```
 
-Trailer under the table. The name is the agent, not a person pretending the agent was not there:
+Under the table, the Co-authored-by trailer. The name is the agent, not a person pretending the agent was not there:
 
 ```
 Co-authored-by: Grok <grok@x.ai>
 ```
 
-Do not hide the tool. Do not claim a review the model did not run.
+Do not hide the tool. Do not claim a review the model did not run. Do not omit the Co-authored-by line on a commit an agent wrote.
 
 ## What we merge (and what we don't)
 
