@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.13.1](https://github.com/capad-xyz/searchts/compare/v0.13.0...v0.13.1) (2026-10-03)
+
+
+### Fixed
+
+* a short page that is the whole page reads without a browser (F25) ([#228](https://github.com/capad-xyz/searchts/issues/228)) ([2bdbb3f](https://github.com/capad-xyz/searchts/commit/2bdbb3f12e32d46a66a304ac6b3b7b56992bf882))
+
 ## [0.13.0](https://github.com/capad-xyz/searchts/compare/v0.12.0...v0.13.0) (2026-10-02)
 
 
