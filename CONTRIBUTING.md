@@ -68,6 +68,41 @@ while `ci:`, `docs:`, `test:`, `refactor:` and `chore:` ship silently with the
 next release. Maintainers cut releases by merging the standing release PR, so
 please do not bump version numbers in your PR.
 
+## AI assistance
+
+Using an AI to write, edit, or review is fine. Say which one.
+
+Every PR an agent touched gets a **Models** section, at the bottom of the body. One writer can be one line. More than one role uses the table. Columns are Role, Model, Effort.
+
+```markdown
+## Models
+
+| Role | Model | Effort | Purpose |
+| --- | --- | --- | --- |
+| wrote | Grok 4.7, xAI chat | medium | AI wrote it |
+| edited | claude-opus-5-5 | high | AI edited it |
+```
+
+The Model cell is the slug, or the agent and the model together. Prefer the API slug when you have one: `openai/gpt-oss-120b`, `gemini-3.1-flash-lite`, `poolside/laguna-s-2.1:free`, `qwen/qwen3.8-27b:free`. A product name alone (`Claude`, `Grok`) is not enough. Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one word: `low`, `medium`, or `high`. Not a second essay. If an AI opened the PR, wrote the commit, or posted the comment, that AI fills Purpose. The line is `AI wrote it` when it created the PR or the commit, `AI edited it` when it only edited, `AI reviewed it` when it only reviewed. A human does not write that cell for the agent.
+
+A comment an agent posts uses the same table, signed as whoever is writing:
+
+```markdown
+— searchts Remote Chat #2
+
+| Role | Model | Effort | Purpose |
+| --- | --- | --- | --- |
+| wrote | Grok 4.7, xAI chat | medium | AI wrote it |
+```
+
+Under the table, the Co-authored-by trailer. The name is the agent, not a person pretending the agent was not there:
+
+```
+Co-authored-by: Grok <grok@x.ai>
+```
+
+Do not hide the tool. Do not claim a review the model did not run. Do not omit the Co-authored-by line on a commit an agent wrote.
+
 ## What we merge (and what we don't)
 
 searchts has a deliberately narrow identity: a **keyless, free, open-source** web layer for AI
