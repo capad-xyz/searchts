@@ -14,7 +14,7 @@ def test_a_call_gets_time_to_answer() -> None:
     # against a hung provider, not a budget: with reasoning off a hop answers in
     # well under a minute.
     assert hare_r1.LLM_TIMEOUT_SEC == 300
-    assert hare_r1.LLM_MAX_TOKENS == 16000
+    assert hare_r1.LLM_MAX_TOKENS == 32000
 
 
 def test_classify_skips_full_matrix_and_hare_job() -> None:
@@ -806,7 +806,7 @@ def test_a_timeout_names_itself(monkeypatch) -> None:
 
 def test_the_nag_names_the_cause_instead_of_calling_every_hop_busy() -> None:
     why = (
-        "nous:a: LLM empty content https://n/v1 a (finish_reason=length, max_tokens=16000, reasoning_tokens=9000) | "
+        "nous:a: LLM empty content https://n/v1 a (finish_reason=length, max_tokens=32000, reasoning_tokens=9000) | "
         "openrouter:b: no JSON object in model output"
     )
     body = hare_r1.needed_body(why)
