@@ -43,7 +43,10 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 # not, the budget is the floor. A 60 s call cut off the hops that did answer.
 LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "300"))
 # Model hops stop after this, so the needed note posts before the job timeout.
-HOP_BUDGET_S = 360
+# Live on PR 235 (2026-10-03): three Nous hops hung for the whole 60 s each and
+# spent a 360 s budget before the one OpenRouter hop that answers got its turn.
+# The budget has to hold two hung hops and still reach a live one.
+HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "600"))
 LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "16000"))
 NOUS_REASONING = {"effort": "none"}
 OR_REASONING = {"effort": "low", "exclude": True}
