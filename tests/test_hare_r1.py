@@ -695,10 +695,12 @@ def test_hop_loop_sends_every_provider_its_own_options() -> None:
     assert parsed == {"summary": "ok", "findings": []}
 
 
-def test_the_slug_with_the_documented_empty_content_is_not_first_on_nous() -> None:
+def test_space_bunny_is_on_nous_for_its_last_day() -> None:
+    """The empty-content failure was measured on OpenRouter, not Nous. Bunny is
+    free until 2026-10-05, so it leads Nous until then; the catalog pass after
+    that date drops it from every list."""
     nous = hare_r1.HARE_NOUS_DEFAULT.split(",")
-    assert "stealth/space-bunny-alpha" in nous
-    assert nous[-1] == "stealth/space-bunny-alpha"
+    assert nous[0] == "stealth/space-bunny-alpha"
 
 
 def test_dead_hops_are_printed_on_success() -> None:
