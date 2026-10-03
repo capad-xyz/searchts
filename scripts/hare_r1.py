@@ -21,12 +21,18 @@ SKIP_CHECKS = frozenset({"test-full", "wheel-gate"})
 HARE_JOB_MARKERS = frozenset({"hare", "r1"})
 MAX_DIFF = 90_000
 MAX_BUBBLES = 20
-CHECK_WAIT_S = 480
+# R1e cadence (owner's call, 2026-10-04). The hop starts at once: CI is read
+# once at post time and the CI line says "still running" when it is. The old
+# 8 min wait held every review for checks the note does not need to start.
+CHECK_WAIT_S = int(os.environ.get("HARE_CHECK_WAIT_S", "0"))
 CHECK_POLL_S = 20
-# R1e cadence. QUIET_S: an agent's burst of pushes becomes one review.
-# PAUSE_AFTER: after this many Hare notes on a PR, pushes wait for /hare or @hare.
-QUIET_S = int(os.environ.get("HARE_QUIET_S", "90"))
-PAUSE_AFTER = 3
+# QUIET_S: an agent's burst of pushes becomes one review. 30 s is enough: the
+# workflow's cancel-in-progress already supersedes a stale head, so the quiet
+# only has to cover the gap between one agent's consecutive pushes.
+QUIET_S = int(os.environ.get("HARE_QUIET_S", "30"))
+# PAUSE_AFTER: 0 is off. Every push gets a note; the cost is the owner's and the
+# note prints it. Set a number to pause after that many notes until /hare.
+PAUSE_AFTER = int(os.environ.get("HARE_PAUSE_AFTER", "0"))
 PAUSED = "<!-- searchts-r1-paused -->"
 
 NOUS_BASE = "https://inference-api.nousresearch.com/v1"
@@ -50,6 +56,17 @@ LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "300"))
 # effort knob is there to prevent.
 HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "600"))
 LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "32000"))
+# Size the spend to the diff. A normal PR gets the ceilings above; a very big
+# diff gets twice the time, and only a very big diff, so a one-file change
+# never pays for a 40-minute job.
+BIG_DIFF_LINES = int(os.environ.get("HARE_BIG_DIFF_LINES", "1000"))
+BIG_LLM_TIMEOUT_SEC = int(os.environ.get("HARE_BIG_LLM_TIMEOUT_S", "600"))
+BIG_HOP_BUDGET_S = int(os.environ.get("HARE_BIG_HOP_BUDGET_S", "1200"))
+# HARE_REASONING: the owner's cap on the quiet pass, one word for every hop
+# that takes one (none, minimal, low, medium, high). Empty keeps the per-provider
+# defaults below. /hare deep ignores it and uses the deep set.
+HARE_REASONING = os.environ.get("HARE_REASONING", "").strip().lower()
+REASONING_WORDS = frozenset({"none", "minimal", "low", "medium", "high"})
 NOUS_REASONING = {"effort": "none"}
 OR_REASONING = {"effort": "low", "exclude": True}
 # `/hare deep`: thinking on, one notch. docs/hare-thinking-ab.md measured thinking
@@ -411,6 +428,7 @@ def render_comment(
     green: list[str] | None = None,
     aim: str = "",
     since: str = "",
+    cost: str = "",
 ) -> str:
     """v2 review body, the shape of Hare Bot's finals on #217, #220 and #221.
 
@@ -442,6 +460,8 @@ def render_comment(
             name, _, what = note.rpartition(": ")
             run_lines.append(f"- CI {name} → {what}" if name else f"- CI {note}")
     run_lines.append("- test-full / wheel-gate skipped by design")
+    if cost:
+        run_lines.append(cost)
     findings_md = "\n\n".join(blocks)
     runs_md = "\n".join(run_lines)
     who = f"Hare (GitHub App) · purpose: review and report · `{model}`"
@@ -520,13 +540,48 @@ def bubble_comments(bubbles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+LAST_USAGE: dict[str, Any] = {}
+
+
+def diff_lines(diff: str) -> int:
+    """Changed lines in a unified diff: + and - rows, not the file headers."""
+    n = 0
+    for line in (diff or "").splitlines():
+        if (line.startswith("+") and not line.startswith("+++")) or (
+            line.startswith("-") and not line.startswith("---")
+        ):
+            n += 1
+    return n
+
+
+def budgets_for(diff: str) -> tuple[int, int, bool]:
+    """(call timeout, hop budget, big) for this diff."""
+    big = diff_lines(diff) > BIG_DIFF_LINES
+    if big:
+        return BIG_LLM_TIMEOUT_SEC, BIG_HOP_BUDGET_S, True
+    return LLM_TIMEOUT_SEC, HOP_BUDGET_S, False
+
+
+def cost_line(usage: dict[str, Any], hop: str, seconds: float) -> str:
+    """What this review cost, for the fold. The meter is the owner's keys."""
+    u = usage or {}
+    prompt = int(u.get("prompt_tokens") or 0)
+    answer = int(u.get("completion_tokens") or 0)
+    reasoning = int((u.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0)
+    if not (prompt or answer):
+        return f"- cost: not reported by `{hop}`, {seconds:.0f} s"
+    return f"- cost: {prompt:,} prompt + {answer:,} answer + {reasoning:,} reasoning tokens on `{hop}`, {seconds:.0f} s"
+
+
 def chat_complete(
     base: str,
     key: str,
     model: str,
     messages: list[dict[str, str]],
     request_options: dict[str, Any] | None = None,
+    timeout: int | None = None,
 ) -> str:
+    timeout = timeout or LLM_TIMEOUT_SEC
     body: dict[str, Any] = {
         "model": model,
         "messages": messages,
@@ -546,7 +601,7 @@ def chat_complete(
     req.add_header("HTTP-Referer", "https://github.com/capad-xyz/searchts")
     req.add_header("X-Title", "searchts-hare")
     try:
-        payload = _post(req, LLM_TIMEOUT_SEC)
+        payload = _post(req, timeout)
     except urllib.error.HTTPError as e:
         err = e.read().decode("utf-8", errors="replace")
         if not ("reasoning" in body and e.code in {400, 404, 422} and "reason" in err.lower()):
@@ -555,10 +610,12 @@ def chat_complete(
         # The retry can fail too, and that failure has to keep its body.
         req.data = json.dumps({k: v for k, v in body.items() if k != "reasoning"}).encode()
         try:
-            payload = _post(req, LLM_TIMEOUT_SEC)
+            payload = _post(req, timeout)
         except urllib.error.HTTPError as e2:
             err2 = e2.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"LLM {e2.code} {base} {model} (without reasoning knob): {err2[:400]}") from e2
+    LAST_USAGE.clear()
+    LAST_USAGE.update(payload.get("usage") or {})
     choices = payload.get("choices") or []
     if not choices:
         raise RuntimeError(f"LLM empty choices {base} {model}")
@@ -788,7 +845,7 @@ def cadence_skip(event: str, pr: dict[str, Any], notes: list[dict[str, Any]]) ->
         return "draft"
     if str(pr.get("state") or "open") != "open":
         return "closed"
-    if len(notes) >= PAUSE_AFTER:
+    if PAUSE_AFTER and len(notes) >= PAUSE_AFTER:
         return "paused"
     return ""
 
@@ -1023,6 +1080,10 @@ def build_provider_chain(
         "openrouter": {"reasoning": DEEP_OR_REASONING if deep else OR_REASONING},
         "zen": {},
     }
+    if not deep and HARE_REASONING in REASONING_WORDS:
+        options["gemini"] = {"reasoning_effort": HARE_REASONING}
+        options["nous"] = {"reasoning": {"effort": HARE_REASONING}}
+        options["openrouter"] = {"reasoning": {"effort": HARE_REASONING, "exclude": True}}
     chain: list[tuple[str, str, str, str, dict[str, Any]]] = []
     for name in ("groq", "gemini", "nous", "openrouter", "zen"):
         key = keys.get(name, "")
@@ -1159,17 +1220,23 @@ def _hare_once(
     errs: list[str] = []
     parsed: dict[str, Any] | None = None
     used = ""
+    call_timeout, hop_budget, big = budgets_for(model_diff)
+    if big:
+        print(f"hare: big diff ({diff_lines(model_diff)} changed lines), call {call_timeout} s, hops {hop_budget} s")
+    cost = ""
     hops_start = time.time()
     for name, base, key, model, request_options in providers:
-        if time.time() - hops_start > HOP_BUDGET_S:
-            errs.append(f"hop budget ({HOP_BUDGET_S} s) spent before {name}:{model}")
+        if time.time() - hops_start > hop_budget:
+            errs.append(f"hop budget ({hop_budget} s) spent before {name}:{model}")
             break
         try:
-            raw = chat_complete(base, key, model, messages, request_options)
+            call_start = time.time()
+            raw = chat_complete(base, key, model, messages, request_options, timeout=call_timeout)
             parsed = extract_json(raw)
             if parsed is None:
                 raise RuntimeError("no JSON object in model output")
             used = f"{name}:{model}" + (" · deep" if deep else "")
+            cost = cost_line(LAST_USAGE, used, time.time() - call_start)
             break
         except Exception as e:
             errs.append(f"{name}:{model}: {e}")
@@ -1202,7 +1269,7 @@ def _hare_once(
     bubbles = filter_bubbles(findings, narrow_plus(plus, parse_plus_lines(model_diff)) if since else plus)
     intent = intent_for(check_state, findings)
     comment = render_comment(
-        used, effort, intent, findings, check_state, check_notes, summary, sha, green_checks(runs), aim, since_md
+        used, effort, intent, findings, check_state, check_notes, summary, sha, green_checks(runs), aim, since_md, cost
     )
     if TOKEN not in comment:
         post_needed(owner, repo, n, token, "rendered comment missing token")
