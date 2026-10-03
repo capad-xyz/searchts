@@ -1,13 +1,20 @@
+import io
+import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import hare_r1  # noqa: E402
+import pytest  # noqa: E402
 
 
-def test_llm_timeout_is_one_minute() -> None:
-    assert hare_r1.LLM_TIMEOUT_SEC == 60
+def test_a_call_gets_time_to_answer() -> None:
+    # 60 s cut off the hops that did answer (2026-10-03). The ceiling is a guard
+    # against a hung provider, not a budget: with reasoning off a hop answers in
+    # well under a minute.
+    assert hare_r1.LLM_TIMEOUT_SEC == 300
+    assert hare_r1.LLM_MAX_TOKENS == 16000
 
 
 def test_classify_skips_full_matrix_and_hare_job() -> None:
@@ -638,7 +645,9 @@ def test_each_provider_carries_its_own_request_options() -> None:
     # Neither shape leaks into the other hop, and the rest carry nothing.
     assert opts["gemini"] == {"reasoning_effort": "low"}
     assert opts["openrouter"] == {"reasoning": {"effort": "low", "exclude": True}}
-    assert opts["groq"] == {} and opts["nous"] == {} and opts["zen"] == {}
+    # Nous honours the knob, so it is told not to think (0 reasoning tokens measured).
+    assert opts["nous"] == {"reasoning": {"effort": "none"}}
+    assert opts["groq"] == {} and opts["zen"] == {}
 
 
 def test_hop_loop_sends_every_provider_its_own_options() -> None:
@@ -664,7 +673,7 @@ def test_hop_loop_sends_every_provider_its_own_options() -> None:
 
     assert [c[0] for c in calls] == ["g1", "m1", "n1"]
     assert [c[1] for c in calls] == ["g", "m", "n"]
-    assert [c[2] for c in calls] == [{}, {"reasoning_effort": "low"}, {}]
+    assert [c[2] for c in calls] == [{}, {"reasoning_effort": "low"}, {"reasoning": {"effort": "none"}}]
     assert parsed == {"summary": "ok", "findings": []}
 
 
@@ -683,3 +692,120 @@ def test_dead_hops_are_printed_on_success() -> None:
     tail = src[:ok_at]
     assert 'print(f"hare dead {dead}")' in tail, "dead hops are never printed on the success path"
     assert src.index("for dead in errs:") < ok_at
+
+# ── the answer fix: a hop answers, or says why it did not ──────────────────────
+
+
+def test_extract_json_survives_quoted_braces_in_the_prose() -> None:
+    # PR 222: the prose quoted ``${{ secrets... }}`` from the diff, the old
+    # first-to-last-brace slice started inside it, and a finished review was
+    # thrown away 6000 characters later.
+    raw = (
+        "The workflow reads `${{ secrets.SEARCHTS_HARE_API_KEY_ZEN }}` here.\n"
+        "Then the review:\n"
+        '{"effort":"low","summary":"One armor plate.","aim":"x","findings":[{"sev":"skip","path":"a.py","line":3,"issue":"i","short":"s","fix":"later","change":"c"}]}'
+    )
+    data = hare_r1.extract_json(raw)
+    assert data is not None and data["summary"] == "One armor plate." and len(data["findings"]) == 1
+
+
+def test_extract_json_looks_inside_a_closed_span_that_is_not_json() -> None:
+    raw = '{ context {"summary":"inner","findings":[]} }'
+    assert hare_r1.extract_json(raw) == {"summary": "inner", "findings": []}
+
+
+def test_extract_json_keeps_braces_inside_strings_together() -> None:
+    raw = '{"summary":"a \\"q\\" }","findings":[{"issue":"uses {x}"}]}'
+    data = hare_r1.extract_json(raw)
+    assert data is not None and data["findings"][0]["issue"] == "uses {x}"
+
+
+def test_extract_json_prefers_the_answer_over_the_sketch() -> None:
+    raw = 'Sketch: {"findings": []} ... final: {"summary":"real","findings":[{"sev":"real"}]}'
+    assert hare_r1.extract_json(raw)["summary"] == "real"
+    raw = 'stray {"x": 1} then {"summary":"s","findings":[]}'
+    assert hare_r1.extract_json(raw) == {"summary": "s", "findings": []}
+    assert hare_r1.extract_json('{"x": 1}') == {"x": 1}
+    assert hare_r1.extract_json("no braces at all") is None
+    assert hare_r1.extract_json("{ never closed") is None
+
+
+def test_extract_json_fence_with_nested_braces_still_parses() -> None:
+    raw = '```json\n{"summary":"s","findings":[{"a":1}]}\n```'
+    assert hare_r1.extract_json(raw) == {"summary": "s", "findings": [{"a": 1}]}
+
+
+class _Resp:
+    def __init__(self, payload: dict) -> None:
+        self._b = json.dumps(payload).encode()
+
+    def read(self) -> bytes:
+        return self._b
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_an_empty_answer_names_the_finish_reason_and_the_tokens(monkeypatch) -> None:
+    payload = {
+        "choices": [{"finish_reason": "length", "message": {"content": ""}}],
+        "usage": {"completion_tokens_details": {"reasoning_tokens": 11980}},
+    }
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", lambda req, timeout=0: _Resp(payload))
+    with pytest.raises(RuntimeError) as e:
+        hare_r1.chat_complete("https://x.test/v1", "k", "m", [])
+    msg = str(e.value)
+    assert "empty content" in msg and "finish_reason=length" in msg and "reasoning_tokens=11980" in msg
+    assert hare_r1._short_fail(f"nous:m: {msg}") == "nous: ran out of tokens while thinking, answered nothing"
+
+
+def test_an_empty_answer_that_stopped_is_not_blamed_on_the_budget(monkeypatch) -> None:
+    payload = {"choices": [{"finish_reason": "stop", "message": {"content": "  "}}]}
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", lambda req, timeout=0: _Resp(payload))
+    with pytest.raises(RuntimeError) as e:
+        hare_r1.chat_complete("https://x.test/v1", "k", "m", [])
+    assert hare_r1._short_fail(f"nous:m: {e.value}") == "nous: answered nothing"
+
+
+def test_a_gateway_that_rejects_the_reasoning_knob_gets_one_retry_without_it(monkeypatch) -> None:
+    seen: list[dict] = []
+
+    def fake_urlopen(req, timeout=0):
+        body = json.loads(req.data)
+        seen.append(body)
+        if "reasoning" in body:
+            raise hare_r1.urllib.error.HTTPError(req.full_url, 400, "bad", {}, io.BytesIO(b'{"error":"unknown field reasoning"}'))
+        return _Resp({"choices": [{"finish_reason": "stop", "message": {"content": "{}"}}]})
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+    out = hare_r1.chat_complete("https://x.test/v1", "k", "m", [], {"reasoning": {"effort": "none"}})
+    assert out == "{}" and len(seen) == 2 and "reasoning" in seen[0] and "reasoning" not in seen[1]
+
+
+def test_a_timeout_names_itself(monkeypatch) -> None:
+    def hang(req, timeout=0):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", hang)
+    with pytest.raises(RuntimeError) as e:
+        hare_r1.chat_complete("https://x.test/v1", "k", "m", [])
+    assert "timeout after" in str(e.value)
+    assert hare_r1._short_fail(f"zen:m: {e.value}") == f"zen: no answer within {hare_r1.LLM_TIMEOUT_SEC}s"
+
+
+def test_the_nag_names_the_cause_instead_of_calling_every_hop_busy() -> None:
+    why = (
+        "nous:a: LLM empty content https://n/v1 a (finish_reason=length, max_tokens=16000, reasoning_tokens=9000) | "
+        "openrouter:b: no JSON object in model output"
+    )
+    body = hare_r1.needed_body(why)
+    assert "ran out of tokens while thinking, not a busy provider" in body
+    assert "- nous: ran out of tokens while thinking, answered nothing" in body
+    assert "- openrouter: answered, but not in JSON" in body
+    assert "busy or blocked" not in body
+    busy = hare_r1.needed_body("openrouter:b: LLM 429 rate-limited")
+    assert "busy or blocked" in busy
+    assert "did not answer" in hare_r1.needed_body("zen:c: LLM empty choices https://z/v1 c")
