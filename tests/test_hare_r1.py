@@ -1060,3 +1060,22 @@ def test_a_restart_never_shrinks_the_review(monkeypatch) -> None:
 
 def test_the_timeout_short_line_says_the_tier_that_timed_out() -> None:
     assert hare_r1._short_fail("nous:m: LLM timeout after 600s https://n/v1 (raise HARE_LLM_TIMEOUT_S)") == "nous: no answer within 600s"
+
+
+def test_a_fenced_restart_is_still_a_restart(monkeypatch) -> None:
+    # Hare Bot on #245: a restart wrapped in a fence or prefaced by a sentence took
+    # the concatenate branch, and the later, smaller findings list won.
+    monkeypatch.setattr(hare_r1, "LLM_MAX_TOKENS", 100)
+    body = '{"summary":"S.","findings":[' + ",".join(_finding(i) for i in range(1, 9)) + "]}"
+    pieces = [body[i : i + 3] for i in range(0, len(body), 3)]
+
+    def fake_urlopen(req, timeout=0):
+        b = json.loads(req.data)
+        if b.get("stream"):
+            return _Stream(pieces)
+        tail = 'Here is the finished review:\n```json\n{"summary":"S.","findings":[' + _finding(99) + "]}\n```"
+        return _Resp({"choices": [{"finish_reason": "stop", "message": {"content": tail}}]})
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+    data = json.loads(hare_r1.chat_complete("https://x.test/v1", "k", "m", [{"role": "user", "content": "x"}]))
+    assert len(data["findings"]) > 1 and 99 not in [f["line"] for f in data["findings"]]

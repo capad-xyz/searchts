@@ -22,12 +22,6 @@ Free, open-source, **keyless** web layer for agents. Fetch a URL or admit you ca
 
 ## R1 — Hare (`searchts-hare[bot]`)
 
-<!-- hare-ledger:rules -->
-**What the owner said Hare missed (from the ledger, PLAN R2c).** Each line is the reason behind a low score, filed by `scripts/hare_ledger.py` from `/hare score`. Hare reads these as rules for the next note. Each ledger run rewrites this block, so to retire a line, edit or delete the score comment it came from.
-
-- (none yet: a `/hare score 1..5 <why>` of 2 or less with a reason lands here)
-<!-- /hare-ledger:rules -->
-
 GitHub shows the bot. Do not also print **Name** / a Hare heading in the body.
 
 The agent that **wrote** the PR does not rubber-stamp it. Hare is the **R1c Action**, author `searchts-hare[bot]`.

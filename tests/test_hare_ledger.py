@@ -88,7 +88,7 @@ def test_pr_rows_follows_a_finding_from_note_to_note() -> None:
         {"body": NOTE_2, "submitted_at": "2026-10-03T21:00:00Z", "html_url": "u2"},
     ]
     comments = [{"body": "/hare score 2 thin on the tests", "user": {"login": "owner"}, "created_at": "2026-10-03T22:00:00Z"}]
-    threads = [{"isResolved": True, "path": "scripts/b.py", "comments": {"nodes": [{"body": hare_r1.TOKEN}]}}]
+    threads = [{"isResolved": True, "path": "scripts/b.py", "line": 7, "comments": {"nodes": [{"body": hare_r1.TOKEN}]}}]
     e = hare_ledger.pr_rows({"number": 7, "title": "t", "merged_at": "x", "state": "closed"}, reviews, comments, threads)
     fates = {f["loc"]: f["fate"] for f in e["findings"]}
     assert fates == {"scripts/a.py:12": "fixed", "docs/x.md:3": "still applies", "scripts/b.py:7": "resolved"}
@@ -143,3 +143,17 @@ def test_hare_md_reaches_the_model() -> None:
     user = hare_r1.build_user("A", "t", "b", "+x", "ok", hare_md="- Always read the tests.")
     assert "## HARE.md" in user and "Always read the tests." in user and user.index("## HARE.md") < user.index("## Diff")
     assert "## HARE.md" not in hare_r1.build_user("A", "t", "b", "+x", "ok")
+
+
+def test_a_resolved_thread_resolves_one_finding_not_the_whole_file() -> None:
+    body = NOTE_1.replace("#### 🟡 skip · `docs/x.md:3`", "#### 🟡 skip · `scripts/a.py:40`")
+    reviews = [{"body": body, "submitted_at": "2026-10-03T20:00:00Z"}]
+    threads = [{"isResolved": True, "path": "scripts/a.py", "line": 45, "originalLine": 40, "comments": {"nodes": [{"body": hare_r1.TOKEN}]}}]
+    e = hare_ledger.pr_rows({"number": 8, "state": "open"}, reviews, [], threads)
+    fates = {f["loc"]: f["fate"] for f in e["findings"]}
+    assert fates == {"scripts/a.py:12": "open", "scripts/a.py:40": "resolved"}
+
+
+def test_note_meta_reads_the_v1_note_shape_too() -> None:
+    v1 = f"{hare_r1.TOKEN}\n\n**ship** · `nous:stealth/space-bunny-alpha` · effort low\n\nExpands the guidance.\n"
+    assert hare_ledger.note_meta(v1)["hop"] == "nous:stealth/space-bunny-alpha" and hare_ledger.note_meta(v1)["effort"] == "low"

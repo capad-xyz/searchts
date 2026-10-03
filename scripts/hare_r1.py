@@ -838,12 +838,13 @@ def wrap_up(req: urllib.request.Request, body: dict[str, Any], partial: str, tim
             else:
                 LAST_USAGE["prompt_tokens"] = int(LAST_USAGE["prompt_tokens"]) + int(tail_usage.get("prompt_tokens") or 0)
             LAST_USAGE["completion_tokens"] = int(LAST_USAGE.get("completion_tokens") or 0) + int(tail_usage.get("completion_tokens") or 0)
-            if tail.lstrip().startswith("{"):
-                # A restart, not a continuation. An 800-token restart cannot hold
-                # the findings the cut kept, so it only wins if it holds more.
-                restart = extract_json(tail)
+            restart = extract_json(tail)
+            if restart is not None and "findings" in restart:
+                # A restart, not a continuation, fenced or prefaced or bare (Hare
+                # Bot, #245). An 800-token restart cannot hold the findings the cut
+                # kept, so it only wins if it holds more.
                 kept_obj = extract_json(repair_json(partial)) or {}
-                if restart and len(restart.get("findings") or []) > len(kept_obj.get("findings") or []):
+                if len(restart.get("findings") or []) > len(kept_obj.get("findings") or []):
                     stitched = tail
             else:
                 stitched = partial + tail
