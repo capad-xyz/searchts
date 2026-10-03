@@ -42,4 +42,5 @@ jobs:
           gh pr create --base main --head "$branch" \
             --title "chore(hare): ledger $(date -u +%Y-%m-%d)" \
             --body "$(printf '## What\n\nThe findings ledger, rebuilt from Hare notes, Since lines, resolved threads and /hare score comments (PLAN R2b), and the rules block in HARE.md from low scores with a reason (R2c).\n\n## Checklist\n\n- [x] chore: does not move the package version\n\n## Models\n\n| Role | Model | Effort | Purpose |\n| --- | --- | --- | --- |\n| wrote | scripts/hare_ledger.py (no model) | low | AI wrote it |\n')" \
-            || echo "PR already open for $branch"
+            || gh pr list --head "$branch" --state open --json number --jq '.[0].number' | grep -q . \
+            || { echo "PR create failed and none is open for $branch"; exit 1; }

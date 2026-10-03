@@ -49,6 +49,10 @@ def note_meta(body: str) -> dict[str, Any]:
     m = re.search(r"\| reviewer \|[^|]*`([^`]+)`[^|]*\| (\w+) \|", body or "")
     if m:
         out["hop"], out["effort"] = m.group(1), m.group(2)
+    else:  # the v1 note shape: **ship** · `nous:slug` · effort low
+        m = re.search(r"\*\*(?:ship|hold)\*\* · `([^`]+)` · effort (\w+)", body or "")
+        if m:
+            out["hop"], out["effort"] = m.group(1), m.group(2)
     m = re.search(r"^- cost: (.+)$", body or "", re.M)
     if m:
         out["cost"] = m.group(1).strip()
@@ -81,10 +85,18 @@ def pr_rows(pr: dict[str, Any], reviews: list[dict[str, Any]], comments: list[di
             row = findings.setdefault(f["loc"], {"loc": f["loc"], "sev": f["sev"], "issue": f["issue"], "fate": "open", "first": note.get("submitted_at", "")})
             row["sev"], row["issue"] = f["sev"], f["issue"]
         note_rows.append({"at": note.get("submitted_at", ""), "url": note.get("html_url", ""), **meta, "findings": len(hare_r1.parse_old_findings(body))})
-    resolved = {t.get("path", ""): t for t in threads if t.get("isResolved")}
+    # A resolved Hare thread marks the one finding on that path AND line (Hare
+    # Bot, #246): one resolved thread on a file must not resolve every finding
+    # on the file. GitHub moves the line as the diff moves, so `originalLine`
+    # (the line when the bubble was posted) is matched too.
+    resolved = set()
+    for t in threads:
+        if t.get("isResolved"):
+            for ln in (t.get("line"), t.get("originalLine")):
+                if ln:
+                    resolved.add(f"{t.get('path', '')}:{ln}")
     for loc, row in findings.items():
-        path = loc.rsplit(":", 1)[0]
-        if row["fate"] == "open" and path in resolved:
+        if row["fate"] == "open" and loc in resolved:
             row["fate"] = "resolved"
     scores = []
     for c in comments:
@@ -211,8 +223,8 @@ is what Hare has learned here. Hare reads both before every note.
 Two kinds of line live here. Rules the owner wrote by hand, anywhere outside the
 marked block. And the marked block, which `scripts/hare_ledger.py` rewrites on
 the weekly ledger run from `/hare score 1..5 <why>` comments: a score of 2 or
-less with a reason becomes a line. To retire one, resolve or edit the score
-comment it came from; the next run drops it.
+less with a reason becomes a line. To retire one, delete the score comment it
+came from, or edit it to a 3 or higher; the next run drops the line.
 
 ## Owner's rules
 
@@ -237,7 +249,7 @@ def _threads(owner: str, repo: str, n: int, token: str) -> list[dict[str, Any]]:
     query = """
     query($owner:String!,$name:String!,$n:Int!) {
       repository(owner:$owner, name:$name) { pullRequest(number:$n) {
-        reviewThreads(first: 100) { nodes { isResolved isOutdated path line comments(first:1) { nodes { body } } } } } } }
+        reviewThreads(first: 100) { nodes { isResolved isOutdated path line originalLine comments(first:1) { nodes { body } } } } } } }
     """
     try:
         data = hare_r1.github_api("POST", "/graphql", token, {"query": query, "variables": {"owner": owner, "name": repo, "n": n}})
