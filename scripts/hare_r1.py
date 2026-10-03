@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hare R1c doorbell: review a PR via Nous, then OpenRouter. Never required CI."""
+"""Hare R1c doorbell: review a PR via Groq, Gemini, Nous, then OpenRouter. Never required CI."""
 
 from __future__ import annotations
 
@@ -32,22 +32,46 @@ PAUSED = "<!-- searchts-r1-paused -->"
 NOUS_BASE = "https://inference-api.nousresearch.com/v1"
 OR_BASE = "https://openrouter.ai/api/v1"
 ZEN_BASE = "https://opencode.ai/zen/v1"
+GROQ_BASE = "https://api.groq.com/openai/v1"
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 LLM_TIMEOUT_SEC = 60
 # Model hops stop after this, so the needed note posts before the job timeout.
 HOP_BUDGET_S = 360
+# Reasoning models burn the whole budget thinking and return content None
+# (finish_reason length). Proven 2026-10-02 on the real PR 222 payload:
+# space-bunny-alpha ate 2500 and 8000 max_tokens with zero content.
+# So the budget is wide and OpenRouter hops cap reasoning effort.
+LLM_MAX_TOKENS = 8000
+OR_REASONING = {"effort": "low", "exclude": True}
+# Gemini's OpenAI-compatibility layer maps a top-level reasoning_effort onto the
+# thinking budget: "low" is 1024 tokens for the 2.5 models. Without it, 2.5 Flash
+# spends the shared 8000-token output budget thinking and returns empty content,
+# which is the failure this whole chain exists to escape. This is NOT the
+# OpenRouter shape (a nested "reasoning" object), so the hop carries its own.
+GEMINI_REASONING = {"reasoning_effort": "low"}
 
-# Fixed list, not a router. Live 2026-10-01.
-# Dropped: nex-n2.5-pro:free (gone), unsuffixed Nous ids (paid).
+# Fixed list, not a router. Live 2026-10-02.
+# Dropped: nex-n2.5-pro:free (gone), unsuffixed Nous ids (paid),
+# OR space-bunny (leaves OpenRouter 2026-10-05).
+# Zen stays in code but CI passes no key (free tier is TUI-only,
+# API calls rejected), so those hops are skipped.
 # Skip: openrouter/free, Lyria, Muse contributor-free (trains; Responses API).
-# Space Bunny leaves OpenRouter 2026-10-05. OR may retain prompts (not training).
-# Zen space-bunny-free is zero-retention.
+# OR may retain prompts (not training).
+HARE_GROQ_DEFAULT = (
+    "openai/gpt-oss-120b"
+)
+HARE_GEMINI_DEFAULT = "gemini-2.5-flash"
 HARE_NOUS_DEFAULT = (
-    "stealth/space-bunny-alpha,"
     "poolside/laguna-s-2.1:free,"
-    "meituan/longcat-2.5-preview:free"
+    "meituan/longcat-2.5-preview:free,"
+    # Last, not first: the empty-content failure above was measured against this
+    # slug on OpenRouter, not on Nous, so it is not dropped on a guess. But Nous
+    # hops carry no reasoning control, so if it fails here it burns up to
+    # LLM_TIMEOUT_S of HOP_BUDGET_S before the chain moves on. Try it after the
+    # two with no such history.
+    "stealth/space-bunny-alpha"
 )
 HARE_OR_DEFAULT = (
-    "stealth/space-bunny-alpha,"
     "poolside/laguna-s-2.1:free,"
     "qwen/qwen3.8-27b:free"
 )
@@ -406,13 +430,21 @@ def bubble_comments(bubbles: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
-def chat_complete(base: str, key: str, model: str, messages: list[dict[str, str]]) -> str:
-    body = {
+def chat_complete(
+    base: str,
+    key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    request_options: dict[str, Any] | None = None,
+) -> str:
+    body: dict[str, Any] = {
         "model": model,
         "messages": messages,
         "temperature": 0.1,
-        "max_tokens": 2500,
+        "max_tokens": LLM_MAX_TOKENS,
     }
+    if request_options:
+        body.update(request_options)
     req = urllib.request.Request(
         f"{base.rstrip('/')}/chat/completions",
         data=json.dumps(body).encode(),
@@ -787,6 +819,10 @@ def run() -> int:
     nous_key = _env("SEARCHTS_HARE_API_KEY_NOUS")
     or_key = _env("SEARCHTS_HARE_API_KEY_OR")
     zen_key = _env("SEARCHTS_HARE_API_KEY_ZEN")
+    groq_key = _env("SEARCHTS_HARE_API_KEY_GROQ")
+    gemini_key = _env("SEARCHTS_HARE_API_KEY_GEMINI")
+    groq_models = _csv_models("HARE_GROQ_MODEL", HARE_GROQ_DEFAULT)
+    gemini_models = _csv_models("HARE_GEMINI_MODEL", HARE_GEMINI_DEFAULT)
     nous_models = _csv_models("HARE_NOUS_MODEL", HARE_NOUS_DEFAULT)
     or_models = _csv_models("HARE_OR_MODEL", HARE_OR_DEFAULT)
     zen_models = _csv_models("HARE_ZEN_MODEL", HARE_ZEN_DEFAULT)
@@ -805,6 +841,10 @@ def run() -> int:
             nous_key,
             or_key,
             zen_key,
+            groq_key,
+            gemini_key,
+            groq_models,
+            gemini_models,
             nous_models,
             or_models,
             zen_models,
@@ -817,6 +857,40 @@ def run() -> int:
         return 0
 
 
+def build_provider_chain(
+    keys: dict[str, str],
+    models: dict[str, list[str]],
+) -> list[tuple[str, str, str, str, dict[str, Any]]]:
+    """The fixed hop list, in order, as (name, base, key, model, request options).
+
+    A missing key drops that provider entirely rather than falling through to
+    the next one with the wrong credential. The order is the contract
+    (PLAN.md R1c), so this stays a pure function and a test pins the order.
+    """
+    bases = {
+        "groq": GROQ_BASE,
+        "gemini": GEMINI_BASE,
+        "nous": NOUS_BASE,
+        "openrouter": OR_BASE,
+        "zen": ZEN_BASE,
+    }
+    options: dict[str, dict[str, Any]] = {
+        "groq": {},
+        "gemini": GEMINI_REASONING,
+        "nous": {},
+        "openrouter": {"reasoning": OR_REASONING},
+        "zen": {},
+    }
+    chain: list[tuple[str, str, str, str, dict[str, Any]]] = []
+    for name in ("groq", "gemini", "nous", "openrouter", "zen"):
+        key = keys.get(name, "")
+        if not key:
+            continue
+        for model in models.get(name, []):
+            chain.append((name, bases[name], key, model, dict(options[name])))
+    return chain
+
+
 def _hare_once(
     owner: str,
     repo: str,
@@ -826,11 +900,15 @@ def _hare_once(
     nous_key: str,
     or_key: str,
     zen_key: str,
+    groq_key: str,
+    gemini_key: str,
+    groq_models: list[str],
+    gemini_models: list[str],
     nous_models: list[str],
     or_models: list[str],
     zen_models: list[str],
 ) -> int:
-    if not nous_key and not or_key and not zen_key:
+    if not nous_key and not or_key and not zen_key and not groq_key and not gemini_key:
         post_needed(owner, repo, n, token, "no Hare API secrets on this run (forks have none).")
         return 0
 
@@ -916,28 +994,34 @@ def _hare_once(
     user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask)
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
 
-    providers: list[tuple[str, str, str, str]] = []
-    if nous_key:
-        for model in nous_models:
-            providers.append(("nous", NOUS_BASE, nous_key, model))
-    if or_key:
-        for model in or_models:
-            providers.append(("openrouter", OR_BASE, or_key, model))
-    if zen_key:
-        for model in zen_models:
-            providers.append(("zen", ZEN_BASE, zen_key, model))
+    providers = build_provider_chain(
+        {
+            "groq": groq_key,
+            "gemini": gemini_key,
+            "nous": nous_key,
+            "openrouter": or_key,
+            "zen": zen_key,
+        },
+        {
+            "groq": groq_models,
+            "gemini": gemini_models,
+            "nous": nous_models,
+            "openrouter": or_models,
+            "zen": zen_models,
+        },
+    )
 
     last_err = "no provider"
     errs: list[str] = []
     parsed: dict[str, Any] | None = None
     used = ""
     hops_start = time.time()
-    for name, base, key, model in providers:
+    for name, base, key, model, request_options in providers:
         if time.time() - hops_start > HOP_BUDGET_S:
             errs.append(f"hop budget ({HOP_BUDGET_S} s) spent before {name}:{model}")
             break
         try:
-            raw = chat_complete(base, key, model, messages)
+            raw = chat_complete(base, key, model, messages, request_options)
             parsed = extract_json(raw)
             if parsed is None:
                 raise RuntimeError("no JSON object in model output")

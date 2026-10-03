@@ -42,7 +42,7 @@ gh pr comment <n> --body '/hare'
 
 If a Review with `<!-- searchts-r1-review -->` already exists on this SHA, the Action no-ops. Push a commit to re-review. `/hare` still retries after a `searchts-r1-needed` nag (no Review yet).
 
-**Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: Nous then OpenRouter then Zen (fixed list in `scripts/hare_r1.py`: Space Bunny, then Laguna / LongCat / Qwen, Ling Fin last on Zen). Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs get the nag, never a model hop, including when `/hare` or `@hare` runs the job with secrets.
+**Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: Groq then Gemini then Nous then OpenRouter then Zen (fixed list in `scripts/hare_r1.py`: GPT-OSS, then Gemini Flash, then Laguna / LongCat / Space Bunny, then Laguna / Qwen, then Zen free; OpenRouter hops cap reasoning effort and the Gemini hop caps its thinking budget, so the budget is not all thinking). Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs get the nag, never a model hop, including when `/hare` or `@hare` runs the job with secrets.
 
 Hare posts **one GitHub Review** (v2, the shape locked on Hare Bot #221). Author is the bot. Local chat is not enough.
 

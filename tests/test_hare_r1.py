@@ -206,11 +206,14 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     assert hare_r1._csv_models("HARE_OR_MODEL", "a, b ,c") == ["a", "b", "c"]
     monkeypatch.setenv("HARE_OR_MODEL", "only-one")  # type: ignore[attr-defined]
     assert hare_r1._csv_models("HARE_OR_MODEL", "a,b") == ["only-one"]
-    assert "stealth/space-bunny-alpha" in hare_r1.HARE_OR_DEFAULT.split(",")
+    assert "stealth/space-bunny-alpha" not in hare_r1.HARE_OR_DEFAULT.split(",")  # dropped: empty content
+    assert hare_r1.HARE_OR_DEFAULT.split(",")[0] == "poolside/laguna-s-2.1:free"
     assert "qwen/qwen3.8-27b:free" in hare_r1.HARE_OR_DEFAULT.split(",")
     assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
-    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stealth/space-bunny-alpha"
-    assert hare_r1.HARE_NOUS_DEFAULT.endswith("meituan/longcat-2.5-preview:free")
+    # space-bunny-alpha stays on Nous but goes last: the empty-content failure
+    # was measured on OpenRouter, and a Nous hop carries no reasoning control.
+    assert hare_r1.HARE_NOUS_DEFAULT.endswith("stealth/space-bunny-alpha")
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "poolside/laguna-s-2.1:free"
     assert hare_r1.HARE_ZEN_DEFAULT.split(",")[0] == "space-bunny-free"
     assert hare_r1.HARE_ZEN_DEFAULT.endswith("ling-3.0-flash-fin-free")
 
@@ -572,3 +575,100 @@ def test_hop_budget_fits_inside_the_job_timeout() -> None:
     worst = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.HOP_BUDGET_S + hare_r1.LLM_TIMEOUT_SEC + 120
     assert worst < minutes * 60
 
+
+def _workflow_env(name: str) -> str:
+    """The literal a HARE_*_MODEL line pins, or "" when it is absent or an expression."""
+    import re
+    from pathlib import Path
+
+    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
+    m = re.search(rf"^\s*{name}:\s*(.+?)\s*$", wf, re.MULTILINE)
+    if not m:  # no override at all, so the Python default is what runs
+        return ""
+    value = m.group(1).strip().strip("'\"")
+    return "" if "${{" in value else value
+
+
+def test_workflow_groq_models_match_the_live_default() -> None:
+    # Retired on Groq free: llama-3.3-70b-versatile (16 Aug 2026), moonshotai/kimi-k2-instruct.
+    assert _workflow_env("HARE_GROQ_MODEL") == hare_r1.HARE_GROQ_DEFAULT
+
+
+def test_workflow_model_overrides_do_not_undo_the_python_defaults() -> None:
+    """An env override re-asserts the order in CI, which is where the code runs.
+
+    This has already drifted twice: the retired Groq models and the OpenRouter
+    space-bunny hop both came back through this file while the Python default
+    was correct. Lock every literal against its default so it cannot again.
+    """
+    for env_name, default in (
+        ("HARE_GROQ_MODEL", hare_r1.HARE_GROQ_DEFAULT),
+        ("HARE_GEMINI_MODEL", hare_r1.HARE_GEMINI_DEFAULT),
+        ("HARE_NOUS_MODEL", hare_r1.HARE_NOUS_DEFAULT),
+        ("HARE_OR_MODEL", hare_r1.HARE_OR_DEFAULT),
+        ("HARE_ZEN_MODEL", hare_r1.HARE_ZEN_DEFAULT),
+    ):
+        pinned = _workflow_env(env_name)
+        if not pinned:  # absent or an expression, so it defers to the default
+            continue
+        assert pinned == default, f"{env_name} pins {pinned!r} but the default is {default!r}"
+
+
+def test_provider_chain_is_the_fixed_order() -> None:
+    keys = {"groq": "g", "gemini": "m", "nous": "n", "openrouter": "o", "zen": "z"}
+    models = {"groq": ["g1"], "gemini": ["m1"], "nous": ["n1", "n2"], "openrouter": ["o1"], "zen": ["z1"]}
+    chain = hare_r1.build_provider_chain(keys, models)
+    assert [hop[0] for hop in chain] == ["groq", "gemini", "nous", "nous", "openrouter", "zen"]
+    assert [hop[3] for hop in chain] == ["g1", "m1", "n1", "n2", "o1", "z1"]
+    assert [hop[2] for hop in chain] == ["g", "m", "n", "n", "o", "z"]
+
+
+def test_provider_chain_drops_a_provider_with_no_key() -> None:
+    models = {"groq": ["g1"], "gemini": ["m1"], "nous": ["n1"], "openrouter": ["o1"], "zen": ["z1"]}
+    chain = hare_r1.build_provider_chain({"groq": "g", "nous": "n"}, models)
+    assert [hop[0] for hop in chain] == ["groq", "nous"]
+    assert all(hop[2] in {"g", "n"} for hop in chain)
+
+
+def test_each_provider_carries_its_own_request_options() -> None:
+    keys = {"groq": "g", "gemini": "m", "nous": "n", "openrouter": "o", "zen": "z"}
+    models = {"groq": ["g1"], "gemini": ["m1"], "nous": ["n1"], "openrouter": ["o1"], "zen": ["z1"]}
+    opts = {hop[0]: hop[4] for hop in hare_r1.build_provider_chain(keys, models)}
+    # Gemini needs a top-level reasoning_effort; OpenRouter needs a nested object.
+    # Neither shape leaks into the other hop, and the rest carry nothing.
+    assert opts["gemini"] == {"reasoning_effort": "low"}
+    assert opts["openrouter"] == {"reasoning": {"effort": "low", "exclude": True}}
+    assert opts["groq"] == {} and opts["nous"] == {} and opts["zen"] == {}
+
+
+def test_hop_loop_sends_every_provider_its_own_options() -> None:
+    calls: list[tuple[str, str, dict[str, object]]] = []
+
+    def fake_complete(base: str, key: str, model: str, messages: list, request_options=None) -> str:
+        calls.append((model, key, dict(request_options or {})))
+        if model != "n1":  # the earlier hops die the way the real ones do
+            raise RuntimeError("LLM empty content")
+        return '{"summary": "ok", "findings": []}'
+
+    keys = {"groq": "g", "gemini": "m", "nous": "n", "openrouter": "o", "zen": "z"}
+    models = {"groq": ["g1"], "gemini": ["m1"], "nous": ["n1"], "openrouter": ["o1"], "zen": ["z1"]}
+
+    parsed = None
+    for _name, base, key, model, request_options in hare_r1.build_provider_chain(keys, models):
+        try:
+            parsed = hare_r1.extract_json(fake_complete(base, key, model, [], request_options))
+            if parsed is not None:
+                break
+        except RuntimeError:
+            continue
+
+    assert [c[0] for c in calls] == ["g1", "m1", "n1"]
+    assert [c[1] for c in calls] == ["g", "m", "n"]
+    assert [c[2] for c in calls] == [{}, {"reasoning_effort": "low"}, {}]
+    assert parsed == {"summary": "ok", "findings": []}
+
+
+def test_the_slug_with_the_documented_empty_content_is_not_first_on_nous() -> None:
+    nous = hare_r1.HARE_NOUS_DEFAULT.split(",")
+    assert "stealth/space-bunny-alpha" in nous
+    assert nous[-1] == "stealth/space-bunny-alpha"
