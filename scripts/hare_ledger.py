@@ -119,8 +119,14 @@ def pr_rows(pr: dict[str, Any], reviews: list[dict[str, Any]], comments: list[di
         if row["fate"] == "open" and row["loc"] in resolved:
             row["fate"] = "resolved"
     scores = []
+    # A run where no hop answered posts a needed comment, not a review. It is a
+    # failed hop, counted apart from the notes so an empty night shows as one.
+    needed = 0
     for c in comments:
-        n, text = score_from(str(c.get("body") or ""))
+        body = str(c.get("body") or "")
+        if hare_r1.NEEDED in body:
+            needed += 1
+        n, text = score_from(body)
         if n is not None:
             scores.append({"score": n, "text": text, "by": (c.get("user") or {}).get("login", ""), "at": c.get("created_at", "")})
     return {
@@ -131,6 +137,7 @@ def pr_rows(pr: dict[str, Any], reviews: list[dict[str, Any]], comments: list[di
         "notes": note_rows,
         "findings": list(findings.values()),
         "scores": scores,
+        "needed": needed,
     }
 
 
@@ -152,6 +159,7 @@ def summarize(entries: list[dict[str, Any]]) -> dict[str, Any]:
         "scores": len(scores),
         "score_avg": round(sum(scores) / len(scores), 2) if scores else None,
         "cut_notes": cuts,
+        "needed": sum(int(e.get("needed") or 0) for e in entries),
     }
 
 
@@ -164,7 +172,7 @@ def render_md(entries: list[dict[str, Any]], summary: dict[str, Any], built: str
         "",
         "Every finding Hare posted here, what became of it, and what the owner said. Built by `scripts/hare_ledger.py` from the notes, the Since lines, resolved threads and `/hare score` comments. PLAN R2b.",
         "",
-        f"Built {built}. {summary['prs']} PRs, {summary['notes']} notes, {summary['real']} real and {summary['skip']} skip findings, {summary['cut_notes']} notes cut at the budget.",
+        f"Built {built}. {summary['prs']} PRs, {summary['notes']} notes, {summary['real']} real and {summary['skip']} skip findings, {summary['cut_notes']} notes cut at the budget, {summary.get('needed', 0)} runs where no hop answered.",
         "",
         f"**Hit rate:** {rate or 'no real findings yet'}.",
         f"**Owner scores:** {summary['scores']} given" + (f", average {summary['score_avg']} of 5" if summary["score_avg"] is not None else "") + ".",
@@ -289,9 +297,9 @@ def build(owner: str, repo: str, token: str, max_prs: int = 200) -> dict[str, An
         for pr in prs:
             n = int(pr["number"])
             reviews = hare_r1.github_api("GET", f"/repos/{owner}/{repo}/pulls/{n}/reviews?per_page=100", token)
-            if not any(is_hare(str(r.get("body") or "")) for r in reviews):
-                continue
             comments = hare_r1.github_api("GET", f"/repos/{owner}/{repo}/issues/{n}/comments?per_page=100", token)
+            if not any(is_hare(str(r.get("body") or "")) for r in reviews) and not any(hare_r1.NEEDED in str(c.get("body") or "") for c in comments):
+                continue
             entry = pr_rows(pr, reviews, comments, _threads(owner, repo, n, token))
             entries.append(entry)
         page += 1

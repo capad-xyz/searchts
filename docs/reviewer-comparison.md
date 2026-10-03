@@ -6,12 +6,13 @@ Built 2026-10-03.
 
 | | Hare (App) | Hare Bot (Grok Bot) |
 | --- | --- | --- |
-| PRs | 53 | 13 |
-| Notes | 82 | 13 |
-| Notes with a finding | 23 | 12 |
+| PRs | 114 | 13 |
+| Notes | 85 | 13 |
+| Notes with a finding | 26 | 12 |
 | Notes with nothing | 59 | 1 |
+| Runs where no hop answered | 138 | not logged |
 | Real findings | 5 | 15 |
-| Skip findings | 24 | 16 |
+| Skip findings | 28 | 16 |
 | Real done | 0 (fixed or resolved, learned from later notes and threads) | 14 (marked fix: yes in its own log, not checked against the repo) |
 | Minutes per note | 0.7 (model call time, from the cost line) | 3.9 (wall clock, start to submit) |
 | Tokens per note | from the cost line, see the ledger | 12482 (its own chars/4 estimate) |
