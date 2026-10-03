@@ -68,8 +68,13 @@ GEMINI_REASONING = {"reasoning_effort": "low"}
 # answered, so last). Left out: apodex-1.1-mini:free (new 2026-10-01, no
 # record), nemotron-3-ultra:free (cannot think below medium), the health,
 # safety, tiny and translation models, space-bunny-alpha (gone 2026-10-05).
-# Groq: gpt-oss-120b stays; qwen/qwen3.8-27b is on Groq too, the same model
-# that answered on OpenRouter, so it is the second Groq hop.
+# Groq: out of the default chain. Live on PR 235 (2026-10-03) gpt-oss-120b
+# returned 413: the free tier caps a request at 8k tokens and Hare's prompt
+# (AGENTS.md plus the diff) is three times that. Back when the prompt is
+# trimmed for it or the key is paid; the code path stays.
+# Gemini: gemini-2.5-flash returned 404 on the same run, ahead of its October
+# 16 shutdown date. Google names 3.5 Flash and 3.1 Flash-Lite as the
+# replacements; free-tier access to them is unverified until a run says.
 # Zen: longcat and ling return 403 FreeTierError outside the OpenCode TUI by
 # policy (measured 2026-10-03), so only space-bunny-free stays. CI passes no
 # Zen key anyway.
@@ -77,11 +82,8 @@ GEMINI_REASONING = {"reasoning_effort": "low"}
 # public list); unchanged, space-bunny-alpha last for the reason below.
 # Skip: openrouter/free, Lyria, Muse contributor-free (trains; Responses API).
 # OR may retain prompts (not training).
-HARE_GROQ_DEFAULT = (
-    "openai/gpt-oss-120b,"
-    "qwen/qwen3.8-27b"
-)
-HARE_GEMINI_DEFAULT = "gemini-2.5-flash"
+HARE_GROQ_DEFAULT = ""
+HARE_GEMINI_DEFAULT = "gemini-3.5-flash,gemini-3.1-flash-lite"
 HARE_NOUS_DEFAULT = (
     "poolside/laguna-s-2.1:free,"
     "meituan/longcat-2.5-preview:free,"
