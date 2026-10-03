@@ -68,6 +68,41 @@ while `ci:`, `docs:`, `test:`, `refactor:` and `chore:` ship silently with the
 next release. Maintainers cut releases by merging the standing release PR, so
 please do not bump version numbers in your PR.
 
+## AI assistance
+
+Using an AI to write, edit, or review is fine. Say which one.
+
+Every PR an agent touched gets a **Models** section, at the bottom of the body. One writer can be one line. More than one role uses the table. Columns are Role, Model, Effort.
+
+```markdown
+## Models
+
+| Role | Model | Effort |
+| --- | --- | --- |
+| wrote | Grok 4.7, xAI chat | medium |
+| edited | claude-opus-5-5 | high |
+```
+
+The Model cell is the slug, or the agent and the model together. Prefer the API slug when you have one: `openai/gpt-oss-120b`, `gemini-2.5-flash`, `poolside/laguna-s-2.1:free`, `qwen/qwen3.8-27b:free`. A product name alone (`Claude`, `Grok`) is not enough. Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one word: `low`, `medium`, or `high`. Not a second essay.
+
+A comment an agent posts uses the same line, signed as whoever is writing:
+
+```markdown
+— searchts Remote Chat #2
+
+| Role | Model | Effort |
+| --- | --- | --- |
+| wrote | Grok 4.7, xAI chat | medium |
+```
+
+Trailer under the table. The name is the agent, not a person pretending the agent was not there:
+
+```
+Co-authored-by: Grok <grok@x.ai>
+```
+
+Do not hide the tool. Do not claim a review the model did not run.
+
 ## What we merge (and what we don't)
 
 searchts has a deliberately narrow identity: a **keyless, free, open-source** web layer for AI
