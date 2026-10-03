@@ -83,7 +83,7 @@ Every PR an agent touched gets a **Models** section, at the bottom of the body. 
 | edited | claude-opus-5-5 | high | AI edited it |
 ```
 
-The Model cell is the slug, or the agent and the model together. Prefer the API slug when you have one: `openai/gpt-oss-120b`, `gemini-2.5-flash`, `poolside/laguna-s-2.1:free`, `qwen/qwen3.8-27b:free`. A product name alone (`Claude`, `Grok`) is not enough. Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one word: `low`, `medium`, or `high`. Not a second essay. If an AI opened the PR, wrote the commit, or posted the comment, that AI fills Purpose. The line is `AI wrote it` when it created the PR or the commit, `AI edited it` when it only edited, `AI reviewed it` when it only reviewed. A human does not write that cell for the agent.
+The Model cell is the slug, or the agent and the model together. Prefer the API slug when you have one: `openai/gpt-oss-120b`, `gemini-3.1-flash-lite`, `poolside/laguna-s-2.1:free`, `qwen/qwen3.8-27b:free`. A product name alone (`Claude`, `Grok`) is not enough. Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one word: `low`, `medium`, or `high`. Not a second essay. If an AI opened the PR, wrote the commit, or posted the comment, that AI fills Purpose. The line is `AI wrote it` when it created the PR or the commit, `AI edited it` when it only edited, `AI reviewed it` when it only reviewed. A human does not write that cell for the agent.
 
 A comment an agent posts uses the same table, signed as whoever is writing:
 
