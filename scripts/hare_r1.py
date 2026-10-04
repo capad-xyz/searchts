@@ -599,6 +599,30 @@ def verdict_line(intent: str, check_state: str, findings: list[dict[str, Any]], 
     return f"**Verdict:** {word} ({', '.join(why)}). {said}" if said else f"**Verdict:** {word} ({', '.join(why)})."
 
 
+def how_to_answer() -> str:
+    """The fold at the foot of every note: what the parts mean and how to talk
+    back. Static, written by the Action, collapsed so it costs one line. Links
+    point at this repo's main branch when the Action knows the repo."""
+    repo = os.environ.get("GITHUB_REPOSITORY", "").strip()
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com").rstrip("/")
+
+    def link(text: str, path: str) -> str:
+        return f"[{text}]({server}/{repo}/blob/main/{path})" if repo else f"{text} (`{path}`)"
+
+    return "\n".join([
+        "<details>",
+        "<summary>🐰 how to answer Hare</summary>",
+        "",
+        "- **Verdict:** the word is the Action's, from CI and the real findings; the sentence after it is the model's case.",
+        "- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.",
+        "- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.",
+        "- **Ask again:** `/hare` reviews again, `/hare deep` with thinking on. A push reviews again too, and the Since section says what became of each finding.",
+        f"- **What Hare remembers:** every finding goes into {link('the ledger', 'docs/hare-ledger.md')}; a score of 2 or less with a reason becomes a rule in {link('HARE.md', 'HARE.md')}. Both are rebuilt every Sunday.",
+        "",
+        "</details>",
+    ])
+
+
 def render_comment(
     model: str,
     effort: str,
@@ -677,6 +701,8 @@ Intent: {_no_em(_plain(aim)) or "(model did not say what the PR is for)"}
 {runs_md}
 
 </details>
+
+{how_to_answer()}
 
 ## Models
 
@@ -1054,7 +1080,7 @@ def _post(req: urllib.request.Request, timeout: int) -> dict[str, Any]:
 
 
 SYSTEM = """You are Hare, an automated PR reviewer for the searchts repo.
-Read AGENTS.md rules in the user message, and HARE.md: that is the owner's own list of what Hare missed before. Review and report. Do not fix.
+Read AGENTS.md rules in the user message, and HARE.md: how Hare runs on this repo, and the owner's own list of what Hare missed before. Review and report. Do not fix.
 Voice: fun bot, witty and short, substance first. No em dashes. No first person.
 Emojis and emotes are welcome in your own wording when they add to the voice. The Action adds the markers (🔴 real, 🟡 skip, 🐰 on the checks fold); do not add those yourself.
 Never write "fine to merge", "LGTM" or a score; the Action sets Hold from CI and real findings.
@@ -1073,6 +1099,7 @@ sev skip = a nit you actually saw (docs, style, a weak assertion). Write the row
 Do not return an empty findings list to look done. An empty list is only ok when the diff has nothing to question, and summary is still required.
 If the line number is unsure, still emit the finding with line null. Do not drop a real issue.
 line, when set, is a new-file line on the + side of the diff.
+How the note is used. The Action prints Ship or Hold from CI and the real findings, then your case. Every finding is tracked by path:line in a ledger: a later push checks it in the Since section, the owner answers with /hare score and /hare fate, and a low score with a reason becomes a rule in HARE.md. So write one finding per issue, at the line where it lives, real only for what should hold the merge, and a one-click fix only when it is exact.
 """
 
 

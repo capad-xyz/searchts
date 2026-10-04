@@ -1170,3 +1170,22 @@ def test_a_python_fix_that_would_not_parse_is_dropped(monkeypatch) -> None:
 
 def test_the_prompt_asks_for_one_click_fixes() -> None:
     assert '"original":' in hare_r1.SYSTEM and "Commit suggestion" in hare_r1.SYSTEM and "at most 8" in hare_r1.SYSTEM
+
+
+def test_every_note_ends_with_how_to_answer_hare(monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_REPOSITORY", "capad-xyz/searchts")
+    body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [])
+    fold = body[body.index("<summary>🐰 how to answer Hare</summary>"):body.index("## Models")]
+    assert "/hare score 1..5 <why>" in fold and "/hare fate <path:line> fixed|wrong|wontfix <why>" in fold
+    assert "/hare deep" in fold and "Commit suggestion" in fold
+    assert "(https://github.com/capad-xyz/searchts/blob/main/HARE.md)" in fold
+    assert "(https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md)" in fold
+    assert body.index("checks & computer run") < body.index("how to answer Hare") < body.index("## Models")
+    monkeypatch.delenv("GITHUB_REPOSITORY")
+    assert "HARE.md (`HARE.md`)" in hare_r1.how_to_answer()  # no repo, no broken link
+    assert "\u2014" not in body
+
+
+def test_the_model_knows_how_its_note_is_used() -> None:
+    assert "tracked by path:line in a ledger" in hare_r1.SYSTEM
+    assert "/hare score and /hare fate" in hare_r1.SYSTEM and "how Hare runs on this repo" in hare_r1.SYSTEM
