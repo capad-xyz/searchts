@@ -46,8 +46,16 @@ happened on the nine days we shipped a version.
 root `Dockerfile` is either `pip install -e .` or a local `dist/*.whl` wheel, neither of which resolves
 `searchts` from PyPI. `demo/Dockerfile` does install the PyPI release (`pip3 install searchts`), but no
 workflow builds it: it is built by hand to record the README GIFs, and pip inside it reports a Linux
-platform, so it cannot be the null-platform rows. So the release-day bursts are not our test suite. They come from outside the
-workflows, and we have not identified the requesters yet. **U8** tracks that.
+platform, so it cannot be the null-platform rows. So the release-day bursts are not our test suite.
+
+They are, though, very likely set off by our own release pipeline. On every tag, the `mcp-registry` job in
+`release.yml` republishes `server.json` to the official MCP registry, and its own comment says why: so
+downstream indexes (PulseMCP, Forge, Glama, and others) pick up the new version automatically. searchts is
+claimed on Glama (`glama.json`; the root `Dockerfile` exists for Glama's builds, and it installs from
+source, so those builds are not PyPI downloads of searchts). A release therefore starts a same-day wave of
+directory crawls, inspections and mirror syncs. Any of them that fetch the files without a package manager
+show up with no platform, which matches both the release-day share and the 67% null rows. This is the
+first suspect for **U8**, not yet confirmed.
 
 ### 1.3 What is left
 
@@ -279,7 +287,7 @@ not require anyone's URLs leaving their machine**, and should not.
    decision.
 3. **Retire the download count as a headline metric.** Quote the median. See **U9**.
 4. **Identify the release-day requesters** (**U8**). 51% of our download history is unexplained and it
-   is answerable.
+   is answerable. Start with the MCP registry fan-out our own release job triggers (section 1.2).
 5. **Only then pick a lane.** Token-metered reads and compliance-grade provenance are both genuinely
    unoccupied. They are also different companies. The market evidence says self-serve read pricing is
    capped near $10/1k by bundled Anthropic/OpenAI web search, and that durable revenue in this category
@@ -314,8 +322,10 @@ Business shape). That needs design-partner conversations, not downloads.
 
 ## Open questions
 
-- **U8** Who are the release-day requesters? 51% of all downloads, unexplained. Answerable from PyPI
-  user-agent strings and release-time correlation.
+- **U8** Who are the release-day requesters? 51% of all downloads, unexplained. First suspect: the
+  directories and mirrors that pick up each version after `release.yml` republishes `server.json` to the
+  MCP registry (PulseMCP, Forge, Glama and others). Answerable from the PyPI BigQuery dataset: installer
+  name and download time against the registry publish time on release days.
 - **U9** Retire download mean as a reported metric; use median. Needs an owner decision to stick.
 - **U10** No published conversion benchmark exists for OSS-download-to-paying. If we want one we have to
   be the first to publish it, which means shipping the hosted tier before we know the answer.
