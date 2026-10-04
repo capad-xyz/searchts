@@ -1170,3 +1170,18 @@ def test_a_python_fix_that_would_not_parse_is_dropped(monkeypatch) -> None:
 
 def test_the_prompt_asks_for_one_click_fixes() -> None:
     assert '"original":' in hare_r1.SYSTEM and "Commit suggestion" in hare_r1.SYSTEM and "at most 8" in hare_r1.SYSTEM
+
+
+def test_the_note_reads_ci_again_after_the_hop(monkeypatch) -> None:
+    """Checks read before the hop say "not done" on a fresh push; the note
+    posts minutes later and should say what CI says then."""
+    done = [{"name": "ci / test", "status": "completed", "conclusion": "success"}]
+    monkeypatch.setattr(hare_r1, "wait_checks", lambda *a: done)
+    runs, state, notes = hare_r1.fresh_checks("o", "r", "abc", "t", [], "pending", ["no non-Hare checks yet"])
+    assert (runs, state, notes) == (done, "ok", [])
+
+    def down(*a):
+        raise RuntimeError("HTTP 502")
+
+    monkeypatch.setattr(hare_r1, "wait_checks", down)
+    assert hare_r1.fresh_checks("o", "r", "abc", "t", [], "pending", ["x"]) == ([], "pending", ["x"])  # keeps the first read
