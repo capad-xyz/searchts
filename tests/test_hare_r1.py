@@ -1,3 +1,4 @@
+import base64
 import io
 import json
 import sys
@@ -1099,3 +1100,73 @@ def test_the_note_says_ship_or_hold_and_the_model_says_why() -> None:
     # the word is never the model's: a case that says ship on a red PR still reads Hold
     assert hare_r1.verdict_line("hold", "fail", [], "ship it") .startswith("**Verdict:** Hold")
     assert '"case":' in hare_r1.SYSTEM and "the Action prints Ship or Hold" in hare_r1.SYSTEM
+
+
+ADDED_DIFF = """diff --git a/a.py b/a.py
+--- a/a.py
++++ b/a.py
+@@ -1,2 +1,7 @@
+ import os
++def f(x):
++    if x:
++        return 1
++    return 0
++print(f(1))
+ # end
+"""
+
+
+def test_a_fix_is_found_by_its_text_and_moves_the_finding_there() -> None:
+    added = hare_r1.parse_added_text(ADDED_DIFF)
+    assert added == {"a.py": {2: "def f(x):", 3: "    if x:", 4: "        return 1", 5: "    return 0", 6: "print(f(1))"}}
+    # the model said line 6, the text it quoted is line 4: the fix goes where the text is
+    f = [{"sev": "skip", "path": "a.py", "line": 6, "issue": "x", "original": "        return 1", "suggestion": "        return True"}]
+    hare_r1.attach_suggestions(f, added)
+    assert f[0]["line"] == 4 and f[0]["suggestion"] == "        return True" and "start_line" not in f[0]
+    c = hare_r1.bubble_comments(f)
+    assert c[0]["line"] == 4 and "```suggestion\n        return True\n```" in c[0]["body"] and "start_line" not in c[0]
+    # a three-line fix takes a range on the bubble
+    f = [{"sev": "real", "path": "a.py", "line": 3, "issue": "x", "original": "+    if x:\n+        return 1\n+    return 0", "suggestion": "    return 1 if x else 0"}]
+    hare_r1.attach_suggestions(f, added)
+    assert (f[0]["start_line"], f[0]["line"]) == (3, 5)  # the + markers were stripped
+    c = hare_r1.bubble_comments(f)[0]
+    assert (c["start_line"], c["start_side"], c["line"]) == (3, "RIGHT", 5)
+    assert "One-click fix in the bubble." in hare_r1.render_comment("nous:x", "low", "hold", f, "ok", [])
+
+
+def test_a_fix_that_cannot_be_pinned_or_changes_nothing_is_dropped_not_the_finding() -> None:
+    added = hare_r1.parse_added_text(ADDED_DIFF)
+    cases = [
+        {"original": "import os", "suggestion": "import sys"},  # a context line: the PR did not write it
+        {"original": "    return 0", "suggestion": "    return 0"},  # changes nothing
+        {"original": "    return 0", "suggestion": "    x = '```'"},  # would break the fence
+        {"original": "    if x:\n    return 0", "suggestion": "y"},  # not contiguous
+        {"suggestion": "a\nb"},  # several lines with nothing to pin them to
+    ]
+    for extra in cases:
+        f = [{"sev": "skip", "path": "a.py", "line": 5, "issue": "x", **extra}]
+        hare_r1.attach_suggestions(f, added)
+        assert "suggestion" not in f[0] and not f[0].get("_checked") and f[0]["line"] == 5, extra
+        assert "```suggestion" not in hare_r1.bubble_comments(f)[0]["body"]
+    # no original, one line: it replaces the finding's own line, as before
+    f = [{"sev": "skip", "path": "a.py", "line": 5, "issue": "x", "suggestion": "    return False"}]
+    hare_r1.attach_suggestions(f, added)
+    assert f[0]["_checked"] and f[0]["line"] == 5
+
+
+def test_a_python_fix_that_would_not_parse_is_dropped(monkeypatch) -> None:
+    src = "import os\ndef f(x):\n    if x:\n        return 1\n    return 0\nprint(f(1))\n# end\n"
+    monkeypatch.setattr(hare_r1, "github_api", lambda *a, **k: {"content": base64.b64encode(src.encode()).decode()})
+    check = hare_r1.suggestion_parses("o", "r", "abc", "t")
+    added = hare_r1.parse_added_text(ADDED_DIFF)
+    bad = [{"sev": "real", "path": "a.py", "line": 4, "issue": "x", "original": "        return 1", "suggestion": "        return (1"}]
+    hare_r1.attach_suggestions(bad, added, check)
+    assert "suggestion" not in bad[0]
+    good = [{"sev": "real", "path": "a.py", "line": 4, "issue": "x", "original": "        return 1", "suggestion": "        return 2"}]
+    hare_r1.attach_suggestions(good, added, check)
+    assert good[0]["suggestion"] == "        return 2"
+    assert check("notes.md", 1, 1, "anything (") is True  # only .py and .json are parsed
+
+
+def test_the_prompt_asks_for_one_click_fixes() -> None:
+    assert '"original":' in hare_r1.SYSTEM and "Commit suggestion" in hare_r1.SYSTEM and "at most 8" in hare_r1.SYSTEM
