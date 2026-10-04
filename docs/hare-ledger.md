@@ -2,21 +2,22 @@
 
 Every finding Hare posted here, what became of it, and what the owner said. Built by `scripts/hare_ledger.py` from the notes, the Since lines, resolved threads and `/hare score` comments. PLAN R2b.
 
-Built 2026-10-03. 114 PRs, 85 notes, 5 real and 28 skip findings, 1 notes cut at the budget, 138 runs where no hop answered.
+Built 2026-10-04. 118 PRs, 91 notes, 6 real and 33 skip findings, 1 notes cut at the budget, 138 runs where no hop answered.
 
-**Hit rate:** 0 of 5 real findings fixed or resolved (0%).
+**Hit rate:** 0 of 6 real findings fixed or resolved (0%).
 **Owner scores:** 0 given.
 
 | Hop | Notes |
 | --- | --- |
 | `openrouter:nex-agi/nex-n2.5-pro:free` | 24 |
 | `openrouter:poolside/laguna-s-2.1:free` | 18 |
-| `openrouter:qwen/qwen3.8-27b:free` | 13 |
-| `groq:openai/gpt-oss-120b` | 12 |
+| `groq:openai/gpt-oss-120b` | 15 |
+| `openrouter:qwen/qwen3.8-27b:free` | 15 |
 | `nous:poolside/laguna-s-2.1:free` | 4 |
 | `gemini:gemini-3.1-flash-lite` | 3 |
 | `nous:meituan/longcat-2.5-preview:free` | 2 |
 | `nous:stealth/space-bunny-alpha` | 2 |
+| `openrouter:qwen/qwen3.8-27b:free · deep` | 1 |
 | `groq:openai/gpt-oss-120b · deep` | 1 |
 | `gemini:gemini-3.1-flash-lite · deep` | 1 |
 | `gemini:gemini-3.5-flash` | 1 |
@@ -26,6 +27,10 @@ Built 2026-10-03. 114 PRs, 85 notes, 5 real and 28 skip findings, 1 notes cut at
 
 | PR | Notes | Real | Skip | Fates of real | Scores |
 | --- | --- | --- | --- | --- | --- |
+| #258 | 2 | 1 | 3 | open 1 |  |
+| #257 | 1 | 0 | 1 |  |  |
+| #256 | 1 | 0 | 0 |  |  |
+| #255 | 1 | 0 | 1 |  |  |
 | #254 | 3 | 0 | 4 |  |  |
 | #253 | 1 | 0 | 1 |  |  |
 | #252 | 1 | 0 | 0 |  |  |
@@ -45,7 +50,7 @@ Built 2026-10-03. 114 PRs, 85 notes, 5 real and 28 skip findings, 1 notes cut at
 | #235 | 2 | 0 | 4 |  |  |
 | #234 | 1 | 0 | 2 |  |  |
 | #233 | 1 | 1 | 0 | open 1 |  |
-| #232 | 2 | 0 | 1 |  |  |
+| #232 | 3 | 0 | 1 |  |  |
 | #231 | 0 | 0 | 0 |  |  |
 | #230 | 1 | 0 | 2 |  |  |
 | #229 | 0 | 0 | 0 |  |  |

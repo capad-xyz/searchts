@@ -1,20 +1,21 @@
 {
- "built": "2026-10-03",
+ "built": "2026-10-04",
  "repo": "capad-xyz/searchts",
  "summary": {
-  "prs": 114,
-  "notes": 85,
-  "real": 5,
-  "skip": 28,
+  "prs": 118,
+  "notes": 91,
+  "real": 6,
+  "skip": 33,
   "real_fates": {
-   "open": 5
+   "open": 6
   },
   "real_fixed_or_resolved": 0,
   "hops": {
-   "openrouter:qwen/qwen3.8-27b:free": 13,
-   "groq:openai/gpt-oss-120b": 12,
-   "nous:poolside/laguna-s-2.1:free": 4,
+   "groq:openai/gpt-oss-120b": 15,
+   "openrouter:qwen/qwen3.8-27b:free · deep": 1,
    "groq:openai/gpt-oss-120b · deep": 1,
+   "openrouter:qwen/qwen3.8-27b:free": 15,
+   "nous:poolside/laguna-s-2.1:free": 4,
    "gemini:gemini-3.1-flash-lite": 3,
    "gemini:gemini-3.1-flash-lite · deep": 1,
    "gemini:gemini-3.5-flash": 1,
@@ -30,6 +31,186 @@
   "needed": 138
  },
  "entries": [
+  {
+   "pr": 258,
+   "title": "ci(hare): the slow hops first; Groq and Gemini are fallbacks",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T00:22:14Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/258#pullrequestreview-5403578436",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "7,528 prompt + 1,766 answer + 1,482 reasoning tokens on `groq:openai/gpt-oss-120b`, 5 s",
+     "cut": "",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-04T08:13:07Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/258#pullrequestreview-5404983114",
+     "hop": "openrouter:qwen/qwen3.8-27b:free · deep",
+     "effort": "medium",
+     "cost": "7,891 prompt + 12,279 answer + 11,725 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free · deep`, 227 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "PLAN.md",
+     "sev": "skip",
+     "issue": "The added failover list line is very long and exceeds the typical 80‑character limit, making the file hard to read.",
+     "fate": "open",
+     "first": "2026-10-04T00:22:14Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py:1356",
+     "sev": "skip",
+     "issue": "The new comment describing the order is over 80 characters, violating the repo’s line‑length style guideline.",
+     "fate": "open",
+     "first": "2026-10-04T00:22:14Z"
+    },
+    {
+     "loc": "tests/test_hare_r1.py",
+     "sev": "real",
+     "issue": "`test_hop_loop_sends_every_provider_its_own_options` asserts three calls (`[\"o1\", \"n1\", \"g1\"]`) but the new chain order puts two nous models (n1, n2) before groq, so four hops fire before g1 succeeds: o1, n1, n2, g1. The test would fail on `pytest`. The PR body claims \"pytest tests/test_hare_r1.py green\", which is a fail-loud lie.",
+     "fate": "open",
+     "first": "2026-10-04T08:13:07Z"
+    },
+    {
+     "loc": "PLAN.md:257",
+     "sev": "skip",
+     "issue": "The PR body and checklist say \"one change: chain order\", but the PLAN line also rearranges model slugs within the OpenRouter and Nous sections (e.g. `poolside/laguna-s-2.1:free` moves from OpenRouter to Nous, `stealth/space-bunny-alpha` moves from Nous to OpenRouter). That is a second, unannounced change riding in the same commit.",
+     "fate": "open",
+     "first": "2026-10-04T08:13:07Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 232,
+   "title": "chore(main): release 0.14.0",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T16:45:19Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5401711247",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-03T23:01:30Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5403316547",
+     "hop": "groq:openai/gpt-oss-120b · deep",
+     "effort": "low",
+     "cost": "4,526 prompt + 1,118 answer + 784 reasoning tokens on `groq:openai/gpt-oss-120b · deep`, 3 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-04T00:25:04Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5403584643",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "5,111 prompt + 1,167 answer + 1,091 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 20 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md",
+     "sev": "skip",
+     "issue": "Extra blank lines around the new version heading make the changelog look untidy.",
+     "fate": "open",
+     "first": "2026-10-03T16:45:19Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 257,
+   "title": "docs(plan): fold 2026-10-04 third pass",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T23:45:52Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/257#pullrequestreview-5403495703",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "5,725 prompt + 1,677 answer + 1,395 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "PLAN.md",
+     "sev": "skip",
+     "issue": "The new table row for 2026‑10‑04 is a single extremely long line, which is difficult to maintain and exceeds common line‑length limits.",
+     "fate": "open",
+     "first": "2026-10-03T23:45:52Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 256,
+   "title": "ci(hare): the ledger counts runs where no hop answered",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T23:43:53Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/256#pullrequestreview-5403490966",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "20,486 prompt + 3,728 answer + 3,487 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 34 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 255,
+   "title": "ci(hare): catalog from the ledger: laguna off OpenRouter, Space Bunny first for its last day",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T23:39:35Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/255#pullrequestreview-5403480977",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "6,434 prompt + 1,740 answer + 1,505 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py",
+     "sev": "skip",
+     "issue": "Several added comment lines exceed the typical 80‑character limit, violating style guidelines.",
+     "fate": "open",
+     "first": "2026-10-03T23:39:35Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
   {
    "pr": 254,
    "title": "ci(hare): the ledger is Hare only; the Hare Bot comparison is its own script",
@@ -190,43 +371,6 @@
     }
    ],
    "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 232,
-   "title": "chore(main): release 0.14.0",
-   "state": "open",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T16:45:19Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5401711247",
-     "hop": "groq:openai/gpt-oss-120b",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "findings": 1
-    },
-    {
-     "at": "2026-10-03T23:01:30Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5403316547",
-     "hop": "groq:openai/gpt-oss-120b · deep",
-     "effort": "low",
-     "cost": "4,526 prompt + 1,118 answer + 784 reasoning tokens on `groq:openai/gpt-oss-120b · deep`, 3 s",
-     "cut": "",
-     "findings": 1
-    }
-   ],
-   "findings": [
-    {
-     "loc": "CHANGELOG.md",
-     "sev": "skip",
-     "issue": "Extra blank lines around the new version heading make the changelog look untidy.",
-     "fate": "open",
-     "first": "2026-10-03T16:45:19Z"
-    }
-   ],
    "scores": [],
    "needed": 0
   },
