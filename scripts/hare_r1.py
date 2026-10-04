@@ -1338,6 +1338,7 @@ def read_checks(owner: str, repo: str, sha: str, token: str) -> tuple[list[dict[
 LOG_TAIL_LINES = 25
 LOG_TAIL_CHARS = 3_000
 LOG_READ_CAP = 64 * 1024 * 1024  # bytes read from one job log before the rest is left unread
+LOG_LINE_CAP = 64 * 1024  # bytes per read, so one endless line cannot be held whole
 
 
 def _tail_of(lines: Iterable[str], n: int = LOG_TAIL_LINES) -> str:
@@ -1364,11 +1365,16 @@ def _log_tail(text: str, n: int = LOG_TAIL_LINES) -> str:
     return _tail_of((text or "").splitlines(), n)
 
 
-def _stream_lines(resp: Any, cap: int = LOG_READ_CAP) -> Iterator[str]:
-    """A response's lines, decoded one at a time, stopping after `cap` bytes so
-    a runaway log cannot hold the run for long either."""
+def _stream_lines(resp: Any, cap: int = LOG_READ_CAP, line_cap: int = LOG_LINE_CAP) -> Iterator[str]:
+    """A response's lines, decoded one at a time. Each read is capped at
+    `line_cap` bytes, so a log with no newlines arrives in pieces instead of
+    whole (Hare Bot on #275), and reading stops after `cap` bytes, so a
+    runaway log cannot hold the run for long either."""
     read = 0
-    for raw in resp:
+    while True:
+        raw = resp.readline(line_cap)
+        if not raw:
+            return
         read += len(raw)
         if read > cap:
             return

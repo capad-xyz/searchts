@@ -1378,13 +1378,22 @@ def test_review_lists_are_read_past_the_first_page(monkeypatch: object) -> None:
 def test_a_job_log_is_read_as_a_stream_and_never_held_whole() -> None:
     """CodeRabbit on #269: the whole log was read into memory before the tail
     was cut. Now lines are read one at a time, at most `n` are held, reading
-    stops at the first error, and a runaway log stops at a byte cap."""
+    stops at the first error, one endless line arrives in capped pieces (Hare
+    Bot on #275), and a runaway log stops at a byte cap."""
+    class Stream:
+        def __init__(self, lines):
+            self.lines = iter(lines)
+
+        def readline(self, limit=-1):
+            return next(self.lines, b"")
+
     def log():
         for i in range(100):
             yield f"2026-10-04T00:00:00.0000000Z line {i}\n".encode()
         yield b"##[error]boom\n"
         raise AssertionError("read past the first error")
 
-    assert hare_r1._tail_of(hare_r1._stream_lines(log()), 3) == "line 98\nline 99\n##[error]boom"
-    assert list(hare_r1._stream_lines(iter([b"x" * 10] * 10), cap=25)) == ["x" * 10, "x" * 10]
+    assert hare_r1._tail_of(hare_r1._stream_lines(Stream(log())), 3) == "line 98\nline 99\n##[error]boom"
+    endless = io.BytesIO(b"x" * 200_000)  # no newline at all
+    assert [len(x) for x in hare_r1._stream_lines(endless, cap=2_500, line_cap=1_000)] == [1_000, 1_000]
     assert hare_r1._log_tail("a\n##[error]e\ncleanup") == "a\n##[error]e"  # same rule for a log in memory
