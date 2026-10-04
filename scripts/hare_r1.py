@@ -194,6 +194,23 @@ def github_api(
         raise RuntimeError(f"GitHub {method} {path} {e.code}: {err[:500]}") from e
 
 
+def github_list(path: str, token: str, max_pages: int = 10) -> list[Any]:
+    """Every item of a GitHub list endpoint, 100 a page, up to `max_pages`
+    pages. One page is not enough for reviews: every reply in a review
+    thread is a review of its own, so a busy PR passes 100 quickly and
+    Hare's note falls off the first page (Hare on #274)."""
+    out: list[Any] = []
+    sep = "&" if "?" in path else "?"
+    for page in range(1, max_pages + 1):
+        got = github_api("GET", f"{path}{sep}per_page=100&page={page}", token)
+        if not isinstance(got, list):
+            break
+        out.extend(got)
+        if len(got) < 100:
+            break
+    return out
+
+
 def _is_hare_job(name: str) -> bool:
     low = name.lower()
     short = low.split("/")[-1].strip()
@@ -704,7 +721,7 @@ def refresh_ci(owner: str, repo: str, sha: str, token: str, actions_token: str) 
         if not isinstance(pr, dict) or pr.get("state") != "open" or (pr.get("head") or {}).get("sha") != sha:
             continue
         n = int(pr["number"])
-        reviews = github_api("GET", f"/repos/{owner}/{repo}/pulls/{n}/reviews?per_page=100", token)
+        reviews = github_list(f"/repos/{owner}/{repo}/pulls/{n}/reviews", token)
         mine = [r for r in hare_notes(reviews if isinstance(reviews, list) else []) if str(r.get("commit_id") or "") == sha]
         if not mine:
             continue
@@ -1707,11 +1724,7 @@ def already_reviewed(owner: str, repo: str, n: int, token: str, sha: str) -> boo
     if not sha:
         return False
     try:
-        data = github_api(
-            "GET",
-            f"/repos/{owner}/{repo}/pulls/{n}/reviews?per_page=100",
-            token,
-        )
+        data = github_list(f"/repos/{owner}/{repo}/pulls/{n}/reviews", token)
     except RuntimeError:
         return False
     rows = data if isinstance(data, list) else []
@@ -1859,7 +1872,7 @@ def _hare_once(
             print(f"hare skip: superseded during the quiet period ({sha[:12]} -> {moved[:12]})")
             return 0
     try:
-        listed = github_api("GET", f"{pull}/reviews?per_page=100", token)
+        listed = github_list(f"{pull}/reviews", token)
     except RuntimeError:
         listed = []
     notes = hare_notes(listed if isinstance(listed, list) else [])

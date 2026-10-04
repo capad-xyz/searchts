@@ -6,6 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
+import inspect
+
 import hare_r1  # noqa: E402
 import pytest  # noqa: E402
 
@@ -1307,7 +1309,7 @@ def test_refresh_edits_only_hare_notes_on_that_head_of_open_prs(monkeypatch) -> 
                 {"number": 6, "state": "closed", "head": {"sha": sha}},
                 {"number": 7, "state": "open", "head": {"sha": "f" * 40}},
             ]
-        if path.endswith("/pulls/5/reviews?per_page=100"):
+        if path.endswith("/pulls/5/reviews?per_page=100&page=1"):
             return [
                 {"id": 1, "body": note, "commit_id": "e" * 40, "submitted_at": "2026-10-04T10:00:00Z"},
                 {"id": 2, "body": "someone else", "commit_id": sha, "submitted_at": "2026-10-04T10:01:00Z"},
@@ -1322,3 +1324,20 @@ def test_refresh_edits_only_hare_notes_on_that_head_of_open_prs(monkeypatch) -> 
     assert [c[1] for c in puts] == ["/repos/o/r/pulls/5/reviews/3"]
     assert "**Verdict:** Ship (CI green, no real findings). C." in puts[0][2]["body"]
     assert not any("/pulls/6/" in c[1] or "/pulls/7/" in c[1] for c in calls)
+
+
+def test_review_lists_are_read_past_the_first_page(monkeypatch: object) -> None:
+    """Hare on #274: every reply in a thread is a review, so a busy PR passes
+    100 reviews and Hare's note falls off page one."""
+    pages = {1: [{"id": i} for i in range(100)], 2: [{"id": 100}]}
+    seen: list[str] = []
+
+    def fake(method: str, path: str, token: str, data: object = None) -> object:
+        seen.append(path)
+        return pages.get(int(path.rsplit("page=", 1)[1]), [])
+
+    monkeypatch.setattr(hare_r1, "github_api", fake)  # type: ignore[attr-defined]
+    got = hare_r1.github_list("/repos/o/r/pulls/7/reviews", "t")
+    assert len(got) == 101 and got[-1] == {"id": 100}
+    assert seen == ["/repos/o/r/pulls/7/reviews?per_page=100&page=1", "/repos/o/r/pulls/7/reviews?per_page=100&page=2"]
+    assert "reviews?per_page=100\"" not in inspect.getsource(hare_r1)  # no single-page review read left
