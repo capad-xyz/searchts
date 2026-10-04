@@ -67,9 +67,9 @@ Then the shape of Hare Bot's finals on #217, #220 and #221: `## Summary` (a one-
 
    Use `🔴 **real**` when it is real. Every finding with a `path:line` on a + line gets a bubble; findings on the same line share one bubble, real first. A short `suggestion` block is allowed only when it is the whole new text of that one line and safe to apply. No scores. No first person. No em dashes. No name line. The bot avatar is the identity.
 
-3. **Skip never holds merge.** Nits stay on the line. Intent = **hold** only if there is a **real** row **or** a required check is red / still pending.
+3. **Skip never holds merge.** Nits stay on the line. Intent = **hold** only if there is a **real** row **or** a required check is red. A check still running is **wait**, never hold (#269); the note follows CI when it finishes (#274).
 
-5. **Checks before Intent (#145):** `gh pr checks`. Red `ci / test` (or any required job) = **real**, Intent **hold**. Pending = wait or hold. Skipped `test-full` / `wheel-gate` on a PR is by design.
+5. **Checks before Intent (#145):** `gh pr checks`. Red `ci / test` (or any required job) = **real**, Intent **hold**. Pending = **wait**, until CI finishes and the note follows it (#274). Skipped `test-full` / `wheel-gate` on a PR is by design.
 
 4. **Later SHA of the same PR (R1d, R1e):** post a **new Review** for the commits since the last note, with a `### Since \`abc1234\`` section saying which of the old findings still apply, are fixed or moved. A force-push gets a full review and says so. Matcher = **latest** token. Do not edit the old table in place. Resolve threads whose finding is gone (outdated *and* not in the new diff). New bubbles only for what is still true. Do not delete old comments.
 

@@ -12,6 +12,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import deque
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -1335,24 +1337,42 @@ def read_checks(owner: str, repo: str, sha: str, token: str) -> tuple[list[dict[
 
 LOG_TAIL_LINES = 25
 LOG_TAIL_CHARS = 3_000
+LOG_READ_CAP = 64 * 1024 * 1024  # bytes read from one job log before the rest is left unread
 
 
-def _log_tail(text: str, n: int = LOG_TAIL_LINES) -> str:
+def _tail_of(lines: Iterable[str], n: int = LOG_TAIL_LINES) -> str:
     """What a failed job printed up to its first error: timestamps and group
     markers stripped, cut at the first `##[error]` so the post-job cleanup does
-    not fill the tail, no fences, capped."""
-    lines: list[str] = []
-    for raw in (text or "").splitlines():
+    not fill the tail, no fences, capped. Reads line by line and holds at most
+    `n` lines, so a huge log costs no more memory than a small one
+    (CodeRabbit on #269)."""
+    keep: deque[str] = deque(maxlen=n)
+    for raw in lines:
         line = re.sub(r"^\ufeff?\d{4}-\d\d-\d\dT[\d:.]+Z ?", "", raw).rstrip()
         if line.startswith("##[group]"):
             line = line[len("##[group]") :]  # the step name, worth keeping
         if not line.strip() or line.startswith("##[endgroup]"):
             continue
-        lines.append(line.replace("`" * 3, "'" * 3))
-    err = next((i for i, ln in enumerate(lines) if ln.startswith("##[error]")), None)
-    if err is not None:
-        lines = lines[: err + 1]
-    return "\n".join(lines[-n:])[-LOG_TAIL_CHARS:]
+        keep.append(line.replace("`" * 3, "'" * 3))
+        if line.startswith("##[error]"):
+            break
+    return "\n".join(keep)[-LOG_TAIL_CHARS:]
+
+
+def _log_tail(text: str, n: int = LOG_TAIL_LINES) -> str:
+    """`_tail_of` for a log already in memory."""
+    return _tail_of((text or "").splitlines(), n)
+
+
+def _stream_lines(resp: Any, cap: int = LOG_READ_CAP) -> Iterator[str]:
+    """A response's lines, decoded one at a time, stopping after `cap` bytes so
+    a runaway log cannot hold the run for long either."""
+    read = 0
+    for raw in resp:
+        read += len(raw)
+        if read > cap:
+            return
+        yield raw.decode("utf-8", errors="replace")
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -1361,8 +1381,9 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def job_log(owner: str, repo: str, job_id: int, token: str) -> str:
-    """One Actions job's log as text. The API answers with a redirect to signed
-    storage; that URL is fetched without the token."""
+    """One Actions job's log, read as a stream and kept only as its tail (see
+    `_tail_of`). The API answers with a redirect to signed storage; that URL is
+    fetched without the token."""
     api = os.environ.get("GITHUB_API_URL", "https://api.github.com").rstrip("/")
     req = urllib.request.Request(
         f"{api}/repos/{owner}/{repo}/actions/jobs/{job_id}/logs",
@@ -1370,13 +1391,13 @@ def job_log(owner: str, repo: str, job_id: int, token: str) -> str:
     )
     try:
         with urllib.request.build_opener(_NoRedirect).open(req, timeout=30) as resp:
-            return str(resp.read().decode("utf-8", errors="replace"))
+            return _tail_of(_stream_lines(resp))
     except urllib.error.HTTPError as e:
         if e.code not in (301, 302, 303, 307, 308) or not e.headers.get("Location"):
             raise
         signed = str(e.headers["Location"])
     with urllib.request.urlopen(urllib.request.Request(signed, headers={"User-Agent": "searchts-hare"}), timeout=30) as resp:
-        return str(resp.read().decode("utf-8", errors="replace"))
+        return _tail_of(_stream_lines(resp))
 
 
 def failed_log_tails(owner: str, repo: str, runs: list[dict[str, Any]], token: str, limit: int = 2) -> dict[str, str]:
