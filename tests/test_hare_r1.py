@@ -1394,6 +1394,9 @@ def test_a_job_log_is_read_as_a_stream_and_never_held_whole() -> None:
         raise AssertionError("read past the first error")
 
     assert hare_r1._tail_of(hare_r1._stream_lines(Stream(log())), 3) == "line 98\nline 99\n##[error]boom"
-    endless = io.BytesIO(b"x" * 200_000)  # no newline at all
-    assert [len(x) for x in hare_r1._stream_lines(endless, cap=2_500, line_cap=1_000)] == [1_000, 1_000]
+    endless = io.BytesIO(b"x" * 200_000)  # no newline at all: one line, cut to line_cap
+    assert [len(x) for x in hare_r1._stream_lines(endless, cap=10**6, line_cap=1_000)] == [1_000]
+    long_then_error = io.BytesIO(b"a" * 5_000 + b"\n" + b"##[error]boom\n" + b"cleanup\n")
+    assert hare_r1._tail_of(hare_r1._stream_lines(long_then_error, line_cap=1_000), 3) == "a" * 1_000 + "\n##[error]boom"
+    assert list(hare_r1._stream_lines(io.BytesIO(b"x\n" * 10), cap=5)) == ["x\n", "x\n"]  # the byte cap
     assert hare_r1._log_tail("a\n##[error]e\ncleanup") == "a\n##[error]e"  # same rule for a log in memory

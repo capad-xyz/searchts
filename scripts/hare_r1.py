@@ -1366,10 +1366,11 @@ def _log_tail(text: str, n: int = LOG_TAIL_LINES) -> str:
 
 
 def _stream_lines(resp: Any, cap: int = LOG_READ_CAP, line_cap: int = LOG_LINE_CAP) -> Iterator[str]:
-    """A response's lines, decoded one at a time. Each read is capped at
-    `line_cap` bytes, so a log with no newlines arrives in pieces instead of
-    whole (Hare Bot on #275), and reading stops after `cap` bytes, so a
-    runaway log cannot hold the run for long either."""
+    """A response's lines, decoded one at a time. A line longer than
+    `line_cap` bytes keeps its first `line_cap` bytes and the rest of it is
+    read and dropped, so an endless line is never held whole (Hare Bot on
+    #275) and still counts as one line (Hare on #275). Reading stops after
+    `cap` bytes, so a runaway log cannot hold the run for long either."""
     read = 0
     while True:
         raw = resp.readline(line_cap)
@@ -1378,6 +1379,12 @@ def _stream_lines(resp: Any, cap: int = LOG_READ_CAP, line_cap: int = LOG_LINE_C
         read += len(raw)
         if read > cap:
             return
+        if not raw.endswith(b"\n"):  # longer than line_cap: skip to its end
+            while read <= cap:
+                more = resp.readline(line_cap)
+                read += len(more)
+                if not more or more.endswith(b"\n"):
+                    break
         yield raw.decode("utf-8", errors="replace")
 
 
