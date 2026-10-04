@@ -1,7 +1,15 @@
 name: hare-ledger
 
 # R2b: the findings ledger, rebuilt weekly from Hare's own notes and the owner's
-# /hare score comments, and offered as a PR. No hidden memory.
+# /hare score and /hare fate comments, offered as a PR and merged by this run
+# once the checks pass. No hidden memory, no Sunday click.
+#
+# The PR is pushed with the searchts-hare[bot] App token, not GITHUB_TOKEN: a
+# push made with GITHUB_TOKEN fires no workflows, so the PR would get no CI and
+# no Hare note and could not merge on its own. With the App token Hare reviews
+# this PR like any other; the body says it is an automated run with no model.
+# GITHUB_TOKEN stays for reading the API: it is minted per run, scoped to this
+# repo and the permissions above, and dies when the run ends.
 on:
   schedule:
     - cron: "0 3 * * 0"
@@ -14,9 +22,18 @@ permissions:
 jobs:
   ledger:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
+      - name: Mint searchts-hare[bot] token
+        id: hare-app
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.HARE_APP_ID }}
+          private-key: ${{ secrets.HARE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: searchts
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -25,22 +42,46 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python scripts/hare_ledger.py --out docs/ --rules HARE.md
-      - name: Open a PR when it changed
+      - name: Open the PR, let Hare and CI run, merge when green
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The App token makes the push fire workflows; GITHUB_TOKEN is the
+          # fallback if minting fails (then the PR waits for a human).
+          GH_TOKEN: ${{ steps.hare-app.outputs.token || secrets.GITHUB_TOKEN }}
+          APP_TOKEN_OK: ${{ steps.hare-app.outputs.token != '' }}
         run: |
           if git diff --quiet -- docs/hare-ledger.json docs/hare-ledger.md HARE.md; then
             echo "ledger unchanged"; exit 0
           fi
-          branch="chore/hare-ledger-$(date -u +%Y-%m-%d)"
+          day="$(date -u +%Y-%m-%d)"
+          branch="chore/hare-ledger-$day"
           git config user.name "searchts-hare[bot]"
           git config user.email "searchts-hare[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git checkout -B "$branch"
           git add docs/hare-ledger.json docs/hare-ledger.md HARE.md
-          git commit -m "chore(hare): ledger $(date -u +%Y-%m-%d)"
+          git commit -m "chore(hare): ledger $day"
           git push -f origin "$branch"
-          gh pr create --base main --head "$branch" \
-            --title "chore(hare): ledger $(date -u +%Y-%m-%d)" \
-            --body "$(printf '## What\n\nThe findings ledger, rebuilt from Hare notes, Since lines, resolved threads and /hare score comments (PLAN R2b), and the rules block in HARE.md from low scores with a reason (R2c).\n\n## Checklist\n\n- [x] chore: does not move the package version\n\n## Models\n\n| Role | Model | Effort | Purpose |\n| --- | --- | --- | --- |\n| wrote | scripts/hare_ledger.py (no model) | low | AI wrote it |\n')" \
-            || gh pr list --head "$branch" --state open --json number --jq '.[0].number' | grep -q . \
-            || { echo "PR create failed and none is open for $branch"; exit 1; }
+          summary="$(grep -m1 '^Built ' docs/hare-ledger.md)"
+          body="$(printf '## What\n\n**Automated weekly run** of `.github/workflows/hare-ledger.yml` (Sunday 03:00 UTC, or by hand). No model took part: `scripts/hare_ledger.py` is deterministic. It rebuilt the findings ledger from Hare notes, Since lines, resolved threads, `/hare score` and `/hare fate` comments (PLAN R2b), and the rules block in HARE.md from low scores with a reason (R2c).\n\n%s\n\nHare reviews this PR like any other. This run merges it once the checks pass; if they do not, it waits for a human.\n\n## Checklist\n\n- [x] chore: does not move the package version\n- [x] one change: the ledger files and the rules block\n\n## Models\n\n| Role | Model | Effort | Purpose |\n| --- | --- | --- | --- |\n| ran | none, scripts/hare_ledger.py on cron | n/a | rebuilt docs/hare-ledger.json, docs/hare-ledger.md and the rules block in HARE.md from the repo, no text generated |\n' "$summary")"
+          n="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
+          if [ -z "$n" ]; then
+            gh pr create --base main --head "$branch" --title "chore(hare): ledger $day" --body "$body"
+            n="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
+          else
+            gh pr edit "$n" --body "$body"
+          fi
+          [ -n "$n" ] || { echo "no PR for $branch"; exit 1; }
+          echo "PR #$n"
+          # A push with GITHUB_TOKEN starts no workflows, so there would be
+          # nothing to wait for: leave the PR to a human and say so.
+          if [ "$APP_TOKEN_OK" != "true" ]; then
+            echo "no App token: checks will not run; PR #$n waits for a human"; exit 0
+          fi
+          # Hare and CI start on the push. Wait for every check, then merge.
+          # A failed check leaves the PR open for a human.
+          sleep 60
+          if ! gh pr checks "$n" --watch --fail-fast; then
+            echo "checks did not pass; PR #$n stays open"; exit 0
+          fi
+          gh pr merge "$n" --squash --delete-branch --subject "chore(hare): ledger $day (#$n)" \
+            || { echo "merge failed; PR #$n stays open"; exit 0; }
