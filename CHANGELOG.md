@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.14.0](https://github.com/capad-xyz/searchts/compare/v0.13.1...v0.14.0) (2026-10-04)
+
+
+### Added
+
+* **hare:** Groq plus Gemini hops, wider token budget ([#224](https://github.com/capad-xyz/searchts/issues/224)) ([a3123d0](https://github.com/capad-xyz/searchts/commit/a3123d0dff9f3c9db5ab145a82c9e49869a7b95c))
+
 ## [0.13.1](https://github.com/capad-xyz/searchts/compare/v0.13.0...v0.13.1) (2026-10-03)
 
 
