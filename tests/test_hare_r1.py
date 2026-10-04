@@ -1204,3 +1204,18 @@ def test_every_note_ends_with_how_to_answer_hare(monkeypatch) -> None:
 def test_the_model_knows_how_its_note_is_used() -> None:
     assert "tracked by path:line in a ledger" in hare_r1.SYSTEM
     assert "/hare score and /hare fate" in hare_r1.SYSTEM and "how Hare runs on this repo" in hare_r1.SYSTEM
+
+
+def test_a_fix_that_changes_a_signature_gets_no_button() -> None:
+    """#271: dropping `url` from `classify` broke its caller on line 75. The
+    finding stays; only the one-click fix goes."""
+    old = "def classify(url: str, attempts: list[tuple[str, str]]) -> str:"
+    assert hare_r1._signature_changed([old], "def classify(attempts: list[tuple[str, str]]) -> str:")
+    assert not hare_r1._signature_changed([old], "def classify(url: str, attempts: list[tuple[str, str]] | None) -> str:")
+    assert hare_r1._signature_changed(["function go(a, b) {"], "function go(a) {")
+    assert not hare_r1._signature_changed(["x = 1"], "x = 2")
+    added = {"b.py": {44: old, 45: "    return url"}}
+    fs = [{"sev": "skip", "path": "b.py", "line": 44, "original": old, "suggestion": "def classify(attempts: list[tuple[str, str]]) -> str:"}]
+    hare_r1.attach_suggestions(fs, added, None)
+    assert len(fs) == 1 and not fs[0].get("_checked") and "suggestion" not in fs[0]
+    assert "must also be the whole fix" in hare_r1.SYSTEM
