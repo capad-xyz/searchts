@@ -1,0 +1,860 @@
+{
+  "meta": {
+    "reviewer": "Hare Bot",
+    "not": "searchts-hare GitHub App (@hare / /hare)",
+    "posts_as": "capad-xyz",
+    "connector": "cursor-github",
+    "review_event": "COMMENT",
+    "markers": {
+      "review": "<!-- harebot:review head=<full 40-char SHA> -->",
+      "bubble": "<!-- harebot:bubble -->"
+    },
+    "models_cell": "Hare Bot (Grok Bot) \u00b7 purpose: <what this pass did> \u00b7 Grok",
+    "model_slug": null,
+    "model_slug_note": "No exact Cursor or provider model slug was returned on these passes. Do not invent one. GitHub cell says Grok.",
+    "executor_effort_requested": "high",
+    "token_method": "named review-input characters divided by 4. Not a meter. Output text is not input. Overlap (source slices vs diff, API envelopes vs bodies) is noted and not double-counted into the estimate.",
+    "timezone": "Asia/Calcutta",
+    "written": "2026-10-04",
+    "intent": "So the owner can see what each Hare Bot pass found, what it cost, and which GitHub review it is. A record of those passes, not a new review."
+  },
+  "rows": [
+    {
+      "pr": 235,
+      "title": "ci(hare): a hop answers, or says why it did not",
+      "state_when_logged": "merged 2026-10-03T21:11:30Z, reviewed while open",
+      "head": "a747bad8d161ac4107b54023b174aa144a447970",
+      "review_id": 5402501651,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/235#pullrequestreview-5402501651",
+      "inlines": [],
+      "start_ist": "2026-10-04 01:31",
+      "submit_ist": "2026-10-04 01:32",
+      "minutes": 1,
+      "summary": "Timeout, JSON brace walk, and named nags so a hop answers or says why.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "scripts/hare_r1.py",
+          "line": 527,
+          "fix": "yes",
+          "issue": "reasoning-knob retry can raise bare HTTPError and hide the cause"
+        },
+        {
+          "sev": "skip",
+          "path": "scripts/hare_r1.py",
+          "line": 48,
+          "fix": "later",
+          "issue": "Nous pinned to effort=none (fast pass as default)"
+        },
+        {
+          "sev": "skip",
+          "path": "scripts/hare_r1.py",
+          "line": 983,
+          "fix": "yes",
+          "issue": "stale comment says no reasoning control"
+        }
+      ],
+      "ci": "green on a747bad: test, lint, typecheck, mcp2-compat, version-sync, r1. test-full and wheel-gate skipped.",
+      "tests": "/tmp/hare-venv/bin/python -m pytest -q tests/test_hare_r1.py \u2192 66 passed, exit 0",
+      "owner": "eye ball",
+      "chars": {
+        "diff": 18611,
+        "title": 47,
+        "body": 3085,
+        "commit_message": 862,
+        "conversation_hare": 766,
+        "conversation_coderabbit_approx": 2500,
+        "ci_text_approx": 1500
+      },
+      "chars_not_in_estimate": {
+        "commits_list_page_barely_used": 163500,
+        "file_patches_overlap_diff": 18600
+      },
+      "estimate_chars": 27000,
+      "estimate_tokens": 6800,
+      "estimate_note": "Rounded from the named inputs. Unused commits page left out."
+    },
+    {
+      "pr": 236,
+      "title": "chore(hare): refresh the free catalogs against what answers",
+      "state_when_logged": "merged 2026-10-03T21:13:31Z, reviewed while open",
+      "head": "805b81a027d4b949aa6cc076dd0d5978c4b6ab92",
+      "review_id": 5402506750,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/236#pullrequestreview-5402506750",
+      "inlines": [
+        "https://github.com/capad-xyz/searchts/pull/236#discussion_r4174637455",
+        "https://github.com/capad-xyz/searchts/pull/236#discussion_r4174637466"
+      ],
+      "start_ist": "2026-10-04 01:31",
+      "submit_ist": "2026-10-04 01:32:57",
+      "minutes": 2,
+      "summary": "Catalog refresh. OpenRouter leads with the hop that answered, Groq gains a second slug, Zen drops two TUI-only ids.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "scripts/hare_r1.py",
+          "line": 81,
+          "fix": "yes",
+          "issue": "note says Nous sends effort none, but build_provider_chain still passes Nous {} so a dead hop waits 60s"
+        },
+        {
+          "sev": "skip",
+          "path": ".github/workflows/hare.yml",
+          "line": 101,
+          "fix": "later",
+          "issue": "OpenRouter list is a ${{ }} fallback and the test skips any value containing ${{ }}"
+        }
+      ],
+      "ci": "green on 805b81a: lint, mcp2-compat, version-sync, typecheck, test, r1. test-full and wheel-gate skipped.",
+      "tests": "pytest -q tests/test_hare_r1.py \u2192 56 passed, exit 0",
+      "owner": "eye ball",
+      "chars": {
+        "diff": 5884,
+        "title": 59,
+        "body": 2186,
+        "commit_message": 731,
+        "review_body": 1121,
+        "issue_comment_body": 2650,
+        "source_slices": 32121
+      },
+      "chars_not_in_estimate": {
+        "api_payload_sum_with_envelopes": 71340,
+        "api_plus_slices_overlap": 103461
+      },
+      "estimate_chars": 45000,
+      "estimate_tokens": 11000,
+      "estimate_note": "Tighter sum of bodies and slices. Envelope upper bound about 26,000 if overlap is counted."
+    },
+    {
+      "pr": 237,
+      "title": "fix(hare): make the reasoning hop answer, and stop losing the answer",
+      "state_when_logged": "closed not merged 2026-10-03T20:53:27Z",
+      "head": "bbce9850b0ac124c87884fdfd78529ab4079be3b",
+      "review_id": 5402622302,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/237#pullrequestreview-5402622302",
+      "inlines": [
+        "https://github.com/capad-xyz/searchts/pull/237#discussion_r4174749545",
+        "https://github.com/capad-xyz/searchts/pull/237#discussion_r4174749550",
+        "https://github.com/capad-xyz/searchts/pull/237#discussion_r4174749551"
+      ],
+      "start_ist": "2026-10-04 01:57:27",
+      "submit_ist": "2026-10-04 02:05:39",
+      "submit_utc": "2026-10-03T20:35:39Z",
+      "minutes": 8,
+      "summary": "Nous effort=none measurement is wired in, but the first hop (Groq openai/gpt-oss-120b) is sent a nested reasoning object Groq does not use.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "scripts/hare_r1.py",
+          "line": 977,
+          "fix": "yes",
+          "issue": "Groq knob is top-level reasoning_effort; nested object is ignored or a 400. none is Qwen-only."
+        },
+        {
+          "sev": "real",
+          "path": "scripts/hare_r1.py",
+          "line": 295,
+          "fix": "yes",
+          "issue": "fence regex matches backslashes, not markdown fences. already raised, no new bubble"
+        },
+        {
+          "sev": "skip",
+          "path": "docs/hare-thinking-ab.md",
+          "line": 8,
+          "fix": "later",
+          "issue": "Same PRs is false: only #221 and #224 are in both tables"
+        },
+        {
+          "sev": "skip",
+          "path": "scripts/hare_r1.py",
+          "line": 544,
+          "fix": "later",
+          "issue": "urlopen timeouts arrive as URLError, so TimeoutError handler never runs"
+        },
+        {
+          "sev": "skip",
+          "path": "scripts/hare_local.py",
+          "line": 81,
+          "fix": "later",
+          "issue": "local runner cannot select Groq or Gemini. already raised"
+        },
+        {
+          "sev": "skip",
+          "path": "tests/test_hare_r1.py",
+          "line": 784,
+          "fix": "later",
+          "issue": "hop_override test only checks the parameter name. already raised"
+        },
+        {
+          "sev": "skip",
+          "path": "scripts/hare_local.py",
+          "line": 7,
+          "fix": "later",
+          "issue": "doc shows --skip-checks, which is not a flag. already raised"
+        },
+        {
+          "sev": "skip",
+          "path": "scripts/hare_r1.py",
+          "line": 232,
+          "fix": "later",
+          "issue": "docstring has a real tab and form feed. already raised"
+        }
+      ],
+      "ci": "bbce985: lint, test, typecheck, mcp2-compat, version-sync, r1, copilot success. test-full and wheel-gate skipped. mergeable_state unstable at submit.",
+      "tests": "pytest never started. shell failed to spawn. no exit code.",
+      "owner": "eye ball",
+      "chars": {
+        "title": 70
+      },
+      "estimate_chars": null,
+      "estimate_tokens": null,
+      "estimate_note": "Shell died before wc. Only the title length is known. No token estimate."
+    },
+    {
+      "pr": 242,
+      "title": "ci(hare): answer budget 32000, the owner's call",
+      "state_when_logged": "merged 2026-10-03T21:31:08Z before this review",
+      "head": "21ffefbfdae1792e64dec66cdd81ce4ed175d6b4",
+      "review_id": 5403009947,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/242#pullrequestreview-5403009947",
+      "inlines": [],
+      "start_ist": "2026-10-04 03:41:44",
+      "submit_ist": "2026-10-04 03:44:40",
+      "minutes": 2.9,
+      "summary": "Default answer budget goes from 16000 to 32000, and the two test pins follow.",
+      "findings": [],
+      "ci": "green on 21ffefb: test, lint, version-sync, mcp2-compat, typecheck, r1.",
+      "tests": "/tmp/hare-venv/bin/pytest -q tests/test_hare_r1.py \u2192 68 passed, exit 0",
+      "owner": "no widget. already merged, no findings",
+      "chars": {
+        "diff": 1722,
+        "title": 47,
+        "body": 515,
+        "commit_message": 280,
+        "reviews": 0,
+        "threads": 0,
+        "issue_comments": 2650,
+        "ci_text": 330,
+        "source_slices": 32433
+      },
+      "estimate_chars": 38000,
+      "estimate_tokens": 9500,
+      "estimate_note": "Source slices are most of it and overlap the small diff."
+    },
+    {
+      "pr": 241,
+      "title": "docs(plan): fold 2026-10-04: Hare answers, thinking off by default, deep on request",
+      "state_when_logged": "merged 2026-10-03T21:17:53Z before this review",
+      "head": "47174a59a61aaa1650972384c9c5384cf9c8dd94",
+      "review_id": 5403014502,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/241#pullrequestreview-5403014502",
+      "inlines": [
+        "https://github.com/capad-xyz/searchts/pull/241#discussion_r4175085020",
+        "https://github.com/capad-xyz/searchts/pull/241#discussion_r4175085023"
+      ],
+      "start_ist": "2026-10-04 03:41:40",
+      "submit_ist": "2026-10-04 03:45:25",
+      "minutes": 3.75,
+      "summary": "Docs fold of the live chain, thinking-off default, and cadence. AGENTS trigger line still describes the old chain.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "AGENTS.md",
+          "line": 45,
+          "fix": "later",
+          "issue": "trigger still says OpenRouter is Laguna / Qwen. fold chain is Qwen, Inkling, Gemma, Laguna last. line not in the diff, no bubble"
+        },
+        {
+          "sev": "skip",
+          "path": "PLAN.md",
+          "line": 260,
+          "fix": "later",
+          "issue": "6-of-6 empty table is the 32000-token runs only"
+        },
+        {
+          "sev": "skip",
+          "path": "PLAN.md",
+          "line": 259,
+          "fix": "later",
+          "issue": "Space Bunny left OpenRouter 2026-10-05 is past tense for a date still ahead of the commit"
+        }
+      ],
+      "ci": "green on 47174a5",
+      "tests": "docs-only. no suite",
+      "owner": "widget skipped",
+      "chars": {
+        "diff": 14788,
+        "title": 83,
+        "body": 1109,
+        "commits": 435,
+        "issue_comments": 2650,
+        "ci_text": 310,
+        "source_slices": 39589
+      },
+      "estimate_chars": 59000,
+      "estimate_tokens": 15000,
+      "estimate_note": "Slices are most of it and overlap the diff."
+    },
+    {
+      "pr": 243,
+      "title": "ci(hare): start at once, size the spend to the diff, print what it cost",
+      "state_when_logged": "merged 2026-10-03T21:41:17Z before this review",
+      "head": "63efc15c39dad2142e7b88bd0a0085c25532cdce",
+      "review_id": 5403015854,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/243#pullrequestreview-5403015854",
+      "inlines": [],
+      "start_ist": "2026-10-04 03:41:49",
+      "submit_ist": "2026-10-04 03:45:37",
+      "minutes": 3.8,
+      "summary": "Hop starts on the push, a diff over 1000 changed lines gets twice the call and hop time, and the fold prints what the winning call spent.",
+      "findings": [
+        {
+          "sev": "skip",
+          "path": "scripts/hare_r1.py",
+          "line": 743,
+          "fix": "later",
+          "issue": "big-diff timeout waits 600s but the short line still says 300s. line not in the diff, no bubble"
+        }
+      ],
+      "ci": "green on 63efc15",
+      "tests": "pytest -q tests/test_hare_r1.py \u2192 72 passed, exit 0",
+      "owner": "no widget. skip only, already merged",
+      "chars": {
+        "diff": 14647,
+        "title": 71,
+        "body": 1855,
+        "commits": 692,
+        "reviews": 0,
+        "threads": 0,
+        "issue_comments": 2651,
+        "ci_text": 319,
+        "source_slices": 46338
+      },
+      "estimate_chars": 67000,
+      "estimate_tokens": 17000,
+      "estimate_note": "Slices are most of it and overlap the diff."
+    },
+    {
+      "pr": 244,
+      "title": "ci(hare): near the limit, wrap up instead of throwing the answer away",
+      "state_when_logged": "merged 2026-10-03T22:09:40Z before this review. squash 7291fa70, same tree",
+      "head": "d25ba95ccd06e2d8034c6a0fc5088debc7267715",
+      "review_id": 5403024630,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/244#pullrequestreview-5403024630",
+      "inlines": [
+        "https://github.com/capad-xyz/searchts/pull/244#discussion_r4175092666",
+        "https://github.com/capad-xyz/searchts/pull/244#discussion_r4175092668"
+      ],
+      "app_review": {
+        "id": 5402987918,
+        "url": "https://github.com/capad-xyz/searchts/pull/244#pullrequestreview-5402987918",
+        "who": "searchts-hare",
+        "model": "gemini:gemini-3.1-flash-lite",
+        "effort": "high",
+        "cost_line": "11,670 prompt + 183 answer + 0 reasoning tokens, 17 s",
+        "note": "Posted 2026-10-03T22:09:53Z, about 13s after merge. Not a Hare Bot review."
+      },
+      "start_ist": "2026-10-04 03:41:56",
+      "submit_ist": "2026-10-04 03:47:01",
+      "minutes": 5.1,
+      "summary": "A cut answer is kept and finished, except the close step can still drop it.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "scripts/hare_r1.py",
+          "line": 612,
+          "fix": "yes",
+          "issue": "odd raw quote count treated as an open string, so one escaped quote makes repair_json append a quote and the fallback stops"
+        },
+        {
+          "sev": "real",
+          "path": "scripts/hare_r1.py",
+          "line": 840,
+          "fix": "yes",
+          "issue": "a continuation that starts with { replaces the partial, and an 800-token restart cannot hold the findings just kept"
+        }
+      ],
+      "ci": "green on d25ba95",
+      "tests": "pytest -q tests/test_hare_r1.py \u2192 79 passed, exit 0",
+      "owner": "widget skipped",
+      "chars": {
+        "diff": 22970,
+        "title": 69,
+        "body": 2112,
+        "commit_messages": 2967,
+        "review_body": 1008,
+        "thread_body": 238,
+        "issue_comment_body": 2650,
+        "ci_text": 302,
+        "source_slices": 27195
+      },
+      "estimate_chars": 60000,
+      "estimate_tokens": 15000,
+      "estimate_note": "Slices overlap the diff."
+    },
+    {
+      "pr": 246,
+      "title": "ci(hare): the findings ledger, and /hare score",
+      "state_when_logged": "merged 2026-10-03T22:29:25Z before this review",
+      "head": "932f5b88c302a60682b970b8606bad85347a09e4",
+      "review_id": 5403145293,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/246#pullrequestreview-5403145293",
+      "inlines": [
+        "https://github.com/capad-xyz/searchts/pull/246#discussion_r4175189560",
+        "https://github.com/capad-xyz/searchts/pull/246#discussion_r4175189567",
+        "https://github.com/capad-xyz/searchts/pull/246#discussion_r4175189571"
+      ],
+      "start_ist": "2026-10-04 04:00:41",
+      "submit_ist": "2026-10-04 04:03:59",
+      "minutes": 3.3,
+      "summary": "Ledger is the right place for notes, fates, and scores, but a resolved thread applies to every open finding on that path, and the hop table only parses the new Models row.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "scripts/hare_ledger.py",
+          "line": 81,
+          "fix": "yes",
+          "issue": "resolved threads keyed by path only, so one resolved thread marks every open finding on that file resolved"
+        },
+        {
+          "sev": "real",
+          "path": "scripts/hare_ledger.py",
+          "line": 46,
+          "fix": "yes",
+          "issue": "hop parsing only matches a backticked Models row, so 55 of 72 older notes never get a hop"
+        },
+        {
+          "sev": "skip",
+          "path": ".github/workflows/hare-ledger.yml",
+          "line": 45,
+          "fix": "later",
+          "issue": "gh pr create || echo turns every create failure into a green step after the force-push"
+        }
+      ],
+      "ci": "green on 932f5b8",
+      "tests": "pytest -q tests/test_hare_ledger.py tests/test_hare_r1.py \u2192 86 passed, exit 0",
+      "owner": "widget skipped",
+      "chars": {
+        "diff": 58501,
+        "title": 46,
+        "body": 2315,
+        "commit_message": 768,
+        "reviews": 1180,
+        "threads": 332,
+        "issue_comments": 2650,
+        "ci_text": 382,
+        "source_slices": 33320
+      },
+      "chars_not_in_estimate": {
+        "get_commit_payload_includes_patches": 71070
+      },
+      "estimate_chars": 99000,
+      "estimate_tokens": 25000,
+      "estimate_note": "Commit payload that repeated the patches was not added on top. Slices overlap the diff."
+    },
+    {
+      "pr": 245,
+      "title": "ci(hare): repair walks strings, a restart never shrinks the review",
+      "state_when_logged": "merged 2026-10-03T22:23:33Z before this review",
+      "head": "944ef4d77958922a11304a4e0501db5ffdc93730",
+      "review_id": 5403161779,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/245#pullrequestreview-5403161779",
+      "inlines": [
+        "https://github.com/capad-xyz/searchts/pull/245#discussion_r4175198783"
+      ],
+      "start_ist": "2026-10-04 04:00:49",
+      "submit_ist": "2026-10-04 04:06:32",
+      "minutes": 5.7,
+      "summary": "Quote repair holds, and a bare { restart no longer shrinks the review. A restart that does not start on { still does.",
+      "links": {
+        "fixes_part_of": 244
+      },
+      "findings": [
+        {
+          "sev": "real",
+          "path": "scripts/hare_r1.py",
+          "line": 840,
+          "fix": "yes",
+          "issue": "a non-{ tail is still concatenated, and extract_json keeps the later shorter findings list"
+        }
+      ],
+      "fixed_from_244": [
+        "odd quote-count repair",
+        "bare { restart no longer shrinks"
+      ],
+      "ci": "green on 944ef4d",
+      "tests": "pytest -q tests/test_hare_r1.py \u2192 82 passed, exit 0",
+      "owner": "widget skipped",
+      "chars": {
+        "diff": 5950,
+        "title": 66,
+        "body": 1173,
+        "commit_message": 657,
+        "reviews": 1231,
+        "threads": 246,
+        "issue_comments_approx": 3200,
+        "ci_text": 315,
+        "source_slices": 34682
+      },
+      "estimate_chars": 48000,
+      "estimate_tokens": 12000,
+      "estimate_note": "CodeRabbit body about 3,200 was not remeasured from a saved payload. Slices overlap the diff."
+    },
+    {
+      "pr": 249,
+      "title": "docs(plan): fold 2026-10-04, second pass: cadence, wrap-up, ledger, HARE.md",
+      "state_when_logged": "merged 2026-10-03T22:39:43Z before this review",
+      "head": "0e2da56e2510f7fbb0a8f9e7a6b95732b187ed9e",
+      "review_id": 5403208505,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/249#pullrequestreview-5403208505",
+      "inlines": [
+        "https://github.com/capad-xyz/searchts/pull/249#discussion_r4175222983"
+      ],
+      "start_ist": "2026-10-04 04:10:34",
+      "submit_ist": "2026-10-04 04:13:49",
+      "minutes": 3.25,
+      "summary": "Chain, cadence, wrap-up, ledger, and HARE.md match the code. The log calls both Flash-Lite cost lines streamed, and the 17s one was not.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "PLAN.md",
+          "line": 523,
+          "fix": "yes",
+          "issue": "17s Flash-Lite note on #244 ran from the base, which had no HARE_STREAM. The 18s deep run after merge did stream."
+        }
+      ],
+      "ci": "green on 0e2da56",
+      "tests": "docs-only. no suite",
+      "owner": "widget skipped",
+      "chars": {},
+      "output_chars_not_input": {
+        "review_body": 1730,
+        "inline": 1021
+      },
+      "estimate_chars": null,
+      "estimate_tokens": null,
+      "estimate_note": "Input was not counted. Do not use the output lengths as a token estimate."
+    },
+    {
+      "pr": 248,
+      "title": "ci(hare): low scores with a reason become rules in AGENTS.md",
+      "state_when_logged": "merged 2026-10-03T22:37:45Z before this review",
+      "head": "031b6ff2d0ed83090e44ddfabbe73c52accefbc9",
+      "review_id": 5403213965,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/248#pullrequestreview-5403213965",
+      "inlines": [
+        "https://github.com/capad-xyz/searchts/pull/248#discussion_r4175226349"
+      ],
+      "start_ist": "2026-10-04 04:10:29",
+      "submit_ist": "2026-10-04 04:14:38",
+      "minutes": 4.2,
+      "summary": "Low-score reasons are filed into HARE.md, but the retire line and the AGENTS.md copy do not match the run that writes them.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "AGENTS.md",
+          "line": 26,
+          "fix": "yes",
+          "issue": "marked block still says the ledger rewrites it. workflow writes --rules HARE.md only. already in a thread"
+        },
+        {
+          "sev": "real",
+          "path": "HARE.md",
+          "line": 9,
+          "fix": "yes",
+          "issue": "resolve or edit does not drop a rule. scores are issue comments with no resolved state"
+        },
+        {
+          "sev": "skip",
+          "path": ".github/workflows/hare-ledger.yml",
+          "line": 44,
+          "fix": "later",
+          "issue": "title still says AGENTS.md. already in a thread"
+        }
+      ],
+      "note": "Rules come from /hare score text only. proposed_rules does not read finding fates, so the #246 path-keyed resolve bug is not baked into a rule.",
+      "ci": "green on 031b6ff",
+      "tests": "pytest -q tests/test_hare_ledger.py \u2192 6 passed, exit 0",
+      "owner": "widget skipped",
+      "chars": {
+        "diff": 13838,
+        "title": 60,
+        "body": 1606,
+        "commits": 1188,
+        "reviews": 3231,
+        "threads": 367,
+        "issue_comments": 2650,
+        "ci_text": 303,
+        "source_slices": 24125
+      },
+      "estimate_chars": 47000,
+      "estimate_tokens": 12000,
+      "estimate_note": "Slices overlap the diff."
+    },
+    {
+      "pr": 247,
+      "title": "ci(hare): Gemini is the fallback, not the default",
+      "state_when_logged": "merged 2026-10-03T22:32:11Z before this review",
+      "head": "2d26fa8574e096a4fe5b63e17bcd1151cce503b8",
+      "review_id": 5403210947,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/247#pullrequestreview-5403210947",
+      "inlines": [],
+      "start_ist": "2026-10-04 04:10:24",
+      "submit_ist": "2026-10-04 04:14:12",
+      "minutes": 3.8,
+      "summary": "Hop list is Groq, OpenRouter, Nous, Gemini, Zen. The two order tests match that tuple.",
+      "findings": [
+        {
+          "sev": "skip",
+          "path": "scripts/hare_r1.py",
+          "line": 1356,
+          "fix": "later",
+          "issue": "build_provider_chain still calls the new order the PLAN.md R1c contract, and the docstring still walks Groq, Gemini, Nous, OpenRouter. already in a thread"
+        }
+      ],
+      "ci": "green on 2d26fa8",
+      "tests": "five named chain tests, 5 passed, exit 0",
+      "owner": "no widget. skip only, already merged",
+      "chars": {
+        "diff": 2750,
+        "title": 49,
+        "body": 856,
+        "commits": 361,
+        "reviews": 1062,
+        "threads": 210,
+        "issue_comments": 2650,
+        "ci_text": 310,
+        "source_slices": 11641
+      },
+      "estimate_chars": 20000,
+      "estimate_tokens": 5000,
+      "estimate_note": "Counts are Unicode code points as reported."
+    },
+    {
+      "type": "review",
+      "pr": 258,
+      "title": "ci(hare): the slow hops first; Groq and Gemini are fallbacks",
+      "state_when_logged": "merged 2026-10-04T00:23:41Z, reviewed after merge",
+      "head": "99fb7effe0e52a80e528d08df5741eb1bd26b242",
+      "review_id": 5404975652,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/258#pullrequestreview-5404975652",
+      "inlines": [],
+      "start_ist": "2026-10-04 13:36",
+      "submit_ist": "2026-10-04 13:40",
+      "minutes": 4,
+      "summary": "Chain and test put OpenRouter, Nous, Groq, Gemini, then Zen. AGENTS.md and the next PLAN bullet still describe the old order.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "AGENTS.md",
+          "line": 45,
+          "fix": "yes",
+          "issue": "still says Groq then OpenRouter then Nous then Gemini then Zen, Space Bunny last on Nous"
+        },
+        {
+          "sev": "real",
+          "path": "PLAN.md",
+          "line": 261,
+          "fix": "yes",
+          "issue": "next bullet still says Space Bunny is last on Nous, contradicting the failover line this PR wrote"
+        },
+        {
+          "sev": "skip",
+          "path": "scripts/hare_r1.py",
+          "line": 111,
+          "fix": "later",
+          "issue": "catalog comment still says Groq gpt-oss stays first because a 413 is free"
+        },
+        {
+          "sev": "skip",
+          "path": "tests/test_hare_r1.py",
+          "line": 645,
+          "fix": "later",
+          "issue": "order-test comment skips the Groq slot"
+        }
+      ],
+      "ci": "green on 99fb7ef: lint, r1, typecheck, test, version-sync, mcp2-compat. test-full and wheel-gate skipped.",
+      "tests": "pytest tests/test_hare_r1.py \u2192 83 passed, exit 0",
+      "estimate_chars": 73376,
+      "estimate_tokens": 18000,
+      "estimate_note": "73376 review-input characters divided by 4, rounded. Named: diff, title, body, commit, CI text, app review, inline, CodeRabbit note, hare_r1 slices, PLAN slices, test slices, hare.yml, AGENTS slice. Not a meter."
+    },
+    {
+      "type": "review",
+      "pr": 271,
+      "title": "docs(f18): input on paid searchts, and the demand measurement it was missing",
+      "state_when_logged": "merged 2026-10-04T13:14:43Z, reviewed after merge",
+      "head": "b191c11fdbaccc20f6e98470269ec961db8d5492",
+      "review_id": 5406572713,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/271#pullrequestreview-5406572713",
+      "inlines": [
+        "docs/f18-input.md:42",
+        "docs/f18-input.md:54",
+        "docs/f18-input.md:74",
+        "docs/f18-input.md:75",
+        "docs/f18-input.md:111",
+        "docs/f18-input.md:228"
+      ],
+      "start_ist": "2026-10-04 19:23",
+      "submit_ist": "2026-10-04 19:30",
+      "minutes": 7,
+      "summary": "Relay script is read-only. The demand doc misstates the download window, the residual, the release count, automation, token pricing, and which failures a relay would fix.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "docs/f18-input.md",
+          "line": 42,
+          "fix": "yes",
+          "issue": "50.9% is a 78-day slice of 2436 downloads, not every download the project has ever received"
+        },
+        {
+          "sev": "real",
+          "path": "docs/f18-input.md",
+          "line": 54,
+          "fix": "yes",
+          "issue": "17/day still includes null-platform rows; 5% laptop share is lifetime, not that residual"
+        },
+        {
+          "sev": "real",
+          "path": "docs/f18-input.md",
+          "line": 74,
+          "fix": "yes",
+          "issue": "22 tags from v0.2.0 through v0.13.1, not 46 releases"
+        },
+        {
+          "sev": "real",
+          "path": "docs/f18-input.md",
+          "line": 75,
+          "fix": "yes",
+          "issue": "automation re-resolving the package contradicts section 1.2"
+        },
+        {
+          "sev": "real",
+          "path": "docs/f18-input.md",
+          "line": 111,
+          "fix": "yes",
+          "issue": "except us and unoccupied contradict Jina and Crawl4AI token meters"
+        },
+        {
+          "sev": "real",
+          "path": "docs/f18-input.md",
+          "line": 228,
+          "fix": "yes",
+          "issue": "x-home is thin maybe, not a relay-fixable bot-wall; count is 2"
+        },
+        {
+          "sev": "skip",
+          "path": "benchmarks/measure_relay_demand.py",
+          "line": 44,
+          "fix": "later",
+          "issue": "url loaded and unused. already raised in a thread"
+        },
+        {
+          "sev": "skip",
+          "path": "benchmarks/measure_relay_demand.py",
+          "line": 88,
+          "fix": "later",
+          "issue": "nested print and unused category. already raised in a thread"
+        }
+      ],
+      "ci": "green on b191c11: test, lint, mcp2-compat, version-sync, typecheck, r1. test-full and wheel-gate skipped. CodeRabbit success, review skipped.",
+      "tests": "pytest tests/ -q exit 0, 1030 passed, 4 skipped. Live relay script not run.",
+      "chars": {
+        "diff": 26170,
+        "title": 76,
+        "body": 6793,
+        "commits": 3457,
+        "ci_text": 575,
+        "prior_reviews": 9386,
+        "file_slices": 14819
+      },
+      "estimate_chars": 61276,
+      "estimate_tokens": 15319,
+      "estimate_note": "61276 review-input characters divided by 4. Named: diff, title, body, commits, CI text, prior reviews, file slices. Not a meter."
+    },
+    {
+      "type": "review",
+      "pr": 269,
+      "title": "ci(hare): CI read once, right before the note; Wait while it runs; a red job shows what it printed",
+      "state_when_logged": "open, conflicts with main, reviewed 2026-10-04",
+      "head": "182b82eae9964313b8a2f541484fd951829a7fda",
+      "review_id": 5407370231,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/269#pullrequestreview-5407370231",
+      "inlines": [
+        "scripts/hare_r1.py:1260"
+      ],
+      "start_ist": "2026-10-04 23:05",
+      "submit_ist": "2026-10-04 23:07",
+      "minutes": 2,
+      "summary": "One CI read after the hop, Wait while pending, failed-job log up to the first error. Eight unrelated tests are deleted. Conflicts with main.",
+      "findings": [
+        {
+          "sev": "real",
+          "path": "tests/test_hare_r1.py",
+          "line": 210,
+          "fix": "yes",
+          "issue": "eight unrelated tests deleted without replacement. already raised in a thread"
+        },
+        {
+          "sev": "skip",
+          "path": "scripts/hare_r1.py",
+          "line": 1260,
+          "fix": "later",
+          "issue": "check-run id used as job-id fallback"
+        }
+      ],
+      "ci": "green on 182b82e: typecheck, mcp2-compat, version-sync, lint, test, r1. test-full and wheel-gate skipped. mergeable_state dirty.",
+      "tests": "pytest tests/test_hare_r1.py tests/test_hare_ledger.py -q exit 0, 95 passed",
+      "chars": {
+        "diff": 33405,
+        "title": 98,
+        "body": 1998,
+        "commits": 905,
+        "ci_text": 263,
+        "prior_reviews": 3850,
+        "source_slices": 26109
+      },
+      "estimate_chars": 66628,
+      "estimate_tokens": 17000,
+      "estimate_note": "66628 review-input characters divided by 4, rounded. Not a meter."
+    }
+  ],
+  "earlier_not_remeasured": {
+    "pr": 234,
+    "title": "ci(hare): a reasoning hop now answers instead of dying silently",
+    "state_when_logged": "reviewed while open. later closed not merged 2026-10-03T18:55:07Z",
+    "head": "89d8d34973267b2feb85cd5407d50ad24866c097",
+    "review_id": 5401811255,
+    "review_url": "https://github.com/capad-xyz/searchts/pull/234#pullrequestreview-5401811255",
+    "overall_comment": "https://github.com/capad-xyz/searchts/pull/234#issuecomment-5971852491",
+    "overall_comment_id": 5971852491,
+    "summary": "Hold. reasoning-off is the fast pass, reasoning-on is the default good review. Still in the way: main conflict, --post bug, non-JSON span.",
+    "findings": [
+      {
+        "sev": "real",
+        "path": "scripts/hare_local.py",
+        "line": 149,
+        "fix": "yes",
+        "issue": "--post never posts, dry run can resolve threads"
+      },
+      {
+        "sev": "real",
+        "path": "scripts/hare_r1.py",
+        "line": 245,
+        "fix": "yes",
+        "issue": "closed non-JSON span jumps to j+1 and can hide a valid review"
+      },
+      {
+        "sev": "skip",
+        "path": "scripts/hare_r1.py",
+        "line": 274,
+        "fix": "later",
+        "issue": "first object with findings wins"
+      }
+    ],
+    "tests": "pytest tests/test_hare_r1.py \u2192 57 passed",
+    "owner": "eye ball",
+    "estimate_tokens": 9000,
+    "estimate_note": "Earlier pass, about 8,900 to 9,000 from chars/4 plus a local hare unit-test run. Character breakdown was not kept. Not remeasured for this file."
+  }
+}
