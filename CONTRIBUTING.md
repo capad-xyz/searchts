@@ -72,18 +72,18 @@ please do not bump version numbers in your PR.
 
 Using an AI to write, edit, or review is fine. Say which one.
 
-Every PR an agent touched gets a **Models** section, at the bottom of the body. One writer can be one line. More than one role uses the table. Columns are Role, Model, Effort.
+Every PR an agent touched gets a **Models** section, at the bottom of the body. One writer can be one line. More than one role uses the table. Columns are Role, Model, Effort, Purpose.
 
 ```markdown
 ## Models
 
 | Role | Model | Effort | Purpose |
 | --- | --- | --- | --- |
-| wrote | Grok 4.7, xAI chat | medium | AI wrote it |
-| edited | claude-opus-5-5 | high | AI edited it |
+| wrote | Grok 4.7, xAI chat | medium | wrote the retry loop in fetch.py and its two tests |
+| edited | claude-opus-5-5 | high | tightened the error messages and the README section |
 ```
 
-The Model cell is the slug, or the agent and the model together. Prefer the API slug when you have one: `openai/gpt-oss-120b`, `gemini-3.1-flash-lite`, `poolside/laguna-s-2.1:free`, `qwen/qwen3.8-27b:free`. A product name alone (`Claude`, `Grok`) is not enough. Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one word: `low`, `medium`, or `high`. Not a second essay. If an AI opened the PR, wrote the commit, or posted the comment, that AI fills Purpose. The line is `AI wrote it` when it created the PR or the commit, `AI edited it` when it only edited, `AI reviewed it` when it only reviewed. A human does not write that cell for the agent.
+The Model cell is the slug, or the agent and the model together. Prefer the API slug when you have one: `openai/gpt-oss-120b`, `gemini-3.1-flash-lite`, `poolside/laguna-s-2.1:free`, `qwen/qwen3.8-27b:free`. A product name alone (`Claude`, `Grok`) is not enough. Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one word: `low`, `medium`, or `high`. Not a second essay. Purpose is one short line that says what work the model did: what kind (code, tests, docs, a review, a summary) and on what. `wrote the retry loop and its tests`, `rewrote the install section`, `reviewed the diff and posted the note`. Not `AI wrote it`: the Role cell already says that, and a Purpose that repeats it tells the reader nothing. The model fills its own Purpose cell; a human does not write it for the agent. A run with no model (a cron job, a deterministic script) says so in the Model cell (`none, scripts/hare_ledger.py on cron`), puts `n/a` in Effort, and in Purpose says what the script produced and that no text was generated.
 
 A comment an agent posts uses the same table, signed as whoever is writing:
 
@@ -92,7 +92,7 @@ A comment an agent posts uses the same table, signed as whoever is writing:
 
 | Role | Model | Effort | Purpose |
 | --- | --- | --- | --- |
-| wrote | Grok 4.7, xAI chat | medium | AI wrote it |
+| wrote | Grok 4.7, xAI chat | medium | wrote this reply from the thread above, no code |
 ```
 
 Under the table, the Co-authored-by trailer. The name is the agent, not a person pretending the agent was not there:

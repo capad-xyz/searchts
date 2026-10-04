@@ -131,7 +131,7 @@ Shape is #103 and #115. Do not invent a third.
 
 - Title: `type(scope): message`. Squash-merge, so the title is the commit on `main`. No status essay in the title.
 - Body, in this order: **What** (what changed, and what it does not do), **Why** (one short reason, skip if What already says it), **Test plan** (commands actually run, checked), **Checklist** (the fences for this PR). A table is fine when the change is a list.
-- **Models** on every agent PR. One writer can be one line, like #103 (`Ox Alpha retry (implementation); editor Grok 4.5`). More than one role uses the #115 table. Columns are Role, Model, Effort, and Purpose when an agent opened the PR, wrote the commit or posted the comment (`AI wrote it`, `AI edited it`, `AI reviewed it`; CONTRIBUTING.md, #239). Model is the agent and the model together (`Grok 4.6`, `claude-opus-5-5`). Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one cell, not a second essay. Trailer under it. The name is the agent:
+- **Models** on every agent PR. One writer can be one line, like #103 (`Ox Alpha retry (implementation); editor Grok 4.5`). More than one role uses the #115 table. Columns are Role, Model, Effort, and Purpose, one line on what work the model did and on what (`wrote the retry loop and its tests`, `reviewed the diff and posted the note`), filled by the model itself; not `AI wrote it`, the Role cell says that already (CONTRIBUTING.md, #239, #263). Model is the agent and the model together (`Grok 4.6`, `claude-opus-5-5`). Put the platform in that cell only when it disambiguates (`Grok 4.7, xAI chat`). Effort is one cell, not a second essay. Trailer under it. The name is the agent:
 
 ```
 Co-authored-by: Name <email>
