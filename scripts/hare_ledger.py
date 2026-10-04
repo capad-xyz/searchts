@@ -6,6 +6,11 @@ said about the note. Built from the notes themselves (GitHub reviews carrying
 the Hare token), the "Since" lines of later notes, resolved review threads and
 `/hare score` comments. No hidden memory: the ledger is a file in the repo.
 
+Fates: `fixed` from a later note's Since line, `resolved` from a resolved
+review thread, `dropped` when the PR closed unmerged, and the owner's word
+`/hare fate <path:line> fixed|wrong|wontfix <why>` as a PR comment, which
+beats all three.
+
 Hare only. Other reviewers on this repo are not Hare's business; a comparison
 against them is a repo-local script (scripts/compare_reviewers.py), not the ledger.
 
@@ -44,6 +49,18 @@ def score_from(comment: str) -> tuple[int | None, str]:
     if not m:
         return None, ""
     return int(m.group(1)), hare_r1._no_em(hare_r1._plain(m.group(2)))[:200]
+
+
+def fate_from(comment: str) -> tuple[str, str, str]:
+    """`/hare fate scripts/a.py:12 wrong the test passes` -> (loc, "wrong", why);
+    ("", "", "") otherwise. The owner's word on one finding: fixed, wrong or
+    wontfix. It beats what the Since lines and threads say, because a resolved
+    thread cannot tell a fix from a dismissal, and a finding with no line has
+    no thread at all."""
+    m = re.search(hare_r1.FATE_RE + r"[:,]?\s*(.*)", comment or "", re.I | re.S)
+    if not m:
+        return "", "", ""
+    return m.group(1), m.group(2).lower(), hare_r1._no_em(hare_r1._plain(m.group(3)))[:200]
 
 
 def is_hare(body: str) -> bool:
@@ -129,10 +146,20 @@ def pr_rows(pr: dict[str, Any], reviews: list[dict[str, Any]], comments: list[di
         n, text = score_from(body)
         if n is not None:
             scores.append({"score": n, "text": text, "by": (c.get("user") or {}).get("login", ""), "at": c.get("created_at", "")})
+        loc, fate, why = fate_from(body)
+        if loc in findings:
+            findings[loc]["fate"], findings[loc]["why"] = fate, why
+    # A PR closed without merging takes its open findings with it: nothing
+    # was fixed and nothing can be, so they are dropped, not open.
+    state = "merged" if pr.get("merged_at") else str(pr.get("state") or "")
+    if state == "closed":
+        for row in findings.values():
+            if row["fate"] == "open":
+                row["fate"] = "dropped"
     return {
         "pr": pr.get("number"),
         "title": pr.get("title", ""),
-        "state": "merged" if pr.get("merged_at") else str(pr.get("state") or ""),
+        "state": state,
         "files": [],
         "notes": note_rows,
         "findings": list(findings.values()),
@@ -166,11 +193,15 @@ def summarize(entries: list[dict[str, Any]]) -> dict[str, Any]:
 def render_md(entries: list[dict[str, Any]], summary: dict[str, Any], built: str) -> str:
     rate = ""
     if summary["real"]:
-        rate = f"{summary['real_fixed_or_resolved']} of {summary['real']} real findings fixed or resolved ({100 * summary['real_fixed_or_resolved'] // summary['real']}%)"
+        judged = summary["real"] - summary["real_fates"].get("open", 0)
+        rate = (
+            f"{summary['real_fixed_or_resolved']} of {summary['real']} real findings fixed or resolved ({100 * summary['real_fixed_or_resolved'] // summary['real']}%); "
+            f"{judged} judged, {summary['real_fates'].get('wrong', 0)} wrong, {summary['real_fates'].get('wontfix', 0)} wontfix, {summary['real_fates'].get('dropped', 0)} dropped with a closed PR"
+        )
     lines = [
         "# Hare ledger",
         "",
-        "Every finding Hare posted here, what became of it, and what the owner said. Built by `scripts/hare_ledger.py` from the notes, the Since lines, resolved threads and `/hare score` comments. PLAN R2b.",
+        "Every finding Hare posted here, what became of it, and what the owner said. Built by `scripts/hare_ledger.py` from the notes, the Since lines, resolved threads, `/hare score` and `/hare fate` comments; a PR closed unmerged drops its open findings. PLAN R2b.",
         "",
         f"Built {built}. {summary['prs']} PRs, {summary['notes']} notes, {summary['real']} real and {summary['skip']} skip findings, {summary['cut_notes']} notes cut at the budget, {summary.get('needed', 0)} runs where no hop answered.",
         "",

@@ -105,6 +105,25 @@ def test_pr_rows_follows_a_finding_from_note_to_note() -> None:
     assert "\u2014" not in md
 
 
+def test_the_owner_word_on_a_finding_beats_the_thread_and_a_closed_pr_drops_the_rest() -> None:
+    assert hare_ledger.fate_from("/hare fate scripts/a.py:12 wrong: the test passes on main") == ("scripts/a.py:12", "wrong", "the test passes on main")
+    assert hare_ledger.fate_from("/hare fate scripts/a.py:12 maybe") == ("", "", "")
+    assert hare_r1.is_score("/hare fate scripts/a.py:12 wontfix owner's call")  # the Action records it, no note
+    reviews = [{"body": NOTE_1, "submitted_at": "2026-10-03T20:00:00Z", "html_url": "u1"}]
+    threads = [{"isResolved": True, "path": "scripts/a.py", "line": 12, "comments": {"nodes": [{"body": hare_r1.TOKEN}]}}]
+    comments = [{"body": "/hare fate scripts/a.py:12 wrong the test passes", "user": {"login": "owner"}, "created_at": "2026-10-03T22:00:00Z"}]
+    e = hare_ledger.pr_rows({"number": 7, "state": "closed"}, reviews, comments, threads)
+    fates = {f["loc"]: f["fate"] for f in e["findings"]}
+    assert fates == {"scripts/a.py:12": "wrong", "docs/x.md:3": "dropped"}  # the word beats the resolved thread; closed takes the rest
+    assert e["state"] == "closed" and next(f for f in e["findings"] if f["loc"] == "scripts/a.py:12")["why"] == "the test passes"
+    s = hare_ledger.summarize([e])
+    assert s["real_fixed_or_resolved"] == 0 and s["real_fates"] == {"wrong": 1}
+    md = hare_ledger.render_md([e], s, "2026-10-04")
+    assert "1 judged, 1 wrong, 0 wontfix, 0 dropped" in md
+    merged = hare_ledger.pr_rows({"number": 8, "merged_at": "2026-10-03T23:00:00Z", "state": "closed"}, reviews, [], [])
+    assert {f["fate"] for f in merged["findings"]} == {"open"}  # merged is not closed-unmerged
+
+
 def test_the_ledger_primes_the_next_note(tmp_path, monkeypatch) -> None:
     reviews = [{"body": NOTE_1, "submitted_at": "2026-10-03T20:00:00Z"}, {"body": NOTE_2, "submitted_at": "2026-10-03T21:00:00Z"}]
     comments = [{"body": "/hare score 2 thin on the tests", "user": {"login": "owner"}, "created_at": "2026-10-03T22:00:00Z"}]
