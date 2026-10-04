@@ -42,9 +42,11 @@ Same window, downloads bucketed by whether that date carried a GitHub release:
 A release day carries **7.9x** a normal day. **50.9%** of every download the project has ever received
 happened on the nine days we shipped a version.
 
-**We checked whether we inflated this ourselves.** Every CI install in `.github/workflows/` and both
-Dockerfiles is either `pip install -e .` or a local `dist/*.whl` wheel, neither of which resolves
-`searchts` from PyPI. So the release-day bursts are not our test suite. They come from outside the
+**We checked whether we inflated this ourselves.** Every CI install in `.github/workflows/` and the
+root `Dockerfile` is either `pip install -e .` or a local `dist/*.whl` wheel, neither of which resolves
+`searchts` from PyPI. `demo/Dockerfile` does install the PyPI release (`pip3 install searchts`), but no
+workflow builds it: it is built by hand to record the README GIFs, and pip inside it reports a Linux
+platform, so it cannot be the null-platform rows. So the release-day bursts are not our test suite. They come from outside the
 workflows, and we have not identified the requesters yet. **U8** tracks that.
 
 ### 1.3 What is left
