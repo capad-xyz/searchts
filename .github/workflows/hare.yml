@@ -32,6 +32,8 @@ permissions:
   checks: read
   statuses: read
   issues: read
+  # Read a failed CI job's log, so the note says what broke.
+  actions: read
 
 jobs:
   r1:
@@ -87,6 +89,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.hare-app.outputs.token || secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          # Job logs are read with the run's own token (actions: read above), not the App's.
+          HARE_ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           # Only an ask from someone with write access reaches the prompt. Read as data, never run.
