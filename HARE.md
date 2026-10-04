@@ -1,13 +1,32 @@
 # HARE.md
 
 Hare's own file on this repo. AGENTS.md is the contract every agent signs; this
-is what Hare has learned here. Hare reads both before every note.
+is how Hare runs here and what it has learned. Hare reads both before every note.
 
-Two kinds of line live here. Rules the owner wrote by hand, anywhere outside the
-marked block. And the marked block, which `scripts/hare_ledger.py` rewrites on
-the weekly ledger run from `/hare score 1..5 <why>` comments: a score of 2 or
-less with a reason becomes a line. To retire one, delete the score comment it
-came from, or edit it to a 3 or higher; the next run drops the line.
+Three parts. How Hare works, below. Rules the owner wrote by hand, anywhere
+outside the marked block. And the marked block, which `scripts/hare_ledger.py`
+rewrites on the weekly ledger run from `/hare score 1..5 <why>` comments: a score
+of 2 or less with a reason becomes a line. To retire one, delete the score
+comment it came from, or edit it to a 3 or higher; the next run drops the line.
+
+## How Hare works here
+
+1. A PR opens or gets a push, or someone with write access comments `/hare`.
+   The Action `hare / r1` runs `scripts/hare_r1.py` from main. A fixed list of
+   free model hops (PLAN R1c) is tried in order; the first that answers writes
+   the review. If none answers, Hare posts a needed comment instead.
+2. Hare reads AGENTS.md, this file, and what the ledger knows about the files in
+   the diff, then posts one review: summary, CI, intent, a verdict (Ship or Hold
+   from CI and the real findings, then the model's case), findings with bubbles
+   on the lines (a one-click fix where the fix is small), a checks fold, and a
+   fold on how to answer. A later push gets a Since section on each old finding.
+3. The owner answers with PR comments: `/hare score 1..5 <why>` on a note,
+   `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare
+   records both and posts nothing.
+4. Every Sunday the ledger run rebuilds `docs/hare-ledger.md` from the notes,
+   Since lines, resolved threads and those comments, rewrites the block below
+   from low scores, opens a PR, asks Hare to review it, and merges it unless
+   Hare finds a real problem.
 
 ## Owner's rules
 
