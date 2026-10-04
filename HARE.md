@@ -30,7 +30,12 @@ comment it came from, or edit it to a 3 or higher; the next run drops the line.
 
 ## Owner's rules
 
-- (none yet)
+- **Tests run the real code.** Fake the network, the clock and the disk, never the function the test is named after. A test that stubs the unit it covers, or reads source text instead of running it, is a real finding, not a skip. (#269, #275)
+- **Anything of unknown size has a bound.** A log, a response body, a file: stream it or cap it, or the PR says why not. An unbounded read is a real finding. (#269, #275)
+- **A changed rule leaves no old copy behind.** When the diff changes how something works, check AGENTS.md, HARE.md and the docs for lines that still say the old thing. Agents read those files, so a contradiction is a real finding. (#269)
+- **One read path.** Every read goes through `unlocker.fetch`; do not suggest routing reads by channel.
+- **Doctor only reads.** Do not suggest wiring config keys that nothing uses.
+- **Honest over clever.** searchts is a keyless reader: prefer saying plainly that a page could not be read over a feature that guesses.
 
 <!-- hare-ledger:rules -->
 **What the owner said Hare missed (from the ledger, PLAN R2c).** Each line is the reason behind a low score, filed by `scripts/hare_ledger.py` from `/hare score`. Hare reads these as rules for the next note. Each ledger run rewrites this block; to retire a line, delete its score comment or edit the score to 3 or higher.
