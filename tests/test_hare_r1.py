@@ -643,15 +643,16 @@ def test_provider_chain_is_the_fixed_order() -> None:
     chain = hare_r1.build_provider_chain(keys, models)
     # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is
     # fast and misses things. OpenRouter's qwen leads, then Nous, then Gemini.
-    assert [hop[0] for hop in chain] == ["groq", "openrouter", "nous", "nous", "gemini", "zen"]
-    assert [hop[3] for hop in chain] == ["g1", "o1", "n1", "n2", "m1", "z1"]
-    assert [hop[2] for hop in chain] == ["g", "o", "n", "n", "m", "z"]
+    # OpenRouter and Nous first, the fast hops (Groq, Gemini) after them: owner's call, 2026-10-04.
+    assert [hop[0] for hop in chain] == ["openrouter", "nous", "nous", "groq", "gemini", "zen"]
+    assert [hop[3] for hop in chain] == ["o1", "n1", "n2", "g1", "m1", "z1"]
+    assert [hop[2] for hop in chain] == ["o", "n", "n", "g", "m", "z"]
 
 
 def test_provider_chain_drops_a_provider_with_no_key() -> None:
     models = {"groq": ["g1"], "gemini": ["m1"], "nous": ["n1"], "openrouter": ["o1"], "zen": ["z1"]}
     chain = hare_r1.build_provider_chain({"groq": "g", "nous": "n"}, models)
-    assert [hop[0] for hop in chain] == ["groq", "nous"]
+    assert [hop[0] for hop in chain] == ["nous", "groq"]
     assert all(hop[2] in {"g", "n"} for hop in chain)
 
 
@@ -673,7 +674,7 @@ def test_hop_loop_sends_every_provider_its_own_options() -> None:
 
     def fake_complete(base: str, key: str, model: str, messages: list, request_options=None) -> str:
         calls.append((model, key, dict(request_options or {})))
-        if model != "n1":  # the earlier hops die the way the real ones do
+        if model != "g1":  # the earlier hops die the way the real ones do
             raise RuntimeError("LLM empty content")
         return '{"summary": "ok", "findings": []}'
 
@@ -689,9 +690,9 @@ def test_hop_loop_sends_every_provider_its_own_options() -> None:
         except RuntimeError:
             continue
 
-    assert [c[0] for c in calls] == ["g1", "o1", "n1"]
-    assert [c[1] for c in calls] == ["g", "o", "n"]
-    assert [c[2] for c in calls] == [{}, {"reasoning": {"effort": "low", "exclude": True}}, {"reasoning": {"effort": "none"}}]
+    assert [c[0] for c in calls] == ["o1", "n1", "g1"]
+    assert [c[1] for c in calls] == ["o", "n", "g"]
+    assert [c[2] for c in calls] == [{"reasoning": {"effort": "low", "exclude": True}}, {"reasoning": {"effort": "none"}}, {}]
     assert parsed == {"summary": "ok", "findings": []}
 
 
