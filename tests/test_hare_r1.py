@@ -85,7 +85,8 @@ def test_normalize_keeps_dotfile_paths() -> None:
 
 def test_intent_hold_on_red_even_without_findings() -> None:
     assert hare_r1.intent_for("fail", []) == "hold"
-    assert hare_r1.intent_for("pending", []) == "hold"
+    assert hare_r1.intent_for("pending", []) == "wait"  # CI still running is not a hold
+    assert hare_r1.intent_for("pending", [{"sev": "real"}]) == "hold"
     assert hare_r1.intent_for("ok", []) == "ship"
     assert hare_r1.intent_for("ok", [{"sev": "skip"}]) == "ship"
     assert hare_r1.intent_for("ok", [{"sev": "real"}]) == "hold"
@@ -209,142 +210,56 @@ def test_run_nags_on_crash(monkeypatch: object) -> None:
     assert "boom" in posted[0]
 
 
-def test_the_note_reads_ci_again_after_the_hop(monkeypatch) -> None:
-    """Checks read before the hop say "not done" on a fresh push; the note
-    posts minutes later and should say what CI says then."""
+def test_ci_is_read_once_right_before_the_note(monkeypatch) -> None:
+    """Hare starts on the same push as CI, so a read before the hop always said
+    "still running" (on #260, #264, #265 and #267 the note said so 37 to 111 s
+    after CI had finished). One read, right before the note; a failed read says
+    so and never blocks the note."""
+    import inspect
+
+    src = inspect.getsource(hare_r1._hare_once)  # the review body of run()
+    assert src.count("read_checks(") == 1 and "wait_checks(" not in src and "classify_checks(" not in src
+    assert src.index("read_checks(") > src.index("build_provider_chain(")  # after the hop is set up, not before
     done = [{"name": "ci / test", "status": "completed", "conclusion": "success"}]
     monkeypatch.setattr(hare_r1, "wait_checks", lambda *a: done)
-    runs, state, notes = hare_r1.fresh_checks("o", "r", "abc", "t", [], "pending", ["no non-Hare checks yet"])
-    assert (runs, state, notes) == (done, "ok", [])
+    assert hare_r1.read_checks("o", "r", "abc", "t") == (done, "ok", [])
 
     def down(*a):
         raise RuntimeError("HTTP 502")
 
     monkeypatch.setattr(hare_r1, "wait_checks", down)
-    assert hare_r1.fresh_checks("o", "r", "abc", "t", [], "pending", ["x"]) == ([], "pending", ["x"])  # keeps the first read
+    assert hare_r1.read_checks("o", "r", "abc", "t") == ([], "pending", ["could not read CI"])
+    assert "Not shown to you" in hare_r1.build_user("", "t", "b", "d", "Not shown to you.")
 
 
-def test_csv_models_splits_and_override(monkeypatch: object) -> None:
-    monkeypatch.delenv("HARE_OR_MODEL", raising=False)  # type: ignore[attr-defined]
-    assert hare_r1._csv_models("HARE_OR_MODEL", "a, b ,c") == ["a", "b", "c"]
-    monkeypatch.setenv("HARE_OR_MODEL", "only-one")  # type: ignore[attr-defined]
-    assert hare_r1._csv_models("HARE_OR_MODEL", "a,b") == ["only-one"]
-    # The ledger (2026-10-04): laguna answered 18 times on OpenRouter and never
-    # found anything, so it is off that list; qwen stays first. Space Bunny is
-    # free until 2026-10-05 and sits second on OpenRouter and first on Nous for
-    # its last day.
-    assert hare_r1.HARE_OR_DEFAULT.split(",")[0] == "qwen/qwen3.8-27b:free"
-    assert hare_r1.HARE_OR_DEFAULT.split(",")[1] == "stealth/space-bunny-alpha"
-    assert "poolside/laguna-s-2.1:free" not in hare_r1.HARE_OR_DEFAULT.split(",")
-    assert len(hare_r1.HARE_OR_DEFAULT.split(",")) >= 4  # not one model: diversity is data
-    # Two Zen slugs are TUI-only by policy (403 FreeTierError from Actions).
-    assert hare_r1.HARE_ZEN_DEFAULT.split(",") == ["space-bunny-free"]
-    assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
-    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stealth/space-bunny-alpha"
-    assert hare_r1.HARE_NOUS_DEFAULT.endswith("poolside/laguna-s-2.1:free")
-    assert hare_r1.HARE_ZEN_DEFAULT.split(",")[0] == "space-bunny-free"
-
-
-def test_short_fail_hides_provider_json() -> None:
-    raw = (
-        'nous:poolside/laguna-s-2.1: LLM 401 https://x poolside/laguna-s-2.1: '
-        '{"status":401,"message":"Your API key is invalid, blocked or out of funds."}'
+def test_a_failed_job_shows_what_it_printed_up_to_its_first_error(monkeypatch) -> None:
+    log = (
+        "\ufeff2026-10-04T10:00:00.1234567Z ##[group]Run pytest -q\n"
+        "2026-10-04T10:00:01.0000000Z ##[endgroup]\n"
+        "2026-10-04T10:00:02.0000000Z FAILED tests/test_x.py::test_y - assert 1 == 2\n"
+        "2026-10-04T10:00:02.5000000Z ```not a fence```\n"
+        "2026-10-04T10:00:03.0000000Z ##[error]Process completed with exit code 1.\n"
+        "2026-10-04T10:00:04.0000000Z Post job cleanup.\n"
     )
-    assert hare_r1._short_fail(raw) == "nous: key invalid or empty"
-    rate = (
-        "openrouter:poolside/laguna-s-2.1:free: LLM 429 "
-        '{"error":{"message":"temporarily rate-limited upstream"}}'
-    )
-    assert hare_r1._short_fail(rate) == "openrouter: rate limited"
-    zen = (
-        "zen:ling-3.0-flash-fin-free: LLM 403 "
-        '{"type":"FreeTierError","message":"OpenCode\'s free tier can only be used from within OpenCode"}'
-    )
-    assert hare_r1._short_fail(zen) == "zen: free tier is TUI-only"
-
-
-def test_needed_body_is_graceful_and_offers_retry() -> None:
-    why = (
-        "nous:x: LLM 401 {\"status\":401} | "
-        "openrouter:y: LLM 429 rate-limited | "
-        "zen:z: LLM 403 FreeTierError within OpenCode"
-    )
-    body = hare_r1.needed_body(why)
-    assert body.startswith(hare_r1.NEEDED)
-    assert "/hare" in body
-    assert "not a review" in body.lower()
-    assert "Run workflow" in body
-    assert '{"status"' not in body
-    assert "key invalid or empty" in body
-    assert "rate limited" in body
-    assert "TUI-only" in body
-    assert "\u2014" not in body
-
-
-def test_deliver_review_posts_pr_review(monkeypatch: object) -> None:
-    calls: list[tuple[str, str]] = []
-
-    def fake(method: str, path: str, token: str, body: object = None, **_k: object) -> dict:
-        calls.append((method, path))
-        return {}
-
-    monkeypatch.setattr(hare_r1, "github_api", fake)
-    out = hare_r1.deliver_review("o", "r", 1, "t", "sha", hare_r1.TOKEN + "\n**ship**", [])
-    assert out == "review"
-    assert calls == [("POST", "/repos/o/r/pulls/1/reviews")]
-
-
-def test_deliver_review_retries_summary_only(monkeypatch: object) -> None:
-    n = {"i": 0}
-
-    def fake(method: str, path: str, token: str, body: object = None, **_k: object) -> dict:
-        n["i"] += 1
-        if n["i"] == 1:
-            raise RuntimeError("422 bad line")
-        assert isinstance(body, dict) and "comments" not in body
-        return {}
-
-    monkeypatch.setattr(hare_r1, "github_api", fake)
-    bubbles = [{"path": "a.py", "line": 1, "side": "RIGHT", "body": "x"}]
-    assert hare_r1.deliver_review("o", "r", 1, "t", "sha", hare_r1.TOKEN, bubbles) == "summary"
-
-
-def test_deliver_review_nags_when_reviews_api_dead(monkeypatch: object) -> None:
-    posted: list[str] = []
-
-    def fake_api(method: str, path: str, token: str, body: object = None, **_k: object) -> dict:
-        if "reviews" in path:
-            raise RuntimeError("503")
-        if isinstance(body, dict):
-            posted.append(str(body.get("body") or ""))
-        return {}
-
-    monkeypatch.setattr(hare_r1, "github_api", fake_api)
-    assert (
-        hare_r1.deliver_review("o", "r", 1, "t", "sha", hare_r1.TOKEN + "\n**ship**", [])
-        == "needed"
-    )
-    assert posted and posted[0].startswith(hare_r1.NEEDED)
-    assert "**ship**" not in posted[0]
-
-
-def test_already_reviewed_same_sha(monkeypatch: object) -> None:
-    def fake(method: str, path: str, token: str, body: object = None, **_k: object) -> object:
-        assert "reviews" in path
-        return [
-            {"commit_id": "aaa", "body": hare_r1.TOKEN + "\n**ship**"},
-            {"commit_id": "bbb", "body": "unrelated"},
-        ]
-
-    monkeypatch.setattr(hare_r1, "github_api", fake)
-    assert hare_r1.already_reviewed("o", "r", 1, "t", "aaa") is True
-    assert hare_r1.already_reviewed("o", "r", 1, "t", "bbb") is False
-    assert hare_r1.already_reviewed("o", "r", 1, "t", "ccc") is False
-
-
-def test_already_reviewed_ignores_empty_sha(monkeypatch: object) -> None:
-    monkeypatch.setattr(hare_r1, "github_api", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no net")))
-    assert hare_r1.already_reviewed("o", "r", 1, "t", "") is False
+    tail = hare_r1._log_tail(log)
+    assert tail.splitlines() == [
+        "Run pytest -q",
+        "FAILED tests/test_x.py::test_y - assert 1 == 2",
+        "\'\'\'not a fence\'\'\'",
+        "##[error]Process completed with exit code 1.",
+    ]
+    asked: list[int] = []
+    monkeypatch.setattr(hare_r1, "job_log", lambda o, r, job, t: asked.append(job) or log)
+    runs = [
+        {"name": "r1", "conclusion": "failure", "id": 1},  # Hare's own job: never read
+        {"name": "lint", "conclusion": "success", "id": 2},
+        {"name": "test", "conclusion": "failure", "id": 3, "details_url": "https://github.com/o/r/actions/runs/9/job/77"},
+    ]
+    assert hare_r1.failed_log_tails("o", "r", runs, "t") == {"test": tail} and asked == [77]
+    real = hare_r1.normalize_findings([{"sev": "real", "path": "a.py", "line": 3, "issue": "x"}])
+    body = hare_r1.render_comment("nous:x", "low", "hold", real, "fail", ["test: failure"], "S.", "abc1234", log_tails={"test": tail})
+    assert "**test** failed. What it printed up to its first error:" in body and "FAILED tests/test_x.py::test_y" in body
+    assert body.index("FAILED tests/test_x.py") > body.index("🐰 checks")  # inside the checks fold, not the note's face
 
 
 def test_ci_line_sits_under_the_summary() -> None:
@@ -353,8 +268,13 @@ def test_ci_line_sits_under_the_summary() -> None:
     assert "CI on `abc1234`: red (ci / test: failure)." in red
     assert red.index("CI on `abc1234`") < red.index("### Findings")
     assert "- CI ci / test → failure" in red
-    waiting = hare_r1.render_comment("nous:x", "low", "hold", [], "pending", [], "S.", "abc1234")
+    waiting = hare_r1.render_comment("nous:x", "low", "wait", [], "pending", [], "S.", "abc1234")
     assert "CI on `abc1234`: still running." in waiting
+    named = hare_r1.render_comment("nous:x", "low", "wait", [], "pending", ["ci / test: in_progress", "lint: queued"], "S.", "abc1234")
+    assert "CI on `abc1234`: still running (test / lint)." in named
+    assert "**Verdict:** Wait (CI still running: test / lint, no real findings)." in named
+    unread = hare_r1.render_comment("nous:x", "low", "wait", [], "pending", ["could not read CI"], "S.", "abc1234")
+    assert "CI on `abc1234`: could not be read." in unread and "Wait (CI could not be read, no real findings)" in unread
 
 
 def test_green_checks_skip_hare_and_by_design_jobs() -> None:
@@ -1110,11 +1030,12 @@ def test_the_note_says_ship_or_hold_and_the_model_says_why() -> None:
     assert "**Verdict:** Hold (CI green, 1 real finding). The retry has no cap, so a dead host loops forever." in body
     body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [], "S.", "abc1234", case="Docs only, and the examples run.")
     assert "**Verdict:** Ship (CI green, no real findings). Docs only, and the examples run." in body
-    assert hare_r1.verdict_line("hold", "pending", [], "") == "**Verdict:** Hold (CI not done, no real findings)."
+    assert hare_r1.verdict_line("wait", "pending", [], "") == "**Verdict:** Wait (CI still running, no real findings)."
+    assert hare_r1.verdict_line("hold", "fail", [], "", ["ci / test: failure"]) == "**Verdict:** Hold (CI red: test, no real findings)."
     assert hare_r1.verdict_line("hold", "fail", real + real, "a \u2014 b") == "**Verdict:** Hold (CI red, 2 real findings). a - b"
     # the word is never the model's: a case that says ship on a red PR still reads Hold
     assert hare_r1.verdict_line("hold", "fail", [], "ship it") .startswith("**Verdict:** Hold")
-    assert '"case":' in hare_r1.SYSTEM and "the Action prints Ship or Hold" in hare_r1.SYSTEM
+    assert '"case":' in hare_r1.SYSTEM and "the Action prints Ship, Hold or Wait" in hare_r1.SYSTEM
 
 
 ADDED_DIFF = """diff --git a/a.py b/a.py
@@ -1219,3 +1140,126 @@ def test_a_fix_that_changes_a_signature_gets_no_button() -> None:
     hare_r1.attach_suggestions(fs, added, None)
     assert len(fs) == 1 and not fs[0].get("_checked") and "suggestion" not in fs[0]
     assert "must also be the whole fix" in hare_r1.SYSTEM
+
+
+def test_csv_models_splits_and_override(monkeypatch: object) -> None:
+    monkeypatch.delenv("HARE_OR_MODEL", raising=False)  # type: ignore[attr-defined]
+    assert hare_r1._csv_models("HARE_OR_MODEL", "a, b ,c") == ["a", "b", "c"]
+    monkeypatch.setenv("HARE_OR_MODEL", "only-one")  # type: ignore[attr-defined]
+    assert hare_r1._csv_models("HARE_OR_MODEL", "a,b") == ["only-one"]
+    # The ledger (2026-10-04): laguna answered 18 times on OpenRouter and never
+    # found anything, so it is off that list; qwen stays first. Space Bunny is
+    # free until 2026-10-05 and sits second on OpenRouter and first on Nous for
+    # its last day.
+    assert hare_r1.HARE_OR_DEFAULT.split(",")[0] == "qwen/qwen3.8-27b:free"
+    assert hare_r1.HARE_OR_DEFAULT.split(",")[1] == "stealth/space-bunny-alpha"
+    assert "poolside/laguna-s-2.1:free" not in hare_r1.HARE_OR_DEFAULT.split(",")
+    assert len(hare_r1.HARE_OR_DEFAULT.split(",")) >= 4  # not one model: diversity is data
+    # Two Zen slugs are TUI-only by policy (403 FreeTierError from Actions).
+    assert hare_r1.HARE_ZEN_DEFAULT.split(",") == ["space-bunny-free"]
+    assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stealth/space-bunny-alpha"
+    assert hare_r1.HARE_NOUS_DEFAULT.endswith("poolside/laguna-s-2.1:free")
+    assert hare_r1.HARE_ZEN_DEFAULT.split(",")[0] == "space-bunny-free"
+
+
+def test_short_fail_hides_provider_json() -> None:
+    raw = (
+        'nous:poolside/laguna-s-2.1: LLM 401 https://x poolside/laguna-s-2.1: '
+        '{"status":401,"message":"Your API key is invalid, blocked or out of funds."}'
+    )
+    assert hare_r1._short_fail(raw) == "nous: key invalid or empty"
+    rate = (
+        "openrouter:poolside/laguna-s-2.1:free: LLM 429 "
+        '{"error":{"message":"temporarily rate-limited upstream"}}'
+    )
+    assert hare_r1._short_fail(rate) == "openrouter: rate limited"
+    zen = (
+        "zen:ling-3.0-flash-fin-free: LLM 403 "
+        '{"type":"FreeTierError","message":"OpenCode\'s free tier can only be used from within OpenCode"}'
+    )
+    assert hare_r1._short_fail(zen) == "zen: free tier is TUI-only"
+
+
+def test_needed_body_is_graceful_and_offers_retry() -> None:
+    why = (
+        "nous:x: LLM 401 {\"status\":401} | "
+        "openrouter:y: LLM 429 rate-limited | "
+        "zen:z: LLM 403 FreeTierError within OpenCode"
+    )
+    body = hare_r1.needed_body(why)
+    assert body.startswith(hare_r1.NEEDED)
+    assert "/hare" in body
+    assert "not a review" in body.lower()
+    assert "Run workflow" in body
+    assert '{"status"' not in body
+    assert "key invalid or empty" in body
+    assert "rate limited" in body
+    assert "TUI-only" in body
+    assert "\u2014" not in body
+
+
+def test_deliver_review_posts_pr_review(monkeypatch: object) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake(method: str, path: str, token: str, body: object = None, **_k: object) -> dict:
+        calls.append((method, path))
+        return {}
+
+    monkeypatch.setattr(hare_r1, "github_api", fake)
+    out = hare_r1.deliver_review("o", "r", 1, "t", "sha", hare_r1.TOKEN + "\n**ship**", [])
+    assert out == "review"
+    assert calls == [("POST", "/repos/o/r/pulls/1/reviews")]
+
+
+def test_deliver_review_retries_summary_only(monkeypatch: object) -> None:
+    n = {"i": 0}
+
+    def fake(method: str, path: str, token: str, body: object = None, **_k: object) -> dict:
+        n["i"] += 1
+        if n["i"] == 1:
+            raise RuntimeError("422 bad line")
+        assert isinstance(body, dict) and "comments" not in body
+        return {}
+
+    monkeypatch.setattr(hare_r1, "github_api", fake)
+    bubbles = [{"path": "a.py", "line": 1, "side": "RIGHT", "body": "x"}]
+    assert hare_r1.deliver_review("o", "r", 1, "t", "sha", hare_r1.TOKEN, bubbles) == "summary"
+
+
+def test_deliver_review_nags_when_reviews_api_dead(monkeypatch: object) -> None:
+    posted: list[str] = []
+
+    def fake_api(method: str, path: str, token: str, body: object = None, **_k: object) -> dict:
+        if "reviews" in path:
+            raise RuntimeError("503")
+        if isinstance(body, dict):
+            posted.append(str(body.get("body") or ""))
+        return {}
+
+    monkeypatch.setattr(hare_r1, "github_api", fake_api)
+    assert (
+        hare_r1.deliver_review("o", "r", 1, "t", "sha", hare_r1.TOKEN + "\n**ship**", [])
+        == "needed"
+    )
+    assert posted and posted[0].startswith(hare_r1.NEEDED)
+    assert "**ship**" not in posted[0]
+
+
+def test_already_reviewed_same_sha(monkeypatch: object) -> None:
+    def fake(method: str, path: str, token: str, body: object = None, **_k: object) -> object:
+        assert "reviews" in path
+        return [
+            {"commit_id": "aaa", "body": hare_r1.TOKEN + "\n**ship**"},
+            {"commit_id": "bbb", "body": "unrelated"},
+        ]
+
+    monkeypatch.setattr(hare_r1, "github_api", fake)
+    assert hare_r1.already_reviewed("o", "r", 1, "t", "aaa") is True
+    assert hare_r1.already_reviewed("o", "r", 1, "t", "bbb") is False
+    assert hare_r1.already_reviewed("o", "r", 1, "t", "ccc") is False
+
+
+def test_already_reviewed_ignores_empty_sha(monkeypatch: object) -> None:
+    monkeypatch.setattr(hare_r1, "github_api", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no net")))
+    assert hare_r1.already_reviewed("o", "r", 1, "t", "") is False

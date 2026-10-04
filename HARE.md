@@ -16,8 +16,8 @@ comment it came from, or edit it to a 3 or higher; the next run drops the line.
    free model hops (PLAN R1c) is tried in order; the first that answers writes
    the review. If none answers, Hare posts a needed comment instead.
 2. Hare reads AGENTS.md, this file, and what the ledger knows about the files in
-   the diff, then posts one review: summary, CI, intent, a verdict (Ship or Hold
-   from CI and the real findings, then the model's case), findings with bubbles
+   the diff, then posts one review: summary, CI, intent, a verdict (Ship, Hold, or Wait
+   while CI runs, from CI and the real findings, then the model's case), findings with bubbles
    on the lines (a one-click fix where the fix is small), a checks fold, and a
    fold on how to answer. A later push gets a Since section on each old finding.
 3. The owner answers with PR comments: `/hare score 1..5 <why>` on a note,
