@@ -209,6 +209,21 @@ def test_run_nags_on_crash(monkeypatch: object) -> None:
     assert "boom" in posted[0]
 
 
+def test_the_note_reads_ci_again_after_the_hop(monkeypatch) -> None:
+    """Checks read before the hop say "not done" on a fresh push; the note
+    posts minutes later and should say what CI says then."""
+    done = [{"name": "ci / test", "status": "completed", "conclusion": "success"}]
+    monkeypatch.setattr(hare_r1, "wait_checks", lambda *a: done)
+    runs, state, notes = hare_r1.fresh_checks("o", "r", "abc", "t", [], "pending", ["no non-Hare checks yet"])
+    assert (runs, state, notes) == (done, "ok", [])
+
+    def down(*a):
+        raise RuntimeError("HTTP 502")
+
+    monkeypatch.setattr(hare_r1, "wait_checks", down)
+    assert hare_r1.fresh_checks("o", "r", "abc", "t", [], "pending", ["x"]) == ([], "pending", ["x"])  # keeps the first read
+
+
 def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     monkeypatch.delenv("HARE_OR_MODEL", raising=False)  # type: ignore[attr-defined]
     assert hare_r1._csv_models("HARE_OR_MODEL", "a, b ,c") == ["a", "b", "c"]

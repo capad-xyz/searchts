@@ -1158,6 +1158,22 @@ def wait_checks(owner: str, repo: str, sha: str, token: str) -> list[dict[str, A
         time.sleep(CHECK_POLL_S)
 
 
+def fresh_checks(
+    owner: str, repo: str, sha: str, token: str, runs: list[dict[str, Any]], state: str, notes: list[str]
+) -> tuple[list[dict[str, Any]], str, list[str]]:
+    """The checks once more, after the hop. They were read before it, and a hop
+    takes seconds to minutes, so the CI line and the Verdict would otherwise say
+    what was true when the run started, which on a fresh push is nearly always
+    "not done". A failed read keeps the first one."""
+    try:
+        again = wait_checks(owner, repo, sha, token)
+    except Exception as e:
+        print(f"hare checks: second read failed: {str(e)[:160]}")
+        return runs, state, notes
+    state2, notes2 = classify_checks(again)
+    return again, state2, notes2
+
+
 def _short_fail(part: str) -> str:
     """One human line. Never dump provider JSON."""
     p = part.strip()
@@ -1774,6 +1790,7 @@ def _hare_once(
                 status[str(o.get("loc") or "")] = str(o["status"])
         since_md = render_since(since, old, status)
     bubbles = filter_bubbles(findings, narrow_plus(plus, parse_plus_lines(model_diff)) if since else plus)
+    runs, check_state, check_notes = fresh_checks(owner, repo, sha, token, runs, check_state, check_notes)
     intent = intent_for(check_state, findings)
     comment = render_comment(
         used, effort, intent, findings, check_state, check_notes, summary, sha, green_checks(runs), aim, since_md, cost, case
