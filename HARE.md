@@ -36,6 +36,7 @@ comment it came from, or edit it to a 3 or higher; the next run drops the line.
 - **One read path.** Every read goes through `unlocker.fetch`; do not suggest routing reads by channel.
 - **Doctor only reads.** Do not suggest wiring config keys that nothing uses.
 - **Honest over clever.** searchts is a keyless reader: prefer saying plainly that a page could not be read over a feature that guesses.
+- **CI scripts may log with `print`.** P4.6 (progress on stderr, never stdout) protects searchts's CLI and MCP output. Scripts under `scripts/` and `.github/` write to the Actions log, where stdout is only a log, and they do not import searchts. A `print` there is not a finding. (#233, #268)
 
 <!-- hare-ledger:rules -->
 **What the owner said Hare missed (from the ledger, PLAN R2c).** Each line is the reason behind a low score, filed by `scripts/hare_ledger.py` from `/hare score`. Hare reads these as rules for the next note. Each ledger run rewrites this block; to retire a line, delete its score comment or edit the score to 3 or higher.
