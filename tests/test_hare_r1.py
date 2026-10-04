@@ -1083,3 +1083,19 @@ def test_a_fenced_restart_is_still_a_restart(monkeypatch) -> None:
     monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
     data = json.loads(hare_r1.chat_complete("https://x.test/v1", "k", "m", [{"role": "user", "content": "x"}]))
     assert len(data["findings"]) > 1 and 99 not in [f["line"] for f in data["findings"]]
+
+
+def test_the_note_says_ship_or_hold_and_the_model_says_why() -> None:
+    """Local Hare said whether a PR looked good to ship and why; the Action's
+    note dropped that. The word is the Action's (CI and real findings); the
+    reason after it is the model's case."""
+    real = [{"sev": "real", "path": "a.py", "line": 1, "issue": "x", "fix": "yes"}]
+    body = hare_r1.render_comment("nous:x", "low", "hold", real, "ok", [], "S.", "abc1234", case="The retry has no cap, so a dead host loops forever.")
+    assert "**Verdict:** Hold (CI green, 1 real finding). The retry has no cap, so a dead host loops forever." in body
+    body = hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [], "S.", "abc1234", case="Docs only, and the examples run.")
+    assert "**Verdict:** Ship (CI green, no real findings). Docs only, and the examples run." in body
+    assert hare_r1.verdict_line("hold", "pending", [], "") == "**Verdict:** Hold (CI not done, no real findings)."
+    assert hare_r1.verdict_line("hold", "fail", real + real, "a \u2014 b") == "**Verdict:** Hold (CI red, 2 real findings). a - b"
+    # the word is never the model's: a case that says ship on a red PR still reads Hold
+    assert hare_r1.verdict_line("hold", "fail", [], "ship it") .startswith("**Verdict:** Hold")
+    assert '"case":' in hare_r1.SYSTEM and "the Action prints Ship or Hold" in hare_r1.SYSTEM
