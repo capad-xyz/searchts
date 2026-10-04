@@ -1,15 +1,20 @@
 name: hare-ledger
 
 # R2b: the findings ledger, rebuilt weekly from Hare's own notes and the owner's
-# /hare score and /hare fate comments, offered as a PR and merged by this run
-# once the checks pass. No hidden memory, no Sunday click.
+# /hare score and /hare fate comments, offered as a PR, reviewed by Hare and
+# merged by this run. No hidden memory, no Sunday click.
 #
-# The PR is pushed with the searchts-hare[bot] App token, not GITHUB_TOKEN: a
-# push made with GITHUB_TOKEN fires no workflows, so the PR would get no CI and
-# no Hare note and could not merge on its own. With the App token Hare reviews
-# this PR like any other; the body says it is an automated run with no model.
-# GITHUB_TOKEN stays for reading the API: it is minted per run, scoped to this
-# repo and the permissions above, and dies when the run ends.
+# Tokens. Everything here runs on GITHUB_TOKEN: minted for this run, scoped to
+# this repo and the permissions below, gone when the run ends. A push made with
+# it starts no workflows (GitHub's guard against loops), so the run asks Hare to
+# review the PR with a workflow_dispatch, the one event GITHUB_TOKEN may start.
+# The searchts-hare[bot] App stays a reviewer and never needs to push code.
+#
+# Merge rule. Hare can stop the merge: a real finding in its note leaves the PR
+# open for a human. Hare being down cannot: no note within the wait, or a
+# needed comment, and the run merges anyway, because the ledger is the output
+# of a deterministic script, not of a model. Hare's Ship or Hold word is not
+# used here: this PR has no CI, so Hare always reads its checks as not done.
 on:
   schedule:
     - cron: "0 3 * * 0"
@@ -18,22 +23,14 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: write  # to dispatch hare.yml on the ledger PR
 
 jobs:
   ledger:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - name: Mint searchts-hare[bot] token
-        id: hare-app
-        continue-on-error: true
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.HARE_APP_ID }}
-          private-key: ${{ secrets.HARE_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: searchts
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -42,27 +39,31 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python scripts/hare_ledger.py --out docs/ --rules HARE.md
-      - name: Open the PR, let Hare and CI run, merge when green
+      - name: Open the PR, ask Hare, merge unless Hare finds a real problem
         env:
-          # The App token makes the push fire workflows; GITHUB_TOKEN is the
-          # fallback if minting fails (then the PR waits for a human).
-          GH_TOKEN: ${{ steps.hare-app.outputs.token || secrets.GITHUB_TOKEN }}
-          APP_TOKEN_OK: ${{ steps.hare-app.outputs.token != '' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if git diff --quiet -- docs/hare-ledger.json docs/hare-ledger.md HARE.md; then
+          files="docs/hare-ledger.json docs/hare-ledger.md HARE.md"
+          if git diff --quiet -- $files; then
             echo "ledger unchanged"; exit 0
+          fi
+          # Only the ledger files may change. Anything else means the script
+          # did something it should not, and nothing is pushed.
+          other="$(git status --porcelain | awk '{print $2}' | grep -vxF -e docs/hare-ledger.json -e docs/hare-ledger.md -e HARE.md || true)"
+          if [ -n "$other" ]; then
+            echo "unexpected changes, not pushing: $other"; exit 1
           fi
           day="$(date -u +%Y-%m-%d)"
           branch="chore/hare-ledger-$day"
-          git config user.name "searchts-hare[bot]"
-          git config user.email "searchts-hare[bot]@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$branch"
-          git add docs/hare-ledger.json docs/hare-ledger.md HARE.md
+          git add $files
           git commit -m "chore(hare): ledger $day"
           git push -f origin "$branch"
+          sha="$(git rev-parse HEAD)"
           summary="$(grep -m1 '^Built ' docs/hare-ledger.md)"
-          body="$(printf '## What\n\n**Automated weekly run** of `.github/workflows/hare-ledger.yml` (Sunday 03:00 UTC, or by hand). No model took part: `scripts/hare_ledger.py` is deterministic. It rebuilt the findings ledger from Hare notes, Since lines, resolved threads, `/hare score` and `/hare fate` comments (PLAN R2b), and the rules block in HARE.md from low scores with a reason (R2c).\n\n%s\n\nHare reviews this PR like any other. This run merges it once the checks pass; if they do not, it waits for a human.\n\n## Checklist\n\n- [x] chore: does not move the package version\n- [x] one change: the ledger files and the rules block\n\n## Models\n\n| Role | Model | Effort | Purpose |\n| --- | --- | --- | --- |\n| ran | none, scripts/hare_ledger.py on cron | n/a | rebuilt docs/hare-ledger.json, docs/hare-ledger.md and the rules block in HARE.md from the repo, no text generated |\n' "$summary")"
+          body="$(printf '## What\n\n**Automated weekly run** of `.github/workflows/hare-ledger.yml` (Sunday 03:00 UTC, or by hand). No model took part: `scripts/hare_ledger.py` is deterministic. It rebuilt the findings ledger from Hare notes, Since lines, resolved threads, `/hare score` and `/hare fate` comments (PLAN R2b), and the rules block in HARE.md from low scores with a reason (R2c).\n\n%s\n\nThe run asks Hare to review this PR and merges it unless Hare finds a real problem; then it stays open for a human.\n\n## Checklist\n\n- [x] chore: does not move the package version\n- [x] one change: the ledger files and the rules block\n\n## Models\n\n| Role | Model | Effort | Purpose |\n| --- | --- | --- | --- |\n| ran | none, scripts/hare_ledger.py on cron | n/a | rebuilt docs/hare-ledger.json, docs/hare-ledger.md and the rules block in HARE.md from the repo, no text generated |\n' "$summary")"
           n="$(gh pr list --head "$branch" --state open --json number --jq '.[0].number')"
           if [ -z "$n" ]; then
             gh pr create --base main --head "$branch" --title "chore(hare): ledger $day" --body "$body"
@@ -71,17 +72,29 @@ jobs:
             gh pr edit "$n" --body "$body"
           fi
           [ -n "$n" ] || { echo "no PR for $branch"; exit 1; }
-          echo "PR #$n"
-          # A push with GITHUB_TOKEN starts no workflows, so there would be
-          # nothing to wait for: leave the PR to a human and say so.
-          if [ "$APP_TOKEN_OK" != "true" ]; then
-            echo "no App token: checks will not run; PR #$n waits for a human"; exit 0
+          echo "PR #$n at $sha"
+          gh workflow run hare.yml -f pr_number="$n"
+          # Up to 20 minutes for Hare's note on this head, or its needed comment.
+          seen=""; held=""
+          for i in $(seq 1 40); do
+            sleep 30
+            notes="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$n/reviews" --paginate \
+              --jq ".[] | select(.commit_id == \"$sha\" and (.body | contains(\"searchts-r1-review\"))) | (.body | contains(\"#### 🔴 real\"))")"
+            if [ -n "$notes" ]; then
+              seen="note"; echo "$notes" | grep -qx true && held="yes"; break
+            fi
+            if gh api "repos/$GITHUB_REPOSITORY/issues/$n/comments" --paginate \
+              --jq '.[] | select(.body | contains("searchts-r1-needed")) | .id' | grep -q .; then
+              seen="needed"; break
+            fi
+          done
+          echo "Hare: ${seen:-no answer in 20 min}"
+          if [ -n "$held" ]; then
+            gh pr comment "$n" --body "Hare found a real problem in this ledger PR, so the weekly run did not merge it. A human decides."
+            echo "held by Hare; PR #$n stays open"; exit 0
           fi
-          # Hare and CI start on the push. Wait for every check, then merge.
-          # A failed check leaves the PR open for a human.
-          sleep 60
-          if ! gh pr checks "$n" --watch --fail-fast; then
-            echo "checks did not pass; PR #$n stays open"; exit 0
+          if [ "$(gh pr view "$n" --json headRefOid --jq .headRefOid)" != "$sha" ]; then
+            echo "someone pushed to PR #$n; it stays open"; exit 0
           fi
           gh pr merge "$n" --squash --delete-branch --subject "chore(hare): ledger $day (#$n)" \
             || { echo "merge failed; PR #$n stays open"; exit 0; }
