@@ -258,13 +258,45 @@ def test_run_nags_on_crash(monkeypatch: object) -> None:
 def test_ci_is_read_once_right_before_the_note(monkeypatch) -> None:
     """Hare starts on the same push as CI, so a read before the hop always said
     "still running" (on #260, #264, #265 and #267 the note said so 37 to 111 s
-    after CI had finished). One read, right before the note; a failed read says
-    so and never blocks the note."""
-    import inspect
+    after CI had finished). One read, after the model has answered and right
+    before the note; a failed read says so and never blocks the note. Drives
+    the real `_hare_once` with only the network faked (CodeRabbit on #269: the
+    old version read the source text, which proves nothing about the order)."""
+    order: list[str] = []
+    pr = {"head": {"sha": "abc", "repo": {"full_name": "o/r"}}, "base": {"sha": "b0", "repo": {"full_name": "o/r"}},
+          "title": "t", "body": "b", "state": "open", "draft": False, "user": {"login": "someone"}}
 
-    src = inspect.getsource(hare_r1._hare_once)  # the review body of run()
-    assert src.count("read_checks(") == 1 and "wait_checks(" not in src and "classify_checks(" not in src
-    assert src.index("read_checks(") > src.index("build_provider_chain(")  # after the hop is set up, not before
+    def api(method, path, token, data=None, accept=None):
+        if accept:  # the diff
+            return "diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -0,0 +1 @@\n+x = 1\n"
+        if method == "GET" and path == "/repos/o/r/pulls/7":
+            return pr
+        if "/contents/" in path:
+            raise RuntimeError("404")
+        return [] if method == "GET" else {}
+
+    def hop(*a, **k):
+        order.append("hop")
+        return '{"summary": "s", "aim": "a", "case": "c", "findings": []}'
+
+    def checks(*a):
+        order.append("checks")
+        return [], "ok", []
+
+    def deliver(*a, **k):
+        order.append("deliver")
+        return "review"
+
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setattr(hare_r1, "github_api", api)
+    monkeypatch.setattr(hare_r1, "github_list", lambda *a, **k: [])
+    monkeypatch.setattr(hare_r1, "chat_complete", hop)
+    monkeypatch.setattr(hare_r1, "read_checks", checks)
+    monkeypatch.setattr(hare_r1, "deliver_review", deliver)
+    monkeypatch.setattr(hare_r1, "post_needed", lambda *a, **k: order.append("needed"))
+    hare_r1._hare_once("o", "r", 7, "t", "abc", "", "k", "", "", "", [], [], [], ["m1"], [])
+    assert order == ["hop", "checks", "deliver"]  # the model first, then CI, then the note
+    monkeypatch.undo()  # the rest checks the real read_checks
     done = [{"name": "ci / test", "status": "completed", "conclusion": "success"}]
     monkeypatch.setattr(hare_r1, "wait_checks", lambda *a: done)
     assert hare_r1.read_checks("o", "r", "abc", "t") == (done, "ok", [])
@@ -1384,3 +1416,30 @@ def test_review_lists_are_read_past_the_first_page(monkeypatch: object) -> None:
     assert len(got) == 101 and got[-1] == {"id": 100}
     assert seen == ["/repos/o/r/pulls/7/reviews?per_page=100&page=1", "/repos/o/r/pulls/7/reviews?per_page=100&page=2"]
     assert "reviews?per_page=100\"" not in inspect.getsource(hare_r1)  # no single-page review read left
+
+
+def test_a_job_log_is_read_as_a_stream_and_never_held_whole() -> None:
+    """CodeRabbit on #269: the whole log was read into memory before the tail
+    was cut. Now lines are read one at a time, at most `n` are held, reading
+    stops at the first error, one endless line arrives in capped pieces (Hare
+    Bot on #275), and a runaway log stops at a byte cap."""
+    class Stream:
+        def __init__(self, lines):
+            self.lines = iter(lines)
+
+        def readline(self, limit=-1):
+            return next(self.lines, b"")
+
+    def log():
+        for i in range(100):
+            yield f"2026-10-04T00:00:00.0000000Z line {i}\n".encode()
+        yield b"##[error]boom\n"
+        raise AssertionError("read past the first error")
+
+    assert hare_r1._tail_of(hare_r1._stream_lines(Stream(log())), 3) == "line 98\nline 99\n##[error]boom"
+    endless = io.BytesIO(b"x" * 200_000)  # no newline at all: one line, cut to line_cap
+    assert [len(x) for x in hare_r1._stream_lines(endless, cap=10**6, line_cap=1_000)] == [1_000]
+    long_then_error = io.BytesIO(b"a" * 5_000 + b"\n" + b"##[error]boom\n" + b"cleanup\n")
+    assert hare_r1._tail_of(hare_r1._stream_lines(long_then_error, line_cap=1_000), 3) == "a" * 1_000 + "\n##[error]boom"
+    assert list(hare_r1._stream_lines(io.BytesIO(b"x\n" * 10), cap=5)) == ["x\n", "x\n"]  # the byte cap
+    assert hare_r1._log_tail("a\n##[error]e\ncleanup") == "a\n##[error]e"  # same rule for a log in memory
