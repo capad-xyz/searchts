@@ -2,26 +2,30 @@
  "built": "2026-10-04",
  "repo": "capad-xyz/searchts",
  "summary": {
-  "prs": 118,
-  "notes": 91,
+  "prs": 120,
+  "notes": 93,
   "real": 6,
   "skip": 33,
   "real_fates": {
-   "open": 6
+   "fixed": 1,
+   "wrong": 1,
+   "wontfix": 1,
+   "resolved": 2,
+   "dropped": 1
   },
-  "real_fixed_or_resolved": 0,
+  "real_fixed_or_resolved": 3,
   "hops": {
    "groq:openai/gpt-oss-120b": 15,
+   "openrouter:qwen/qwen3.8-27b:free": 16,
    "openrouter:qwen/qwen3.8-27b:free · deep": 1,
+   "openrouter:stealth/space-bunny-alpha": 2,
    "groq:openai/gpt-oss-120b · deep": 1,
-   "openrouter:qwen/qwen3.8-27b:free": 15,
    "nous:poolside/laguna-s-2.1:free": 4,
    "gemini:gemini-3.1-flash-lite": 3,
    "gemini:gemini-3.1-flash-lite · deep": 1,
    "gemini:gemini-3.5-flash": 1,
    "nous:meituan/longcat-2.5-preview:free": 2,
    "openrouter:poolside/laguna-s-2.1:free": 18,
-   "openrouter:stealth/space-bunny-alpha": 1,
    "nous:stealth/space-bunny-alpha": 2,
    "openrouter:nex-agi/nex-n2.5-pro:free": 24
   },
@@ -31,6 +35,51 @@
   "needed": 138
  },
  "entries": [
+  {
+   "pr": 248,
+   "title": "ci(hare): low scores with a reason become rules in AGENTS.md",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T22:35:27Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/248#pullrequestreview-5403154898",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "medium",
+     "cost": "6,683 prompt + 1,574 answer + 1,300 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-03T22:38:41Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/248#pullrequestreview-5403175301",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "8,554 prompt + 4,211 answer + 3,780 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 72 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_ledger.py",
+     "sev": "real",
+     "issue": "apply_rules uses an anchor string \"## R1 \" that does not match the actual header \"## R1 - Hare\" (contains an em dash). The rules block will be appended to the end of the file rather than inserted after the Hare section, breaking the intended placement.",
+     "fate": "fixed",
+     "first": "2026-10-03T22:35:27Z",
+     "why": "the rules block is found by the hare-ledger:rules markers, not a header anchor."
+    },
+    {
+     "loc": ".github/workflows/hare-ledger.yml:27",
+     "sev": "skip",
+     "issue": "PR title says 'become rules in AGENTS.md' but the change moves them to HARE.md. Minor title/body mismatch.",
+     "fate": "open",
+     "first": "2026-10-03T22:38:41Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
   {
    "pr": 258,
    "title": "ci(hare): the slow hops first; Groq and Gemini are fallbacks",
@@ -75,8 +124,9 @@
      "loc": "tests/test_hare_r1.py",
      "sev": "real",
      "issue": "`test_hop_loop_sends_every_provider_its_own_options` asserts three calls (`[\"o1\", \"n1\", \"g1\"]`) but the new chain order puts two nous models (n1, n2) before groq, so four hops fire before g1 succeeds: o1, n1, n2, g1. The test would fail on `pytest`. The PR body claims \"pytest tests/test_hare_r1.py green\", which is a fail-loud lie.",
-     "fate": "open",
-     "first": "2026-10-04T08:13:07Z"
+     "fate": "wrong",
+     "first": "2026-10-04T08:13:07Z",
+     "why": "the fake dies until g1, which now sits third, so the three calls are o1, n1, g1; the test passes on main."
     },
     {
      "loc": "PLAN.md:257",
@@ -84,6 +134,131 @@
      "issue": "The PR body and checklist say \"one change: chain order\", but the PLAN line also rearranges model slugs within the OpenRouter and Nous sections (e.g. `poolside/laguna-s-2.1:free` moves from OpenRouter to Nous, `stealth/space-bunny-alpha` moves from Nous to OpenRouter). That is a second, unannounced change riding in the same commit.",
      "fate": "open",
      "first": "2026-10-04T08:13:07Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 260,
+   "title": "docs(hare): the spec says the #258 order (Hare Bot's finds on #258)",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T09:29:52Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/260#pullrequestreview-5405266196",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,868 prompt + 2,747 answer + 2,561 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 38 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 259,
+   "title": "chore(hare): ledger 2026-10-04",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T09:24:02Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/259#pullrequestreview-5405235228",
+     "hop": "openrouter:stealth/space-bunny-alpha",
+     "effort": "low",
+     "cost": "8,041 prompt + 480 answer + 0 reasoning tokens on `openrouter:stealth/space-bunny-alpha`, 11 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 233,
+   "title": "chore(hare): print the hops that died, not just the one that worked",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T16:55:21Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/233#pullrequestreview-5401750523",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:1082",
+     "sev": "real",
+     "issue": "The new `print(f\"hare dead {dead}\")` writes to stdout, but the repo policy (P4.6) mandates that any diagnostic output must go to stderr, never stdout.",
+     "fate": "wontfix",
+     "first": "2026-10-03T16:55:21Z",
+     "why": "P4.6 is about progress ticks on stderr; one closing log line from an Action step stays on stdout."
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 245,
+   "title": "ci(hare): repair walks strings, a restart never shrinks the review",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T22:23:18Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/245#pullrequestreview-5403071728",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "medium",
+     "cost": "5,379 prompt + 1,306 answer + 1,045 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:842",
+     "sev": "real",
+     "issue": "When `tail` starts with a JSON object but the restart isn’t longer than the kept findings, `stitched` is never assigned, leading to an UnboundLocalError later.",
+     "fate": "resolved",
+     "first": "2026-10-03T22:23:18Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 247,
+   "title": "ci(hare): Gemini is the fallback, not the default",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T22:31:56Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/247#pullrequestreview-5403132309",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "medium",
+     "cost": "5,155 prompt + 1,515 answer + 1,309 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:1355",
+     "sev": "real",
+     "issue": "The provider chain order is changed (groq → openrouter → nous → gemini → zen) without a corresponding PLAN entry, violating scope‑control rules.",
+     "fate": "resolved",
+     "first": "2026-10-03T22:31:56Z"
     }
    ],
    "scores": [],
@@ -375,78 +550,6 @@
    "needed": 0
   },
   {
-   "pr": 248,
-   "title": "ci(hare): low scores with a reason become rules in AGENTS.md",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T22:35:27Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/248#pullrequestreview-5403154898",
-     "hop": "groq:openai/gpt-oss-120b",
-     "effort": "medium",
-     "cost": "6,683 prompt + 1,574 answer + 1,300 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
-     "cut": "",
-     "findings": 1
-    },
-    {
-     "at": "2026-10-03T22:38:41Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/248#pullrequestreview-5403175301",
-     "hop": "openrouter:qwen/qwen3.8-27b:free",
-     "effort": "medium",
-     "cost": "8,554 prompt + 4,211 answer + 3,780 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 72 s",
-     "cut": "",
-     "findings": 2
-    }
-   ],
-   "findings": [
-    {
-     "loc": "scripts/hare_ledger.py",
-     "sev": "real",
-     "issue": "apply_rules uses an anchor string \"## R1 \" that does not match the actual header \"## R1 - Hare\" (contains an em dash). The rules block will be appended to the end of the file rather than inserted after the Hare section, breaking the intended placement.",
-     "fate": "open",
-     "first": "2026-10-03T22:35:27Z"
-    },
-    {
-     "loc": ".github/workflows/hare-ledger.yml:27",
-     "sev": "skip",
-     "issue": "PR title says 'become rules in AGENTS.md' but the change moves them to HARE.md. Minor title/body mismatch.",
-     "fate": "open",
-     "first": "2026-10-03T22:38:41Z"
-    }
-   ],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 247,
-   "title": "ci(hare): Gemini is the fallback, not the default",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T22:31:56Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/247#pullrequestreview-5403132309",
-     "hop": "groq:openai/gpt-oss-120b",
-     "effort": "medium",
-     "cost": "5,155 prompt + 1,515 answer + 1,309 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
-     "cut": "",
-     "findings": 1
-    }
-   ],
-   "findings": [
-    {
-     "loc": "scripts/hare_r1.py:1355",
-     "sev": "real",
-     "issue": "The provider chain order is changed (groq → openrouter → nous → gemini → zen) without a corresponding PLAN entry, violating scope‑control rules.",
-     "fate": "open",
-     "first": "2026-10-03T22:31:56Z"
-    }
-   ],
-   "scores": [],
-   "needed": 0
-  },
-  {
    "pr": 249,
    "title": "docs(plan): fold 2026-10-04, second pass: cadence, wrap-up, ledger, HARE.md",
    "state": "merged",
@@ -463,34 +566,6 @@
     }
    ],
    "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 245,
-   "title": "ci(hare): repair walks strings, a restart never shrinks the review",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T22:23:18Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/245#pullrequestreview-5403071728",
-     "hop": "groq:openai/gpt-oss-120b",
-     "effort": "medium",
-     "cost": "5,379 prompt + 1,306 answer + 1,045 reasoning tokens on `groq:openai/gpt-oss-120b`, 4 s",
-     "cut": "",
-     "findings": 1
-    }
-   ],
-   "findings": [
-    {
-     "loc": "scripts/hare_r1.py:842",
-     "sev": "real",
-     "issue": "When `tail` starts with a JSON object but the restart isn’t longer than the kept findings, `stitched` is never assigned, leading to an UnboundLocalError later.",
-     "fate": "open",
-     "first": "2026-10-03T22:23:18Z"
-    }
-   ],
    "scores": [],
    "needed": 0
   },
@@ -796,21 +871,21 @@
      "loc": "scripts/hare_r1.py:272",
      "sev": "real",
      "issue": "The fence regex uses `\\\\` (literal backslash) instead of triple backticks. The fence path is dead code; the test passes only because `json_objects` covers the same case. A future maintainer who trusts the fence path will be surprised.",
-     "fate": "open",
+     "fate": "dropped",
      "first": "2026-10-03T20:30:48Z"
     },
     {
      "loc": "tests/test_hare_r1.py:789",
      "sev": "skip",
      "issue": "`test_hare_once_accepts_an_ordered_hop_override` inspects `co_varnames` rather than calling the function with a `hop_override` and asserting the provider list is honoured. It will pass even if the parameter is ignored at runtime.",
-     "fate": "open",
+     "fate": "dropped",
      "first": "2026-10-03T20:30:48Z"
     },
     {
      "loc": "scripts/hare_local.py:172",
      "sev": "skip",
      "issue": "Setting `os.environ[\"GITHUB_EVENT_NAME\"]` mutates the process globally. If any imported module reads that variable at import time or in a later call, it will see the spoofed value. A `contextlib` or explicit parameter would be safer, but the current scope (single script, single call) makes the risk low.",
-     "fate": "open",
+     "fate": "dropped",
      "first": "2026-10-03T20:30:48Z"
     }
    ],
@@ -838,47 +913,19 @@
      "loc": "scripts/hare_r1.py:52",
      "sev": "skip",
      "issue": "`OR_REASONING` carries `\"exclude\": True`, which is not a documented OpenRouter `reasoning` field. The 400-retry in `chat_complete` self-heals, but every OpenRouter hop will pay one extra round-trip on first contact.",
-     "fate": "open",
+     "fate": "dropped",
      "first": "2026-10-03T17:58:56Z"
     },
     {
      "loc": "scripts/hare_local.py:193",
      "sev": "skip",
      "issue": "File has no trailing newline (the diff shows `\\ No newline at end of file`). POSIX text files should end with one.",
-     "fate": "open",
+     "fate": "dropped",
      "first": "2026-10-03T17:58:56Z"
     }
    ],
    "scores": [],
    "needed": 1
-  },
-  {
-   "pr": 233,
-   "title": "chore(hare): print the hops that died, not just the one that worked",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T16:55:21Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/233#pullrequestreview-5401750523",
-     "hop": "groq:openai/gpt-oss-120b",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "findings": 1
-    }
-   ],
-   "findings": [
-    {
-     "loc": "scripts/hare_r1.py:1082",
-     "sev": "real",
-     "issue": "The new `print(f\"hare dead {dead}\")` writes to stdout, but the repo policy (P4.6) mandates that any diagnostic output must go to stderr, never stdout.",
-     "fate": "open",
-     "first": "2026-10-03T16:55:21Z"
-    }
-   ],
-   "scores": [],
-   "needed": 0
   },
   {
    "pr": 228,

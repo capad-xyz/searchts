@@ -1098,10 +1098,14 @@ def wants_deep(comment: str) -> bool:
     return bool(m and re.search(r"\b(deep|think)\b", m.group(1), re.I))
 
 
+FATE_RE = r"(?:^|\s)[/@]hare\s+fate\s+(\S+)\s+(fixed|wrong|wontfix)\b"
+
+
 def is_score(comment: str) -> bool:
-    """`/hare score 1..5 <why>`: the owner's verdict on a note. Recorded by the
+    """`/hare score 1..5 <why>` and `/hare fate <path:line> fixed|wrong|wontfix <why>`:
+    the owner's word on a note or a finding. Both are recorded by the
     ledger (scripts/hare_ledger.py), not a request for another review."""
-    return bool(re.search(r"(?:^|\s)[/@]hare\s+score\s+[1-5]\b", comment or "", re.I))
+    return bool(re.search(r"(?:^|\s)[/@]hare\s+score\s+[1-5]\b", comment or "", re.I) or re.search(FATE_RE, comment or "", re.I))
 
 
 def ask_from(comment: str) -> str:
