@@ -1567,9 +1567,15 @@ def is_score(comment: str) -> bool:
 
 
 def ask_from(comment: str) -> str:
-    """The short instruction after @hare. The workflow only passes it on from people with write access."""
-    m = re.search(r"@hare\b[:,]?\s*(.*)", comment or "", re.I | re.S)
-    return _no_em(_plain(m.group(1)))[:200] if m else ""
+    """The short instruction after `/hare` or `@hare`, without the mode word
+    (`deep`, `think`), which `wants_deep` reads. The workflow only passes it on
+    from people with write access. Before, only `@hare` matched, so every
+    `/hare ...` lost its words."""
+    m = re.search(r"[/@]hare\b[:,]?\s*(.*)", comment or "", re.I | re.S)
+    if not m:
+        return ""
+    text = re.sub(r"^(?:deep|think)\b[:,]?\s*", "", m.group(1).strip(), flags=re.I)
+    return _no_em(_plain(text))[:200]
 
 
 LEDGER_PATH = os.environ.get("HARE_LEDGER", "docs/hare-ledger.json")
@@ -1720,7 +1726,7 @@ def deliver_review(
 
 
 def already_reviewed(owner: str, repo: str, n: int, token: str, sha: str) -> bool:
-    """True if this SHA already has a Hare Review. /hare will not double-post."""
+    """True if this SHA already has a Hare Review. Automatic runs do not double-post; a `/hare` command runs anyway."""
     if not sha:
         return False
     try:
@@ -1889,7 +1895,12 @@ def _hare_once(
     if why:
         print(f"hare skip: {why}")
         return 0
-    if not ask and already_reviewed(owner, repo, n, token, sha):
+    # A command (`/hare`, `/hare deep`, `/hare think`) is someone asking for a
+    # pass now, so it runs even on a commit Hare already reviewed. Only the
+    # automatic runs skip a reviewed commit. Before, a command with no words
+    # after it was dropped here without a word (the owner's `/hare think` on
+    # #275).
+    if event != "issue_comment" and already_reviewed(owner, repo, n, token, sha):
         print(f"hare skip: review already on {sha[:12]}")
         return 0
     title = pr_data.get("title") or ""

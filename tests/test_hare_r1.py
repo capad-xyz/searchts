@@ -12,6 +12,49 @@ import hare_r1  # noqa: E402
 import pytest  # noqa: E402
 
 
+def _hare_world(monkeypatch, order, event, ask="", reviewed=True):
+    """`_hare_once` with only the network faked, for tests that drive it."""
+    pr = {"head": {"sha": "abc", "repo": {"full_name": "o/r"}}, "base": {"sha": "b0", "repo": {"full_name": "o/r"}},
+          "title": "t", "body": "b", "state": "open", "draft": False, "user": {"login": "someone"}}
+
+    def api(method, path, token, data=None, accept=None):
+        if accept:
+            return "diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -0,0 +1 @@\n+x = 1\n"
+        if method == "GET" and path == "/repos/o/r/pulls/7":
+            return pr
+        if "/contents/" in path:
+            raise RuntimeError("404")
+        return [] if method == "GET" else {}
+
+    monkeypatch.setenv("GITHUB_EVENT_NAME", event)
+    monkeypatch.setenv("HARE_ASK", ask)
+    monkeypatch.setattr(hare_r1, "QUIET_S", 0)
+    monkeypatch.setattr(hare_r1, "github_api", api)
+    monkeypatch.setattr(hare_r1, "github_list", lambda *a, **k: [])
+    monkeypatch.setattr(hare_r1, "already_reviewed", lambda *a, **k: reviewed)
+    monkeypatch.setattr(hare_r1, "chat_complete", lambda *a, **k: order.append("hop") or '{"summary": "s", "aim": "a", "findings": []}')
+    monkeypatch.setattr(hare_r1, "read_checks", lambda *a: ([], "ok", []))
+    monkeypatch.setattr(hare_r1, "deliver_review", lambda *a, **k: order.append("deliver") or "review")
+    monkeypatch.setattr(hare_r1, "post_needed", lambda *a, **k: order.append("needed"))
+    hare_r1._hare_once("o", "r", 7, "t", "abc", "", "k", "", "", "", [], [], [], ["m1"], [])
+
+
+def test_a_hare_command_runs_even_on_a_reviewed_commit(monkeypatch) -> None:
+    """The owner's `/hare think` on #275 was dropped without a word: `/hare`
+    never matched the parser, so the ask was empty, and an empty ask on a
+    reviewed commit was skipped. A command is someone asking now; it runs."""
+    assert hare_r1.ask_from("/hare think") == "" and hare_r1.wants_deep("/hare think")
+    assert hare_r1.ask_from("/hare deep why is this slow?") == "why is this slow?"
+    assert hare_r1.ask_from("@hare check the tests") == "check the tests"
+    assert hare_r1.ask_from("no command here") == ""
+    for command in ("/hare", "/hare think", "/hare deep"):
+        order: list[str] = []
+        _hare_world(monkeypatch, order, "issue_comment", command, reviewed=True)
+        assert order == ["hop", "deliver"], command
+    order = []
+    _hare_world(monkeypatch, order, "pull_request", reviewed=True)
+    assert order == []  # an automatic run still skips a reviewed commit
+
 def test_a_call_gets_time_to_answer() -> None:
     # 60 s cut off the hops that did answer (2026-10-03). The ceiling is a guard
     # against a hung provider, not a budget: with reasoning off a hop answers in
