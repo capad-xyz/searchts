@@ -7,6 +7,7 @@ import base64
 import json
 import os
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -638,6 +639,90 @@ def _job_names(check_notes: list[str]) -> list[str]:
     return out
 
 
+CI_LOG_OPEN, CI_LOG_CLOSE = "<!-- hare-ci-log -->", "<!-- /hare-ci-log -->"
+CI_FOLD_RE = re.compile(
+    r"^- CI [^\n]*(?:\n- CI [^\n]*)*(?:\n\n" + re.escape(CI_LOG_OPEN) + r".*?" + re.escape(CI_LOG_CLOSE) + r")?",
+    re.M | re.S,
+)
+
+
+def ci_fold(
+    check_state: str, check_notes: list[str], green: list[str] | None, log_tails: dict[str, str] | None = None, when: str = ""
+) -> str:
+    """The CI lines of the checks fold and, for a red job, what it printed up
+    to its first error, as one block a later refresh can find and replace."""
+    lines: list[str] = []
+    passed = " / ".join(green or [])
+    if check_state == "ok":
+        lines.append(f"- CI {passed} → green" if passed else "- CI → green")
+    else:
+        if passed:
+            lines.append(f"- CI {passed} → green")
+        for note in check_notes[:6]:
+            name, _, what = note.rpartition(": ")
+            lines.append(f"- CI {name} → {what}" if name else f"- CI {note}")
+    if when:
+        lines.append(f"- CI read again when it finished ({when}); the note above was updated, the model's words were not")
+    out = "\n".join(lines)
+    if log_tails:
+        logs = "\n\n".join(
+            f"**{name}** failed. What it printed up to its first error:\n\n```text\n{tail}\n```" for name, tail in log_tails.items()
+        )
+        out += f"\n\n{CI_LOG_OPEN}\n{logs}\n{CI_LOG_CLOSE}"
+    return out
+
+
+def refresh_ci_body(
+    body: str, state: str, notes: list[str], green: list[str], sha: str, tails: dict[str, str], when: str
+) -> str:
+    """Hare's note with its Action-written CI parts brought up to date: the CI
+    line, the Verdict word and its brackets, and the CI block of the checks
+    fold. The model's words (summary, intent, case, findings) are kept as
+    written. A body with no CI line comes back unchanged."""
+    ci_re = re.compile(r"^CI on `[0-9a-f]{7}`: .*$", re.M)
+    if not ci_re.search(body):
+        return body
+    out = ci_re.sub(lambda m: _ci_line(state, notes, sha), body, count=1)
+    reals = out.count("#### 🔴 real")
+    stub = [{"sev": "real"}] * reals
+    v_re = re.compile(r"^\*\*Verdict:\*\* (?:Ship|Hold|Wait) \(.*?\)\.(?: (.*))?$", re.M)
+    out = v_re.sub(lambda m: verdict_line(intent_for(state, stub), state, stub, m.group(1) or "", notes), out, count=1)
+    return CI_FOLD_RE.sub(lambda m: ci_fold(state, notes, green, tails, when), out, count=1)
+
+
+def refresh_ci(owner: str, repo: str, sha: str, token: str, actions_token: str) -> int:
+    """When CI finishes after Hare's note, bring that note's CI parts up to date
+    (.github/workflows/hare-ci.yml, on the ci workflow's completion). No model is
+    called. Only the note's author can edit it, so `token` is the one that
+    posted it; `actions_token` reads the red jobs' logs."""
+    prs = github_api("GET", f"/repos/{owner}/{repo}/commits/{sha}/pulls", token) or []
+    runs, state, notes = read_checks(owner, repo, sha, token)
+    tails = failed_log_tails(owner, repo, runs, actions_token) if state == "fail" else {}
+    when = time.strftime("%H:%M UTC", time.gmtime())
+    edited = 0
+    for pr in prs if isinstance(prs, list) else []:
+        if not isinstance(pr, dict) or pr.get("state") != "open" or (pr.get("head") or {}).get("sha") != sha:
+            continue
+        n = int(pr["number"])
+        reviews = github_api("GET", f"/repos/{owner}/{repo}/pulls/{n}/reviews?per_page=100", token)
+        mine = [r for r in hare_notes(reviews if isinstance(reviews, list) else []) if str(r.get("commit_id") or "") == sha]
+        if not mine:
+            continue
+        note = mine[-1]
+        old = str(note.get("body") or "")
+        new = refresh_ci_body(old, state, notes, green_checks(runs), sha, tails, when)
+        if new == old:
+            continue
+        try:
+            github_api("PUT", f"/repos/{owner}/{repo}/pulls/{n}/reviews/{note['id']}", token, {"body": new})
+            edited += 1
+            print(f"hare ci-refresh: PR #{n} note {note['id']} now says CI {state}")
+        except RuntimeError as e:
+            print(f"hare ci-refresh: PR #{n} note {note['id']} not edited: {str(e)[:160]}")
+    print(f"hare ci-refresh: {sha[:7]} CI {state}, {edited} note(s) edited")
+    return 0
+
+
 def verdict_line(
     intent: str, check_state: str, findings: list[dict[str, Any]], case: str, check_notes: list[str] | None = None
 ) -> str:
@@ -729,22 +814,12 @@ def render_comment(
     run_lines: list[str] = []
     if sha:
         run_lines.append(f"- head `{sha[:7]}`")
-    passed = " / ".join(green or [])
-    if check_state == "ok":
-        run_lines.append(f"- CI {passed} → green" if passed else "- CI → green")
-    else:
-        if passed:
-            run_lines.append(f"- CI {passed} → green")
-        for note in check_notes[:6]:
-            name, _, what = note.rpartition(": ")
-            run_lines.append(f"- CI {name} → {what}" if name else f"- CI {note}")
+    run_lines.append(ci_fold(check_state, check_notes, green, log_tails))
     run_lines.append("- test-full / wheel-gate skipped by design")
     if cost:
         run_lines.append(cost)
     findings_md = "\n\n".join(blocks)
     runs_md = "\n".join(run_lines)
-    for name, tail in (log_tails or {}).items():
-        runs_md += f"\n\n**{name}** failed. What it printed up to its first error:\n\n```text\n{tail}\n```"
     who = f"Hare (GitHub App) · purpose: review and report · `{model}`"
     return _no_em(
         f"""{TOKEN}
@@ -1967,4 +2042,8 @@ def _hare_once(
 
 
 if __name__ == "__main__":
+    if "--refresh-ci" in sys.argv[1:]:
+        _owner, _, _repo = _env("GITHUB_REPOSITORY").partition("/")
+        _tok = _env("GITHUB_TOKEN") or _env("GH_TOKEN")
+        raise SystemExit(refresh_ci(_owner, _repo, _env("HEAD_SHA"), _tok, _env("HARE_ACTIONS_TOKEN") or _tok))
     raise SystemExit(run())

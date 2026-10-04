@@ -1263,3 +1263,62 @@ def test_already_reviewed_same_sha(monkeypatch: object) -> None:
 def test_already_reviewed_ignores_empty_sha(monkeypatch: object) -> None:
     monkeypatch.setattr(hare_r1, "github_api", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no net")))
     assert hare_r1.already_reviewed("o", "r", 1, "t", "") is False
+
+
+def test_when_ci_finishes_the_note_is_brought_up_to_date_and_the_model_words_stay() -> None:
+    """A note posted while CI ran said Wait. When CI finishes, its CI line, the
+    Verdict word and the fold's CI block follow; summary, case and findings do
+    not change."""
+    case = "Docs only (one table), and nothing reads it."
+    waiting = hare_r1.render_comment(
+        "nous:x", "low", "wait", [], "pending", ["ci / test: in_progress"], "Docs.", "abc1234", aim="Aim.", case=case
+    )
+    assert "**Verdict:** Wait (CI still running: test, no real findings)." in waiting
+    green = hare_r1.refresh_ci_body(waiting, "ok", [], ["lint", "test"], "abc1234", {}, "10:05 UTC")
+    assert "CI on `abc1234`: green." in green and "CI on `abc1234`: still running" not in green
+    assert f"**Verdict:** Ship (CI green, no real findings). {case}" in green
+    assert "- CI lint / test → green" in green and "- CI ci / test → in_progress" not in green
+    assert "- CI read again when it finished (10:05 UTC)" in green
+    for kept in ("Docs.", "Intent: Aim.", "### Findings", hare_r1.TOKEN):
+        assert kept in green
+    assert hare_r1.refresh_ci_body(green, "ok", [], ["lint", "test"], "abc1234", {}, "10:05 UTC") == green  # idempotent
+
+    real = hare_r1.normalize_findings([{"sev": "real", "path": "a.py", "line": 3, "issue": "x"}])
+    note = hare_r1.render_comment("nous:x", "low", "hold", real, "pending", ["test: queued"], "S.", "abc1234", case="Fix a.py first.")
+    red = hare_r1.refresh_ci_body(note, "fail", ["test: failure"], ["lint"], "abc1234", {"test": "FAILED t::y\n##[error]exit 1"}, "10:06 UTC")
+    assert "**Verdict:** Hold (CI red: test, 1 real finding). Fix a.py first." in red
+    assert "CI on `abc1234`: red (test: failure)." in red and red.count(hare_r1.CI_LOG_OPEN) == 1 and "FAILED t::y" in red
+    rerun = hare_r1.refresh_ci_body(red, "ok", [], ["lint", "test"], "abc1234", {}, "10:20 UTC")
+    assert hare_r1.CI_LOG_OPEN not in rerun and "FAILED t::y" not in rerun  # a green re-run takes the old log away
+    assert "**Verdict:** Hold (CI green, 1 real finding). Fix a.py first." in rerun  # the real finding still holds
+    assert hare_r1.refresh_ci_body("no CI line here", "ok", [], [], "abc1234", {}, "x") == "no CI line here"
+
+
+def test_refresh_edits_only_hare_notes_on_that_head_of_open_prs(monkeypatch) -> None:
+    sha = "abc1234" + "0" * 33
+    note = hare_r1.render_comment("nous:x", "low", "wait", [], "pending", ["test: in_progress"], "S.", sha, case="C.")
+    calls: list[tuple[str, str, object]] = []
+
+    def api(method, path, token, data=None):
+        calls.append((method, path, data))
+        if path.endswith(f"/commits/{sha}/pulls"):
+            return [
+                {"number": 5, "state": "open", "head": {"sha": sha}},
+                {"number": 6, "state": "closed", "head": {"sha": sha}},
+                {"number": 7, "state": "open", "head": {"sha": "f" * 40}},
+            ]
+        if path.endswith("/pulls/5/reviews?per_page=100"):
+            return [
+                {"id": 1, "body": note, "commit_id": "e" * 40, "submitted_at": "2026-10-04T10:00:00Z"},
+                {"id": 2, "body": "someone else", "commit_id": sha, "submitted_at": "2026-10-04T10:01:00Z"},
+                {"id": 3, "body": note, "commit_id": sha, "submitted_at": "2026-10-04T10:02:00Z"},
+            ]
+        return {}
+
+    monkeypatch.setattr(hare_r1, "github_api", api)
+    monkeypatch.setattr(hare_r1, "read_checks", lambda *a: ([{"name": "test", "status": "completed", "conclusion": "success"}], "ok", []))
+    assert hare_r1.refresh_ci("o", "r", sha, "t", "a") == 0
+    puts = [c for c in calls if c[0] == "PUT"]
+    assert [c[1] for c in puts] == ["/repos/o/r/pulls/5/reviews/3"]
+    assert "**Verdict:** Ship (CI green, no real findings). C." in puts[0][2]["body"]
+    assert not any("/pulls/6/" in c[1] or "/pulls/7/" in c[1] for c in calls)

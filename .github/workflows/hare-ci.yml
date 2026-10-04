@@ -1,0 +1,51 @@
+name: hare-ci
+
+# When the ci workflow finishes on a PR head, Hare's note on that head is
+# brought up to date: the CI line, the Verdict word and the CI block of the
+# checks fold, with what a red job printed up to its first error. No model is
+# called and the model's words stay as written. The script comes from main,
+# never from the PR. Editing a note starts nothing: hare.yml does not listen
+# to review events.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+  actions: read
+
+concurrency:
+  group: hare-ci-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Mint searchts-hare[bot] token
+        id: hare-app
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.HARE_APP_ID }}
+          private-key: ${{ secrets.HARE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: searchts
+      - name: Bring Hare's note up to date with CI
+        env:
+          # Only a review's author can edit it. The App posted the note, so the
+          # App token edits it; the run's own token reads the job logs.
+          GITHUB_TOKEN: ${{ steps.hare-app.outputs.token || secrets.GITHUB_TOKEN }}
+          HARE_ACTIONS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: python scripts/hare_r1.py --refresh-ci
