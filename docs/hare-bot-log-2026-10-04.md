@@ -253,3 +253,59 @@ No line findings.
 - real `scripts/hare_r1.py:245` Fix yes. closed non-JSON span jumps to j+1 and can hide a valid review
 - skip `scripts/hare_r1.py:274` Fix later. first object with findings wins
 - Token estimate: about 9000. Earlier pass, about 8,900 to 9,000 from chars/4 plus a local hare unit-test run. Character breakdown was not kept. Not remeasured for this file.
+
+### #258 ci(hare): the slow hops first; Groq and Gemini are fallbacks
+
+- Review: https://github.com/capad-xyz/searchts/pull/258#pullrequestreview-5404975652
+- Head: `99fb7effe0e52a80e528d08df5741eb1bd26b242`
+- State: merged 2026-10-04T00:23:41Z, reviewed after merge
+- Clock: 2026-10-04 13:36 to 2026-10-04 13:40 (4 min)
+- Summary: Chain and test put OpenRouter, Nous, Groq, Gemini, then Zen. AGENTS.md and the next PLAN bullet still describe the old order.
+- CI: green on 99fb7ef: lint, r1, typecheck, test, version-sync, mcp2-compat. test-full and wheel-gate skipped. CodeRabbit success.
+- Tests: python3 -m venv /tmp/venv-hare && /tmp/venv-hare/bin/python -m pytest -q tests/test_hare_r1.py --tb=short → 83 passed, exit 0. Full pytest not run.
+- Inlines: none (the stale lines are not in the diff)
+- Findings:
+- real `AGENTS.md:45` Fix yes. still says Groq then OpenRouter then Nous then Gemini then Zen, Space Bunny last on Nous
+- real `PLAN.md:261` Fix yes. next bullet still says Space Bunny is last on Nous, contradicting the failover line this PR wrote
+- skip `scripts/hare_r1.py:111` Fix later. catalog comment still says Groq gpt-oss stays first because a 413 is free
+- skip `tests/test_hare_r1.py:645` Fix later. order-test comment skips the Groq slot
+- Characters counted: diff 9455, title 60, body 1112, commit messages 408, CI text 160, app review body 1257, inline comment 139, CodeRabbit issue comment 2651, hare_r1.py slices 32571, PLAN.md 250-279 11354, PLAN.md 522-524 2864, test slices 8233, hare.yml 1968, AGENTS.md 40-51 1144
+- Token estimate: about 18000 from 73376 characters (those inputs divided by 4). Not a meter.
+
+### #271 docs(f18): input on paid searchts, and the demand measurement it was missing
+
+- Review: https://github.com/capad-xyz/searchts/pull/271#pullrequestreview-5406572713
+- Head: `b191c11fdbaccc20f6e98470269ec961db8d5492`
+- State: merged 2026-10-04T13:14:43Z, reviewed after merge
+- Clock: 2026-10-04 19:23 to 2026-10-04 19:30 (7 min)
+- Summary: Relay script is read-only. The demand doc misstates the download window, the residual, the release count, automation, token pricing, and which failures a relay would fix.
+- CI: green on b191c11: test, lint, mcp2-compat, version-sync, typecheck, r1. test-full and wheel-gate skipped. CodeRabbit success, review skipped.
+- Tests: pytest tests/ -q exit 0, 1030 passed, 4 skipped. Live relay script not run.
+- Inlines: docs/f18-input.md 42, 54, 74, 75, 111, 228
+- Findings:
+- real `docs/f18-input.md:42` Fix yes. 50.9% is a 78-day slice, not lifetime downloads
+- real `docs/f18-input.md:54` Fix yes. 17/day still includes nulls; 5% is not that residual
+- real `docs/f18-input.md:74` Fix yes. 22 tags, not 46 releases
+- real `docs/f18-input.md:75` Fix yes. automation claim contradicts section 1.2
+- real `docs/f18-input.md:111` Fix yes. except us contradicts Jina and Crawl4AI
+- real `docs/f18-input.md:228` Fix yes. x-home is thin, not a relay-fixable wall
+- skip `benchmarks/measure_relay_demand.py:44` Fix later. unused url. already raised in a thread
+- skip `benchmarks/measure_relay_demand.py:88` Fix later. nested print. already raised in a thread
+- Characters counted: diff 26170, title 76, body 6793, commits 3457, CI text 575, prior reviews 9386, file slices 14819
+- Token estimate: about 15000 from 61276 characters (those inputs divided by 4). Not a meter.
+
+### #269 ci(hare): CI read once, right before the note
+
+- Review: https://github.com/capad-xyz/searchts/pull/269#pullrequestreview-5407370231
+- Head: `182b82eae9964313b8a2f541484fd951829a7fda`
+- State: open, conflicts with main
+- Clock: 2026-10-04 23:05 to 2026-10-04 23:07 (2 min)
+- Summary: One CI read after the hop, Wait while pending, failed-job log up to the first error. Eight unrelated tests are deleted.
+- CI: green on 182b82e. test-full and wheel-gate skipped. mergeable_state dirty.
+- Tests: pytest tests/test_hare_r1.py tests/test_hare_ledger.py -q exit 0, 95 passed
+- Inlines: scripts/hare_r1.py:1260
+- Findings:
+- real `tests/test_hare_r1.py:210` Fix yes. eight unrelated tests deleted. already raised in a thread
+- skip `scripts/hare_r1.py:1260` Fix later. check-run id used as job-id fallback
+- Characters counted: diff 33405, title 98, body 1998, commits 905, CI text 263, prior reviews 3850, file slices 26109
+- Token estimate: about 17000 from 66628 characters (those inputs divided by 4). Not a meter.
