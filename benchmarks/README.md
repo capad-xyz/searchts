@@ -82,6 +82,27 @@ Generate a local scorecard and its raw data with:
 python -m benchmarks.run --out results/
 ```
 
+## Relay-demand measurement (F18 input)
+
+A separate read-only script answers a different question from the pass rate: **when a read fails, would a
+hosted relay plausibly fix it?** It reuses the suites above, makes no config change, sends no telemetry,
+and writes nothing.
+
+```bash
+python benchmarks/measure_relay_demand.py --suite walled   # the interesting one
+python benchmarks/measure_relay_demand.py --suite smoke
+python benchmarks/measure_relay_demand.py --suite all
+```
+
+It classifies each failure into `bot-wall (relay plausibly fixes)`, `login-wall (relay cannot fix:
+needs credentials)`, `thin (relay may help)`, or `other`. Use it to size relay demand before building
+one. Findings and caveats are in [docs/f18-input.md](../docs/f18-input.md#5-the-relay-demand-measurement-first-run-2026-10-04).
+
+Caveat that matters: the `walled` suite is a deliberately adversarial list of vendors that block bots. Its
+failure rate is **not** a sample of ordinary agent traffic, and the relay-fixable share measured there is
+an upper bound rather than a forecast. Only real-usage instrumentation answers the demand question, and
+that must stay local and opt-in.
+
 ## Cases: smoke vs walled
 
 Each case is tagged `suite: smoke | walled`. The committed `cases.py` ships the
