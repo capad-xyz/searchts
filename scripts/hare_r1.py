@@ -2157,7 +2157,7 @@ def _hare_once(
     graph: list[dict[str, Any]] = []
     if hare_graph is not None:
         try:
-            graph = hare_graph.uses(_env("GITHUB_WORKSPACE") or ".", model_diff)
+            graph = hare_graph.uses(_env("GITHUB_WORKSPACE") or ".", model_diff, visible=model_diff[:MAX_DIFF])
         except Exception as e:  # never fail a review over extra context
             print(f"hare: graph skipped: {str(e)[:120]}")
 

@@ -26,6 +26,7 @@ from typing import Any
 
 # Bounds (HARE.md: anything of unknown size has a bound).
 MAX_FILES = 5_000
+MAX_WALK = 50_000
 MAX_FILE_BYTES = 1_000_000
 MAX_USES = 240
 MAX_LINES_PER_FILE = 12
@@ -54,10 +55,16 @@ STOP = {
 }
 GENERIC_STEMS = {"index", "utils", "main", "init", "__init__", "config", "setup", "conftest", "helpers", "common", "readme"}
 
+MODS = r"(?:(?:export|default|public|private|protected|internal|static|final|abstract|sealed|open|override|virtual|async|synchronized|readonly|pub(?:\([^)]*\))?)\s+)*"
 DEF = re.compile(
-    r"^\s*(?:export\s+)?(?:default\s+)?(?:pub(?:\([^)]*\))?\s+)?(?:async\s+)?"
-    r"(?:def|class|function|func|fn|interface|struct|enum|trait)\s+(?:\([^)]*\)\s*)?([A-Za-z_][A-Za-z0-9_]{3,})"
+    rf"^\s*{MODS}(?:def|class|function|func|fun|fn|interface|struct|enum|trait|record|protocol)\s+(?:\([^)]*\)\s*)?([A-Za-z_][A-Za-z0-9_]{{3,}})"
 )
+# A method with a return type: at least one modifier, so a plain call never matches.
+METHOD = re.compile(
+    r"^\s*(?:(?:public|private|protected|internal|static|final|abstract|synchronized|override|virtual|async)\s+)+"
+    r"[\w<>\[\],.?]+\s+([A-Za-z_][A-Za-z0-9_]{3,})\s*\("
+)
+CALLISH = re.compile(r"([A-Za-z_][A-Za-z0-9_]{3,})\s*\(")
 JS_FN = re.compile(r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]{3,})\s*=\s*(?:async\s*)?(?:\(|function\b|[A-Za-z_$][\w$]*\s*=>)")
 CONST = re.compile(r"^\s*(?:export\s+)?(?:const\s+|let\s+|var\s+)?([A-Z][A-Z0-9_]{3,})\s*(?::[^=]*)?=(?!=)")
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@ ?(.*)$")
@@ -103,13 +110,15 @@ def changed(diff: str) -> tuple[list[str], list[str], dict[str, list[tuple[int, 
         if h:
             start, count = int(h.group(1)), int(h.group(2) or "1")
             ranges.setdefault(current, []).append((start, start + max(count, 1)))
-            tail = DEF.search(h.group(3) or "")
-            if tail and _keep(tail.group(1)):
-                names[tail.group(1)] = None
+            head = h.group(3) or ""
+            got = DEF.match(head) or METHOD.match(head)
+            name = got.group(1) if got else ((CALLISH.findall(head) or [""])[-1])
+            if name and _keep(name):
+                names[name] = None
             continue
         if line[:1] in "+-" and not line.startswith(("+++", "---")):
             body = line[1:]
-            for rx in (DEF, JS_FN, CONST):
+            for rx in (DEF, METHOD, JS_FN, CONST):
                 m2 = rx.match(body)
                 if m2 and _keep(m2.group(1)):
                     names[m2.group(1)] = None
@@ -134,31 +143,40 @@ def _terms(names: list[str], paths: list[str]) -> tuple[re.Pattern[str] | None, 
 
 
 def _files(root: Path) -> list[str]:
-    out: list[str] = []
+    """Readable files in rank order (code, tests, config with .github first,
+    docs), so the caps below drop the lowest-ranked files first, never a code
+    caller that sorts late in the alphabet. The walk itself is bounded too."""
+    seen: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".") or d == ".github")
         for f in sorted(filenames):
             rel = os.path.relpath(os.path.join(dirpath, f), root).replace(os.sep, "/")
             if tier_of(rel):
-                out.append(rel)
-                if len(out) >= MAX_FILES:
-                    return out
-    return out
+                seen.append(rel)
+        if len(seen) >= MAX_WALK:
+            break
+    seen.sort(key=lambda r: (tier_of(r), "test" in r.lower(), not r.startswith(".github/"), r))
+    return seen[:MAX_FILES]
 
 
 def _defines(text: str, names: list[str]) -> bool:
-    for rx in (DEF, JS_FN, CONST):
+    for rx in (DEF, METHOD, JS_FN, CONST):
         m = rx.match(text)
         if m and m.group(1) in names:
             return True
     return False
 
 
-def uses(root: str | Path, diff: str) -> list[dict[str, Any]]:
+def uses(root: str | Path, diff: str, visible: str | None = None) -> list[dict[str, Any]]:
     """Every file outside the diff's own lines that names what the diff changes,
     ranked: code, then workflows and config, then docs; tests after other code;
     more distinct names matched first."""
     names, paths, ranges = changed(diff)
+    if visible is not None and visible != diff:
+        # Lines in a hunk (changed or context) are skipped because the model
+        # sees them in the diff. When the prompt cuts the diff short, only the
+        # hunks it kept are seen, so only those are skipped.
+        ranges = changed(visible)[2]
     by_name, by_place = _terms(names, paths)
     if by_name is None and by_place is None:
         return []

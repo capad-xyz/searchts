@@ -70,3 +70,45 @@ def test_only_distinctive_names_are_searched() -> None:
     """A plain word floods the search: on #282's replay `link` matched 30 files."""
     assert not hare_graph._keep("link") and not hare_graph._keep("Ledger") and not hare_graph._keep("test_thing")
     assert all(hare_graph._keep(n) for n in ("render_comment", "ACK_MARK", "LedgerBook", "_hare_once", "summarize_rows", "fetchPage"))
+
+
+def test_declarations_in_other_languages_are_names() -> None:
+    """CodeRabbit on #287: `public class LedgerBook` (Java) was not read, nor a
+    modifier-led method, Kotlin's fun, or a C signature in a hunk header."""
+    diff = (
+        "diff --git a/src/A.java b/src/A.java\n@@ -1,2 +1,2 @@ int parse_header(char *s)\n"
+        "+public class LedgerBook {\n+    public static void tallyRows(int x) {\n+fun loadPageNow(url: String) {\n"
+        "+    tallyRows(3);\n"
+    )
+    names = hare_graph.changed(diff)[0]
+    assert {"parse_header", "LedgerBook", "tallyRows", "loadPageNow"} <= set(names)
+
+
+def test_only_hunks_the_model_sees_are_skipped(tmp_path) -> None:
+    """A hunk cut off the prompt is not in front of the model, so a caller
+    inside it is not skipped as if it were."""
+    (tmp_path / "s.py").write_text("".join(f"x{i} = load_rows()\n" if i in (2, 20, 25) else f"x{i} = {i}\n" for i in range(1, 30)))
+    diff = (
+        "diff --git a/s.py b/s.py\n@@ -2,1 +2,1 @@\n-x2 = load_rows()\n+x2 = load_rows(1)\n"
+        "@@ -20,1 +20,1 @@\n-x20 = load_rows()\n+def load_rows(n=0):\n"
+    )
+    first_hunk_only = diff.split("@@ -20")[0]
+    lines = [i for i, _ in hare_graph.uses(tmp_path, diff, visible=first_hunk_only)[0]["lines"]]
+    assert lines == [20, 25]  # line 2 is in the visible hunk; line 20's hunk was cut off the prompt
+    lines = [i for i, _ in hare_graph.uses(tmp_path, diff)[0]["lines"]]
+    assert lines == [25]
+
+
+def test_caps_drop_the_lowest_rank_first(tmp_path, monkeypatch) -> None:
+    """CodeRabbit on #287: docs early in the alphabet used up the cap before a
+    code caller late in it was read."""
+    for i in range(5):
+        (tmp_path / "a_docs").mkdir(exist_ok=True)
+        (tmp_path / "a_docs" / f"n{i}.md").write_text("tally_rows here\n" * 3)
+    (tmp_path / "z_src").mkdir()
+    (tmp_path / "z_src" / "use.py").write_text("tally_rows()\n")
+    monkeypatch.setattr(hare_graph, "MAX_USES", 3)
+    diff = "diff --git a/z_src/t.py b/z_src/t.py\n@@ -1 +1 @@\n+def tally_rows():\n"
+    assert hare_graph.uses(tmp_path, diff)[0]["file"] == "z_src/use.py"
+    monkeypatch.setattr(hare_graph, "MAX_FILES", 1)
+    assert hare_graph._files(tmp_path) == ["z_src/use.py"]
