@@ -1228,9 +1228,13 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     # found anything, so it is off that list; qwen stays first. Space Bunny left
     # OpenRouter and Nous when its free period ended (2026-10-05).
     assert hare_r1.HARE_OR_DEFAULT.split(",")[0] == "qwen/qwen3.8-27b:free"
-    assert hare_r1.HARE_OR_DEFAULT.split(",")[1] == "thinkingmachines/inkling-small:free"
+    # Inkling's free endpoint serves only agentic harnesses (403 from Actions,
+    # 2026-10-05), so both Inkling slugs are off; gemma is second.
+    assert hare_r1.HARE_OR_DEFAULT.split(",")[1] == "google/gemma-4-31b-it:free"
+    assert "inkling" not in hare_r1.HARE_OR_DEFAULT
     assert "poolside/laguna-s-2.1:free" not in hare_r1.HARE_OR_DEFAULT.split(",")
-    assert len(hare_r1.HARE_OR_DEFAULT.split(",")) >= 4  # not one model: diversity is data
+    # Not one model: diversity is data. Two here, and five providers in the chain.
+    assert len(hare_r1.HARE_OR_DEFAULT.split(",")) >= 2
     # Two Zen slugs are TUI-only by policy (403 FreeTierError from Actions).
     assert hare_r1.HARE_ZEN_DEFAULT.split(",") == ["space-bunny-free"]
     assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
