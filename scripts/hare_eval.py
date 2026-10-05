@@ -23,6 +23,7 @@ import argparse
 import base64
 import json
 import os
+import re
 import statistics
 import sys
 import time
@@ -136,6 +137,35 @@ def score(case: dict[str, Any], fs: list[dict[str, Any]]) -> dict[str, Any]:
     return {"caught": caught, "reals": reals, "findings": len(fs), "false_reals": reals if case.get("clean") else 0}
 
 
+# Free tiers say no in two ways. A per-minute limit (HTTP 429, "rate limit",
+# Groq's tokens per minute) clears in a minute: wait and ask again. A per-day
+# quota (OpenRouter's free-models-per-day, Gemini's PerDay, Groq's RPD or TPD)
+# does not clear during a run: stop asking that provider.
+RATE = re.compile(r"\b429\b|rate.?limit|too many requests", re.I)
+DAILY = re.compile(r"per.?day|daily|PerDay|\bRPD\b|\bTPD\b", re.I)
+WAITS = (20, 60)
+
+
+class QuotaGone(RuntimeError):
+    """The provider's daily quota is spent; the run stops asking it."""
+
+
+def _ask(call: Callable[..., str], pause: Callable[[float], None], base: str, key: str, model: str,
+         messages: list[dict[str, Any]], opts: dict[str, Any]) -> str:
+    for attempt in range(len(WAITS) + 1):
+        try:
+            return call(base, key, model, messages, opts, timeout=300)
+        except Exception as e:
+            text = str(e)
+            if DAILY.search(text):
+                raise QuotaGone(text) from e
+            if attempt < len(WAITS) and RATE.search(text):
+                pause(WAITS[attempt])
+                continue
+            raise
+    raise RuntimeError("unreachable")
+
+
 def run(
     cases: list[dict[str, Any]],
     providers: list[str],
@@ -147,9 +177,19 @@ def run(
     call: Callable[..., str] = hare_r1.chat_complete,
     pause: Callable[[float], None] = time.sleep,
     repeat: int = 1,
+    deadline_s: float = 0,
+    clock: Callable[[], float] = time.time,
 ) -> list[dict[str, Any]]:
+    """deadline_s > 0 stops starting new calls after that many seconds, so the
+    report is still written before the job's own timeout kills everything."""
     rows: list[dict[str, Any]] = []
+    started = clock()
+    spent: set[str] = set()
     for case in cases:
+        if deadline_s and clock() - started > deadline_s:
+            rows.append({"case": "deadline", "pr": 0, "provider": "-", "model": "-", "mode": "-",
+                         "error": f"stopped at the {round(deadline_s / 60)}-minute deadline; this case and the ones after it were not run"})
+            break
         try:
             built = build_case(owner, repo, case, token)
         except Exception as e:  # a case that cannot be built is reported, not fatal
@@ -166,10 +206,15 @@ def run(
                     hare_r1.LAST_USAGE.clear()
                     t0, err, parsed = time.time(), "", None
                     try:
-                        raw = call(base, key, model, built["messages"], opts, timeout=300)
+                        if name in spent:
+                            raise QuotaGone("skipped: this provider's daily quota ran out earlier in the run")
+                        raw = _ask(call, pause, base, key, model, built["messages"], opts)
                         parsed = hare_r1.extract_json(raw)
                         if parsed is None:
                             err = "no JSON in the answer"
+                    except QuotaGone as e:
+                        spent.add(name)
+                        err = f"daily quota: {str(e)[:150]}"
                     except Exception as e:
                         err = str(e)[:160]
                     usage = dict(hare_r1.LAST_USAGE)
@@ -213,10 +258,12 @@ def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "mode": mode,
                 "runs": len(rs),
                 "answered": len(ok),
-                "expected": sum(len(r.get("caught") or []) for r in rs),
-                "caught_real": sum(c == "real" for r in rs for c in r.get("caught") or []),
-                "caught_any": sum(bool(c) for r in rs for c in r.get("caught") or []),
-                "false_reals": sum(int(r.get("false_reals") or 0) for r in rs),
+                # Catches count over answered runs only: a run a provider refused
+                # (rate limit, quota, too large, timeout) is no answer, not a miss.
+                "expected": sum(len(r.get("caught") or []) for r in ok),
+                "caught_real": sum(c == "real" for r in ok for c in r.get("caught") or []),
+                "caught_any": sum(bool(c) for r in ok for c in r.get("caught") or []),
+                "false_reals": sum(int(r.get("false_reals") or 0) for r in ok),
                 "median_s": statistics.median(secs) if secs else None,
                 "median_reasoning": statistics.median(reasoning) if reasoning else None,
             }
@@ -234,7 +281,9 @@ def render(rows: list[dict[str, Any]], cases: list[dict[str, Any]], built: str) 
         "Old PRs with confirmed issues, each provider's first model, thinking off and on. Built by "
         "`scripts/hare_eval.py` in `.github/workflows/hare-eval.yml`; nothing was posted. Each cell is one run, so treat "
         "a difference of one or two catches as noise. The answer key is `docs/hare-eval-cases.json`. A real finding on a PR "
-        "judged clean is usually a false alarm, but it may be something every reviewer missed, so check those by hand.",
+        "judged clean is usually a false alarm, but it may be something every reviewer missed, so check those by hand. "
+        "Catches count over answered runs only; a run with no answer (rate limit, quota, too large, timeout) is listed "
+        "under Errors, not counted as a miss.",
         "",
         "| Provider | Model | Thinking | Answered | Caught as real | Caught at all | Reals on clean PRs (check by hand) | Median s | Median reasoning tokens |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
@@ -275,6 +324,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--modes", default="off,on")
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--out", default="docs")
+    ap.add_argument("--deadline-min", type=float, default=240, help="stop starting calls after this many minutes (the job allows 300)")
     args = ap.parse_args(argv)
     token = os.environ.get("GITHUB_TOKEN", "")
     owner, _, repo = os.environ.get("GITHUB_REPOSITORY", "capad-xyz/searchts").partition("/")
@@ -288,7 +338,7 @@ def main(argv: list[str] | None = None) -> int:
     missing = [p for p in providers if not keys.get(p)]
     if missing:
         print(f"hare eval: no key for {', '.join(missing)}; those providers are skipped")
-    rows = run(cases, providers, modes, keys, token, owner, repo, repeat=args.repeat)
+    rows = run(cases, providers, modes, keys, token, owner, repo, repeat=args.repeat, deadline_s=args.deadline_min * 60)
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     out = Path(args.out)
     (out / f"hare-eval-{day}.json").write_text(json.dumps({"built": day, "rows": rows}, indent=1), encoding="utf-8")
