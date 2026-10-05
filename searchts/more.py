@@ -27,6 +27,7 @@ _CHROME_TAGS = frozenset({"header", "footer", "aside", "form", "dialog", "menu",
 _CHROME_ROLES = frozenset(
     {"navigation", "banner", "contentinfo", "menu", "menubar", "dialog", "search", "complementary"}
 )
+_SIDE_CLASS = re.compile(r"\b(?:sidebar|aside|complementary|side-panel)\b", re.I)
 _SKIP_TEXT_TAGS = frozenset({"script", "style", "noscript", "template", "svg"})
 
 #: "Load more" and "Show more posts": more items, not more of one item.
@@ -97,6 +98,8 @@ def _in_chrome(el) -> bool:
         if tag.lower() in _CHROME_TAGS:
             return True
         if (node.get("role") or "").lower() in _CHROME_ROLES:
+            return True
+        if _SIDE_CLASS.search(node.get("class") or ""):
             return True
         node = node.getparent()
     return False
@@ -547,8 +550,10 @@ def _item_key(item) -> str:
 def _best_list(doc) -> Optional[List]:
     """The repeated items the page is made of (results, cards, posts), or None."""
     body = doc.find(".//body")
+    main = doc.find(".//main")
     root = body if body is not None else doc
-    page_len = len(_visible_text(root))
+    measure = main if main is not None else root
+    page_len = len(_visible_text(measure))
     if page_len < 400:
         return None
     best: Optional[List] = None

@@ -24,6 +24,27 @@ def _index(name: str, url: str):
     return more.list_index(html, url, html_to_text(html, url=url))
 
 
+def test_sidebar_archive_does_not_beat_the_main_list():
+    posts = "".join(
+        f'<article class="post"><h3><a href="/p/{i}">Post number {i} on the weblog</a></h3>'
+        f"<p>A teaser for post {i} that is long enough to be the item.</p></article>"
+        for i in range(10)
+    )
+    months = "".join(
+        f'<li class="month"><a href="/archive/{i}">Month {i} in the archive</a></li>'
+        for i in range(24)
+    )
+    html = (
+        f"<html><body><main>{posts}</main>"
+        f'<div class="sidebar"><ul>{months}</ul></div></body></html>'
+    )
+    doc = more._parse(html)
+    items = more._best_list(doc)
+    assert items is not None
+    assert all("/archive/" not in (a.get("href") or "") for a in items[0].xpath(".//a"))
+    assert items[0].xpath(".//a[contains(@href, '/p/')]")
+
+
 def test_bing_results_get_titles_and_real_links_back():
     rebuilt = _index("bing_results.html", "https://www.bing.com/search?q=searchts")
     assert rebuilt is not None
