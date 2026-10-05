@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "reviewer": "Hare Bot",
+    "timezone": "Asia/Calcutta",
+    "written": "2026-10-05",
+    "intent": "So the owner can see what each Hare Bot pass found, what it cost, and which GitHub review it is. A record of those passes, not a new review."
+  },
+  "rows": [
+    {
+      "type": "review",
+      "pr": 275,
+      "title": "fix(hare): what CodeRabbit found on #269",
+      "state_when_logged": "open, not merged, reviewed 2026-10-05",
+      "head": "0e9827177aa40be409d0a33e29edd66a8aa46ba2",
+      "review_id": 5407645458,
+      "review_url": "https://github.com/capad-xyz/searchts/pull/275#pullrequestreview-5407645458",
+      "inlines": [
+        "scripts/hare_r1.py:1374"
+      ],
+      "start_ist": "2026-10-05 00:10",
+      "submit_ist": "2026-10-05 00:14",
+      "minutes": 5,
+      "summary": "Streams a failed job log instead of loading it whole, and the CI-order test drives a real hop. One skip: the 64 MB cap runs after the next chunk is already built.",
+      "findings": [
+        {
+          "sev": "skip",
+          "path": "scripts/hare_r1.py",
+          "line": 1374,
+          "fix": "later",
+          "issue": "64 MB cap runs only after the next chunk is built; one line with no newline is loaded whole"
+        }
+      ],
+      "ci": "green on 0e98271: test, lint, version-sync, typecheck, mcp2-compat, r1. test-full and wheel-gate skipped.",
+      "tests": "pytest tests/test_hare_r1.py tests/test_hare_ledger.py exit 0, 108 passed",
+      "chars": {
+        "diff": 10233,
+        "title": 40,
+        "body": 1589,
+        "commits": 581,
+        "ci_text": 213,
+        "prior_reviews": 2691,
+        "source_slices": 52994
+      },
+      "estimate_chars": 68341,
+      "estimate_tokens": 17000,
+      "estimate_note": "68341 review-input characters divided by 4, rounded. Not a meter."
+    }
+  ]
+}
