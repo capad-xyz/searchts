@@ -15,7 +15,8 @@ Hare reviews this repo's pull requests with free models on the owner's own keys.
    Text only, never run. Ranked code, then workflows and config, then docs.
    Each hop gets its own budget (Groq 4k characters, Gemini 40k, the rest 20k);
    a small workflow that names a changed file goes in whole. The note says how
-   much of that graph the model saw. Then one review: summary, CI, intent, a verdict (Ship, Hold, or Wait
+   much of that graph the model saw.
+   Then one review: summary, CI, intent, a verdict (Ship, Hold, or Wait
    while CI runs, from CI and the real findings, then the model's case), findings with bubbles
    on the lines (a one-click fix where the fix is small), a checks fold, and a
    fold on how to answer. A later push gets a Since section on each old finding.
