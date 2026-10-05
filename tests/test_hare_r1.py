@@ -714,7 +714,7 @@ def test_space_bunny_is_off_openrouter_and_nous_after_its_free_period() -> None:
     space-bunny-free is its own offer and stays until Zen retires it."""
     assert "stealth/space-bunny-alpha" not in hare_r1.HARE_NOUS_DEFAULT.split(",")
     assert "stealth/space-bunny-alpha" not in hare_r1.HARE_OR_DEFAULT.split(",")
-    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "meituan/longcat-2.5-preview:free"
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "poolside/laguna-s-2.1:free"
 
 
 def test_dead_hops_are_printed_on_success() -> None:
@@ -1239,8 +1239,8 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     # Two Zen slugs are TUI-only by policy (403 FreeTierError from Actions).
     assert hare_r1.HARE_ZEN_DEFAULT.split(",") == ["space-bunny-free"]
     assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
-    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "meituan/longcat-2.5-preview:free"
-    assert hare_r1.HARE_NOUS_DEFAULT.endswith("poolside/laguna-s-2.1:free")
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "poolside/laguna-s-2.1:free"
+    assert hare_r1.HARE_NOUS_DEFAULT.endswith("meituan/longcat-2.5-preview:free")
     assert hare_r1.HARE_ZEN_DEFAULT.split(",")[0] == "space-bunny-free"
 
 
