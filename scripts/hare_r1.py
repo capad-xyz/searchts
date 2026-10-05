@@ -115,8 +115,7 @@ GEMINI_REASONING = {"reasoning_effort": "low"}
 # Fixed list, not a router. Read against the live catalogs 2026-10-04:
 # OpenRouter /api/v1/models (pricing 0/0), Groq docs/models, Zen by probe.
 # OpenRouter free that review code, best coding index first: qwen3.8-27b:free
-# (68; answered live on PR 234), inkling-small:free (53) and inkling:free (52),
-# both with reasoning effort none on the menu, gemma-4-31b-it:free (43,
+# (68; answered live on PR 234), gemma-4-31b-it:free (43,
 # thinking off by default), laguna-s-2.1:free (no score; sat first and never
 # answered, so last). Left out: apodex-1.1-mini:free (new 2026-10-01, no
 # record), nemotron-3-ultra:free (cannot think below medium), the health,
@@ -149,10 +148,11 @@ HARE_NOUS_DEFAULT = (
     "meituan/longcat-2.5-preview:free,"
     "poolside/laguna-s-2.1:free"
 )
+# Inkling (inkling-small:free, inkling:free) left 2026-10-05: OpenRouter's free
+# Inkling endpoint now serves only agentic harnesses, so a direct API call gets
+# 403 (both did on #287's /hare deep), and it logs prompts to train on.
 HARE_OR_DEFAULT = (
     "qwen/qwen3.8-27b:free,"
-    "thinkingmachines/inkling-small:free,"
-    "thinkingmachines/inkling:free,"
     "google/gemma-4-31b-it:free"
 )
 HARE_ZEN_DEFAULT = "space-bunny-free"
