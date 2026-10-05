@@ -168,8 +168,6 @@ def _run():
     p_read.add_argument("--scrub", action="store_true",
                         help="Redact prompt-injection spans from the content (invisible-char "
                              "stripping + indicator scanning always run regardless)")
-                        help="Redact prompt-injection spans from the content (invisible-char "
-                             "stripping + indicator scanning always run regardless)")
 
     # ── search ──
     p_search = sub.add_parser("search", parents=[_verbose],
