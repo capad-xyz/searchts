@@ -193,6 +193,7 @@ def _run():
                              help="Remove only what install --browser added. Chromium stays unless --chromium")
     p_uninstall.add_argument("--chromium", action="store_true",
                              help="With --browser, also remove the shared Chromium cache")
+    p_uninstall.add_argument("--keep-config", action="store_true",
                              help="Remove skill files only, keep ~/.searchts/ config and tokens")
 
     # ── mcp ──
