@@ -230,6 +230,9 @@ def _memory_enabled() -> bool:
     return os.environ.get("SEARCHTS_NO_MEMORY", "") not in ("1", "true", "True", "yes")
 
 
+_jina_spent = False
+
+
 def jina_enabled() -> bool:
     """Whether the Jina Reader relay is allowed (P3.5 / Q4).
 
@@ -1133,7 +1136,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         pass
 
     order = list(backends if backends is not None else DEFAULT_BACKENDS)
-    if not jina_enabled():
+    if not jina_enabled() or _jina_spent:
         order = [b for b in order if b != "Jina Reader"]
 
     memory_on = use_memory and _memory_enabled()
@@ -1183,6 +1186,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
 
             if backend == "Jina Reader":
                 reason = looks_blocked(status, body, headers)
+                if status == 403:
+                    global _jina_spent
+                    _jina_spent = True
                 if reason:
                     attempts.append((backend, reason))
                     _tick(f"  {backend}: {reason}")
