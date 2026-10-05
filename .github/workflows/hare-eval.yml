@@ -14,6 +14,10 @@ on:
         description: "Providers, comma separated"
         required: false
         default: "openrouter,nous,groq,gemini"
+      graphs:
+        description: "Codebase graph: on, off, or off,on to measure what it adds"
+        required: false
+        default: "on"
       modes:
         description: "Thinking modes: off, on, or off,on"
         required: false
@@ -37,6 +41,8 @@ jobs:
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # each case's graph reads a worktree at that case's own base
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -50,8 +56,9 @@ jobs:
           CASES: ${{ inputs.cases }}
           PROVIDERS: ${{ inputs.providers }}
           MODES: ${{ inputs.modes }}
+          GRAPHS: ${{ inputs.graphs }}
           REPEAT: ${{ inputs.repeat }}
-        run: python scripts/hare_eval.py --only "$CASES" --providers "$PROVIDERS" --modes "$MODES" --repeat "$REPEAT" --out docs
+        run: python scripts/hare_eval.py --only "$CASES" --providers "$PROVIDERS" --modes "$MODES" --graphs "$GRAPHS" --repeat "$REPEAT" --out docs
       - name: Open a PR with the report
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
