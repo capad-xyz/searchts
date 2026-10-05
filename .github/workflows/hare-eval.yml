@@ -64,6 +64,6 @@ jobs:
           git add "docs/hare-eval-$day.md" "docs/hare-eval-$day.json"
           git commit -m "chore(hare): eval $day"
           git push -f origin "$branch"
-          summary="$(sed -n '7,40p' "docs/hare-eval-$day.md")"
+          summary="$(awk '/^\| Provider/{p=1} /^## Per expected issue/{p=0} p' "docs/hare-eval-$day.md")"
           body="$(printf '## What\n\n**Automated run** of `.github/workflows/hare-eval.yml` (run %s), dispatched by hand. `scripts/hare_eval.py` replayed old PRs with confirmed issues through each provider with thinking off and on and scored the findings against `docs/hare-eval-cases.json`. Nothing was posted on any PR.\n\n%s\n\n## Models\n\n| Role | Model | Effort | Purpose |\n| --- | --- | --- | --- |\n| ran | the first model of each provider, as listed in the report | off and on | reviewed the old PRs for the eval; scoring is deterministic, by scripts/hare_eval.py |\n' "${{ github.run_id }}" "$summary")"
           gh pr create --base main --head "$branch" --title "chore(hare): eval $day" --body "$body"

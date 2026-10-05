@@ -233,9 +233,10 @@ def render(rows: list[dict[str, Any]], cases: list[dict[str, Any]], built: str) 
         "",
         "Old PRs with confirmed issues, each provider's first model, thinking off and on. Built by "
         "`scripts/hare_eval.py` in `.github/workflows/hare-eval.yml`; nothing was posted. Each cell is one run, so treat "
-        "a difference of one or two catches as noise. The answer key is `docs/hare-eval-cases.json`.",
+        "a difference of one or two catches as noise. The answer key is `docs/hare-eval-cases.json`. A real finding on a PR "
+        "judged clean is usually a false alarm, but it may be something every reviewer missed, so check those by hand.",
         "",
-        "| Provider | Model | Thinking | Answered | Caught as real | Caught at all | False reals on clean PRs | Median s | Median reasoning tokens |",
+        "| Provider | Model | Thinking | Answered | Caught as real | Caught at all | Reals on clean PRs (check by hand) | Median s | Median reasoning tokens |",
         "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for s in summarize(rows):
