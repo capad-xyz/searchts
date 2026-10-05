@@ -62,6 +62,13 @@ LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "300"))
 # reaches a live hop; two full hangs spend it, and that is the case the Nous
 # effort knob is there to prevent.
 HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "600"))
+# Slow hops go first (#258), so slow failures can spend the whole budget before
+# the fast fallbacks get a turn: on #287 two Nous hops answered nothing and the
+# 600 s ran out before Groq, so a /hare deep posted no note. While a fallback is
+# still ahead in the chain, a slow hop gets the time left minus this reserve.
+FALLBACK_RESERVE_S = int(os.environ.get("HARE_FALLBACK_RESERVE_S", "150"))
+FAST_FALLBACKS = ("groq", "gemini")
+MIN_HOP_S = 60
 LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "32000"))
 # Size the spend to the diff. A normal PR gets the ceilings above; a very big
 # diff gets twice the time, and only a very big diff, so a one-file change
@@ -2170,14 +2177,21 @@ def _hare_once(
     hops_start = time.time()
     salvaged: list[dict[str, Any]] = []
     salvage_notes: list[str] = []
-    for name, base, key, model, request_options in providers:
+    for i, (name, base, key, model, request_options) in enumerate(providers):
         if time.time() - hops_start > hop_budget:
             errs.append(f"hop budget ({hop_budget} s) spent before {name}:{model}")
             break
+        timeout = call_timeout
+        if name not in FAST_FALLBACKS and any(p[0] in FAST_FALLBACKS for p in providers[i + 1:]):
+            left = hop_budget - (time.time() - hops_start) - FALLBACK_RESERVE_S
+            if left < MIN_HOP_S:
+                errs.append(f"{name}:{model}: skipped, the last {FALLBACK_RESERVE_S} s are kept for the fast fallbacks")
+                continue
+            timeout = int(min(call_timeout, left))
         try:
             call_start = time.time()
             SALVAGE.clear()
-            raw = chat_complete(base, key, model, messages, request_options, timeout=call_timeout)
+            raw = chat_complete(base, key, model, messages, request_options, timeout=timeout)
             parsed = extract_json(raw)
             if parsed is None:
                 raise RuntimeError("no JSON object in model output")
