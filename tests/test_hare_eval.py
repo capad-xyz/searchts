@@ -152,3 +152,31 @@ def test_the_graph_is_sent_when_on_and_measured_apart(monkeypatch, tmp_path) -> 
     monkeypatch.setattr(hare_eval, "case_root", lambda base: None)
     rows = hare_eval.run([CASE], ["groq"], ["off"], {"groq": "k"}, "t", "o", "r", call=call, pause=lambda s: None, graphs=["on"])
     assert rows[0]["error"].startswith("no checkout") and hare_eval.summarize(rows)[0]["expected"] == 0
+
+
+def test_case_root_checks_out_the_base_for_real(tmp_path, monkeypatch) -> None:
+    """Hare on #291: the other test fakes case_root. This one runs it against a
+    real repo: the worktree holds the base, not the head, and is reused."""
+    import subprocess
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True).stdout.strip()
+
+    git("init", "-q")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    (repo / "a.py").write_text("x = 1\n")
+    git("add", "a.py")
+    git("commit", "-qm", "base")
+    base = git("rev-parse", "HEAD")
+    (repo / "a.py").write_text("x = 2\n")
+    git("commit", "-qam", "head")
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(hare_eval.tempfile, "gettempdir", lambda: str(tmp_path))
+    root = hare_eval.case_root(base)
+    assert root is not None and (Path(root) / "a.py").read_text() == "x = 1\n"
+    assert hare_eval.case_root(base) == root
+    assert hare_eval.case_root("0" * 40) is None
