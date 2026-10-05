@@ -233,6 +233,11 @@ def _memory_enabled() -> bool:
 _jina_spent = False
 
 
+def _spend_jina() -> None:
+    global _jina_spent
+    _jina_spent = True
+
+
 def jina_enabled() -> bool:
     """Whether the Jina Reader relay is allowed (P3.5 / Q4).
 
@@ -1187,8 +1192,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             if backend == "Jina Reader":
                 reason = looks_blocked(status, body, headers)
                 if status == 403:
-                    global _jina_spent
-                    _jina_spent = True
+                    _spend_jina()
                 if reason:
                     attempts.append((backend, reason))
                     _tick(f"  {backend}: {reason}")
