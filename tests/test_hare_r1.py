@@ -1638,3 +1638,37 @@ def test_finished_findings_survive_the_model_that_found_them(monkeypatch) -> Non
     seen = _salvage_world(monkeypatch, ["m1", "m2"], all_die)
     assert [(f["path"], f["line"]) for f in seen["findings"]] == [("a.py", 3)]  # one finding, not one per dead hop
     assert seen["used"].startswith("salvage") and "needed" not in seen
+
+
+def test_slow_hops_leave_time_for_the_fast_fallbacks(monkeypatch) -> None:
+    """On #287 two slow hops spent the 600 s budget and Groq never ran, so a
+    /hare deep posted no note. A slow hop gets the time left minus the reserve
+    while a fallback is ahead; one that would get under a minute is skipped."""
+    import time as real_time
+
+    class Clock:
+        now = 1000.0
+
+        def time(self) -> float:
+            return self.now
+
+        def __getattr__(self, name):
+            return getattr(real_time, name)
+
+    clock = Clock()
+    timeouts: list[int] = []
+
+    def hop(base, key, model, messages, options, timeout=0):
+        if model.startswith("slow"):
+            timeouts.append(timeout)
+            clock.now += timeout  # hangs for as long as it is allowed
+            raise TimeoutError("timed out")
+        return '{"summary": "s", "aim": "a", "findings": []}'
+
+    seen = _salvage_world(monkeypatch, [], hop)  # installs the fakes; the empty chain posts nothing
+    monkeypatch.setattr(hare_r1, "time", clock)
+    monkeypatch.setattr(hare_r1, "budgets_for", lambda diff: (300, 600, False))
+    # chain order is OpenRouter, Nous, Groq: two slow hops, then the fast fallback
+    hare_r1._hare_once("o", "r", 7, "t", "abc", "kn", "ko", "", "kg", "", ["fast-groq"], [], ["slow-nous"], ["slow-a", "slow-b"], [])
+    assert timeouts == [300, 150]  # the second slow hop got what was left minus the 150 s reserve
+    assert str(seen["used"]).startswith("groq:fast-groq")  # slow-nous was skipped; Groq answered
