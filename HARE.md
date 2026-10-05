@@ -12,8 +12,9 @@ comment it came from, or edit it to a 3 or higher; the next run drops the line.
 ## How Hare works here
 
 1. A PR opens or gets a push, or someone with write access comments `/hare`.
-   A command gets 🐇 at once, or 🐢 for `/hare think`; the note quotes the request Re-run on Hare's check also reviews again, and the note says who pressed it.
-   and the sign is removed when it lands.
+   A command gets 🐇 at once, or 🐢 for `/hare think`; the note quotes the request
+   and the sign is removed when it lands. Re-run on Hare's check also reviews
+   again, and the note says who pressed it.
    The Action `hare / r1` runs `scripts/hare_r1.py` from main. A fixed list of
    free model hops (PLAN R1c) is tried in order; the first that answers writes
    the review. If none answers, Hare posts a needed comment instead.
