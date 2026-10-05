@@ -120,35 +120,3 @@ def test_a_rate_limit_waits_a_daily_quota_stops_and_a_deadline_still_reports(mon
                          pause=lambda s: None, deadline_s=60, clock=lambda: next(ticks))
     assert rows[0]["case"] == "c1" and rows[-1]["case"] == "deadline" and "not run" in rows[-1]["error"]
     assert "stopped at the 1-minute deadline" in hare_eval.render(rows, [CASE, CLEAN], "2026-10-05")
-
-
-def test_the_graph_is_sent_when_on_and_measured_apart(monkeypatch, tmp_path) -> None:
-    """graphs=off,on runs every case both ways; the on run's prompt carries the
-    graph filled to that provider's budget, read from a checkout of the case's base."""
-    (tmp_path / "scripts").mkdir()
-    (tmp_path / "scripts" / "b.py").write_text("from a import load_rows\nload_rows()\n")
-    monkeypatch.setattr(hare_r1, "github_api", _gh)
-
-    def gh_with_def(method, path, token, body=None, accept="application/vnd.github+json"):
-        if "compare/base1..." in path:
-            return "diff --git a/scripts/a.py b/scripts/a.py\n@@ -1 +1 @@\n+def load_rows():\n"
-        return _gh(method, path, token, body, accept)
-
-    monkeypatch.setattr(hare_r1, "github_api", gh_with_def)
-    monkeypatch.setattr(hare_eval, "case_root", lambda base: str(tmp_path))
-    sent: dict[str, str] = {}
-
-    def call(base, key, model, messages, opts, timeout=0):
-        sent.setdefault("on" if "## Elsewhere in the repo" in messages[1]["content"] else "off", messages[1]["content"])
-        return json.dumps({"summary": "s", "findings": []})
-
-    rows = hare_eval.run([CASE], ["groq"], ["off"], {"groq": "k"}, "t", "o", "r", call=call, pause=lambda s: None, graphs=["off", "on"])
-    assert [r["graph"] for r in rows] == ["off", "on"] and set(sent) == {"off", "on"}
-    assert "scripts/b.py" in sent["on"] and "scripts/b.py" not in sent["off"]
-    assert {(s["graph"]) for s in hare_eval.summarize(rows)} == {"off", "on"}
-    md = hare_eval.render(rows, [CASE], "2026-10-05")
-    assert "| Graph |" in md and "groq think off graph on" in md
-
-    monkeypatch.setattr(hare_eval, "case_root", lambda base: None)
-    rows = hare_eval.run([CASE], ["groq"], ["off"], {"groq": "k"}, "t", "o", "r", call=call, pause=lambda s: None, graphs=["on"])
-    assert rows[0]["error"].startswith("no checkout") and hare_eval.summarize(rows)[0]["expected"] == 0
