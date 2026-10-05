@@ -16,6 +16,11 @@ import urllib.request
 from collections import deque
 from collections.abc import Iterable, Iterator
 from pathlib import Path
+
+try:  # scripts/ is on sys.path when run as `python scripts/hare_r1.py`
+    import hare_graph
+except ImportError:  # e.g. the bootstrap checkout carries hare_r1.py alone
+    hare_graph = None  # type: ignore[assignment]
 from typing import Any
 
 TOKEN = "<!-- searchts-r1-review -->"
@@ -2147,6 +2152,14 @@ def _hare_once(
     )
     user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask, ledger_block(model_diff), hare_md)
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
+    # The codebase graph (hare_graph): uses of what the diff changes, from the
+    # trusted base checkout, ranked; each hop gets as much as its budget holds.
+    graph: list[dict[str, Any]] = []
+    if hare_graph is not None:
+        try:
+            graph = hare_graph.uses(_env("GITHUB_WORKSPACE") or ".", model_diff)
+        except Exception as e:  # never fail a review over extra context
+            print(f"hare: graph skipped: {str(e)[:120]}")
 
     providers = build_provider_chain(
         {
@@ -2191,7 +2204,12 @@ def _hare_once(
         try:
             call_start = time.time()
             SALVAGE.clear()
-            raw = chat_complete(base, key, model, messages, request_options, timeout=timeout)
+            hop_messages = messages
+            if graph and hare_graph is not None:
+                more = hare_graph.section(graph, hare_graph.budget_for(name))
+                if more:
+                    hop_messages = [messages[0], {"role": "user", "content": f"{messages[1]['content']}\n\n{more}"}]
+            raw = chat_complete(base, key, model, hop_messages, request_options, timeout=timeout)
             parsed = extract_json(raw)
             if parsed is None:
                 raise RuntimeError("no JSON object in model output")

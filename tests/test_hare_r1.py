@@ -1676,3 +1676,20 @@ def test_slow_hops_leave_time_for_the_fast_fallbacks(monkeypatch) -> None:
     hare_r1._hare_once("o", "r", 7, "t", "abc", "kn", "ko", "", "kg", "", ["fast-groq"], [], ["slow-nous"], ["slow-a", "slow-b"], [])
     assert timeouts == [300, 150]  # the second slow hop got what was left minus the 150 s reserve
     assert str(seen["used"]).startswith("groq:fast-groq")  # slow-nous was skipped; Groq answered
+
+
+def test_the_graph_reaches_the_model(monkeypatch, tmp_path) -> None:
+    """What #282 lacked: a workflow that runs the changed file, with its
+    concurrency lines, is in front of the model next to the diff."""
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / "w.yml").write_text("concurrency:\n  group: g-${{ github.event_name }}\n  cancel-in-progress: true\njobs:\n  r:\n    steps:\n      - run: python a.py\n")
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    sent: list[str] = []
+
+    def hop(base, key, model, messages, options, timeout=0):
+        sent.append(messages[1]["content"])
+        return '{"summary": "s", "aim": "a", "findings": []}'
+
+    _salvage_world(monkeypatch, ["m1"], hop)
+    assert "## Elsewhere in the repo (not in this diff)" in sent[0] and "cancel-in-progress: true" in sent[0]
