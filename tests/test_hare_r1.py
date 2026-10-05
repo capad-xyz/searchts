@@ -1691,5 +1691,6 @@ def test_the_graph_reaches_the_model(monkeypatch, tmp_path) -> None:
         sent.append(messages[1]["content"])
         return '{"summary": "s", "aim": "a", "findings": []}'
 
-    _salvage_world(monkeypatch, ["m1"], hop)
+    seen = _salvage_world(monkeypatch, ["m1"], hop)
     assert "## Elsewhere in the repo (not in this diff)" in sent[0] and "cancel-in-progress: true" in sent[0]
+    assert "- graph: 1 file from the repo," in str(seen["cost"])  # the note says what the model saw

@@ -2205,16 +2205,19 @@ def _hare_once(
             call_start = time.time()
             SALVAGE.clear()
             hop_messages = messages
+            graph_line = ""
             if graph and hare_graph is not None:
                 more = hare_graph.section(graph, hare_graph.budget_for(name))
                 if more:
+                    files = more.count("\n### ")
+                    graph_line = f"\n- graph: {files} file{'' if files == 1 else 's'} from the repo, {len(more):,} characters"
                     hop_messages = [messages[0], {"role": "user", "content": f"{messages[1]['content']}\n\n{more}"}]
             raw = chat_complete(base, key, model, hop_messages, request_options, timeout=timeout)
             parsed = extract_json(raw)
             if parsed is None:
                 raise RuntimeError("no JSON object in model output")
             used = f"{name}:{model}" + (" · deep" if deep else "")
-            cost = cost_line(LAST_USAGE, used, time.time() - call_start)
+            cost = cost_line(LAST_USAGE, used, time.time() - call_start) + graph_line
             if LAST_CUT.get("cut"):
                 how = "finished by one continuation call" if LAST_CUT.get("continued") else "closed by the script"
                 cost += f"\n- cut at the budget ({LAST_CUT.get('why')}) after {LAST_CUT.get('kept', 0)} findings, {how}"
