@@ -1,0 +1,33 @@
+{
+  "about": "Old PRs whose issues were confirmed by a reviewer or by the fix that followed. A finding catches an expected issue when it names the same file (and a line within 25, when one is given) and its text carries one of the words. On a clean case every real finding counts as a false alarm.",
+  "cases": [
+    {"id": "269-v1", "pr": 269, "head": "182b82e", "expect": [
+      {"path": "scripts/hare_r1.py", "words": ["memory", "whole log", "entire log", "read()", "stream", "unbounded"], "what": "job_log reads a whole job log into memory before cutting the tail", "by": "CodeRabbit"},
+      {"path": "tests/test_hare_r1.py", "words": ["getsource", "source text", "inspect", "string match", "source code"], "what": "the CI-order test reads source text instead of running _hare_once", "by": "CodeRabbit"},
+      {"path": "AGENTS.md", "words": ["pending", "hold"], "what": "AGENTS.md still says a pending check means hold", "by": "CodeRabbit"},
+      {"path": "tests/test_hare_r1.py", "words": ["delet", "remov", "drops", "eight", "unrelated"], "what": "deletes eight unrelated tests", "by": "Hare"}]},
+    {"id": "271-v1", "pr": 271, "head": "4913bb9", "expect": [
+      {"path": "docs/f18-input.md", "words": ["Dockerfile", "demo"], "what": "says neither Dockerfile installs searchts from PyPI, but demo/Dockerfile does (needs repo context)", "by": "Claude review"}]},
+    {"id": "274-v1", "pr": 274, "head": "9c61c82", "expect": [
+      {"path": "scripts/hare_r1.py", "words": ["pagina", "per_page", "first 100", "100 reviews", "page"], "what": "the reviews read stops at the first 100", "by": "Hare"}]},
+    {"id": "275-v1", "pr": 275, "head": "0e98271", "expect": [
+      {"path": "scripts/hare_r1.py", "words": ["readline", "newline", "endless", "long line", "single line", "line length"], "what": "readline has no size limit, so one endless line is read whole", "by": "Hare Bot"}]},
+    {"id": "245", "pr": 245, "head": "944ef4d", "expect": [
+      {"path": "scripts/hare_r1.py", "words": ["concatenat", "stitch", "shorter", "tail"], "what": "a non-{ tail is still concatenated, and extract_json keeps the later, shorter findings list", "by": "Hare Bot"}]},
+    {"id": "246", "pr": 246, "head": "932f5b8", "expect": [
+      {"path": "scripts/hare_ledger.py", "words": ["path only", "by path", "same path", "same file", "every finding", "every open finding", "all findings"], "what": "a resolved thread keyed by path only marks every finding on the file", "by": "Hare Bot"},
+      {"path": "scripts/hare_ledger.py", "words": ["backtick", "models row", "older notes"], "what": "hop parsing only matches a backticked Models row, missing older notes", "by": "Hare Bot"}]},
+    {"id": "248", "pr": 248, "head": "031b6ff", "expect": [
+      {"path": "AGENTS.md", "words": ["rewrite", "marked block"], "what": "AGENTS.md says the ledger rewrites a block it does not", "by": "Hare Bot"},
+      {"path": "HARE.md", "words": ["resolv", "issue comment", "retire"], "what": "HARE.md says resolving or editing drops a rule, but scores are issue comments", "by": "Hare Bot"}]},
+    {"id": "249", "pr": 249, "head": "0e2da56", "expect": [
+      {"path": "PLAN.md", "words": ["base", "HARE_STREAM", "17"], "what": "the 17 s Flash-Lite note ran from the base script, not the PR's streaming code", "by": "Hare Bot"}]},
+    {"id": "258", "pr": 258, "head": "99fb7ef", "expect": [
+      {"path": "AGENTS.md", "words": ["Groq", "order", "chain"], "what": "AGENTS.md still names the old chain order", "by": "Hare Bot"},
+      {"path": "PLAN.md", "words": ["Space Bunny", "bunny"], "what": "the PLAN bullet still says Space Bunny is last on Nous", "by": "Hare Bot"}]},
+    {"id": "270", "pr": 270, "head": "7f6edc2", "clean": true, "expect": []},
+    {"id": "276", "pr": 276, "head": "273a51e", "clean": true, "expect": []},
+    {"id": "278", "pr": 278, "head": "690793d", "clean": true, "expect": []},
+    {"id": "279", "pr": 279, "head": "b168bbd", "clean": true, "expect": []}
+  ]
+}

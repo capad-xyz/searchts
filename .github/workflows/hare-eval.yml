@@ -1,0 +1,69 @@
+# Hare's eval (PLAN R1c): old PRs with confirmed issues, run through each
+# provider with thinking off and on, scored against docs/hare-eval-cases.json.
+# Posts nothing on any PR. Runs only by hand, opens one PR with the report.
+name: hare-eval
+
+on:
+  workflow_dispatch:
+    inputs:
+      cases:
+        description: "Case ids, comma separated (empty runs all)"
+        required: false
+        default: ""
+      providers:
+        description: "Providers, comma separated"
+        required: false
+        default: "openrouter,nous,groq,gemini"
+      modes:
+        description: "Thinking modes: off, on, or off,on"
+        required: false
+        default: "off,on"
+      repeat:
+        description: "Runs per cell"
+        required: false
+        default: "1"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: hare-eval
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run the eval
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SEARCHTS_HARE_API_KEY_GROQ: ${{ secrets.SEARCHTS_HARE_API_KEY_GROQ }}
+          SEARCHTS_HARE_API_KEY_GEMINI: ${{ secrets.SEARCHTS_HARE_API_KEY_GEMINI }}
+          SEARCHTS_HARE_API_KEY_NOUS: ${{ secrets.SEARCHTS_HARE_API_KEY_NOUS }}
+          SEARCHTS_HARE_API_KEY_OR: ${{ secrets.SEARCHTS_HARE_API_KEY_OR }}
+          CASES: ${{ inputs.cases }}
+          PROVIDERS: ${{ inputs.providers }}
+          MODES: ${{ inputs.modes }}
+          REPEAT: ${{ inputs.repeat }}
+        run: python scripts/hare_eval.py --only "$CASES" --providers "$PROVIDERS" --modes "$MODES" --repeat "$REPEAT" --out docs
+      - name: Open a PR with the report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          day="$(date -u +%Y-%m-%d)"
+          branch="chore/hare-eval-$day-${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add "docs/hare-eval-$day.md" "docs/hare-eval-$day.json"
+          git commit -m "chore(hare): eval $day"
+          git push -f origin "$branch"
+          summary="$(awk '/^\| Provider/{p=1} /^## Per expected issue/{p=0} p' "docs/hare-eval-$day.md")"
+          body="$(printf '## What\n\n**Automated run** of `.github/workflows/hare-eval.yml` (run %s), dispatched by hand. `scripts/hare_eval.py` replayed old PRs with confirmed issues through each provider with thinking off and on and scored the findings against `docs/hare-eval-cases.json`. Nothing was posted on any PR.\n\n%s\n\n## Models\n\n| Role | Model | Effort | Purpose |\n| --- | --- | --- | --- |\n| ran | the first model of each provider, as listed in the report | off and on | reviewed the old PRs for the eval; scoring is deterministic, by scripts/hare_eval.py |\n' "${{ github.run_id }}" "$summary")"
+          gh pr create --base main --head "$branch" --title "chore(hare): eval $day" --body "$body"
