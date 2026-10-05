@@ -10,7 +10,13 @@ Hare reviews this repo's pull requests with free models on the owner's own keys.
    free model hops (PLAN R1c) is tried in order; the first that answers writes
    the review. If none answers, Hare posts a needed comment instead.
 2. Hare reads AGENTS.md, [HARE.md](../HARE.md), and what the ledger knows about the files in
-   the diff, then posts one review: summary, CI, intent, a verdict (Ship, Hold, or Wait
+   the diff. It also builds a codebase graph (`scripts/hare_graph.py`): names and
+   files the diff changes, and where the trusted base checkout still uses them.
+   Text only, never run. Ranked code, then workflows and config, then docs.
+   Each hop gets its own budget (Groq 4k characters, Gemini 40k, the rest 20k);
+   a small workflow that names a changed file goes in whole. The note says how
+   much of that graph the model saw.
+   Then one review: summary, CI, intent, a verdict (Ship, Hold, or Wait
    while CI runs, from CI and the real findings, then the model's case), findings with bubbles
    on the lines (a one-click fix where the fix is small), a checks fold, and a
    fold on how to answer. A later push gets a Since section on each old finding.
