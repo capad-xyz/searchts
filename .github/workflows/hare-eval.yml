@@ -30,6 +30,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  workflows: write  # the report branch still contains this file, so the push is refused without it
 
 concurrency:
   group: hare-eval
