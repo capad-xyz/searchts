@@ -9,7 +9,7 @@ Hare reviews this repo's pull requests with free models on the owner's own keys.
    The Action `hare / r1` runs `scripts/hare_r1.py` from main. A fixed list of
    free model hops (PLAN R1c) is tried in order; the first that answers writes
    the review. If none answers, Hare posts a needed comment instead.
-2. Hare reads AGENTS.md, this file, and what the ledger knows about the files in
+2. Hare reads AGENTS.md, [HARE.md](../HARE.md), and what the ledger knows about the files in
    the diff, then posts one review: summary, CI, intent, a verdict (Ship, Hold, or Wait
    while CI runs, from CI and the real findings, then the model's case), findings with bubbles
    on the lines (a one-click fix where the fix is small), a checks fold, and a
@@ -18,6 +18,6 @@ Hare reviews this repo's pull requests with free models on the owner's own keys.
    `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare
    records both and posts nothing.
 4. Every Sunday the ledger run rebuilds `docs/hare-ledger.md` from the notes,
-   Since lines, resolved threads and those comments, rewrites the block below
+   Since lines, resolved threads and those comments, rewrites the learned block in HARE.md
    from low scores, opens a PR, asks Hare to review it, and merges it unless
    Hare finds a real problem.
