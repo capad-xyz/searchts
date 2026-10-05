@@ -545,7 +545,7 @@ def _item_key(item) -> str:
 
 
 def _following_detail_row(row):
-    """The next row, when it carries the item's details rather than another title."""
+    """The next row when it is a detail row, not another title row."""
     nxt = row.getnext()
     if nxt is None or not isinstance(nxt.tag, str) or nxt.tag.lower() != "tr":
         return None
