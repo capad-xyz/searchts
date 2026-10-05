@@ -709,12 +709,12 @@ def test_hop_loop_sends_every_provider_its_own_options() -> None:
     assert parsed == {"summary": "ok", "findings": []}
 
 
-def test_space_bunny_is_on_nous_for_its_last_day() -> None:
-    """The empty-content failure was measured on OpenRouter, not Nous. Bunny is
-    free until 2026-10-05, so it leads Nous until then; the catalog pass after
-    that date drops it from every list."""
-    nous = hare_r1.HARE_NOUS_DEFAULT.split(",")
-    assert nous[0] == "stealth/space-bunny-alpha"
+def test_space_bunny_is_off_openrouter_and_nous_after_its_free_period() -> None:
+    """Space Bunny's free period on OpenRouter and Nous ended 2026-10-05. Zen's
+    space-bunny-free is its own offer and stays until Zen retires it."""
+    assert "stealth/space-bunny-alpha" not in hare_r1.HARE_NOUS_DEFAULT.split(",")
+    assert "stealth/space-bunny-alpha" not in hare_r1.HARE_OR_DEFAULT.split(",")
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "meituan/longcat-2.5-preview:free"
 
 
 def test_dead_hops_are_printed_on_success() -> None:
@@ -1225,17 +1225,16 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     monkeypatch.setenv("HARE_OR_MODEL", "only-one")  # type: ignore[attr-defined]
     assert hare_r1._csv_models("HARE_OR_MODEL", "a,b") == ["only-one"]
     # The ledger (2026-10-04): laguna answered 18 times on OpenRouter and never
-    # found anything, so it is off that list; qwen stays first. Space Bunny is
-    # free until 2026-10-05 and sits second on OpenRouter and first on Nous for
-    # its last day.
+    # found anything, so it is off that list; qwen stays first. Space Bunny left
+    # OpenRouter and Nous when its free period ended (2026-10-05).
     assert hare_r1.HARE_OR_DEFAULT.split(",")[0] == "qwen/qwen3.8-27b:free"
-    assert hare_r1.HARE_OR_DEFAULT.split(",")[1] == "stealth/space-bunny-alpha"
+    assert hare_r1.HARE_OR_DEFAULT.split(",")[1] == "thinkingmachines/inkling-small:free"
     assert "poolside/laguna-s-2.1:free" not in hare_r1.HARE_OR_DEFAULT.split(",")
     assert len(hare_r1.HARE_OR_DEFAULT.split(",")) >= 4  # not one model: diversity is data
     # Two Zen slugs are TUI-only by policy (403 FreeTierError from Actions).
     assert hare_r1.HARE_ZEN_DEFAULT.split(",") == ["space-bunny-free"]
     assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
-    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stealth/space-bunny-alpha"
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "meituan/longcat-2.5-preview:free"
     assert hare_r1.HARE_NOUS_DEFAULT.endswith("poolside/laguna-s-2.1:free")
     assert hare_r1.HARE_ZEN_DEFAULT.split(",")[0] == "space-bunny-free"
 

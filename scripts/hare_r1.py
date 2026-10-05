@@ -133,17 +133,15 @@ HARE_GEMINI_DEFAULT = "gemini-3.1-flash-lite,gemini-3.5-flash"
 # times on OpenRouter and found nothing once; on Nous, 1 finding in 4. Groq
 # found something on all 10 of its notes, Gemini on 3 of 3, qwen on 5 of 12.
 # So laguna leaves OpenRouter (it only cost a 300 s wait before the next hop)
-# and goes last on Nous. Space Bunny is free until 2026-10-05, so for its last
-# day it goes first on Nous and second on OpenRouter: a miss is instant, a hit
-# is a free review. The next catalog pass drops it.
+# and goes last on Nous. Space Bunny's free period ended 2026-10-05, so it is
+# off OpenRouter and Nous; Zen's space-bunny-free is a separate offer and stays
+# until Zen retires it (a gone model fails in under a second and falls through).
 HARE_NOUS_DEFAULT = (
-    "stealth/space-bunny-alpha,"
     "meituan/longcat-2.5-preview:free,"
     "poolside/laguna-s-2.1:free"
 )
 HARE_OR_DEFAULT = (
     "qwen/qwen3.8-27b:free,"
-    "stealth/space-bunny-alpha,"
     "thinkingmachines/inkling-small:free,"
     "thinkingmachines/inkling:free,"
     "google/gemma-4-31b-it:free"
