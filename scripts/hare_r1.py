@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import os
 import re
@@ -930,6 +931,8 @@ def bubble_comments(bubbles: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 LAST_USAGE: dict[str, Any] = {}
+# What a dying stream had received, for the hop loop to salvage (see salvage()).
+SALVAGE: dict[str, Any] = {}
 # What the last call did at the limit: {"cut": bool, "kept": findings kept,
 # "continued": bool, "why": "seam"|"think"|"length"}. The fold prints it.
 LAST_CUT: dict[str, Any] = {}
@@ -1013,40 +1016,46 @@ def _sse(req: urllib.request.Request, timeout: int, max_tokens: int) -> tuple[st
             choice = (payload.get("choices") or [{}])[0] or {}
             text = (choice.get("message") or {}).get("content") or ""
             return str(text), str(choice.get("finish_reason") or ""), payload.get("usage") or {}, ""
-        for raw in resp:
-            line = raw.decode("utf-8", errors="replace").strip()
-            if not line.startswith("data:"):
-                continue
-            data = line[5:].strip()
-            if data == "[DONE]":
-                break
-            try:
-                chunk = json.loads(data)
-            except json.JSONDecodeError:
-                continue
-            if chunk.get("usage"):
-                usage = chunk["usage"]
-            for choice in chunk.get("choices") or []:
-                delta = choice.get("delta") or {}
-                if delta.get("reasoning") or delta.get("reasoning_content"):
-                    think_chunks += 1
-                piece = delta.get("content") or ""
-                if piece:
-                    content.append(piece)
-                    chars += len(piece)
-                    answer_chunks += 1
-                if choice.get("finish_reason"):
-                    finish = str(choice["finish_reason"])
-            answer_est = max(answer_chunks, chars // 4)
-            if not content and max(think_chunks, 0) >= think_tokens:
-                cut = "think"
-                break
-            if content and answer_est >= seam_tokens and at_seam("".join(content)):
-                cut = "seam"
-                break
-            if time.time() - started > timeout:
-                cut = "seam" if at_seam("".join(content)) else "length"
-                break
+        try:
+            for raw in resp:
+                line = raw.decode("utf-8", errors="replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                if chunk.get("usage"):
+                    usage = chunk["usage"]
+                for choice in chunk.get("choices") or []:
+                    delta = choice.get("delta") or {}
+                    if delta.get("reasoning") or delta.get("reasoning_content"):
+                        think_chunks += 1
+                    piece = delta.get("content") or ""
+                    if piece:
+                        content.append(piece)
+                        chars += len(piece)
+                        answer_chunks += 1
+                    if choice.get("finish_reason"):
+                        finish = str(choice["finish_reason"])
+                answer_est = max(answer_chunks, chars // 4)
+                if not content and max(think_chunks, 0) >= think_tokens:
+                    cut = "think"
+                    break
+                if content and answer_est >= seam_tokens and at_seam("".join(content)):
+                    cut = "seam"
+                    break
+                if time.time() - started > timeout:
+                    cut = "seam" if at_seam("".join(content)) else "length"
+                    break
+        except (OSError, http.client.HTTPException):
+            # The stream died mid-answer (timeout, reset, cut short). Keep what
+            # arrived so the hop loop can salvage the findings it finished.
+            SALVAGE["text"] = "".join(content)
+            raise
     if cut and not usage:
         # The usage chunk comes last and the cut came first: the meter stands in.
         usage = {"completion_tokens": max(answer_chunks, chars // 4) + think_chunks, "estimated": True}
@@ -1124,6 +1133,45 @@ def cost_line(usage: dict[str, Any], hop: str, seconds: float) -> str:
         return f"- cost: not reported by `{hop}`, {seconds:.0f} s"
     about = "about " if u.get("estimated") else ""
     return f"- cost: {about}{prompt:,} prompt + {answer:,} answer + {reasoning:,} reasoning tokens on `{hop}`, {seconds:.0f} s"
+
+
+def salvage(partial: str, model: str) -> list[dict[str, Any]]:
+    """The findings a model had finished when it died mid-answer. The partial
+    is repaired the same way a budget cut is, and only complete findings are
+    kept, each credited to the model that found it."""
+    if not (partial or "").strip():
+        return []
+    parsed = extract_json(repair_json(partial)) or {}
+    kept = []
+    for f in parsed.get("findings") or []:
+        if isinstance(f, dict) and f.get("path") and f.get("issue"):
+            f = dict(f)
+            f["issue"] = f"{str(f['issue']).rstrip()} (Found by `{model}` before it was cut off.)"
+            kept.append(f)
+    return kept
+
+
+def merge_salvage(findings: list[dict[str, Any]], salvaged: list[dict[str, Any]], near: int = 3) -> list[dict[str, Any]]:
+    """Add the salvaged findings the answering model did not raise itself: same
+    file and a line within `near` counts as the same finding."""
+    out = list(findings)
+    for f in salvaged:
+        try:
+            line = int(f.get("line") or 0)
+        except (TypeError, ValueError):
+            line = 0
+        dup = False
+        for g in out:
+            try:
+                g_line = int(g.get("line") or 0)
+            except (TypeError, ValueError):
+                g_line = 0
+            if str(g.get("path")) == str(f.get("path")) and abs(g_line - line) <= near:
+                dup = True
+                break
+        if not dup:
+            out.append(f)
+    return out
 
 
 def chat_complete(
@@ -2120,12 +2168,15 @@ def _hare_once(
         print(f"hare: big diff ({diff_lines(model_diff)} changed lines), call {call_timeout} s, hops {hop_budget} s")
     cost = ""
     hops_start = time.time()
+    salvaged: list[dict[str, Any]] = []
+    salvage_notes: list[str] = []
     for name, base, key, model, request_options in providers:
         if time.time() - hops_start > hop_budget:
             errs.append(f"hop budget ({hop_budget} s) spent before {name}:{model}")
             break
         try:
             call_start = time.time()
+            SALVAGE.clear()
             raw = chat_complete(base, key, model, messages, request_options, timeout=call_timeout)
             parsed = extract_json(raw)
             if parsed is None:
@@ -2139,8 +2190,19 @@ def _hare_once(
         except Exception as e:
             errs.append(f"{name}:{model}: {e}")
             parsed = None
+            kept = salvage(str(SALVAGE.get("text") or ""), f"{name}:{model}")
+            if kept:  # finished findings survive the model that found them
+                salvaged.extend(kept)
+                salvage_notes.append(f"- {len(kept)} finished findings kept from `{name}:{model}`, which died mid-answer")
             continue
 
+    if parsed is None and salvaged:
+        # Every model died, but findings one of them finished survived: post
+        # those, marked, instead of nothing.
+        parsed = {"summary": "Every model was cut off before it finished. The findings below were complete when that happened; ask again with `/hare` for a full pass.", "findings": []}
+        used = "salvage (every model was cut off)"
+        cost = "\n".join(salvage_notes)
+        salvage_notes = []
     if parsed is None:
         try:
             talk = github_api("GET", f"/repos/{owner}/{repo}/issues/{n}/comments?per_page=100", token)
@@ -2153,6 +2215,10 @@ def _hare_once(
         return 0
 
     findings = normalize_findings(list(parsed.get("findings") or []) if isinstance(parsed.get("findings"), list) else [])
+    if salvaged:
+        findings = merge_salvage(findings, normalize_findings(salvaged))
+        if salvage_notes:
+            cost += "\n" + "\n".join(salvage_notes)
     effort = str(parsed.get("effort") or "low")
     if effort not in {"low", "medium", "high"}:
         effort = "low"
