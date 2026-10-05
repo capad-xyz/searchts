@@ -180,3 +180,14 @@ def test_case_root_checks_out_the_base_for_real(tmp_path, monkeypatch) -> None:
     assert root is not None and (Path(root) / "a.py").read_text() == "x = 1\n"
     assert hare_eval.case_root(base) == root
     assert hare_eval.case_root("0" * 40) is None
+
+
+def test_the_eval_prefers_its_own_keys() -> None:
+    """A long eval on the live keys starved Hare's own reviews (2026-10-05). Each
+    provider key prefers HARE_EVAL_KEY_* and falls back to the shared secret."""
+    import yaml
+
+    wf = yaml.safe_load((Path(__file__).resolve().parents[1] / ".github" / "workflows" / "hare-eval.yml").read_text())
+    env = {k: v for step in wf["jobs"]["eval"]["steps"] for k, v in (step.get("env") or {}).items()}
+    for p in ("GROQ", "GEMINI", "NOUS", "OR"):
+        assert env[f"SEARCHTS_HARE_API_KEY_{p}"] == f"${{{{ secrets.HARE_EVAL_KEY_{p} || secrets.SEARCHTS_HARE_API_KEY_{p} }}}}"

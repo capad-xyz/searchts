@@ -49,10 +49,14 @@ jobs:
       - name: Run the eval
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SEARCHTS_HARE_API_KEY_GROQ: ${{ secrets.SEARCHTS_HARE_API_KEY_GROQ }}
-          SEARCHTS_HARE_API_KEY_GEMINI: ${{ secrets.SEARCHTS_HARE_API_KEY_GEMINI }}
-          SEARCHTS_HARE_API_KEY_NOUS: ${{ secrets.SEARCHTS_HARE_API_KEY_NOUS }}
-          SEARCHTS_HARE_API_KEY_OR: ${{ secrets.SEARCHTS_HARE_API_KEY_OR }}
+          # The eval prefers its own keys (HARE_EVAL_KEY_*), so a long run does not
+          # spend the free quota live reviews need (#287's /hare deep was rate
+          # limited during the 2026-10-05 run). Free quotas are per account, so the
+          # eval's keys help only from separate accounts. Unset: the shared keys.
+          SEARCHTS_HARE_API_KEY_GROQ: ${{ secrets.HARE_EVAL_KEY_GROQ || secrets.SEARCHTS_HARE_API_KEY_GROQ }}
+          SEARCHTS_HARE_API_KEY_GEMINI: ${{ secrets.HARE_EVAL_KEY_GEMINI || secrets.SEARCHTS_HARE_API_KEY_GEMINI }}
+          SEARCHTS_HARE_API_KEY_NOUS: ${{ secrets.HARE_EVAL_KEY_NOUS || secrets.SEARCHTS_HARE_API_KEY_NOUS }}
+          SEARCHTS_HARE_API_KEY_OR: ${{ secrets.HARE_EVAL_KEY_OR || secrets.SEARCHTS_HARE_API_KEY_OR }}
           CASES: ${{ inputs.cases }}
           PROVIDERS: ${{ inputs.providers }}
           MODES: ${{ inputs.modes }}
