@@ -1548,3 +1548,93 @@ def test_re_running_hares_check_reviews_again(monkeypatch) -> None:
     assert order == []
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "x")
     assert not hare_r1.is_rerun()
+
+
+def _salvage_world(monkeypatch, models, hop):
+    """`_hare_once` on one provider with `models`, the network faked, and the
+    findings that reach the note captured."""
+    pr = {"head": {"sha": "abc", "repo": {"full_name": "o/r"}}, "base": {"sha": "b0", "repo": {"full_name": "o/r"}},
+          "title": "t", "body": "b", "state": "open", "draft": False, "user": {"login": "someone"}}
+
+    def api(method, path, token, data=None, accept=None):
+        if accept:
+            return "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -0,0 +1,9 @@\n" + "".join(f"+x{i} = {i}\n" for i in range(9))
+        if method == "GET" and path == "/repos/o/r/pulls/7":
+            return pr
+        if "/contents/" in path:
+            raise RuntimeError("404")
+        return [] if method == "GET" else {}
+
+    seen: dict[str, object] = {}
+    real_render = hare_r1.render_comment
+
+    def render(*a, **k):
+        seen["findings"], seen["used"], seen["cost"] = a[3], a[0], a[11]
+        return real_render(*a, **k)
+
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+    monkeypatch.setattr(hare_r1, "QUIET_S", 0)
+    monkeypatch.setattr(hare_r1, "github_api", api)
+    monkeypatch.setattr(hare_r1, "github_list", lambda *a, **k: [])
+    monkeypatch.setattr(hare_r1, "already_reviewed", lambda *a, **k: False)
+    monkeypatch.setattr(hare_r1, "chat_complete", hop)
+    monkeypatch.setattr(hare_r1, "read_checks", lambda *a: ([], "ok", []))
+    monkeypatch.setattr(hare_r1, "render_comment", render)
+    monkeypatch.setattr(hare_r1, "deliver_review", lambda *a, **k: "review")
+    monkeypatch.setattr(hare_r1, "post_needed", lambda *a, **k: seen.setdefault("needed", True))
+    hare_r1._hare_once("o", "r", 7, "t", "abc", "", "k", "", "", "", [], [], [], models, [])
+    return seen
+
+
+PARTIAL = ('{"summary": "s", "findings": [{"sev": "real", "path": "a.py", "line": 3, "issue": "x3 is wrong", "fix": "yes"}, '
+           '{"sev": "skip", "path": "a.py", "line": 8, "iss')
+
+
+def test_a_dying_stream_keeps_what_arrived(monkeypatch) -> None:
+    """A stream cut mid-answer used to take everything it had received with it."""
+    chunks = [f'data: {json.dumps({"choices": [{"delta": {"content": PARTIAL[i:i + 40]}}]})}\n'.encode() for i in range(0, len(PARTIAL), 40)]
+
+    class Resp:
+        headers = {"Content-Type": "text/event-stream"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def __iter__(self):
+            yield from chunks
+            raise ConnectionResetError("reset by peer")
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", lambda *a, **k: Resp())
+    hare_r1.SALVAGE.clear()
+    with pytest.raises(ConnectionResetError):
+        hare_r1._sse(object(), 30, 32000)  # type: ignore[arg-type]
+    assert hare_r1.SALVAGE["text"] == PARTIAL
+
+
+def test_finished_findings_survive_the_model_that_found_them(monkeypatch) -> None:
+    kept = hare_r1.salvage(PARTIAL, "nous:m1")
+    assert [(f["path"], f["line"]) for f in kept] == [("a.py", 3)]  # the half-written one is dropped
+    assert kept[0]["issue"].endswith("(Found by `nous:m1` before it was cut off.)")
+    merged = hare_r1.merge_salvage([{"path": "a.py", "line": 4, "issue": "same"}], kept + [{"path": "b.py", "line": 1, "issue": "new"}])
+    assert [f["path"] for f in merged] == ["a.py", "b.py"]  # a.py:3 is a.py:4's finding; b.py is new
+
+    def hop(base, key, model, messages, options, timeout=0):
+        if model == "m1":
+            hare_r1.SALVAGE["text"] = PARTIAL
+            raise TimeoutError("timed out")
+        return '{"summary": "s", "aim": "a", "findings": [{"sev": "skip", "path": "a.py", "line": 8, "issue": "style"}]}'
+
+    seen = _salvage_world(monkeypatch, ["m1", "m2"], hop)
+    assert sorted((f["path"], f["line"]) for f in seen["findings"]) == [("a.py", 3), ("a.py", 8)]
+    assert "kept from" in str(seen["cost"]) and "needed" not in seen
+
+    def all_die(base, key, model, messages, options, timeout=0):
+        hare_r1.SALVAGE["text"] = PARTIAL
+        raise TimeoutError("timed out")
+
+    seen = _salvage_world(monkeypatch, ["m1", "m2"], all_die)
+    assert [(f["path"], f["line"]) for f in seen["findings"]] == [("a.py", 3)]  # one finding, not one per dead hop
+    assert seen["used"].startswith("salvage") and "needed" not in seen
