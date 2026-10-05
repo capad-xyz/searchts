@@ -1442,3 +1442,81 @@ def test_a_job_log_is_read_as_a_stream_and_never_held_whole() -> None:
     assert hare_r1._tail_of(hare_r1._stream_lines(long_then_error, line_cap=1_000), 3) == "a" * 1_000 + "\n##[error]boom"
     assert list(hare_r1._stream_lines(io.BytesIO(b"x\n" * 10), cap=5)) == ["x\n", "x\n"]  # the byte cap
     assert hare_r1._log_tail("a\n##[error]e\ncleanup") == "a\n##[error]e"  # same rule for a log in memory
+
+
+def _command_world(monkeypatch, tmp_path, ask, event="issue_comment", fail=False):
+    """`_hare_once` with only the network faked, recording every GitHub write."""
+    calls: list[tuple[str, str, object]] = []
+    posted: list[str] = []
+    payload = tmp_path / "event.json"
+    payload.write_text(json.dumps({"comment": {"user": {"login": "capad-xyz"}, "html_url": "https://github.com/o/r/pull/7#issuecomment-1"}}))
+    pr = {"head": {"sha": "abc", "repo": {"full_name": "o/r"}}, "base": {"sha": "b0", "repo": {"full_name": "o/r"}},
+          "title": "t", "body": "b", "state": "open", "draft": False, "user": {"login": "someone"}}
+
+    def api(method, path, token, data=None, accept=None):
+        if method != "GET":
+            calls.append((method, path, data))
+        if accept:
+            return "diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -0,0 +1 @@\n+x = 1\n"
+        if method == "GET" and path == "/repos/o/r/pulls/7":
+            return pr
+        if method == "POST" and path.endswith("/issues/7/comments"):
+            return {"id": 99}
+        if "/contents/" in path:
+            raise RuntimeError("404")
+        return [] if method == "GET" else {}
+
+    def hop(*a, **k):
+        if fail:
+            raise RuntimeError("LLM empty content")
+        return '{"summary": "s", "aim": "a", "findings": []}'
+
+    hare_r1.ACK.clear()
+    monkeypatch.setenv("GITHUB_EVENT_NAME", event)
+    monkeypatch.setenv("GITHUB_EVENT_PATH", str(payload))
+    monkeypatch.setenv("HARE_ASK", ask)
+    monkeypatch.setattr(hare_r1, "QUIET_S", 0)
+    monkeypatch.setattr(hare_r1, "github_api", api)
+    monkeypatch.setattr(hare_r1, "github_list", lambda *a, **k: [])
+    monkeypatch.setattr(hare_r1, "already_reviewed", lambda *a, **k: False)
+    monkeypatch.setattr(hare_r1, "chat_complete", hop)
+    monkeypatch.setattr(hare_r1, "read_checks", lambda *a: ([], "ok", []))
+    monkeypatch.setattr(hare_r1, "head_now", lambda *a, **k: "abc")
+    monkeypatch.setattr(hare_r1, "deliver_review", lambda o, r, n, t, sha, comment, rc: posted.append(comment) or "review")
+    hare_r1._hare_once("o", "r", 7, "t", "abc", "", "k", "", "", "", [], [], [], ["m1"], [])
+    return calls, posted
+
+
+def test_a_command_gets_a_rabbit_or_a_tortoise_and_the_note_quotes_it(monkeypatch, tmp_path) -> None:
+    """Owner's call (2026-10-04): Hare answers a command at once with its own
+    sign, 🐇 for a review and 🐢 for a thinking review, quotes the request in
+    the note, and removes the sign when the note lands."""
+    calls, posted = _command_world(monkeypatch, tmp_path, "/hare think check what @someone changed")
+    assert calls[0][0] == "POST" and "🐢 On it, thinking." in calls[0][2]["body"] and hare_r1.ACK_MARK in calls[0][2]["body"]
+    note = posted[0]
+    assert "> Asked by @capad-xyz ([comment](https://github.com/o/r/pull/7#issuecomment-1)): check what @\u200bsomeone changed" in note
+    assert note.index("> Asked by") < note.index("## Summary")
+    assert ("DELETE", "/repos/o/r/issues/comments/99", None) in calls and not hare_r1.ACK
+    calls, posted = _command_world(monkeypatch, tmp_path, "/hare")
+    assert "🐇 On it." in calls[0][2]["body"] and "): review again" in posted[0]
+
+
+def test_a_command_that_gets_no_answer_turns_its_sign_into_the_reason(monkeypatch, tmp_path) -> None:
+    calls, posted = _command_world(monkeypatch, tmp_path, "/hare", fail=True)
+    assert not posted
+    assert [c[0] for c in calls] == ["POST", "PATCH"]  # one comment, edited in place, never a second one
+    assert calls[1][1] == "/repos/o/r/issues/comments/99" and hare_r1.NEEDED in calls[1][2]["body"]
+
+
+def test_a_push_gets_no_sign_and_no_quote(monkeypatch, tmp_path) -> None:
+    calls, posted = _command_world(monkeypatch, tmp_path, "", event="pull_request")
+    assert not any(c[0] == "POST" and "On it" in str(c[2]) for c in calls)
+    assert "Asked by" not in posted[0]
+
+
+def test_a_run_that_stops_without_a_note_says_so(monkeypatch) -> None:
+    edits = []
+    monkeypatch.setattr(hare_r1, "github_api", lambda m, p, t, d=None, accept=None: edits.append((m, p, d)) or {})
+    hare_r1.ACK.update({"id": 5, "where": "/repos/o/r/issues/comments", "token": "t"})
+    hare_r1.ack_left()
+    assert edits[0][0] == "PATCH" and "No note this time" in edits[0][2]["body"] and not hare_r1.ACK
