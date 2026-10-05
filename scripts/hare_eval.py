@@ -25,7 +25,9 @@ import json
 import os
 import re
 import statistics
+import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -33,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import hare_graph  # noqa: E402
 import hare_r1  # noqa: E402
 
 PROVIDERS = ("openrouter", "nous", "groq", "gemini", "zen")
@@ -70,7 +73,22 @@ def _file(owner: str, repo: str, path: str, ref: str, token: str) -> str:
         return ""
 
 
-def build_case(owner: str, repo: str, case: dict[str, Any], token: str) -> dict[str, Any]:
+def case_root(base: str) -> str | None:
+    """A read-only checkout of the case's base commit for the graph, the way a
+    real run has the PR's base checked out. A git worktree shares objects with
+    the eval's own clone (the workflow fetches full history). None if it fails."""
+    path = Path(tempfile.gettempdir()) / f"hare-eval-{base[:12]}"
+    if path.exists():
+        return str(path)
+    try:
+        subprocess.run(["git", "worktree", "add", "--detach", str(path), base], check=True, capture_output=True, timeout=120)
+        return str(path)
+    except Exception as e:
+        print(f"hare eval: no checkout of {base[:12]}, so no graph for that case: {str(e)[:100]}")
+        return None
+
+
+def build_case(owner: str, repo: str, case: dict[str, Any], token: str, with_graph: bool = False) -> dict[str, Any]:
     """The messages a real run would have sent for this PR at this commit."""
     pr = hare_r1.github_api("GET", f"/repos/{owner}/{repo}/pulls/{case['pr']}", token)
     cmp = hare_r1.github_api("GET", f"/repos/{owner}/{repo}/compare/main...{case['head']}", token)
@@ -85,10 +103,22 @@ def build_case(owner: str, repo: str, case: dict[str, Any], token: str) -> dict[
     user = hare_r1.build_user(
         agents, str(pr.get("title") or ""), str(pr.get("body") or ""), diff, CHECKS_TXT, "", [], "", "", hare_md
     )
+    root = case_root(base) if with_graph else None
     return {
         "messages": [{"role": "system", "content": hare_r1.SYSTEM}, {"role": "user", "content": user}],
         "diff_chars": len(diff),
+        "graph": hare_graph.uses(root, diff) if root else None,
     }
+
+
+def messages_for(built: dict[str, Any], graph: str, provider: str) -> list[dict[str, Any]]:
+    """What one hop is sent: the case's messages, plus the graph filled to that
+    provider's budget when the graph is on, exactly as hare_r1 does."""
+    msgs: list[dict[str, Any]] = built["messages"]
+    if graph != "on" or not built.get("graph"):
+        return msgs
+    more = hare_graph.section(built["graph"], hare_graph.budget_for(provider))
+    return msgs if not more else [msgs[0], {"role": "user", "content": f"{msgs[1]['content']}\n\n{more}"}]
 
 
 def _norm(path: Any) -> str:
@@ -179,9 +209,11 @@ def run(
     repeat: int = 1,
     deadline_s: float = 0,
     clock: Callable[[], float] = time.time,
+    graphs: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """deadline_s > 0 stops starting new calls after that many seconds, so the
     report is still written before the job's own timeout kills everything."""
+    graphs = graphs or ["off"]
     rows: list[dict[str, Any]] = []
     started = clock()
     spent: set[str] = set()
@@ -191,11 +223,11 @@ def run(
                          "error": f"stopped at the {round(deadline_s / 60)}-minute deadline; this case and the ones after it were not run"})
             break
         try:
-            built = build_case(owner, repo, case, token)
+            built = build_case(owner, repo, case, token, with_graph="on" in graphs)
         except Exception as e:  # a case that cannot be built is reported, not fatal
             rows.append({"case": case["id"], "pr": case["pr"], "provider": "-", "model": "-", "mode": "-", "error": f"case: {str(e)[:120]}"})
             continue
-        for mode in modes:
+        for mode, graph in [(m, g) for m in modes for g in graphs]:
             chain = hare_r1.build_provider_chain(
                 {p: keys.get(p, "") if p in providers else "" for p in PROVIDERS},
                 {p: [first_model(p)] if p in providers else [] for p in PROVIDERS},
@@ -208,7 +240,9 @@ def run(
                     try:
                         if name in spent:
                             raise QuotaGone("skipped: this provider's daily quota ran out earlier in the run")
-                        raw = _ask(call, pause, base, key, model, built["messages"], opts)
+                        if graph == "on" and built.get("graph") is None:
+                            raise RuntimeError("no checkout of the base, so no graph to send")
+                        raw = _ask(call, pause, base, key, model, messages_for(built, graph, name), opts)
                         parsed = hare_r1.extract_json(raw)
                         if parsed is None:
                             err = "no JSON in the answer"
@@ -226,6 +260,7 @@ def run(
                             "provider": name,
                             "model": model,
                             "mode": mode,
+                            "graph": graph,
                             "seconds": round(time.time() - t0, 1),
                             "error": err,
                             "diff_chars": built["diff_chars"],
@@ -241,13 +276,13 @@ def run(
 
 
 def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    groups: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
     for r in rows:
         if r.get("provider") in (None, "-"):
             continue
-        groups.setdefault((r["provider"], r["model"], r["mode"]), []).append(r)
+        groups.setdefault((r["provider"], r["model"], r["mode"], r.get("graph", "off")), []).append(r)
     out = []
-    for (provider, model, mode), rs in sorted(groups.items()):
+    for (provider, model, mode, graph), rs in sorted(groups.items()):
         ok = [r for r in rs if not r.get("error")]
         secs = [r["seconds"] for r in ok]
         reasoning = [r["reasoning_tokens"] for r in ok]
@@ -256,6 +291,7 @@ def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "provider": provider,
                 "model": model,
                 "mode": mode,
+                "graph": graph,
                 "runs": len(rs),
                 "answered": len(ok),
                 # Catches count over answered runs only: a run a provider refused
@@ -285,23 +321,23 @@ def render(rows: list[dict[str, Any]], cases: list[dict[str, Any]], built: str) 
         "Catches count over answered runs only; a run with no answer (rate limit, quota, too large, timeout) is listed "
         "under Errors, not counted as a miss.",
         "",
-        "| Provider | Model | Thinking | Answered | Caught as real | Caught at all | Reals on clean PRs (check by hand) | Median s | Median reasoning tokens |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| Provider | Model | Thinking | Graph | Answered | Caught as real | Caught at all | Reals on clean PRs (check by hand) | Median s | Median reasoning tokens |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for s in summarize(rows):
         lines.append(
-            f"| {s['provider']} | `{s['model']}` | {s['mode']} | {s['answered']} of {s['runs']} | {s['caught_real']} of {s['expected']} "
+            f"| {s['provider']} | `{s['model']}` | {s['mode']} | {s['graph']} | {s['answered']} of {s['runs']} | {s['caught_real']} of {s['expected']} "
             f"| {s['caught_any']} of {s['expected']} | {s['false_reals']} | {cell(s['median_s'])} | {cell(s['median_reasoning'])} |"
         )
-    combos = sorted({(r["provider"], r["mode"]) for r in rows if r.get("provider") not in (None, "-")})
+    combos = sorted({(r["provider"], r["mode"], r.get("graph", "off")) for r in rows if r.get("provider") not in (None, "-")})
     lines += ["", "## Per expected issue", "", "real = caught as a real finding, skip = caught only as a skip, miss = not caught, err = no answer.", ""]
-    lines.append("| Case | Issue | " + " | ".join(f"{p} {m}" for p, m in combos) + " |")
+    lines.append("| Case | Issue | " + " | ".join(f"{p} think {m} graph {g}" for p, m, g in combos) + " |")
     lines.append("| --- | --- | " + " | ".join("---" for _ in combos) + " |")
     for case in cases:
         for i, e in enumerate(case.get("expect") or []):
             cells = []
-            for p, m in combos:
-                r = next((x for x in rows if x["case"] == case["id"] and x.get("provider") == p and x.get("mode") == m), None)
+            for p, m, g in combos:
+                r = next((x for x in rows if x["case"] == case["id"] and x.get("provider") == p and x.get("mode") == m and x.get("graph", "off") == g), None)
                 if r is None:
                     cells.append(" ")
                 elif r.get("error"):
@@ -324,6 +360,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--modes", default="off,on")
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--out", default="docs")
+    ap.add_argument("--graphs", default="on", help="the codebase graph: off, on, or off,on to compare")
     ap.add_argument("--deadline-min", type=float, default=240, help="stop starting calls after this many minutes (the job allows 300)")
     args = ap.parse_args(argv)
     token = os.environ.get("GITHUB_TOKEN", "")
@@ -338,7 +375,8 @@ def main(argv: list[str] | None = None) -> int:
     missing = [p for p in providers if not keys.get(p)]
     if missing:
         print(f"hare eval: no key for {', '.join(missing)}; those providers are skipped")
-    rows = run(cases, providers, modes, keys, token, owner, repo, repeat=args.repeat, deadline_s=args.deadline_min * 60)
+    rows = run(cases, providers, modes, keys, token, owner, repo, repeat=args.repeat, deadline_s=args.deadline_min * 60,
+               graphs=[g.strip() for g in args.graphs.split(",") if g.strip() in ("off", "on")] or ["on"])
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     out = Path(args.out)
     (out / f"hare-eval-{day}.json").write_text(json.dumps({"built": day, "rows": rows}, indent=1), encoding="utf-8")
