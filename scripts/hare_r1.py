@@ -149,9 +149,11 @@ HARE_GEMINI_DEFAULT = "gemini-3.1-flash-lite,gemini-3.5-flash"
 # and goes last on Nous. Space Bunny's free period ended 2026-10-05, so it is
 # off OpenRouter and Nous; Zen's space-bunny-free is a separate offer and stays
 # until Zen retires it (a gone model fails in under a second and falls through).
+# Laguna first on Nous (2026-10-06): LongCat wrote the three notes on #299 and
+# contradicted itself, shorten then lengthen. LongCat stays in the flow.
 HARE_NOUS_DEFAULT = (
-    "meituan/longcat-2.5-preview:free,"
-    "poolside/laguna-s-2.1:free"
+    "poolside/laguna-s-2.1:free,"
+    "meituan/longcat-2.5-preview:free"
 )
 # Inkling (inkling-small:free, inkling:free) left 2026-10-05: OpenRouter's free
 # Inkling endpoint now serves only agentic harnesses, so a direct API call gets
