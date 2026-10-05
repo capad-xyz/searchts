@@ -189,7 +189,10 @@ def _run():
                                  help="Remove all searchts config, tokens, and skill files")
     p_uninstall.add_argument("--dry-run", action="store_true",
                              help="Show what would be removed without making any changes")
-    p_uninstall.add_argument("--keep-config", action="store_true",
+    p_uninstall.add_argument("--browser", action="store_true",
+                             help="Remove only what install --browser added. Chromium stays unless --chromium")
+    p_uninstall.add_argument("--chromium", action="store_true",
+                             help="With --browser, also remove the shared Chromium cache")
                              help="Remove skill files only, keep ~/.searchts/ config and tokens")
 
     # ── mcp ──
@@ -1487,6 +1490,10 @@ def _cmd_uninstall(args):
     import subprocess
 
     dry_run = args.dry_run
+    if getattr(args, "browser", False):
+        from searchts.browser_install import uninstall_browser
+
+        sys.exit(uninstall_browser(dry_run=dry_run, chromium=getattr(args, "chromium", False)))
     keep_config = args.keep_config
 
     print()
