@@ -1531,3 +1531,20 @@ def test_hares_own_comment_cannot_cancel_the_command_that_posted_it() -> None:
     wf = yaml.safe_load((Path(__file__).resolve().parents[1] / ".github" / "workflows" / "hare.yml").read_text())
     group = wf["concurrency"]["group"]
     assert "github.event.comment.user.login" in group and "github.event_name" in group
+
+
+def test_re_running_hares_check_reviews_again(monkeypatch) -> None:
+    """GitHub's Re-run button on Hare's check means review again, even on a
+    commit Hare already reviewed; a first run still skips a reviewed commit."""
+    order: list[str] = []
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
+    monkeypatch.setenv("GITHUB_TRIGGERING_ACTOR", "capad-xyz")
+    _hare_world(monkeypatch, order, "pull_request", reviewed=True)
+    assert order == ["hop", "deliver"]
+    assert hare_r1.rerun_line() == "> Asked by @capad-xyz (re-ran Hare's check): review again"
+    order = []
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    _hare_world(monkeypatch, order, "pull_request", reviewed=True)
+    assert order == []
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "x")
+    assert not hare_r1.is_rerun()

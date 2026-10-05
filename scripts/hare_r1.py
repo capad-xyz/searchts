@@ -784,7 +784,7 @@ def how_to_answer() -> str:
         "- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.",
         "- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.",
         "- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.",
-        "- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. A push reviews again too, and the Since section says what became of each finding.",
+        "- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.",
         f"- **What Hare remembers:** every finding goes into {link('the ledger', 'docs/hare-ledger.md')}; a score of 2 or less with a reason becomes a rule in {link('HARE.md', 'HARE.md')}. Both are rebuilt every Sunday.",
         "",
         "</details>",
@@ -1552,6 +1552,20 @@ def ack_left() -> None:
     ACK.clear()
 
 
+def is_rerun() -> bool:
+    """True when someone pressed Re-run on Hare's check (attempt 2 or later)."""
+    try:
+        return int(_env("GITHUB_RUN_ATTEMPT") or "1") > 1
+    except ValueError:
+        return False
+
+
+def rerun_line() -> str:
+    """The note's first line for a re-run: who pressed it."""
+    who = _env("GITHUB_TRIGGERING_ACTOR") or _env("GITHUB_ACTOR")
+    return f"> Asked by {'@' + who if who else 'a maintainer'} (re-ran Hare's check): review again"
+
+
 def asked_line(info: dict[str, Any], ask: str, deep: bool) -> str:
     """The request, quoted at the top of the note, so anyone reading the PR
     knows why this pass exists. Mentions inside it are defused so quoting
@@ -1973,6 +1987,13 @@ def _hare_once(
         print("hare: score recorded for the ledger; not a review")  # R2b
         return 0
     asked = ""
+    # GitHub's Re-run on Hare's check is someone asking for a pass now, the
+    # closest thing to Copilot's re-request that GitHub gives an app. A re-run
+    # of an automatic run reviews again even on a reviewed commit, and the
+    # note says who asked.
+    rerun = event != "issue_comment" and is_rerun()
+    if rerun:
+        asked = rerun_line()
     if event == "issue_comment":
         ack_command(owner, repo, n, token, deep)
         asked = asked_line(command_info(), ask, deep)
@@ -2013,7 +2034,7 @@ def _hare_once(
     # automatic runs skip a reviewed commit. Before, a command with no words
     # after it was dropped here without a word (the owner's `/hare think` on
     # #275).
-    if event != "issue_comment" and already_reviewed(owner, repo, n, token, sha):
+    if event != "issue_comment" and not rerun and already_reviewed(owner, repo, n, token, sha):
         print(f"hare skip: review already on {sha[:12]}")
         return 0
     title = pr_data.get("title") or ""
