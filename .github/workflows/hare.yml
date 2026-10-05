@@ -23,7 +23,10 @@ on:
 concurrency:
   # Include event_name. CodeRabbit's skip-comment is issue_comment; without this
   # it queues a skipped run in the same group and cancels the real pull_request review.
-  group: hare-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number }}
+  # Include the commenter too: Hare's own "🐇 On it." is a comment, and in the
+  # command's group its skipped run would cancel the command that posted it.
+  # A second command from the same person still replaces the first.
+  group: hare-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr_number }}-${{ github.event.comment.user.login || 'run' }}
   cancel-in-progress: true
 
 permissions:

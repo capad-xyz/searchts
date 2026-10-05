@@ -19,6 +19,7 @@ from typing import Any
 
 TOKEN = "<!-- searchts-r1-review -->"
 NEEDED = "<!-- searchts-r1-needed -->"
+ACK_MARK = "<!-- searchts-r1-ack -->"
 BUBBLE_HEAD = TOKEN
 # v2: summary, finding blocks, line bubbles, Models table. Same shape as Hare Bot on #221.
 REVIEW_SHAPE = "v2"
@@ -783,7 +784,7 @@ def how_to_answer() -> str:
         "- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.",
         "- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.",
         "- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.",
-        "- **Ask again:** `/hare` reviews again, `/hare deep` with thinking on. A push reviews again too, and the Since section says what became of each finding.",
+        "- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. A push reviews again too, and the Since section says what became of each finding.",
         f"- **What Hare remembers:** every finding goes into {link('the ledger', 'docs/hare-ledger.md')}; a score of 2 or less with a reason becomes a rule in {link('HARE.md', 'HARE.md')}. Both are rebuilt every Sunday.",
         "",
         "</details>",
@@ -805,6 +806,7 @@ def render_comment(
     cost: str = "",
     case: str = "",
     log_tails: dict[str, str] | None = None,
+    asked: str = "",
 ) -> str:
     """v2 review body, the shape of Hare Bot's finals on #217, #220 and #221.
 
@@ -841,7 +843,7 @@ def render_comment(
     return _no_em(
         f"""{TOKEN}
 
-## Summary
+{asked + chr(10) + chr(10) if asked else ""}## Summary
 
 {said}
 
@@ -1495,7 +1497,80 @@ def needed_body(why: str) -> str:
     )
 
 
+# A command's acknowledgement: Hare's own sign it heard `/hare`, 🐇 for a review
+# and 🐢 for a thinking review (owner's call, 2026-10-04: not CodeRabbit's 👀).
+# Posted at once, deleted when the note lands; if no note lands, post_needed
+# turns it into the reason, so a command is never left unanswered.
+ACK: dict[str, Any] = {}
+
+
+def command_info() -> dict[str, Any]:
+    """Who asked and where, from the event payload Actions gives every run."""
+    path = _env("GITHUB_EVENT_PATH")
+    try:
+        event = json.loads(Path(path).read_text(encoding="utf-8")) if path else {}
+    except (OSError, ValueError):
+        return {}
+    c = event.get("comment") if isinstance(event, dict) else None
+    if not isinstance(c, dict):
+        return {}
+    return {"login": str((c.get("user") or {}).get("login") or ""), "url": str(c.get("html_url") or "")}
+
+
+def ack_command(owner: str, repo: str, n: int, token: str, deep: bool) -> None:
+    sign = "🐢 On it, thinking." if deep else "🐇 On it."
+    try:
+        got = github_api("POST", f"/repos/{owner}/{repo}/issues/{n}/comments", token, {"body": f"{ACK_MARK}\n{sign}"})
+        ACK.update({"id": int((got or {}).get("id") or 0), "where": f"/repos/{owner}/{repo}/issues/comments", "token": token})
+    except Exception as e:
+        print(f"hare: could not acknowledge the command: {str(e)[:120]}")
+
+
+def ack_done() -> None:
+    """The note landed: the acknowledgement has done its job."""
+    if ACK.get("id"):
+        try:
+            github_api("DELETE", f"{ACK['where']}/{ACK['id']}", ACK["token"])
+        except Exception as e:
+            print(f"hare: could not remove the acknowledgement: {str(e)[:120]}")
+    ACK.clear()
+
+
+def ack_left() -> None:
+    """The run ended with neither a note nor a reason (it was superseded, or
+    stopped): say so instead of leaving "On it." behind."""
+    if ACK.get("id"):
+        try:
+            github_api(
+                "PATCH",
+                f"{ACK['where']}/{ACK['id']}",
+                ACK["token"],
+                {"body": f"{ACK_MARK}\nNo note this time: the run stopped before posting, usually because a newer commit arrived. Ask again with `/hare`."},
+            )
+        except Exception as e:
+            print(f"hare: could not update the acknowledgement: {str(e)[:120]}")
+    ACK.clear()
+
+
+def asked_line(info: dict[str, Any], ask: str, deep: bool) -> str:
+    """The request, quoted at the top of the note, so anyone reading the PR
+    knows why this pass exists. Mentions inside it are defused so quoting
+    never pings anyone."""
+    what = ask or ("review again, thinking on" if deep else "review again")
+    what = what.replace("@", "@\u200b")
+    link = f" ([comment]({info['url']}))" if info.get("url") else ""
+    who = f"@{info['login']}" if info.get("login") else "a maintainer"
+    return f"> Asked by {who}{link}: {what}"
+
+
 def post_needed(owner: str, repo: str, n: int, token: str, why: str) -> None:
+    if ACK.get("id"):  # answer the command in place, not with a second comment
+        try:
+            github_api("PATCH", f"{ACK['where']}/{ACK['id']}", ACK["token"], {"body": needed_body(why)})
+            ACK.clear()
+            return
+        except Exception:
+            ACK.clear()
     github_api(
         "POST",
         f"/repos/{owner}/{repo}/issues/{n}/comments",
@@ -1820,6 +1895,8 @@ def run() -> int:
         except Exception as post_err:
             print(f"hare crash and nag failed: {e}; {post_err}")
         return 0
+    finally:
+        ack_left()
 
 
 def build_provider_chain(
@@ -1895,6 +1972,10 @@ def _hare_once(
     if event == "issue_comment" and is_score(_env("HARE_ASK")):
         print("hare: score recorded for the ledger; not a review")  # R2b
         return 0
+    asked = ""
+    if event == "issue_comment":
+        ack_command(owner, repo, n, token, deep)
+        asked = asked_line(command_info(), ask, deep)
     pull = f"/repos/{owner}/{repo}/pulls/{n}"
     pr_data = github_api("GET", pull, token)
     sha = sha or pr_data.get("head", {}).get("sha") or ""
@@ -2070,7 +2151,7 @@ def _hare_once(
     intent = intent_for(check_state, findings)
     comment = render_comment(
         used, effort, intent, findings, check_state, check_notes, summary, sha, green_checks(runs), aim, since_md, cost, case,
-        tails,
+        tails, asked,
     )
     if TOKEN not in comment:
         post_needed(owner, repo, n, token, "rendered comment missing token")
@@ -2085,6 +2166,7 @@ def _hare_once(
         print(f"hare skip: superseded, head moved {sha[:12]} -> {now[:12]}")
         return 0
     how = deliver_review(owner, repo, n, token, sha, comment, review_comments)
+    ack_done()
     if how != "needed":
         resolve_stale_threads(owner, repo, n, token, plus)
     # The dead hops used to vanish on success: errs only reached the nag when
