@@ -1361,3 +1361,35 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         return _finalize(best, scrub, tick=_tick)
 
     raise UnlockerError(url, attempts)
+
+
+_MAX_PAGES = 5
+
+
+def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
+    """Read this page and follow its next page, curl only, up to ``pages``.
+
+    Stops on a loop, a missing next link, or the cap. The first page uses the
+    caller's backends. Later pages are curl only: a browser on every next page
+    is not this change.
+    """
+    pages = max(1, min(int(pages or 1), _MAX_PAGES))
+    seen = set()
+    out: List[FetchResult] = []
+    current = url
+    for i in range(pages):
+        key = current.split("#", 1)[0].rstrip("/")
+        if key in seen:
+            break
+        seen.add(key)
+        call = dict(kwargs)
+        if i:
+            call["backends"] = ["curl_cffi"]
+            call["allow_human"] = False
+        result = fetch(current, **call)
+        out.append(result)
+        nxt = result.next_url
+        if not nxt:
+            break
+        current = nxt
+    return out
