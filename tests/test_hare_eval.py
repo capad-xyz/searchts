@@ -69,3 +69,54 @@ def test_the_answer_key_parses_and_every_case_names_files_and_words() -> None:
     for c in cases:
         for e in c["expect"]:
             assert e["path"] and e["words"] and e["what"], c["id"]
+
+
+def _gh(method, path, token, body=None, accept="application/vnd.github+json"):
+    if "compare/main..." in path:
+        return {"merge_base_commit": {"sha": "base1"}}
+    if "compare/base1..." in path:
+        return "diff --git a/scripts/a.py b/scripts/a.py\n+x = 1\n"
+    if "/contents/" in path:
+        raise RuntimeError("404")
+    return {"title": "t", "body": "b"}
+
+
+def test_a_refused_run_is_no_answer_not_a_miss() -> None:
+    """A rate-limited provider used to look blind: its errored runs added to the
+    expected count with nothing caught."""
+    ok = {"case": "c1", "provider": "groq", "model": "m", "mode": "off", "seconds": 1, "reasoning_tokens": 0, "caught": ["real", ""], "false_reals": 0, "error": ""}
+    refused = dict(ok, case="c3", caught=["", ""], error="HTTP 413 too large")
+    s = hare_eval.summarize([ok, refused])[0]
+    assert (s["answered"], s["runs"], s["caught_real"], s["expected"]) == (1, 2, 1, 2)
+
+
+def test_a_rate_limit_waits_a_daily_quota_stops_and_a_deadline_still_reports(monkeypatch) -> None:
+    monkeypatch.setattr(hare_r1, "github_api", _gh)
+    good = json.dumps({"summary": "s", "findings": []})
+    waits: list[float] = []
+    tries = {"n": 0}
+
+    def busy_twice(base, key, model, messages, opts, timeout=0):
+        tries["n"] += 1
+        if tries["n"] <= 2:
+            raise RuntimeError("HTTP 429: rate limit, tokens per minute")
+        return good
+
+    rows = hare_eval.run([CASE], ["groq"], ["off"], {"groq": "k"}, "t", "o", "r", call=busy_twice, pause=waits.append)
+    assert not rows[0]["error"] and tries["n"] == 3 and waits[:2] == [20, 60]
+
+    asked: list[str] = []
+
+    def out_for_today(base, key, model, messages, opts, timeout=0):
+        asked.append(model)
+        raise RuntimeError("HTTP 429: Rate limit exceeded: free-models-per-day")
+
+    rows = hare_eval.run([CASE, CLEAN], ["openrouter"], ["off", "on"], {"openrouter": "k"}, "t", "o", "r", call=out_for_today, pause=lambda s: None)
+    assert len(asked) == 1 and len(rows) == 4  # asked once; the other three runs are skipped, not retried
+    assert all(r["error"].startswith("daily quota") for r in rows)
+
+    ticks = iter([0, 0, 999999, 999999])
+    rows = hare_eval.run([CASE, CLEAN], ["groq"], ["off"], {"groq": "k"}, "t", "o", "r", call=lambda *a, **k: good,
+                         pause=lambda s: None, deadline_s=60, clock=lambda: next(ticks))
+    assert rows[0]["case"] == "c1" and rows[-1]["case"] == "deadline" and "not run" in rows[-1]["error"]
+    assert "stopped at the 1-minute deadline" in hare_eval.render(rows, [CASE, CLEAN], "2026-10-05")
