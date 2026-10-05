@@ -1201,7 +1201,8 @@ def test_every_note_ends_with_how_to_answer_hare(monkeypatch) -> None:
 
 def test_the_model_knows_how_its_note_is_used() -> None:
     assert "tracked by path:line in a ledger" in hare_r1.SYSTEM
-    assert "/hare score and /hare fate" in hare_r1.SYSTEM and "how Hare runs on this repo" in hare_r1.SYSTEM
+    # HARE.md holds the rules; how Hare works moved to docs/hare.md (not sent).
+    assert "/hare score and /hare fate" in hare_r1.SYSTEM and "the owner's rules for Hare on this repo" in hare_r1.SYSTEM
 
 
 def test_a_fix_that_changes_a_signature_gets_no_button() -> None:
@@ -1694,3 +1695,13 @@ def test_the_graph_reaches_the_model(monkeypatch, tmp_path) -> None:
     seen = _salvage_world(monkeypatch, ["m1"], hop)
     assert "## Elsewhere in the repo (not in this diff)" in sent[0] and "cancel-in-progress: true" in sent[0]
     assert "- graph: 1 file from the repo," in str(seen["cost"])  # the note says what the model saw
+
+
+def test_the_learned_rules_survive_a_long_hare_md() -> None:
+    """The learned-rules block is at the end of HARE.md; a plain cut at the cap
+    would drop it first. It is kept whole and the cut comes from above."""
+    block = f"{hare_r1.LEARNED[0]}\n- missed a self-cancelling comment\n{hare_r1.LEARNED[1]}"
+    text = "# HARE.md\n" + "owner rule line\n" * 900 + block + "\ntail\n"
+    out = hare_r1.hare_md_for_prompt(text, cap=2_000)
+    assert len(out) <= 2_000 and block in out and out.startswith("# HARE.md") and "...[cut]..." in out
+    assert hare_r1.hare_md_for_prompt("short", cap=2_000) == "short"

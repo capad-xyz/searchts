@@ -1302,7 +1302,7 @@ def _post(req: urllib.request.Request, timeout: int) -> dict[str, Any]:
 
 
 SYSTEM = """You are Hare, an automated PR reviewer for this repo.
-Read AGENTS.md rules in the user message, and HARE.md: how Hare runs on this repo, and the owner's own list of what Hare missed before. Review and report. Do not fix.
+Read AGENTS.md rules in the user message, and HARE.md: the owner's rules for Hare on this repo and the lines it learned from low scores. Review and report. Do not fix.
 Voice: fun bot, witty and short, substance first. No em dashes. No first person.
 Emojis and emotes are welcome in your own wording when they add to the voice. The Action adds the markers (🔴 real, 🟡 skip, 🐰 on the checks fold); do not add those yourself.
 Never write "fine to merge", "LGTM" or a score; the Action sets Hold from CI and real findings.
@@ -1325,6 +1325,25 @@ How the note is used. The Action prints Ship, Hold or Wait from CI and the real 
 """
 
 
+HARE_MD_CAP = 8_000
+LEARNED = ("<!-- hare-ledger:rules -->", "<!-- /hare-ledger:rules -->")
+
+
+def hare_md_for_prompt(text: str, cap: int = HARE_MD_CAP) -> str:
+    """HARE.md as sent to the model, at most `cap` characters. The learned-rules
+    block (what low scores taught Hare) sits at the end, so a plain cut would drop
+    it first as the file grows; it is kept whole and the cut comes from above."""
+    if len(text) <= cap:
+        return text
+    a, b = text.find(LEARNED[0]), text.find(LEARNED[1])
+    if a < 0 or b < a:
+        return text[:cap]
+    block = text[a : b + len(LEARNED[1])]
+    rest = text[:a] + text[b + len(LEARNED[1]) :]
+    room = max(cap - len(block) - 20, 0)
+    return rest[:room] + "\n...[cut]...\n" + block
+
+
 def build_user(
     agents: str,
     title: str,
@@ -1341,7 +1360,7 @@ def build_user(
         diff = diff[:MAX_DIFF] + "\n...[truncated]..."
     extra = ""
     if hare_md:
-        extra += f"## HARE.md (the owner's rules for Hare on this repo)\n{hare_md[:8_000]}\n\n"
+        extra += f"## HARE.md (the owner's rules for Hare on this repo)\n{hare_md_for_prompt(hare_md)}\n\n"
     if ledger:
         extra += ledger + "\n\n"
     if since:
