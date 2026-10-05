@@ -1520,3 +1520,14 @@ def test_a_run_that_stops_without_a_note_says_so(monkeypatch) -> None:
     hare_r1.ACK.update({"id": 5, "where": "/repos/o/r/issues/comments", "token": "t"})
     hare_r1.ack_left()
     assert edits[0][0] == "PATCH" and "No note this time" in edits[0][2]["body"] and not hare_r1.ACK
+
+
+def test_hares_own_comment_cannot_cancel_the_command_that_posted_it() -> None:
+    """The acknowledgement is an issue comment. With cancel-in-progress on and a
+    group of event and PR only, its skipped run would cancel the command's run
+    seconds after it said "On it." The commenter is part of the group."""
+    import yaml
+
+    wf = yaml.safe_load((Path(__file__).resolve().parents[1] / ".github" / "workflows" / "hare.yml").read_text())
+    group = wf["concurrency"]["group"]
+    assert "github.event.comment.user.login" in group and "github.event_name" in group
