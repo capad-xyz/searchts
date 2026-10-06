@@ -5,6 +5,8 @@ The important thing here is :class:`Tripwire`. Read its docstring before
 writing a "must not be called" stub.
 """
 
+import pytest
+
 
 class Tripwire(BaseException):
     """Raised by a stub that must never be called.
@@ -33,3 +35,11 @@ def tripwire(message):
     def _boom(*args, **kwargs):
         raise Tripwire(message)
     return _boom
+
+
+@pytest.fixture(autouse=True)
+def reset_jina_spent():
+    import searchts.unlocker as unlocker
+    unlocker._jina_spent = False
+    yield
+    unlocker._jina_spent = False
