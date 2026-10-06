@@ -146,7 +146,7 @@ HARE_GEMINI_DEFAULT = "gemini-3.1-flash-lite,gemini-3.5-flash"
 # times on OpenRouter and found nothing once; on Nous, 1 finding in 4. Groq
 # found something on all 10 of its notes, Gemini on 3 of 3, qwen on 5 of 12.
 # So laguna leaves OpenRouter (it only cost a 300 s wait before the next hop)
-# and goes last on Nous. Space Bunny's free period ended 2026-10-05, so it is
+# and went last on Nous until 2026-10-06, when Laguna moved ahead. Space Bunny's free period ended 2026-10-05, so it is
 # off OpenRouter and Nous; Zen's space-bunny-free is a separate offer and stays
 # until Zen retires it (a gone model fails in under a second and falls through).
 # Laguna first on Nous (2026-10-06): LongCat wrote the three notes on #299 and
