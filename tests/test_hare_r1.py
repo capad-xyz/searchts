@@ -91,6 +91,19 @@ def test_classify_empty_is_pending() -> None:
     assert notes
 
 
+def test_an_eval_report_does_not_wait_for_ci_that_cannot_start() -> None:
+    pr = {"user": {"login": "github-actions[bot]"}}
+    diff = "diff --git a/docs/hare-eval-2026-10-06.md b/docs/hare-eval-2026-10-06.md\n"
+    state, notes = hare_r1.classify_checks([])
+    got, why = hare_r1.checks_for_report(state, notes, pr, diff)
+    assert got == "ok" and "cannot start" in why[0]
+    human, _ = hare_r1.checks_for_report(state, notes, {"user": {"login": "capad-xyz"}}, diff)
+    assert human == "pending"
+    code = "diff --git a/searchts/more.py b/searchts/more.py\n"
+    still, _ = hare_r1.checks_for_report(state, notes, pr, code)
+    assert still == "pending"
+
+
 def test_classify_does_not_eat_share_named_jobs() -> None:
     runs = [
         {"name": "ci / share-extractors", "status": "completed", "conclusion": "failure"},
