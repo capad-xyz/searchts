@@ -49,6 +49,21 @@ def test_hacker_news_table_rows_keep_title_link_and_points():
     assert "links" in note.note
 
 
+def test_a_card_list_that_only_lost_its_links_still_has_to_be_the_extract():
+    """Titles in the text are not proof. The carve-out is for table rows only."""
+    cards = "".join(
+        f'<article class="card"><h2><a href="https://example.com/{i}">Story {i} about tools and more words</a></h2>'
+        f"<p>{'teaser ' * 20}</p></article>"
+        for i in range(8)
+    )
+    html = f"<html><body><main>{cards}</main></body></html>"
+    essay = "This paragraph is a different article and it never mentions those cards. " * 12
+    titles = "\n\n".join(f"Story {i} about tools and more words" for i in range(8))
+    doc = more._parse(html)
+    assert more._best_list(doc) is not None
+    assert more.list_index(html, "https://example.com/blog", essay + "\n\n" + titles) is None
+
+
 def test_bing_results_get_titles_and_real_links_back():
     rebuilt = _index("bing_results.html", "https://www.bing.com/search?q=searchts")
     assert rebuilt is not None

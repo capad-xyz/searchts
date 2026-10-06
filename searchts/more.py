@@ -875,10 +875,13 @@ def list_index(html: str, url: str, text: str) -> Optional[Tuple[str, More]]:
                 lost.append("dates")
         if not lost:
             return None
-        # Titles present and links gone: the extract is this list, just without the links.
-        # The coverage window below spans items and misses a table whose rows carry a rank.
         titles_present = sum(1 for p in parts if p["title"][:60].lower() in plain) > 0.5 * n
-        if not (lost == ["links"] and titles_present):
+        # A Hacker News table loses the coverage window: the rank on the row
+        # makes the window miss the row. Any other list still has to be most
+        # of the extract. Titles in the text and missing links are not enough,
+        # or an article that repeats a card list's titles gets rebuilt.
+        table_list = isinstance(items[0].tag, str) and items[0].tag.lower() == "tr"
+        if not (lost == ["links"] and titles_present and table_list):
             # The extract must be mostly this list; otherwise it is an article with a list under it.
             item_text = " ".join(_norm(_visible_text(it)) for it in items).lower()
             paras = [_norm(_strip_md_links(p)).lower() for p in re.split(r"\n\s*\n", text or "")]
