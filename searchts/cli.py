@@ -1611,7 +1611,7 @@ def _cmd_read(args):
         if getattr(args, "items", 0):
             pages = unlocker.read_items(
                 args.url, args.items, backends=backends, allow_human=args.human,
-                scrub=args.scrub, progress=progress,
+                scrub=args.scrub, progress=True,
             )
         elif getattr(args, "pages", 1) > 1:
             pages = unlocker.read_pages(
