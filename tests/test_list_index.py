@@ -24,6 +24,31 @@ def _index(name: str, url: str):
     return more.list_index(html, url, html_to_text(html, url=url))
 
 
+def test_hacker_news_table_rows_keep_title_link_and_points():
+    rows = "".join(
+        f'<tr class="athing" id="{i}"><td class="title"><span class="rank">{i}.</span></td>'
+        f'<td><span class="titleline"><a href="https://example{i}.com/post">Story {i} about tools</a>'
+        f'</span></td></tr><tr><td colspan="2"></td><td class="subtext"><span class="score">{i} points</span> '
+        f'by <a href="user?id=u{i}" class="hnuser">u{i}</a> | <a href="item?id={i}">{i} comments</a></td></tr>'
+        for i in range(1, 31)
+    )
+    html = (
+        '<html><head><title>Hacker News</title></head><body><table>'
+        f'{rows}<tr><td><a href="?p=2" class="morelink" rel="next">More</a></td></tr>'
+        '</table></body></html>'
+    )
+    # The extractor prints the title words and drops the links.
+    text = "\n".join(f"Story {i} about tools" for i in range(1, 31))
+    rebuilt = more.list_index(html, "https://news.ycombinator.com/", text)
+    assert rebuilt is not None
+    md, note = rebuilt
+    assert "[Story 1 about tools](https://example1.com/post)" in md
+    assert "1 points" in md
+    assert "u1" in md
+    assert note.kind == "index"
+    assert "links" in note.note
+
+
 def test_bing_results_get_titles_and_real_links_back():
     rebuilt = _index("bing_results.html", "https://www.bing.com/search?q=searchts")
     assert rebuilt is not None

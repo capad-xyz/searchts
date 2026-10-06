@@ -219,6 +219,10 @@ def test_the_ledger_is_hare_only(tmp_path) -> None:
     assert "hare_r1.py:527" not in json.dumps(e)
     assert "by_reviewer" not in hare_ledger.summarize([e])
     assert "Hare Bot" not in hare_ledger.render_md([e], hare_ledger.summarize([e]), "2026-10-04")
+    bot_comment = "<!-- harebot:review -->\n/hare score 1 this must not count\n/hare fate scripts/a.py:12 wrong no"
+    scored = hare_ledger.pr_rows({"number": 7, "state": "open"}, reviews, [{"body": bot_comment, "user": {"login": "capad-xyz"}, "created_at": "2026-10-04"}], [])
+    assert scored["scores"] == []
+    assert all(f["fate"] != "wrong" for f in scored["findings"])
 
 
 def test_compare_reviewers_reads_the_repo_files(tmp_path) -> None:

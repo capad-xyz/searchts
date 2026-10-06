@@ -63,9 +63,14 @@ def fate_from(comment: str) -> tuple[str, str, str]:
     return m.group(1), m.group(2).lower(), hare_r1._no_em(hare_r1._plain(m.group(3)))[:200]
 
 
+def is_harebot(body: str) -> bool:
+    """True for a Hare Bot note. It posts as the owner, so the login is not the check."""
+    return "harebot:" in (body or "")
+
+
 def is_hare(body: str) -> bool:
     """True for a note Hare posted (it carries the Hare token)."""
-    return hare_r1.TOKEN in (body or "")
+    return hare_r1.TOKEN in (body or "") and not is_harebot(body)
 
 
 def findings_of(body: str) -> list[dict[str, str]]:
@@ -143,6 +148,8 @@ def pr_rows(pr: dict[str, Any], reviews: list[dict[str, Any]], comments: list[di
         body = str(c.get("body") or "")
         if hare_r1.NEEDED in body:
             needed += 1
+        if is_harebot(body):
+            continue
         n, text = score_from(body)
         if n is not None:
             scores.append({"score": n, "text": text, "by": (c.get("user") or {}).get("login", ""), "at": c.get("created_at", "")})
