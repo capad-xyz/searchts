@@ -2210,14 +2210,18 @@ def build_provider_chain(
         options["nous"] = {"reasoning": {"effort": HARE_REASONING}}
         options["openrouter"] = {"reasoning": {"effort": HARE_REASONING, "exclude": True}}
     chain: list[tuple[str, str, str, str, dict[str, Any]]] = []
-    # Order is the owner's call (2026-10-04), not the ledger's: the ledger's
-    # notes mostly predate the fixes that landed that day, so it cannot rank
-    # hops yet. OpenRouter and Nous go first because their models take their
-    # time with the diff. Groq and Gemini answer in seconds and the owner has
-    # watched them miss what a slower reviewer caught on the same PR, so both
-    # are fallbacks: Groq after Nous (it 413s on a big prompt anyway), Gemini
-    # after Groq. The ledger's per-hop scores decide the order later.
-    for name in ("openrouter", "nous", "groq", "gemini", "zen"):
+    # Order is the owner's call, not the ledger's: the ledger's notes mostly
+    # predate the fixes that landed on 2026-10-04, so it cannot rank hops yet.
+    #
+    # Nous first (owner, 2026-10-06): a live probe of the swallowed-SSRF
+    # diff had laguna name it in 4 s on Nous and Nemotron Lightning take 9 s
+    # and open with "Here's a thinking process" instead of the JSON. Laguna
+    # answers in the shape the prompt wants, so it goes first.
+    # OpenRouter second for its wider model list. Groq and Gemini after Nous:
+    # both answer in seconds and the owner has watched them miss what a slower
+    # reviewer caught on the same PR. Zen last, and it only runs when a key is
+    # present (CI passes none).
+    for name in ("nous", "openrouter", "groq", "gemini", "zen"):
         key = keys.get(name, "")
         if not key:
             continue
