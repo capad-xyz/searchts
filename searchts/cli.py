@@ -1491,6 +1491,9 @@ def _cmd_uninstall(args):
     import subprocess
 
     dry_run = args.dry_run
+    if getattr(args, "chromium", False) and not getattr(args, "browser", False):
+        print("--chromium only applies with --browser. It does not remove config.", file=sys.stderr)
+        sys.exit(2)
     if getattr(args, "browser", False):
         from searchts.browser_install import uninstall_browser
 

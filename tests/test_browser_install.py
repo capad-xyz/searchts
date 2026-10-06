@@ -407,7 +407,9 @@ class TestUninstallBrowser:
             cli_env=self._env("ephemeral_uvx"),
         )
         assert code == 0 and calls == []
-        assert "nothing to remove" in capsys.readouterr().out
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "No browser packages" in captured.err
 
     def test_dry_run_does_not_run(self, capsys):
         calls = []
@@ -418,7 +420,8 @@ class TestUninstallBrowser:
         )
         out = capsys.readouterr()
         assert code == 0 and calls == []
-        assert "Dry run complete" in out.out
+        assert out.out == ""
+        assert "Dry run complete" in out.err
         assert "Chromium stays" in out.err
 
     def test_pipx_uninjects_the_extra_names(self, monkeypatch):
@@ -478,3 +481,32 @@ class TestUninstallBrowser:
         )
         assert code == 1
         assert "Chromium uninstall failed" in capsys.readouterr().err
+
+    def test_uv_tool_does_not_pip_uninstall(self, capsys):
+        seen = []
+        code = bi.uninstall_browser(
+            runner=lambda cmd: seen.append(list(cmd)) or _ok(cmd),
+            cli_env=self._env("uv_tool", "/opt/uv/python"),
+        )
+        assert code == 0 and seen == []
+        assert capsys.readouterr().out == ""
+
+    def test_uv_tool_can_still_drop_the_shared_chromium(self):
+        seen = []
+        code = bi.uninstall_browser(
+            chromium=True,
+            runner=lambda cmd: seen.append(list(cmd)) or _ok(cmd),
+            cli_env=self._env("uv_tool", "/opt/uv/python"),
+        )
+        assert code == 0
+        assert seen == [["/opt/uv/python", "-m", "patchright", "uninstall", "chromium"]]
+
+    def test_chromium_alone_does_not_wipe_config(self, capsys):
+        with patch("sys.argv", ["searchts", "uninstall", "--chromium"]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        captured = capsys.readouterr()
+        assert exc.value.code == 2
+        assert "searchts Uninstaller" not in captured.out
+        assert "--browser" in captured.err
+        assert captured.out == ""
