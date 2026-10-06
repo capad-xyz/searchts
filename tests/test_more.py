@@ -400,6 +400,35 @@ def test_read_pages_follows_next_then_stops_on_a_loop(monkeypatch):
     assert [p.text for p in got] == ["page one", "page two"]
 
 
+def test_a_next_page_the_ssrf_guard_refuses_raises_rather_than_truncating(monkeypatch):
+    # Both walks used to pre-check nxt and break quietly, so a page linking at
+    # a refused address returned a short read with exit 0. fetch guards every
+    # URL it is handed, so the fix is to let it raise. This drives the real
+    # guard: only fetch is faked, and only to hand back page one.
+    from searchts.ssrf import guard_mcp_url
+
+    def fake(url, **k):
+        if url == "https://example.org/blog":
+            return unlocker.FetchResult(
+                backend="curl_cffi", text="page one", status=200,
+                final_url=url, next_url="https://100.64.7.7/list",
+            )
+        # The real fetch refuses here. Reproduce only that step so the test
+        # drives the walk, not the network.
+        blocked = guard_mcp_url(url, resolve_dns=True)
+        raise unlocker.UnlockerError(url, [("ssrf", blocked[7:] if blocked and blocked.startswith("Error: ") else blocked)])
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    for walk in (lambda: unlocker.read_pages("https://example.org/blog", 5),
+                 lambda: unlocker.read_items("https://example.org/blog", 20)):
+        with pytest.raises(unlocker.UnlockerError) as e:
+            walk()
+        assert any(attempt[0] == "ssrf" for attempt in e.value.attempts)
+        assert "100.64" in str(e.value.attempts)
+    # And the guard really does refuse that address, so the test is not vacuous.
+    assert guard_mcp_url("https://100.64.7.7/list")
+
+
 def test_read_items_stops_at_the_count_and_names_the_ceiling(monkeypatch):
     def row(i):
         return f"- [Item {i}](https://example.org/i/{i})"

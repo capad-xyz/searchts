@@ -107,7 +107,11 @@ def test_youtube_warns_when_node_only_and_no_config(monkeypatch, tmp_path):
 
     monkeypatch.setattr("shutil.which", fake_which)
     monkeypatch.setattr("subprocess.run", _fake_run_ok)  # yt-dlp probe really executes now
-    # Point to a non-existent config file
+    # Point to a non-existent config file. get_ytdlp_config_path reads APPDATA
+    # on win32 and expanduser elsewhere, so patching only expanduser let this
+    # read the real user config: green on Linux CI, red on any Windows dev.
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     monkeypatch.setattr("os.path.expanduser", lambda p: str(tmp_path / ".config/yt-dlp/config"))
 
     ch = YouTubeChannel()
@@ -132,6 +136,12 @@ def test_youtube_warns_with_windows_specific_fix_command(monkeypatch, tmp_path):
     monkeypatch.setattr("subprocess.run", _fake_run_ok)  # yt-dlp probe really executes now
     monkeypatch.setattr("searchts.utils.paths.sys.platform", "win32")
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
+    # sys.platform is patched for this one, so expanduser is not the path
+    # builder here; APPDATA is. Point it somewhere empty or a real config on
+    # the machine running the test decides whether this warns or passes.
+    monkeypatch.setattr(
+        "os.path.expanduser", lambda p: str(tmp_path / "AppData" / "Roaming" / "yt-dlp" / "config")
+    )
 
     ch = YouTubeChannel()
     status, message = ch.check()

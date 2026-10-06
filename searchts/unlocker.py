@@ -1413,10 +1413,10 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
         nxt = result.next_url
         if not nxt:
             break
-        from searchts.ssrf import guard_mcp_url
-        blocked = guard_mcp_url(nxt)
-        if blocked:
-            break
+        # No pre-check on nxt. fetch guards every URL it is handed, so it
+        # raises UnlockerError with the guard's own reason on the next hop.
+        # Guarding here and breaking quietly turned a refused address into a
+        # short read with exit 0, which is the opposite of fail loud.
         current = nxt
     return out
 
@@ -1471,9 +1471,7 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         nxt = result.next_url
         if got >= want or not nxt:
             break
-        from searchts.ssrf import guard_mcp_url
-        if guard_mcp_url(nxt):
-            break
+        # No pre-check on nxt, same as read_pages: fetch guards it and raises.
         current = nxt
     if not out:
         return out

@@ -861,13 +861,82 @@ def test_the_nag_names_the_cause_instead_of_calling_every_hop_busy() -> None:
         "openrouter:b: no JSON object in model output"
     )
     body = hare_r1.needed_body(why)
-    assert "ran out of tokens while thinking, not a busy provider" in body
+    assert "reasoning mode, not the provider" in body
     assert "- nous: ran out of tokens while thinking, answered nothing" in body
     assert "- openrouter: answered, but not in JSON" in body
     assert "busy or blocked" not in body
-    busy = hare_r1.needed_body("openrouter:b: LLM 429 rate-limited")
-    assert "busy or blocked" in busy
+    throttled = hare_r1.needed_body("openrouter:b: LLM 429 rate-limited")
+    assert "busy or blocked" not in throttled
+    assert "1 of 1 hops is rate limited" in throttled
+    assert "usually temporary" in throttled
     assert "did not answer" in hare_r1.needed_body("zen:c: LLM empty choices https://z/v1 c")
+
+
+def test_a_dead_pin_is_named_rather_than_called_busy() -> None:
+    # The real failure on 2026-10-06: two Gemini slugs gone from the catalog,
+    # three hops reserved for fallbacks that were themselves dead. "busy or
+    # blocked" sent the reader after a throttle when the pin had to change.
+    why = (
+        "openrouter: answered nothing | "
+        "openrouter:google/gemma-4-31b-it:free: skipped, the last 150 s are kept for the fast fallbacks | "
+        "nous:poolside/laguna-s-2.1:free: skipped, the last 150 s are kept for the fast fallbacks | "
+        "groq:openai/gpt-oss-120b: LLM 413 | "
+        "gemini:gemini-3.1-flash-lite: model not available | "
+        "gemini:gemini-3.5-flash: model not available"
+    )
+    body = hare_r1.needed_body(why)
+    assert "busy or blocked" not in body
+    assert "gone from the provider catalog" in body
+    assert "gemini-3.1-flash-lite" in body and "gemini-3.5-flash" in body
+    assert "dead pin" in body
+    # The skips are their own bucket and must not be counted as gone.
+    assert "gone from the provider catalog: gemini-3.1-flash-lite, gemini-3.5-flash" in body
+
+
+def test_a_mixed_nag_names_the_throttle_and_the_dead_pin_separately() -> None:
+    body = hare_r1.needed_body(
+        "gemini:gemini-3.1-flash-lite: model not available | "
+        "groq:openai/gpt-oss-120b: LLM 429 rate-limited"
+    )
+    assert "gone from the provider catalog" in body
+    assert "1 of 2 hops is rate limited" in body
+    assert "needs the pin changed" in body
+
+
+def test_a_held_hop_is_not_counted_as_a_failure() -> None:
+    # Hops reserved for the fast fallbacks are not failures. Tallied as
+    # failures they pad the headline and hide what actually went wrong.
+    body = hare_r1.needed_body(
+        "nous:poolside/laguna-s-2.1:free: skipped, the last 150 s are kept for the fast fallbacks | "
+        "gemini: model not available"
+    )
+    assert "gone from the provider catalog: gemini" in body
+    assert "1 of 1 hops" in body
+    assert "Also:" not in body
+    # All held is its own failure: the fallback chain is what broke.
+    only_held = hare_r1.needed_body(
+        "nous:a: skipped, the last 150 s are kept for the fast fallbacks | "
+        "groq:b: skipped, the last 150 s are kept for the fast fallbacks"
+    )
+    assert "fallback chain is the part that is broken" in only_held
+
+
+def test_two_dead_pins_on_one_provider_read_as_a_count() -> None:
+    body = hare_r1.needed_body("gemini: model not available | gemini: model not available")
+    assert "gemini x2" in body
+    assert "gemini, gemini" not in body
+
+
+def test_a_missing_key_is_not_reported_as_a_busy_provider() -> None:
+    body = hare_r1.needed_body("nous: no hare api secrets on this run")
+    assert "no API secret" in body
+    assert "busy" not in body.lower()
+
+
+def test_a_tui_only_free_tier_is_named_as_a_refusal() -> None:
+    body = hare_r1.needed_body("zen:space-bunny-free: 404 available only within OpenCode")
+    assert "refused" in body.lower() or "TUI-only" in body
+    assert "busy or blocked" not in body
 
 
 def test_a_failed_knob_retry_keeps_its_body(monkeypatch) -> None:
@@ -1561,7 +1630,10 @@ def test_hares_own_comment_cannot_cancel_the_command_that_posted_it() -> None:
     seconds after it said "On it." The commenter is part of the group."""
     import yaml
 
-    wf = yaml.safe_load((Path(__file__).resolve().parents[1] / ".github" / "workflows" / "hare.yml").read_text())
+    # utf-8, not the locale default: the workflow holds non-ASCII markers and a
+    # cp1252 read raises here on a Windows box with no UTF-8 mode set.
+    wf_path = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "hare.yml"
+    wf = yaml.safe_load(wf_path.read_text(encoding="utf-8"))
     group = wf["concurrency"]["group"]
     assert "github.event.comment.user.login" in group and "github.event_name" in group
 

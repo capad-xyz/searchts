@@ -1597,17 +1597,149 @@ def _short_fail(part: str) -> str:
     return (short or name)[:160]
 
 
+def _fail_kind(part: str) -> str:
+    """One cause word for a hop's raw failure. Same order as ``_short_fail``."""
+    p = part.strip()
+    low = p.lower()
+    if p.startswith("crash:"):
+        return "crashed"
+    # A hop held back for the fast fallbacks is not a failure of that hop. It
+    # would otherwise be tallied as "other" and pad the headline with noise.
+    if "are kept for the fast fallbacks" in low or "kept for the fast fallback" in low:
+        return "held"
+    if "no hare api secrets" in low:
+        return "no key"
+    if "401" in p or "invalid" in low or "out of funds" in low:
+        return "key invalid"
+    if "429" in p or "rate-limited" in low or "rate limited" in low:
+        return "throttled"
+    if "freetier" in low or "within opencode" in low:
+        return "refused"
+    if "404" in p or "unavailable" in low or "not available" in low:
+        return "gone"
+    if "thinking cut" in low:
+        return "thinking"
+    if "empty content" in low:
+        return "thinking" if "finish_reason=length" in low else "empty"
+    if "no json object" in low:
+        return "not json"
+    if "timeout after" in low:
+        return "timeout"
+    return "other"
+
+
+def _hop_name(part: str) -> str:
+    """The hop's model slug, for naming a dead pin.
+
+    Failures arrive as ``provider:model: reason`` or, when the slug is
+    unknown, ``provider: reason``. The model is field two when there is one.
+    """
+    bits = [b.strip() for b in part.strip().split(":")]
+    name = bits[1] if len(bits) >= 3 else (bits[0] if bits else "")
+    if not name:
+        name = "a hop"
+    if "/" in name:
+        name = name.split("/", 1)[1]
+    return name.strip() or "a hop"
+
+
+def cause_line(parts: list[str]) -> str:
+    """The headline. Names the real cause instead of guessing at one.
+
+    "busy or blocked" was wrong often enough to mislead a human reading it:
+    a hop that is gone from the catalog, a hop that is merely throttled, and a
+    hop that refused the reasoning mode are three different problems with three
+    different fixes, and they read identically under the old headline.
+    """
+    # A repeated name is two dead pins on one provider, not one provider seen
+    # twice. "gemini, gemini" reads as noise; "gemini x2" reads as a fact.
+    def dedupe(names: list[str]) -> str:
+        if len(names) <= 1:
+            return names[0] if names else ""
+        if all(x == names[0] for x in names):
+            return f"{names[0]} x{len(names)}"
+        seen: list[str] = []
+        for x in names:
+            if x not in seen:
+                seen.append(x)
+        if len(seen) == 1:
+            return f"{seen[0]} x{len(names)}"
+        return ", ".join(seen)
+
+    kinds = [_fail_kind(x) for x in parts]
+    held = sum(1 for k in kinds if k == "held")
+    parts = [p for p, k in zip(parts, kinds) if k != "held"]
+    kinds = [k for k in kinds if k != "held"]
+    if not parts:
+        return (
+            f"Every hop was held back for the fast fallbacks, and no fallback answered "
+            f"({held} held). The fallback chain is the part that is broken."
+        )
+    n = len(parts)
+    tally: dict[str, list[str]] = {}
+    for part, kind in zip(parts, kinds):
+        tally.setdefault(kind, []).append(_hop_name(part))
+
+    def phrase(kind: str, one: str, many: str) -> str:
+        names = tally.get(kind) or []
+        if not names:
+            return ""
+        head = one if len(names) == 1 else many
+        listed = dedupe(names)
+        return f"{len(names)} of {n} hops {head}" + (f" ({listed})" if len(names) <= 3 else "")
+
+    if "gone" in tally:
+        listed = dedupe(tally["gone"][:4])
+        lead = (
+            f"{len(tally['gone'])} of {n} hops are gone from the provider catalog: {listed}. "
+            "That is a dead pin in scripts/hare_r1.py or the workflow env, not a busy provider."
+        )
+        rest = [
+            phrase("throttled", "is rate limited", "are rate limited"),
+            phrase("empty", "answered nothing", "answered nothing"),
+            phrase("thinking", "spent its budget thinking", "spent their budget thinking"),
+            phrase("not json", "answered outside JSON", "answered outside JSON"),
+            phrase("timeout", "timed out", "timed out"),
+            phrase("crashed", "crashed", "crashed"),
+            phrase("key invalid", "has an invalid key", "have invalid keys"),
+            phrase("refused", "refused the call", "refused the call"),
+            phrase("other", "failed", "failed"),
+        ]
+        others = [x for x in rest if x]
+        if others:
+            lead += " Also: " + "; ".join(others) + "."
+    elif "no key" in tally or "key invalid" in tally:
+        lead = phrase("no key", "has no API secret", "have no API secret").capitalize() or "A key is missing."
+        lead += " Every hop that needs that provider cannot run."
+    elif "refused" in tally:
+        lead = "A hop refused: its free tier serves agentic harnesses only, so an Actions call is refused."
+    elif "thinking" in tally and "empty" not in tally:
+        lead = "A hop spent its whole budget thinking and returned no content. This is the reasoning mode, not the provider."
+    else:
+        lead = "The hops did not answer."
+        extra = [p for p in (
+            phrase("throttled", "is rate limited", "are rate limited"),
+            phrase("empty", "answered nothing", "answered nothing"),
+            phrase("thinking", "ran out of tokens while thinking", "ran out of tokens while thinking"),
+            phrase("not json", "answered outside JSON", "answered outside JSON"),
+            phrase("timeout", "timed out", "timed out"),
+            phrase("crashed", "crashed", "crashed"),
+            phrase("other", "failed", "failed"),
+        ) if p]
+        if extra:
+            lead += " " + "; ".join(extra) + "."
+    if "throttled" in tally and "gone" in tally:
+        lead += " A throttled hop usually clears on its own; a gone one needs the pin changed."
+    elif "throttled" in tally:
+        lead += " Throttling is usually temporary, so `/hare` again may land on a different hop."
+    return lead
+
+
 def needed_body(why: str) -> str:
-    """Graceful nag. Raw errors stay behind a details fold. Offer /hare retry."""
+    """Graceful nag that names the cause. Raw errors stay behind a fold."""
     parts = [x.strip() for x in why.split(" | ") if x.strip()] or [why.strip()]
     hops = "\n".join(f"- {_short_fail(x)}" for x in parts)
-    low = why.lower()
-    if "finish_reason=length" in low:
-        cause = "Review hops ran out of tokens while thinking, not a busy provider."
-    elif "429" in why or "rate limit" in low or "5xx" in low or "503" in why or "502" in why:
-        cause = "Review hops were busy or blocked."
-    else:
-        cause = "Review hops did not answer."
+    cause = cause_line(parts)
     return _no_em(
         f"{NEEDED}\n\n"
         f"🐰 Could not finish this pass. {cause} "
