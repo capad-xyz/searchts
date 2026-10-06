@@ -165,6 +165,8 @@ def _run():
                         help="If no tier gets clean content, open a headful browser to clear it by hand")
     p_read.add_argument("--pages", type=int, default=1,
                         help="Follow the next page on the same site, curl only, up to this many (max 5)")
+    p_read.add_argument("--items", type=int, default=0,
+                        help="Keep following next pages until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300)")
     p_read.add_argument("--scrub", action="store_true",
                         help="Redact prompt-injection spans from the content (invisible-char "
                              "stripping + indicator scanning always run regardless)")
@@ -1606,7 +1608,12 @@ def _cmd_read(args):
 
     backends = [args.backend] if args.backend else None
     try:
-        if getattr(args, "pages", 1) > 1:
+        if getattr(args, "items", 0):
+            pages = unlocker.read_items(
+                args.url, args.items, backends=backends, allow_human=args.human,
+                scrub=args.scrub, progress=True,
+            )
+        elif getattr(args, "pages", 1) > 1:
             pages = unlocker.read_pages(
                 args.url, args.pages, backends=backends, allow_human=args.human,
                 scrub=getattr(args, "scrub", False), progress=True,

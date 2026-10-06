@@ -400,6 +400,44 @@ def test_read_pages_follows_next_then_stops_on_a_loop(monkeypatch):
     assert [p.text for p in got] == ["page one", "page two"]
 
 
+def test_read_items_stops_at_the_count_and_names_the_ceiling(monkeypatch):
+    def row(i):
+        return f"- [Item {i}](https://example.org/i/{i})"
+
+    pages = {
+        "https://example.org/list": ("\n".join(row(i) for i in range(8)), "https://example.org/list?page=2"),
+        "https://example.org/list?page=2": ("\n".join(row(i) for i in range(8, 16)), None),
+    }
+
+    def fake(url, **k):
+        text, nxt = pages[url]
+        return unlocker.FetchResult(backend="curl_cffi", text=text, status=200, final_url=url, next_url=nxt)
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list", 10)
+    assert len(got) == 2
+    assert unlocker.item_count(got[0].text) + unlocker.item_count(got[1].text) == 16
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "4")
+    clamped = unlocker.read_items("https://example.org/list", 50)
+    assert "the ceiling is 4" in clamped[-1].text
+
+
+def test_a_feed_without_a_next_link_says_to_install_the_browser(monkeypatch):
+    def fake(url, **k):
+        return unlocker.FetchResult(
+            backend="curl_cffi",
+            text="[feed: more items load on scroll or \"Load more\"; this read has the first window]",
+            status=200,
+            final_url=url,
+            next_url=None,
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    monkeypatch.setattr(unlocker, "_browser_installed", lambda: False)
+    got = unlocker.read_items("https://example.org/feed", 20)
+    assert "searchts install --browser" in got[-1].text
+
+
 def test_fetch_carries_next_url_and_a_trailing_note(monkeypatch):
     html = _page("", head='<link rel="next" href="/blog/page/2/">')
     _curl(monkeypatch, html)
