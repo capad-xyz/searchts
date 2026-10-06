@@ -267,6 +267,37 @@ def classify_checks(runs: list[dict[str, Any]]) -> tuple[str, list[str]]:
     return "ok", notes
 
 
+def files_in_diff(diff: str) -> set[str]:
+    """Paths a unified diff touches."""
+    out: set[str] = set()
+    for raw in (diff or "").splitlines():
+        if raw.startswith("diff --git ") and " b/" in raw:
+            out.add(raw.split(" b/", 1)[1].strip())
+    return out
+
+
+def eval_report_pr(pr: dict[str, Any], diff: str) -> bool:
+    """The eval workflow's report. Its token opens the PR and cannot start CI."""
+    login = str(((pr or {}).get("user") or {}).get("login") or "")
+    if login != "github-actions[bot]":
+        return False
+    paths = files_in_diff(diff)
+    return bool(paths) and all(p.startswith("docs/hare-eval-") for p in paths)
+
+
+def checks_for_report(
+    state: str, notes: list[str], pr: dict[str, Any], diff: str
+) -> tuple[str, list[str]]:
+    """#309 waited forever: zero checks, and none were coming.
+
+    An empty check list stays pending for a normal PR, because CI may not
+    have registered yet. This report is the exception.
+    """
+    if state == "pending" and eval_report_pr(pr, diff) and any("no non-Hare checks yet" in n for n in notes):
+        return "ok", ["no CI: the eval workflow opened this report, and its token cannot start other workflows"]
+    return state, notes
+
+
 def parse_plus_lines(diff: str) -> dict[str, set[int]]:
     """New-file line numbers that exist on the RIGHT side of the diff."""
     out: dict[str, set[int]] = {}
@@ -2319,6 +2350,7 @@ def _hare_once(
         since_md = render_since(since, old, status)
     bubbles = filter_bubbles(findings, narrow_plus(plus, parse_plus_lines(model_diff)) if since else plus)
     runs, check_state, check_notes = read_checks(owner, repo, sha, token)
+    check_state, check_notes = checks_for_report(check_state, check_notes, pr_data, diff)
     tails = failed_log_tails(owner, repo, runs, _env("HARE_ACTIONS_TOKEN") or token) if check_state == "fail" else {}
     intent = intent_for(check_state, findings)
     comment = render_comment(
