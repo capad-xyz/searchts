@@ -75,9 +75,12 @@ jobs:
           branch="chore/hare-eval-$day-${{ github.run_id }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Branch from current main and add only the report. A branch whose
-          # workflow file differs from main is refused: GITHUB_TOKEN has no
-          # workflows scope, and `workflows` is not a permissions key.
+          # Branch from current main and add only the report. GITHUB_TOKEN
+          # cannot push a branch whose workflow file differs from the default
+          # branch. workflows: write is a real permissions key; this job does
+          # not set it, because the report branch must not change the workflow.
+          # checkout -f is deliberate: the job reuses the workspace, so a dirty
+          # tree is reset. Do not copy that flag into a workflow that has work to keep.
           git fetch origin main
           git checkout -f -B "$branch" origin/main
           cp "/tmp/hare-eval-$day.md" "docs/hare-eval-$day.md"
