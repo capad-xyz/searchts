@@ -1609,6 +1609,10 @@ def _cmd_read(args):
     backends = [args.backend] if args.backend else None
     try:
         if getattr(args, "items", 0):
+            if getattr(args, "pages", 1) > 1:
+                # --items counts rows and --pages counts hops; together the
+                # first silently won. Say it rather than drop one.
+                print("--items and --pages are mutually exclusive; using --items.", file=sys.stderr)
             pages = unlocker.read_items(
                 args.url, args.items, backends=backends, allow_human=args.human,
                 scrub=args.scrub, progress=True,

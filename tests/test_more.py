@@ -516,6 +516,55 @@ def test_an_ssrf_refusal_mid_walk_still_raises(monkeypatch):
         assert any(a[0] == "ssrf" for a in e.value.attempts)
 
 
+def test_a_walk_that_hits_the_page_cap_says_so(monkeypatch):
+    # Asking 99 pages and silently getting 5 is the same shape as asking for
+    # 300 rows and getting 150. The cap has to be visible or the list looks
+    # like it ended.
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text="a page", status=200, final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_pages("https://example.org/list?p=1", 99)
+    assert len(got) == unlocker._MAX_PAGES
+    assert "asked for 99, got 5" in got[-1].text
+    assert "The next page is" in got[-1].text
+    # Asking for fewer than the cap and hitting it anyway says the cap.
+    at_cap = unlocker.read_pages("https://example.org/list?p=1", unlocker._MAX_PAGES)
+    assert "stopped at the 5-page cap" in at_cap[-1].text
+
+
+def test_item_rows_count_for_ordered_lists_too():
+    # _ITEM_LINE matched only "- [", so every ordered list counted zero rows and
+    # --items walked the whole cap reporting nothing.
+    assert unlocker.item_count("- [one](https://e.test/1)\n- [two](https://e.test/2)") == 2
+    assert unlocker.item_count("1. [one](https://e.test/1)\n2. [two](https://e.test/2)") == 2
+    assert unlocker.item_count("1. [one](https://e.test/1)\n- [two](https://e.test/2)") == 2
+    assert unlocker.item_count("just prose, no rows") == 0
+
+
+def test_read_items_says_when_the_cap_cut_the_list_short(monkeypatch):
+    def row(i, page):
+        return "\n".join(f"{n + 1}. [Row {page}-{n}](https://example.org/{page}/{n})" for n in range(3))
+
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=row(p, p), status=200, final_url=url,
+            next_url=f"https://example.org/list?page={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list?page=1", 300)
+    rows = sum(unlocker.item_count(p.text) for p in got)
+    assert rows > 0, "ordered rows must count"
+    assert len(got) == unlocker._MAX_PAGES
+    assert "rows of 300" in got[-1].text
+
+
 def test_read_items_stops_at_the_count_and_names_the_ceiling(monkeypatch):
     def row(i):
         return f"- [Item {i}](https://example.org/i/{i})"

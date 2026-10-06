@@ -1393,9 +1393,11 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
 
     Stops on a loop, a missing next link, or the cap. The first page uses the
     caller's backends. Later pages are curl only: a browser on every next page
-    is not this change.
+    is not this change. The cap is said out loud: a walk that hits it with a
+    live next link would otherwise look like the list ended.
     """
-    pages = max(1, min(int(pages or 1), _MAX_PAGES))
+    wanted = max(1, int(pages or 1))
+    pages = min(wanted, _MAX_PAGES)
     seen = set()
     out: List[FetchResult] = []
     current = url
@@ -1428,11 +1430,28 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
         # Guarding here and breaking quietly turned a refused address into a
         # short read with exit 0, which is the opposite of fail loud.
         current = nxt
+    else:
+        # The loop ran out with pages still coming. Without this the caller
+        # cannot tell a finished list from one cut off at the cap.
+        if out and out[-1].next_url:
+            _note_walk_capped(out[-1], len(out), wanted, out[-1].next_url)
     return out
 
 
+def _note_walk_capped(
+    last: "FetchResult", got_pages: int, asked: int, nxt: str, rows: str = ""
+) -> None:
+    """Say the walk stopped at a cap, not because the list ended."""
+    got = f"asked for {asked}, got {got_pages}" if asked > got_pages else f"stopped at the {got_pages}-page cap"
+    got = f"{rows}, {got}" if rows else got
+    last.text = (last.text or "").rstrip() + f"\n\n[pages: {got}. The next page is {nxt}]"
+
+
 _MAX_ITEMS = 300
-_ITEM_LINE = re.compile(r"(?m)^- \[")
+# Both markdown list shapes the extractor emits: unordered "- [" and ordered
+# "1. [". Matching only the unordered form counted every ordered list as zero
+# rows, so --items walked the whole page cap and reported nothing.
+_ITEM_LINE = re.compile(r"(?m)^(?:-|\d+\.)\s+\[")
 
 
 def _is_refusal(err: UnlockerError) -> bool:
@@ -1515,6 +1534,14 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
             break
         # No pre-check on nxt, same as read_pages: fetch guards it and raises.
         current = nxt
+    else:
+        # Out of pages with more to read. Say so: otherwise asking for 300 rows
+        # and getting 150 is indistinguishable from the list ending there.
+        if out and got < want and out[-1].next_url and not broke:
+            _note_walk_capped(
+                out[-1], len(out), asked, out[-1].next_url,
+                rows=f"{got} rows of {asked}" if got else "no rows",
+            )
     if not out:
         return out
     extra = ""
