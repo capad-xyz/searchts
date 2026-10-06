@@ -544,17 +544,26 @@ def _item_key(item) -> str:
     return _norm(item.text_content())[:60].lower()
 
 
+def _is_title_row(row) -> bool:
+    """A Hacker News title row, not the byline under it."""
+    if "athing" in (row.get("class") or "").split():
+        return True
+    return bool(row.xpath(
+        ".//span[contains(@class, 'titleline')]"
+        " | .//a[contains(@class, 'titleline') or contains(@class, 'storylink')]"
+    ))
+
+
 def _following_detail_row(row):
-    """The next row when it is a detail row, not another title row."""
+    """The next row when it is a byline, not another title.
+
+    Link length is not the test. A username or a comment link can be long,
+    and that byline is still the detail row.
+    """
     nxt = row.getnext()
     if nxt is None or not isinstance(nxt.tag, str) or nxt.tag.lower() != "tr":
         return None
-    if nxt.xpath(".//a[contains(@class, 'titleline') or contains(@class, 'storylink')]"):
-        return None
-    title = _norm(" ".join(a.text_content() for a in nxt.xpath(".//a[@href]")[:1]))
-    if nxt.xpath(".//span[contains(@class, 'titleline')]"):
-        return None
-    if len(title) >= 25 and nxt.xpath(".//a[@href]"):
+    if _is_title_row(nxt):
         return None
     return nxt
 
