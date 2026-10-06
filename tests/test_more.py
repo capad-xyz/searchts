@@ -383,6 +383,23 @@ def test_hacker_news_more_link_is_the_next_page(url, href, expected):
     assert [(m.kind, m.url) for m in found if m.kind == "next-page"] == [("next-page", expected)]
 
 
+def test_read_pages_follows_next_then_stops_on_a_loop(monkeypatch):
+    pages = {
+        "https://example.org/blog": ("page one", "https://example.org/blog/page/2"),
+        "https://example.org/blog/page/2": ("page two", "https://example.org/blog"),
+    }
+
+    def fake(url, **k):
+        text, nxt = pages[url]
+        if url.endswith("/page/2"):
+            assert k.get("backends") == ["curl_cffi"]
+        return unlocker.FetchResult(backend="curl_cffi", text=text, status=200, final_url=url, next_url=nxt)
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_pages("https://example.org/blog", 5)
+    assert [p.text for p in got] == ["page one", "page two"]
+
+
 def test_fetch_carries_next_url_and_a_trailing_note(monkeypatch):
     html = _page("", head='<link rel="next" href="/blog/page/2/">')
     _curl(monkeypatch, html)

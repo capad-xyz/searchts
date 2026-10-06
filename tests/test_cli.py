@@ -209,6 +209,7 @@ class TestCLI:
             "text": "markdown text",
             "next_url": None,
             "more": [],
+            "pages": [{"url": "https://x.test/final", "text": "markdown text", "next_url": None}],
         }
 
     def test_read_command_forwards_flags(self, capsys):

@@ -120,12 +120,12 @@ def create_server():
         return get_status()
 
     @mcp.tool(name="read_url", description=READ_URL_DESCRIPTION)
-    async def read_url_tool(url: str) -> str:
+    async def read_url_tool(url: str, max_pages: int = 1) -> str:
         # The stealth-browser rung is sync Playwright work that refuses to run
         # on a running asyncio loop. ``asyncio.to_thread`` runs it in a worker
         # thread and yields control back to the loop, so other MCP tasks keep
         # making progress while a slow browser render is pending (P3.10).
-        return await asyncio.to_thread(read_url, url)
+        return await asyncio.to_thread(read_url, url, max_pages)
 
     @mcp.tool(name="web_search", description=WEB_SEARCH_DESCRIPTION)
     def web_search_tool(query: str, max_results: int = 5) -> str:
@@ -292,7 +292,7 @@ def get_status() -> str:
     return Searchts().doctor_report()
 
 
-def read_url(url: str) -> str:
+def read_url(url: str, max_pages: int = 1) -> str:
     """Fetch `url` via the unlocker and return a JSON source-receipt + markdown.
 
     The result is a JSON object with citation/provenance fields (``url``,
@@ -317,11 +317,12 @@ def read_url(url: str) -> str:
     # One 403 must not disable Jina for every later tool call on this server.
     unlocker.reset_jina_spend()
     try:
-        result = unlocker.fetch(url)
+        pages = unlocker.read_pages(url, max_pages)
     except unlocker.UnlockerError as e:
         return f"Error: {e}"
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
         return _unexpected("read_url", e)
+    result = pages[0]
 
     # fetch() already strips invisibles and scans; reuse its findings. (Belt-and-
     # braces strip in case a caller swaps in a non-sanitizing fetch.)
@@ -344,6 +345,10 @@ def read_url(url: str) -> str:
             "text": text,
             "next_url": result.next_url,
             "more": result.more,
+            "pages": [
+                {"url": p.final_url or url, "text": p.text, "next_url": p.next_url}
+                for p in pages
+            ],
         },
         ensure_ascii=False,
     )

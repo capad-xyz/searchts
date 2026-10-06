@@ -163,6 +163,8 @@ def _run():
                         help="Print {url,final_url,fetched_at,backend,status,chars,text,next_url,more} as JSON instead of raw text")
     p_read.add_argument("--human", action="store_true",
                         help="If no tier gets clean content, open a headful browser to clear it by hand")
+    p_read.add_argument("--pages", type=int, default=1,
+                        help="Follow the next page on the same site, curl only, up to this many (max 5)")
     p_read.add_argument("--scrub", action="store_true",
                         help="Redact prompt-injection spans from the content (invisible-char "
                              "stripping + indicator scanning always run regardless)")
@@ -1604,12 +1606,17 @@ def _cmd_read(args):
 
     backends = [args.backend] if args.backend else None
     try:
-        result = unlocker.fetch(
-            args.url, backends=backends, allow_human=args.human,
-            scrub=getattr(args, "scrub", False),
-            # Live ticks on stderr so long ladder runs (stealth) are not silent.
-            progress=True,
-        )
+        if getattr(args, "pages", 1) > 1:
+            pages = unlocker.read_pages(
+                args.url, args.pages, backends=backends, allow_human=args.human,
+                scrub=getattr(args, "scrub", False), progress=True,
+            )
+        else:
+            pages = [unlocker.fetch(
+                args.url, backends=backends, allow_human=args.human,
+                scrub=getattr(args, "scrub", False), progress=True,
+            )]
+        result = pages[0]
     except unlocker.UnlockerError as e:
         print(f"Failed to read {e.url}", file=sys.stderr)
         for backend, why in e.attempts:
@@ -1632,6 +1639,10 @@ def _cmd_read(args):
             "text": result.text,
             "next_url": result.next_url,
             "more": result.more,
+            "pages": [
+                {"url": p.final_url or args.url, "text": p.text, "next_url": p.next_url}
+                for p in pages
+            ],
         }
         print(json.dumps(payload, ensure_ascii=False))
     else:
@@ -1639,6 +1650,8 @@ def _cmd_read(args):
         print(f"[{result.backend}] status={result.status} chars={len(result.text)}",
               file=sys.stderr)
         print(result.text)
+        for extra in pages[1:]:
+            print(f"\n# {extra.final_url}\n\n{extra.text}")
 
 
 def _cmd_get(args):

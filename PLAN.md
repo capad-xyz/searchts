@@ -344,7 +344,7 @@ Installing it does **not** give a private Jev. Zero-shot it does not beat `jev-1
     - [ ] Bing redirects are decoded only on `bing.com` and its subdomains; lookalike hosts stay as written (#217, with the MCP Windows device-name refusal). **0.13.**
     - Shipped (2026-10-01): it replaces the extract only when the page is made of a list, the extract is mostly that list, and the extract lost most items' titles, links or dates. A related grid under an article, a list the extractor kept whole, and an article over a comment list are left alone (tests). The read says `[list: N items rebuilt from the page; …]` and `more` gets an `index` entry.
   - [x] **F23g** Table lists (Hacker News). **0.14.** Title row plus the detail row under it. The index keeps the title, the link, and the points.
-  - [ ] **F23b** Pagination: `--pages N`, MCP `max_pages`. **0.14.** Follow `rel=next` on the same host, curl first (no browser). MCP SSRF check on every followed page. Stop on a loop, a wall or the cap. Each page keeps its own URL in the output.
+  - [x] **F23b** Pagination: `--pages N`, MCP `max_pages`. **0.14.** Follows the next page the read already detects. Later pages are curl only, cap 5. Stops on a loop, a missing next link, or a blocked hop. Each page keeps its own URL.
   - [ ] **F23c** More items: `--items N`, MCP `max_items`. **0.15.** Cheapest way that works:
     - A next-batch URL in the HTML (`rel=next`, a "Load more" link, a cursor like `?after=`): fetch it with curl.
     - Content only through JavaScript: scroll in stealth. The `--human` browser can reuse the same engine.
