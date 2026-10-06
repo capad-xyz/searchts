@@ -1228,7 +1228,9 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     # The ledger (2026-10-04): laguna answered 18 times on OpenRouter and never
     # found anything, so it is off that list; qwen stays first. Space Bunny left
     # OpenRouter and Nous when its free period ended (2026-10-05).
-    assert hare_r1.HARE_OR_DEFAULT.split(",")[0] == "qwen/qwen3.8-27b:free"
+    # qwen3.8-27b:free 404'd on every OpenRouter row of the 2026-10-06 eval (#309).
+    # Nemotron Lightning is on the free catalog that day. Gemma is still second.
+    assert hare_r1.HARE_OR_DEFAULT.split(",")[0] == "nvidia/nemotron-3.5-lightning:free"
     # Inkling's free endpoint serves only agentic harnesses (403 from Actions,
     # 2026-10-05), so both Inkling slugs are off; gemma is second.
     assert hare_r1.HARE_OR_DEFAULT.split(",")[1] == "google/gemma-4-31b-it:free"
