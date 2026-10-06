@@ -1218,6 +1218,9 @@ def test_a_fix_that_changes_a_signature_gets_no_button() -> None:
     hare_r1.attach_suggestions(fs, added, None)
     assert len(fs) == 1 and not fs[0].get("_checked") and "suggestion" not in fs[0]
     assert "must also be the whole fix" in hare_r1.SYSTEM
+    assert "A real finding is never no" in hare_r1.SYSTEM
+    assert "Fix:** later" in hare_r1._fix_line("no", "Keep the coverage gate.", "real")
+    assert "Fix:** no" in hare_r1._fix_line("no", "", "skip")
 
 
 def test_csv_models_splits_and_override(monkeypatch: object) -> None:
