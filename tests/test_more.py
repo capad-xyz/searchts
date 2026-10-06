@@ -429,6 +429,65 @@ def test_a_next_page_the_ssrf_guard_refuses_raises_rather_than_truncating(monkey
     assert guard_mcp_url("https://100.64.7.7/list")
 
 
+def test_a_page_that_fails_mid_walk_keeps_the_pages_already_read(monkeypatch):
+    # Page 3 of 5 challenging used to raise out of the walk and throw away
+    # pages 1 and 2. The caller asked for page 1; they should get it, plus a
+    # line saying the walk stopped and why.
+    pages = {
+        "https://example.org/blog": ("page one", "https://example.org/blog/page/2"),
+        "https://example.org/blog/page/2": ("page two", "https://example.org/blog/page/3"),
+    }
+
+    def fake(url, **k):
+        if url in pages:
+            text, nxt = pages[url]
+            return unlocker.FetchResult(backend="curl_cffi", text=text, status=200, final_url=url, next_url=nxt)
+        raise unlocker.UnlockerError(url, [("curl_cffi", "challenge-403"), ("stealth-browser", "challenge-403")])
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_pages("https://example.org/blog", 5)
+    assert [p.text for p in got[:1]] == ["page one"]
+    assert len(got) == 2
+    assert "stopped before https://example.org/blog/page/3" in got[-1].text
+    assert "challenge-403" in got[-1].text
+    # The item walk behaves the same way.
+    got2 = unlocker.read_items("https://example.org/blog", 40)
+    assert len(got2) == 2 and "stopped before" in got2[-1].text
+
+
+def test_page_one_failing_still_raises(monkeypatch):
+    def fake(url, **k):
+        raise unlocker.UnlockerError(url, [("curl_cffi", "challenge-403")])
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    with pytest.raises(unlocker.UnlockerError):
+        unlocker.read_pages("https://example.org/blog", 5)
+    with pytest.raises(unlocker.UnlockerError):
+        unlocker.read_items("https://example.org/blog", 40)
+
+
+def test_an_ssrf_refusal_mid_walk_still_raises(monkeypatch):
+    # #323's guarantee: a refused address is a security event, not a page that
+    # failed. Recovering the walk must not swallow it.
+    from searchts.ssrf import guard_mcp_url
+
+    def fake(url, **k):
+        if url == "https://example.org/blog":
+            return unlocker.FetchResult(
+                backend="curl_cffi", text="page one", status=200,
+                final_url=url, next_url="https://100.64.7.7/list",
+            )
+        blocked = guard_mcp_url(url, resolve_dns=True)
+        raise unlocker.UnlockerError(url, [("ssrf", blocked[7:] if blocked and blocked.startswith("Error: ") else blocked)])
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    for walk in (lambda: unlocker.read_pages("https://example.org/blog", 5),
+                 lambda: unlocker.read_items("https://example.org/blog", 40)):
+        with pytest.raises(unlocker.UnlockerError) as e:
+            walk()
+        assert any(a[0] == "ssrf" for a in e.value.attempts)
+
+
 def test_read_items_stops_at_the_count_and_names_the_ceiling(monkeypatch):
     def row(i):
         return f"- [Item {i}](https://example.org/i/{i})"
