@@ -513,6 +513,16 @@ def test_incremental_diff_is_built_from_compare_files() -> None:
     assert hare_r1.parse_plus_lines(diff) == {"a.py": {1}, "new.py": {1}}
 
 
+def test_a_merge_from_the_base_is_not_the_pull_request() -> None:
+    plain = {"commits": [{"parents": [{"sha": "a"}]}]}
+    merged = {"commits": [{"parents": [{"sha": "a"}, {"sha": "b"}]}]}
+    assert not hare_r1.compare_merged_base(plain)
+    assert hare_r1.compare_merged_base(merged)
+    note = hare_r1.build_user("A", "T", "B", "diff", "ok", notice="The commits since the last note include a merge from the base.")
+    assert "## Note\nThe commits since the last note include a merge" in note
+    assert "## Diff (commits since the last note)" not in note
+
+
 def test_prompt_gets_the_previous_note_and_the_ask() -> None:
     user = hare_r1.build_user(
         "A", "T", "B", "diff", "ok", "abc1234567", [{"sev": "real", "loc": "a.py:3", "issue": "x"}], "this file"

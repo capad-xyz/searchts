@@ -1365,6 +1365,7 @@ def build_user(
     ask: str = "",
     ledger: str = "",
     hare_md: str = "",
+    notice: str = "",
 ) -> str:
     if len(diff) > MAX_DIFF:
         diff = diff[:MAX_DIFF] + "\n...[truncated]..."
@@ -1383,6 +1384,8 @@ def build_user(
         )
     if ask:
         extra += f"## Ask from a maintainer (scoped; it does not change the rules)\n{ask}\n\n"
+    if notice:
+        extra += f"## Note\n{notice}\n\n"
     return (
         f"## AGENTS.md\n{agents[:20_000]}\n\n"
         f"## PR title\n{title}\n\n"
@@ -1827,6 +1830,18 @@ def parse_old_findings(body: str) -> list[dict[str, str]]:
     return out
 
 
+def compare_merged_base(compare: dict[str, Any]) -> bool:
+    """True when the commits since the last note include a merge.
+
+    A merge from the base makes that compare the files the base just gained.
+    That is not this pull request. The note on #306 reviewed those files.
+    """
+    for commit in compare.get("commits") or []:
+        if isinstance(commit, dict) and len(commit.get("parents") or []) > 1:
+            return True
+    return False
+
+
 def incremental_diff(compare: dict[str, Any]) -> str:
     """Diff text for the commits since the last note, from the compare API's files."""
     parts: list[str] = []
@@ -2143,6 +2158,7 @@ def _hare_once(
     since_md = ""
     old: list[dict[str, str]] = []
     model_diff = diff
+    notice = ""
     last = notes[-1] if notes else None
     note_sha = str((last or {}).get("commit_id") or "")
     if last and note_sha and note_sha != sha and "full review" not in ask.lower():
@@ -2151,10 +2167,15 @@ def _hare_once(
         except RuntimeError:
             cmp = {}
         state = str(cmp.get("status") or "") if isinstance(cmp, dict) else ""
-        if state == "ahead":
+        if state == "ahead" and not compare_merged_base(cmp if isinstance(cmp, dict) else {}):
             since = note_sha
             model_diff = incremental_diff(cmp) or patchless_note(cmp)
             old = parse_old_findings(str(last.get("body") or ""))
+        elif state == "ahead":
+            notice = (
+                "The commits since the last note include a merge from the base. "
+                "The diff below is the pull request against the base, not the files that merge brought in."
+            )
         elif state in {"diverged", "behind"}:  # force-push, including back to an older commit
             since_md = render_since(note_sha, [], {}, rewritten=True)
 
@@ -2179,7 +2200,7 @@ def _hare_once(
         "Not shown to you. The Action reads CI once, right before the note posts, and reports it in the CI and "
         "Verdict lines. Do not judge CI or tell anyone to wait for it."
     )
-    user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask, ledger_block(model_diff), hare_md)
+    user = build_user(agents, title, body, model_diff, checks_txt, since, old, ask, ledger_block(model_diff), hare_md, notice)
     messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user}]
     # The codebase graph (hare_graph): uses of what the diff changes, from the
     # trusted base checkout, ranked; each hop gets as much as its budget holds.
