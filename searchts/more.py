@@ -27,7 +27,7 @@ _CHROME_TAGS = frozenset({"header", "footer", "aside", "form", "dialog", "menu",
 _CHROME_ROLES = frozenset(
     {"navigation", "banner", "contentinfo", "menu", "menubar", "dialog", "search", "complementary"}
 )
-_SIDE_CLASS = re.compile(r"\b(?:sidebar|aside|complementary|side-panel)\b", re.I)
+_SIDE_CLASS = re.compile(r"(?:^|\s)(?:sidebar|aside|complementary|side-panel)(?:\s|$)", re.I)
 _SKIP_TEXT_TAGS = frozenset({"script", "style", "noscript", "template", "svg"})
 
 #: "Load more" and "Show more posts": more items, not more of one item.
