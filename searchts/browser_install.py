@@ -443,3 +443,58 @@ def install_browser(
         return 1
 
     return _install_chromium_and_check(chromium_cmd, runner=runner, dry_run=False)
+
+
+def _req_name(spec: str) -> str:
+    return spec.split(">=")[0].split("==")[0].split("[")[0].strip()
+
+
+def uninstall_browser(
+    *,
+    dry_run: bool = False,
+    chromium: bool = False,
+    runner: Optional[Runner] = None,
+    cli_env: Optional[CliEnv] = None,
+) -> int:
+    """Undo ``install --browser`` in this env. Chromium stays unless asked.
+
+    Ephemeral uvx has nothing installed into it. pipx uses ``uninject``.
+    Anything else uses that env's pip. The Chromium cache is shared, so it
+    is removed only with ``chromium=True``.
+    """
+    run = runner or _default_runner
+    env = cli_env or detect_cli_env()
+    _tick(f"mutating: {env.label}")
+    if env.kind == "ephemeral_uvx":
+        print("ephemeral uvx has nothing to remove. Drop browser from the spec.")
+        return 0
+    names = [_req_name(spec) for spec in browser_extra_requirements()]
+    pipx = shutil.which("pipx")
+    if env.kind == "pipx" and pipx:
+        cmd = [pipx, "uninject", "searchts", *names]
+    else:
+        cmd = [env.python, "-m", "pip", "uninstall", "-y", *names]
+    chrome = [env.python, "-m", "patchright", "uninstall", "chromium"]
+    if dry_run:
+        _tick(f"[dry-run] would run: {' '.join(cmd)}")
+        if chromium:
+            _tick(f"[dry-run] would run: {' '.join(chrome)}")
+        else:
+            _tick("Chromium stays. It is a shared cache. Pass --chromium to remove it.")
+        print("Dry run complete. No changes were made.")
+        return 0
+    extra = run(cmd)
+    if extra.returncode != 0:
+        err = (extra.stderr or extra.stdout or "").strip()
+        print(f"[X] failed to remove browser deps.\n  {' '.join(cmd)}\n  {err or extra.returncode}", file=sys.stderr)
+        return 1
+    if not chromium:
+        print("Chromium stays. It is a shared cache. Pass --chromium to remove it.")
+        return 0
+    dropped = run(chrome)
+    if dropped.returncode != 0:
+        err = (dropped.stderr or dropped.stdout or "").strip()
+        print(f"[X] browser deps removed; Chromium uninstall failed.\n  {err or dropped.returncode}", file=sys.stderr)
+        return 1
+    print("browser deps and Chromium removed.")
+    return 0

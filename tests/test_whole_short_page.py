@@ -181,3 +181,23 @@ def test_the_old_browser_pin_heals_once_it_expires(monkeypatch, cache):
     r = unlocker.fetch(URL)
     assert (r.backend, called) == ("curl_cffi", ["curl_cffi"])
     assert unlocker.load_memory() == {"example.test": "curl_cffi"}
+
+
+def test_jina_403_skips_the_next_fetch(monkeypatch):
+    import searchts.unlocker as unlocker
+    unlocker._jina_spent = False
+    called = []
+
+    def fake(url, timeout=40):
+        called.append("jina")
+        return 403, "", url, {}
+
+    monkeypatch.setattr(unlocker, "_fetch_jina", fake)
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (200, "<html><body>" + ("word " * 200) + "</body></html>", url, {}))
+    monkeypatch.setattr(unlocker, "jina_enabled", lambda: True)
+    unlocker.fetch("https://example.org/a", backends=["Jina Reader", "curl_cffi"], use_memory=False)
+    assert unlocker._jina_spent is True
+    called.clear()
+    unlocker.fetch("https://example.org/b", backends=["Jina Reader", "curl_cffi"], use_memory=False)
+    assert called == []
+    unlocker._jina_spent = False

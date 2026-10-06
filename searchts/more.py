@@ -547,6 +547,62 @@ def _item_key(item) -> str:
     return _norm(item.text_content())[:60].lower()
 
 
+def _following_detail_row(row):
+    """The next row when it is a detail row, not another title row."""
+    nxt = row.getnext()
+    if nxt is None or not isinstance(nxt.tag, str) or nxt.tag.lower() != "tr":
+        return None
+    if nxt.xpath(".//a[contains(@class, 'titleline') or contains(@class, 'storylink')]"):
+        return None
+    title = _norm(" ".join(a.text_content() for a in nxt.xpath(".//a[@href]")[:1]))
+    if nxt.xpath(".//span[contains(@class, 'titleline')]"):
+        return None
+    if len(title) >= 25 and nxt.xpath(".//a[@href]"):
+        return None
+    return nxt
+
+
+def _table_rows(doc) -> Optional[List]:
+    """Title rows of a table list, Hacker News shape: title row, details in the next.
+
+    A data table or a pager does not qualify. The rows must be most of the page.
+    """
+    body = doc.find(".//body")
+    root = body if body is not None else doc
+    page_len = len(_visible_text(root))
+    if page_len < 400:
+        return None
+    best: Optional[List] = None
+    best_len = 0
+    for table in root.iter("table"):
+        rows = [r for r in table.xpath("./tr | ./tbody/tr") if isinstance(r.tag, str)]
+        titles = []
+        for row in rows:
+            link = row.xpath(".//span[contains(@class,'titleline')]//a[@href] | .//a[@href]")
+            if not link:
+                continue
+            if len(_norm(link[0].text_content())) < 8:
+                continue
+            if _following_detail_row(row) is None and "athing" not in (row.get("class") or ""):
+                continue
+            titles.append(row)
+        if len(titles) < _LIST_MIN_ITEMS:
+            continue
+        total = 0
+        for row in titles:
+            total += len(_visible_text(row))
+            detail = _following_detail_row(row)
+            if detail is not None:
+                total += len(_visible_text(detail))
+        if total > best_len:
+            best, best_len = titles, total
+    if not best or _in_chrome(best[0]) or _in_nav(best[0]):
+        return None
+    if best_len < _LIST_MIN_SHARE * page_len:
+        return None
+    return best
+
+
 def _best_list(doc) -> Optional[List]:
     """The repeated items the page is made of (results, cards, posts), or None."""
     body = doc.find(".//body")
@@ -576,10 +632,12 @@ def _best_list(doc) -> Optional[List]:
             total = sum(len(_visible_text(it)) for it in items)
             if total > best_len:
                 best, best_len = items, total
-    if not best or _in_chrome(best[0]) or _in_nav(best[0]):
-        return None
-    if best_len < _LIST_MIN_SHARE * page_len:
-        return None
+    if not best or _in_chrome(best[0]) or _in_nav(best[0]) or best_len < _LIST_MIN_SHARE * page_len:
+        best = None
+    table = _table_rows(doc)
+    # Title-row pairs beat a grab of the detail rows. A card list is left alone.
+    if table is not None and (best is None or best[0].tag.lower() == "tr"):
+        return table
     return best
 
 
@@ -757,6 +815,9 @@ def _item_parts(item, base: str) -> Optional[Dict[str, str]]:
 
     title_el = heading if heading is not None else link
     pieces = [(el, t) for el, t in _text_pieces(item) if el is not title_el and title_el not in el.iterancestors()]
+    detail = _following_detail_row(item) if isinstance(item.tag, str) and item.tag.lower() == "tr" else None
+    if detail is not None:
+        pieces.extend(_text_pieces(detail))
     snippet_i = max(range(len(pieces)), key=lambda i: len(pieces[i][1]), default=None)
     snippet = ""
     if snippet_i is not None and len(pieces[snippet_i][1]) >= 40:
@@ -819,19 +880,23 @@ def list_index(html: str, url: str, text: str) -> Optional[Tuple[str, More]]:
                 lost.append("dates")
         if not lost:
             return None
-        # The extract must be mostly this list; otherwise it is an article with a list under it.
-        item_text = " ".join(_norm(_visible_text(it)) for it in items).lower()
-        paras = [_norm(_strip_md_links(p)).lower() for p in re.split(r"\n\s*\n", text or "")]
-        paras = [p for p in paras if len(p) >= 30]
-        total = sum(len(p) for p in paras)
-        covered = sum(len(p) for p in paras if p[len(p) // 2 - 15 : len(p) // 2 + 15] in item_text)
-        if not total and _norm(text or ""):
-            # Every paragraph is short (a brief post, a caption): nothing proves the
-            # extract is this list, so an article next to a related grid stays an article.
-            # Only an extract with no text at all is replaced outright.
-            return None
-        if total and covered < _INDEX_MIN_COVERAGE * total:
-            return None
+        # Titles present and links gone: the extract is this list, just without the links.
+        # The coverage window below spans items and misses a table whose rows carry a rank.
+        titles_present = sum(1 for p in parts if p["title"][:60].lower() in plain) > 0.5 * n
+        if not (lost == ["links"] and titles_present):
+            # The extract must be mostly this list; otherwise it is an article with a list under it.
+            item_text = " ".join(_norm(_visible_text(it)) for it in items).lower()
+            paras = [_norm(_strip_md_links(p)).lower() for p in re.split(r"\n\s*\n", text or "")]
+            paras = [p for p in paras if len(p) >= 30]
+            total = sum(len(p) for p in paras)
+            covered = sum(len(p) for p in paras if p[len(p) // 2 - 15 : len(p) // 2 + 15] in item_text)
+            if not total and _norm(text or ""):
+                # Every paragraph is short (a brief post, a caption): nothing proves the
+                # extract is this list, so an article next to a related grid stays an article.
+                # Only an extract with no text at all is replaced outright.
+                return None
+            if total and covered < _INDEX_MIN_COVERAGE * total:
+                return None
         heading = next(
             (h for h in doc.xpath("//h1") if _norm(h.text_content()) and not _in_chrome(h)
              and not any(h is d or h in d.iterdescendants() for d in items)),

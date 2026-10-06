@@ -79,7 +79,7 @@ jobs:
           # workflow file differs from main is refused: GITHUB_TOKEN has no
           # workflows scope, and `workflows` is not a permissions key.
           git fetch origin main
-          git checkout -B "$branch" origin/main
+          git checkout -f -B "$branch" origin/main
           cp "/tmp/hare-eval-$day.md" "docs/hare-eval-$day.md"
           cp "/tmp/hare-eval-$day.json" "docs/hare-eval-$day.json"
           git add "docs/hare-eval-$day.md" "docs/hare-eval-$day.json"
