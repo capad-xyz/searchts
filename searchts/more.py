@@ -544,17 +544,26 @@ def _item_key(item) -> str:
     return _norm(item.text_content())[:60].lower()
 
 
+def _is_title_row(row) -> bool:
+    """A Hacker News title row, not the byline under it."""
+    if "athing" in (row.get("class") or "").split():
+        return True
+    return bool(row.xpath(
+        ".//span[contains(@class, 'titleline')]"
+        " | .//a[contains(@class, 'titleline') or contains(@class, 'storylink')]"
+    ))
+
+
 def _following_detail_row(row):
-    """The next row when it is a detail row, not another title row."""
+    """The next row when it is a byline, not another title.
+
+    Link length is not the test. A username or a comment link can be long,
+    and that byline is still the detail row.
+    """
     nxt = row.getnext()
     if nxt is None or not isinstance(nxt.tag, str) or nxt.tag.lower() != "tr":
         return None
-    if nxt.xpath(".//a[contains(@class, 'titleline') or contains(@class, 'storylink')]"):
-        return None
-    title = _norm(" ".join(a.text_content() for a in nxt.xpath(".//a[@href]")[:1]))
-    if nxt.xpath(".//span[contains(@class, 'titleline')]"):
-        return None
-    if len(title) >= 25 and nxt.xpath(".//a[@href]"):
+    if _is_title_row(nxt):
         return None
     return nxt
 
@@ -875,10 +884,13 @@ def list_index(html: str, url: str, text: str) -> Optional[Tuple[str, More]]:
                 lost.append("dates")
         if not lost:
             return None
-        # Titles present and links gone: the extract is this list, just without the links.
-        # The coverage window below spans items and misses a table whose rows carry a rank.
         titles_present = sum(1 for p in parts if p["title"][:60].lower() in plain) > 0.5 * n
-        if not (lost == ["links"] and titles_present):
+        # A Hacker News table loses the coverage window: the rank on the row
+        # makes the window miss the row. Any other list still has to be most
+        # of the extract. Titles in the text and missing links are not enough,
+        # or an article that repeats a card list's titles gets rebuilt.
+        table_list = isinstance(items[0].tag, str) and items[0].tag.lower() == "tr"
+        if not (lost == ["links"] and titles_present and table_list):
             # The extract must be mostly this list; otherwise it is an article with a list under it.
             item_text = " ".join(_norm(_visible_text(it)) for it in items).lower()
             paras = [_norm(_strip_md_links(p)).lower() for p in re.split(r"\n\s*\n", text or "")]

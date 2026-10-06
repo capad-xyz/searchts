@@ -201,3 +201,29 @@ def test_jina_403_skips_the_next_fetch(monkeypatch):
     unlocker.fetch("https://example.org/b", backends=["Jina Reader", "curl_cffi"], use_memory=False)
     assert called == []
     unlocker._jina_spent = False
+
+
+def test_an_mcp_read_does_not_keep_the_jina_403(monkeypatch):
+    """A server stays up. The next tool call gets Jina again. A CLI process does not."""
+    import searchts.unlocker as unlocker
+    from searchts.integrations.mcp_server import read_url
+
+    unlocker._jina_spent = False
+    called = []
+
+    def fake(url, timeout=40):
+        called.append(url)
+        return 403, "", url, {}
+
+    monkeypatch.setattr(unlocker, "_fetch_jina", fake)
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi",
+        lambda url, timeout=30: (200, "<html><body>" + ("word " * 200) + "</body></html>", url, {}),
+    )
+    monkeypatch.setattr(unlocker, "jina_enabled", lambda: True)
+    monkeypatch.setattr(unlocker, "_memory_enabled", lambda: False)
+    monkeypatch.setattr(unlocker, "DEFAULT_BACKENDS", ["Jina Reader", "curl_cffi"])
+    read_url("https://example.org/a")
+    read_url("https://example.org/b")
+    assert called == ["https://example.org/a", "https://example.org/b"]
+    unlocker._jina_spent = False

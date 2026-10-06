@@ -64,8 +64,12 @@ def fate_from(comment: str) -> tuple[str, str, str]:
 
 
 def is_harebot(body: str) -> bool:
-    """True for a Hare Bot note. It posts as the owner, so the login is not the check."""
-    return "harebot:" in (body or "")
+    """True for a Hare Bot note. It posts as the owner, so the login is not the check.
+
+    The marker has to start the comment. A person quoting it later in a
+    score is not a bot note, and that score still counts.
+    """
+    return (body or "").lstrip().startswith("<!-- harebot:")
 
 
 def is_hare(body: str) -> bool:

@@ -223,6 +223,15 @@ def test_the_ledger_is_hare_only(tmp_path) -> None:
     scored = hare_ledger.pr_rows({"number": 7, "state": "open"}, reviews, [{"body": bot_comment, "user": {"login": "capad-xyz"}, "created_at": "2026-10-04"}], [])
     assert scored["scores"] == []
     assert all(f["fate"] != "wrong" for f in scored["findings"])
+    quoted = (
+        "the note started with a bot marker and I am quoting <!-- harebot:review --> here\n"
+        "/hare score 2 the quote is not a bot note"
+    )
+    human = hare_ledger.pr_rows(
+        {"number": 7, "state": "open"}, reviews,
+        [{"body": quoted, "user": {"login": "capad-xyz"}, "created_at": "2026-10-04"}], [],
+    )
+    assert human["scores"] == [{"score": 2, "text": "the quote is not a bot note", "by": "capad-xyz", "at": "2026-10-04"}]
 
 
 def test_compare_reviewers_reads_the_repo_files(tmp_path) -> None:
