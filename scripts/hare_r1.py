@@ -117,13 +117,11 @@ DEEP_GEMINI_REASONING = {"reasoning_effort": "medium"}
 # shape (a nested "reasoning" object), so the hop carries its own.
 GEMINI_REASONING = {"reasoning_effort": "low"}
 
-# Fixed list, not a router. Read against the live catalogs 2026-10-04:
+# Fixed list, not a router. Read against the live catalogs 2026-10-06:
 # OpenRouter /api/v1/models (pricing 0/0), Groq docs/models, Zen by probe.
-# OpenRouter free that review code, best coding index first: qwen3.8-27b:free
-# (68; answered live on PR 234), gemma-4-31b-it:free (43,
-# thinking off by default), laguna-s-2.1:free (no score; sat first and never
-# answered, so last). Left out: apodex-1.1-mini:free (new 2026-10-01, no
-# record), nemotron-3-ultra:free (cannot think below medium), the health,
+# OpenRouter: nemotron-3.5-lightning:free, then gemma-4-31b-it:free.
+# qwen3.8-27b:free 404'd on every eval row (#309). Left out:
+# nemotron-3-ultra:free (cannot think below medium), the health,
 # safety, tiny and translation models, space-bunny-alpha (gone 2026-10-05).
 # Groq: gpt-oss-120b sits after OpenRouter and Nous (#258, owner's call: it
 # answers in seconds and has missed what a slower reviewer caught). It answered
@@ -158,8 +156,11 @@ HARE_NOUS_DEFAULT = (
 # Inkling (inkling-small:free, inkling:free) left 2026-10-05: OpenRouter's free
 # Inkling endpoint now serves only agentic harnesses, so a direct API call gets
 # 403 (both did on #287's /hare deep), and it logs prompts to train on.
+# qwen3.8-27b:free left 2026-10-06: every row of the eval (#309) was
+# 404 "unavailable for free". nvidia/nemotron-3.5-lightning:free is on the
+# free catalog that day (1M context). It has not been measured in an eval yet.
 HARE_OR_DEFAULT = (
-    "qwen/qwen3.8-27b:free,"
+    "nvidia/nemotron-3.5-lightning:free,"
     "google/gemma-4-31b-it:free"
 )
 HARE_ZEN_DEFAULT = "space-bunny-free"
