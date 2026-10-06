@@ -95,6 +95,9 @@ REASONING_WORDS = frozenset({"none", "minimal", "low", "medium", "high"})
 HARE_STREAM = os.environ.get("HARE_STREAM", "1") != "0"
 SEAM_FRAC = float(os.environ.get("HARE_SEAM_FRAC", "0.8"))
 THINK_CUT_FRAC = float(os.environ.get("HARE_THINK_CUT_FRAC", "0.6"))
+# --probe-pins gives every hop one short call. Long enough for a 200-token
+# answer on a free tier, short enough to walk the whole chain by hand.
+PROBE_TIMEOUT_SEC = int(os.environ.get("HARE_PROBE_TIMEOUT_S", "90"))
 WRAP_UP_TOKENS = int(os.environ.get("HARE_WRAP_UP_TOKENS", "800"))
 WRAP_UP = (
     "Your answer was cut at the token budget. Finish the JSON from exactly where "
@@ -129,8 +132,13 @@ GEMINI_REASONING = {"reasoning_effort": "low"}
 # three times the free tier's 8k-token request cap; a 413 is instant.
 # Gemini: gemini-2.5-flash returned 404 on 2026-10-03, ahead of its October 16
 # shutdown date. gemini-3.1-flash-lite answered the review on PR 236 the same
-# night, so it goes first; 3.5 Flash is Google's other named replacement and
-# stays second, unverified.
+# night, so it went first; 3.5 Flash was second, unverified.
+# BOTH Gemini pins then returned "model not available" on 2026-10-06, in the
+# /hare deep on #321, where nothing in the chain answered. No Gemini key exists
+# on this laptop, so the fix could not be probed live and the pins stay with
+# the caveat below rather than a guess. Run `python scripts/hare_r1.py --probe-pins`
+# on a box that holds the key before trusting them; that command is the point,
+# so the next dead pin is a fact rather than a nag nobody believed.
 # Zen: longcat and ling return 403 FreeTierError outside the OpenCode TUI by
 # policy (measured 2026-10-03), so only space-bunny-free stays. CI passes no
 # Zen key anyway.
@@ -157,17 +165,128 @@ HARE_NOUS_DEFAULT = (
 # Inkling endpoint now serves only agentic harnesses, so a direct API call gets
 # 403 (both did on #287's /hare deep), and it logs prompts to train on.
 # qwen3.8-27b:free left 2026-10-06: every row of the eval (#309) was
-# 404 "unavailable for free". nvidia/nemotron-3.5-lightning:free is on the
-# free catalog that day (1M context). It has not been measured in an eval yet.
+# 404 "unavailable for free".
+#
+# Probed live 2026-10-06 with a real code diff and thinking off, not a catalog
+# listing. Every slug here returned a review in 1 to 6 s:
+#   nvidia/nemotron-3.5-lightning:free  OK 2s (full payload 65s, JSON out)
+#   nvidia/nemotron-3-super-120b-a12b:free  OK 1s
+#   nvidia/nemotron-3-ultra-550b-a55b:free   OK 2s
+#   apodex/apodex-1.1-mini:free              OK 1s
+# Dropped 2026-10-06, both 429 "temporarily rate-limited upstream" on the probe:
+#   google/gemma-4-31b-it:free, google/gemma-4-26b-a4b-it:free
+# Dropped 2026-10-06: poolside/laguna-s-2.1:free is 429 on OpenRouter. It is in
+# the Nous list below, where the same probe answered in 6s. Two providers, two
+# answers, so keep it on the one that works.
+# Inkling is back on the catalog (thinkingmachines/inkling:free, 1M ctx) and
+# stays off: its free endpoint served agentic harnesses only as of 2026-10-05.
 HARE_OR_DEFAULT = (
     "nvidia/nemotron-3.5-lightning:free,"
-    "google/gemma-4-31b-it:free"
+    "nvidia/nemotron-3-super-120b-a12b:free,"
+    "nvidia/nemotron-3-ultra-550b-a55b:free"
 )
+# Nous probed live the same day: laguna 6s, longcat 3s, ling-3.0-flash-sante 2s.
+HARE_NOUS_EXTRA_DEFAULT = "inclusionai/ling-3.0-flash-sante:free"
 HARE_ZEN_DEFAULT = "space-bunny-free"
 
 
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
+
+
+# A tiny code diff with a real defect in it. A pin is not proven by appearing
+# on a catalog listing; it is proven by answering this.
+_PROBE_DIFF = """--- a/mod.py
++++ b/mod.py
+@@ -1,6 +1,8 @@
+ def walk(url):
+-    fetch(url)
++    nxt = page(url).next_url
++    if nxt:
++        fetch(nxt)
+"""
+_PROBE_ASK = (
+    "Review this diff. In one sentence, name the security or correctness "
+    "problem.\n\n" + _PROBE_DIFF
+)
+
+
+def probe_pins() -> int:
+    """Ask every pinned hop the one question that matters: do you answer?
+
+    Run this when a pass dies. A hop that has gone from the catalog, or whose
+    free tier is throttled, fails in under a second and the chain falls through
+    to the next one. Nobody notices until the whole chain is dead, and then the
+    only evidence is a nag that used to say "busy or blocked" for every cause.
+
+    Needs the provider keys in the environment. Prints one line per pin and
+    exits 1 if any pinned hop cannot answer, so it can gate a model swap.
+    """
+    keys = {
+        "openrouter": _env("SEARCHTS_HARE_API_KEY_OR"),
+        "nous": _env("SEARCHTS_HARE_API_KEY_NOUS"),
+        "groq": _env("SEARCHTS_HARE_API_KEY_GROQ"),
+        "gemini": _env("SEARCHTS_HARE_API_KEY_GEMINI"),
+        "zen": _env("SEARCHTS_HARE_API_KEY_ZEN"),
+    }
+    bases = {
+        "openrouter": "https://openrouter.ai/api/v1",
+        "nous": "https://inference-api.nousresearch.com/v1",
+        "groq": "https://api.groq.com/openai/v1",
+        "gemini": GEMINI_BASE,
+        "zen": "https://opencode.ai/zen/v1",
+    }
+    pins = {
+        "openrouter": _csv_models("HARE_OR_MODEL", HARE_OR_DEFAULT),
+        "nous": _csv_models("HARE_NOUS_MODEL", HARE_NOUS_DEFAULT)
+        + _csv_models("HARE_NOUS_EXTRA_MODEL", HARE_NOUS_EXTRA_DEFAULT),
+        "groq": _csv_models("HARE_GROQ_MODEL", HARE_GROQ_DEFAULT),
+        "gemini": _csv_models("HARE_GEMINI_MODEL", HARE_GEMINI_DEFAULT),
+        "zen": _csv_models("HARE_ZEN_MODEL", HARE_ZEN_DEFAULT),
+    }
+    dead: list[str] = []
+    for provider, models in pins.items():
+        key = keys.get(provider) or ""
+        if not key:
+            print(f"{provider}: no key in this environment, skipped")
+            for m in models:
+                dead.append(f"{provider}:{m}")
+            continue
+        for model in models:
+            url = f"{bases[provider]}/chat/completions"
+            body: dict[str, Any] = {
+                "model": model,
+                "messages": [{"role": "user", "content": _PROBE_ASK}],
+                "max_tokens": 200,
+                "reasoning": NOUS_REASONING if provider == "nous" else OR_REASONING,
+            }
+            req = urllib.request.Request(
+                url, data=json.dumps(body).encode("utf-8"),
+                headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=PROBE_TIMEOUT_SEC) as r:
+                    data = json.loads(r.read().decode("utf-8", "replace"))
+                text = str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+                if text.strip():
+                    print(f"{provider}:{model}: answers")
+                else:
+                    print(f"{provider}:{model}: EMPTY (returned no content)")
+                    dead.append(f"{provider}:{model}")
+            except urllib.error.HTTPError as e:
+                why = e.read()[:160].decode("utf-8", "replace").replace("\n", " ")
+                print(f"{provider}:{model}: HTTP {e.code} {why}")
+                dead.append(f"{provider}:{model}")
+            except Exception as e:  # noqa: BLE001 - a probe reports, it never raises
+                print(f"{provider}:{model}: {type(e).__name__} {str(e)[:120]}")
+                dead.append(f"{provider}:{model}")
+    if dead:
+        print(f"\n{len(dead)} pinned hop(s) cannot answer right now:")
+        for d in dead:
+            print(f"  {d}")
+        return 1
+    print("\nevery pinned hop answered.")
+    return 0
 
 
 def _csv_models(name: str, default: str) -> list[str]:
@@ -2520,6 +2639,8 @@ def _hare_once(
 
 
 if __name__ == "__main__":
+    if "--probe-pins" in sys.argv[1:]:
+        raise SystemExit(probe_pins())
     if "--refresh-ci" in sys.argv[1:]:
         _owner, _, _repo = _env("GITHUB_REPOSITORY").partition("/")
         _tok = _env("GITHUB_TOKEN") or _env("GH_TOKEN")

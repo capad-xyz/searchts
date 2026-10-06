@@ -105,5 +105,6 @@ jobs:
           HARE_GROQ_MODEL: openai/gpt-oss-120b
           HARE_GEMINI_MODEL: gemini-3.1-flash-lite,gemini-3.5-flash
           HARE_NOUS_MODEL: poolside/laguna-s-2.1:free,meituan/longcat-2.5-preview:free
-          HARE_OR_MODEL: ${{ github.event.inputs.or_model || 'nvidia/nemotron-3.5-lightning:free,google/gemma-4-31b-it:free' }}
+          HARE_NOUS_EXTRA_MODEL: inclusionai/ling-3.0-flash-sante:free
+          HARE_OR_MODEL: ${{ github.event.inputs.or_model || 'nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3-ultra-550b-a55b:free' }}
         run: python scripts/hare_r1.py

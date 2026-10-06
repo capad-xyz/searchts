@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import sys
+import urllib.error
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -651,6 +652,42 @@ def _workflow_env(name: str) -> str:
 def test_workflow_groq_models_match_the_live_default() -> None:
     # Retired on Groq free: llama-3.3-70b-versatile (16 Aug 2026), moonshotai/kimi-k2-instruct.
     assert _workflow_env("HARE_GROQ_MODEL") == hare_r1.HARE_GROQ_DEFAULT
+
+
+def test_probe_pins_asks_every_pin_and_names_the_dead_ones(monkeypatch, capsys) -> None:
+    # The probe is what makes a model swap safe. It has to actually ask, and
+    # it has to exit nonzero when a pin cannot answer.
+    # Every provider with a key gets asked, so the run is hermetic.
+    for var in ("GROQ", "GEMINI", "ZEN"):
+        monkeypatch.setenv(f"SEARCHTS_HARE_API_KEY_{var}", "")
+    asked: list[tuple[str, str]] = []
+
+    class FakeResp:
+        def __init__(self, payload): self._b = json.dumps(payload).encode()
+        def read(self): return self._b
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_urlopen(req, timeout=0):
+        body = json.loads(req.data)
+        asked.append((body["model"], req.full_url))
+        if "gemma" in body["model"]:
+            raise urllib.error.HTTPError(req.full_url, 429, "rate-limited upstream", {}, io.BytesIO(b"{}"))
+        return FakeResp({"choices": [{"message": {"content": "the next page is not guarded"}}]})
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("SEARCHTS_HARE_API_KEY_OR", "k")
+    monkeypatch.setenv("SEARCHTS_HARE_API_KEY_NOUS", "k")
+    monkeypatch.setenv("HARE_NOUS_MODEL", "google/gemma-4-31b-it:free")
+    monkeypatch.setenv("HARE_NOUS_EXTRA_MODEL", "")
+    rc = hare_r1.probe_pins()
+    out = capsys.readouterr().out
+    assert "nvidia/nemotron-3.5-lightning:free: answers" in out
+    assert "google/gemma-4-31b-it:free: HTTP 429" in out
+    assert rc == 1
+    assert any("gemma" in m for m, _ in asked), "the probe must call the hop, not read a catalog"
+    # The prompt it sends has a real defect in it, so "answers" means something.
+    assert any("security" in _PROBE for _PROBE in [hare_r1._PROBE_ASK])
 
 
 def test_workflow_model_overrides_do_not_undo_the_python_defaults() -> None:
@@ -1328,10 +1365,17 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     # OpenRouter and Nous when its free period ended (2026-10-05).
     # qwen3.8-27b:free 404'd on every OpenRouter row of the 2026-10-06 eval (#309).
     # Nemotron Lightning is on the free catalog that day. Gemma is still second.
-    assert hare_r1.HARE_OR_DEFAULT.split(",")[0] == "nvidia/nemotron-3.5-lightning:free"
-    # Inkling's free endpoint serves only agentic harnesses (403 from Actions,
-    # 2026-10-05), so both Inkling slugs are off; gemma is second.
-    assert hare_r1.HARE_OR_DEFAULT.split(",")[1] == "google/gemma-4-31b-it:free"
+    # Probed live 2026-10-06 with a real diff: nemotron-lightning, nemotron-super
+    # and nemotron-ultra all answered in 1 to 2 s. Both gemma slugs 429'd and
+    # were dropped; Inkling stays off (agentic harnesses only).
+    or_list = hare_r1.HARE_OR_DEFAULT.split(",")
+    assert or_list[0] == "nvidia/nemotron-3.5-lightning:free"
+    assert "nvidia/nemotron-3-super-120b-a12b:free" in or_list
+    assert not any("gemma" in m for m in or_list), "gemma 429'd on 2026-10-06"
+    assert not any("inkling" in m for m in or_list)
+    # Laguna answers on Nous and 429s on OpenRouter, so it is on one list only.
+    assert any("laguna" in m for m in hare_r1.HARE_NOUS_DEFAULT.split(","))
+    assert not any("laguna" in m for m in or_list)
     assert "inkling" not in hare_r1.HARE_OR_DEFAULT
     assert "poolside/laguna-s-2.1:free" not in hare_r1.HARE_OR_DEFAULT.split(",")
     # Not one model: diversity is data. Two here, and five providers in the chain.
