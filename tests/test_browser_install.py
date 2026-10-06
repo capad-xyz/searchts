@@ -394,3 +394,87 @@ class TestStreamRunner:
         out, err = capfd.readouterr()
         assert "progress 42%" in err
         assert "progress 42%" not in out
+
+
+class TestUninstallBrowser:
+    def _env(self, kind: str, python: str = "/usr/bin/python") -> bi.CliEnv:
+        return bi.CliEnv(kind=kind, label=kind, python=python)
+
+    def test_ephemeral_uvx_removes_nothing(self, capsys):
+        calls = []
+        code = bi.uninstall_browser(
+            runner=lambda cmd: calls.append(cmd) or _ok(cmd),
+            cli_env=self._env("ephemeral_uvx"),
+        )
+        assert code == 0 and calls == []
+        assert "nothing to remove" in capsys.readouterr().out
+
+    def test_dry_run_does_not_run(self, capsys):
+        calls = []
+        code = bi.uninstall_browser(
+            dry_run=True,
+            runner=lambda cmd: calls.append(cmd) or _ok(cmd),
+            cli_env=self._env("venv"),
+        )
+        out = capsys.readouterr()
+        assert code == 0 and calls == []
+        assert "Dry run complete" in out.out
+        assert "Chromium stays" in out.err
+
+    def test_pipx_uninjects_the_extra_names(self, monkeypatch):
+        seen = []
+        monkeypatch.setattr(bi.shutil, "which", lambda cmd: "/usr/bin/pipx" if cmd == "pipx" else None)
+        monkeypatch.setattr(bi, "browser_extra_requirements", lambda: ["patchright>=1.50", "foo[extra]"])
+
+        def run(cmd):
+            seen.append(list(cmd))
+            return _ok(cmd)
+
+        code = bi.uninstall_browser(runner=run, cli_env=self._env("pipx", "/opt/python"))
+        assert code == 0
+        assert seen == [["/usr/bin/pipx", "uninject", "searchts", "patchright", "foo"]]
+
+    def test_pip_uninstalls_when_pipx_is_absent(self, monkeypatch):
+        monkeypatch.setattr(bi.shutil, "which", lambda cmd: None)
+        monkeypatch.setattr(bi, "browser_extra_requirements", lambda: ["patchright>=1.50"])
+        seen = []
+        code = bi.uninstall_browser(
+            runner=lambda cmd: seen.append(list(cmd)) or _ok(cmd),
+            cli_env=self._env("venv", "/venv/bin/python"),
+        )
+        assert code == 0
+        assert seen == [["/venv/bin/python", "-m", "pip", "uninstall", "-y", "patchright"]]
+
+    def test_a_failed_dep_removal_does_not_touch_chromium(self, monkeypatch, capsys):
+        monkeypatch.setattr(bi.shutil, "which", lambda cmd: None)
+        monkeypatch.setattr(bi, "browser_extra_requirements", lambda: ["patchright>=1.50"])
+        seen = []
+
+        def run(cmd):
+            seen.append(list(cmd))
+            return _fail(cmd, err="no package")
+
+        code = bi.uninstall_browser(
+            chromium=True,
+            runner=run,
+            cli_env=self._env("venv", "/venv/bin/python"),
+        )
+        assert code == 1 and len(seen) == 1
+        assert "failed to remove browser deps" in capsys.readouterr().err
+
+    def test_chromium_failure_is_its_own_error(self, monkeypatch, capsys):
+        monkeypatch.setattr(bi.shutil, "which", lambda cmd: None)
+        monkeypatch.setattr(bi, "browser_extra_requirements", lambda: ["patchright>=1.50"])
+
+        def run(cmd):
+            if "chromium" in cmd:
+                return _fail(cmd, err="cache busy")
+            return _ok(cmd)
+
+        code = bi.uninstall_browser(
+            chromium=True,
+            runner=run,
+            cli_env=self._env("venv", "/venv/bin/python"),
+        )
+        assert code == 1
+        assert "Chromium uninstall failed" in capsys.readouterr().err
