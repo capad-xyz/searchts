@@ -1391,5 +1391,9 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
         nxt = result.next_url
         if not nxt:
             break
+        from searchts.ssrf import guard_mcp_url
+        blocked = guard_mcp_url(nxt)
+        if blocked:
+            break
         current = nxt
     return out

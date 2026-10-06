@@ -1595,18 +1595,17 @@ def _cmd_read(args):
 
     backends = [args.backend] if args.backend else None
     try:
-        result = unlocker.fetch(
-            args.url, backends=backends, allow_human=args.human,
-            scrub=getattr(args, "scrub", False),
-            progress=True,
-        )
-        pages = [result]
         if getattr(args, "pages", 1) > 1:
             pages = unlocker.read_pages(
                 args.url, args.pages, backends=backends, allow_human=args.human,
                 scrub=getattr(args, "scrub", False), progress=True,
             )
-            result = pages[0]
+        else:
+            pages = [unlocker.fetch(
+                args.url, backends=backends, allow_human=args.human,
+                scrub=getattr(args, "scrub", False), progress=True,
+            )]
+        result = pages[0]
     except unlocker.UnlockerError as e:
         print(f"Failed to read {e.url}", file=sys.stderr)
         for backend, why in e.attempts:

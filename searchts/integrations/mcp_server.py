@@ -321,10 +321,6 @@ def read_url(url: str, max_pages: int = 1) -> str:
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
         return _unexpected("read_url", e)
     result = pages[0]
-    for extra in pages[1:]:
-        blocked = ssrf.guard_mcp_url(extra.final_url or "")
-        if blocked:
-            return blocked
 
     # fetch() already strips invisibles and scans; reuse its findings. (Belt-and-
     # braces strip in case a caller swaps in a non-sanitizing fetch.)
