@@ -1419,3 +1419,70 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
             break
         current = nxt
     return out
+
+
+_MAX_ITEMS = 300
+_ITEM_LINE = re.compile(r"(?m)^- \[")
+
+
+def _browser_installed() -> bool:
+    try:
+        import patchright  # noqa: F401
+        return True
+    except Exception:  # noqa: BLE001 - a missing extra is the normal case
+        return False
+
+
+def item_count(text: str) -> int:
+    """Index rows already rendered as markdown links."""
+    return len(_ITEM_LINE.findall(text or ""))
+
+
+def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]:
+    """Follow next-page links until ``items`` list rows, curl only after the first.
+
+    The ceiling is ``SEARCHTS_MAX_ITEMS`` and never above 300. A request over
+    the ceiling is clamped and the read says so. A feed with no next link and
+    no browser says to install one. Scrolling that feed is not this function.
+    """
+    try:
+        raw_ceiling = int(os.environ.get("SEARCHTS_MAX_ITEMS") or _MAX_ITEMS)
+    except ValueError:
+        raw_ceiling = _MAX_ITEMS
+    ceiling = max(1, min(raw_ceiling, _MAX_ITEMS))
+    asked = max(1, int(items or 1))
+    want = min(asked, ceiling)
+    seen = set()
+    out: List[FetchResult] = []
+    current = url
+    got = 0
+    for i in range(_MAX_PAGES):
+        key = current.split("#", 1)[0].rstrip("/")
+        if key in seen:
+            break
+        seen.add(key)
+        call = dict(kwargs)
+        if i:
+            call["backends"] = ["curl_cffi"]
+            call["allow_human"] = False
+        result = fetch(current, **call)
+        out.append(result)
+        got += item_count(result.text)
+        nxt = result.next_url
+        if got >= want or not nxt:
+            break
+        from searchts.ssrf import guard_mcp_url
+        if guard_mcp_url(nxt):
+            break
+        current = nxt
+    if not out:
+        return out
+    extra = ""
+    if asked > ceiling:
+        extra += f"\n\n[items: asked for {asked}, the ceiling is {ceiling}]"
+    last = out[-1]
+    if got < want and not last.next_url and "[feed:" in (out[0].text or "") and not _browser_installed():
+        extra += "\n\n[items: more of this list loads in the browser. Run: searchts install --browser]"
+    if extra:
+        last.text = (last.text or "").rstrip() + extra
+    return out

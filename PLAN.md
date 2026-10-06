@@ -346,7 +346,7 @@ Installing it does **not** give a private Jev. Zero-shot it does not beat `jev-1
   - [x] **F23g** Table lists (Hacker News). **0.14.** Title row plus the detail row under it. The index keeps the title, the link, and the points.
   - [x] **F23b** Pagination: `--pages N`, MCP `max_pages`. **0.14.** Follows the next page the read already detects. Later pages are curl only, cap 5. Stops on a loop, a missing next link, or a blocked hop. Each page keeps its own URL.
   - [ ] **F23c** More items: `--items N`, MCP `max_items`. **0.15.** Cheapest way that works:
-    - A next-batch URL in the HTML (`rel=next`, a "Load more" link, a cursor like `?after=`): fetch it with curl.
+    - A next-batch URL in the HTML (`rel=next`, a "Load more" link, a cursor like `?after=`): fetch it with curl. **Done for list rows:** `--items N`, MCP `max_items`, ceiling `SEARCHTS_MAX_ITEMS` (max 300). Stops at N, on a loop, or at 5 pages. A feed with no next link and no browser says `searchts install --browser`. Scroll is not this.
     - Content only through JavaScript: scroll in stealth. The `--human` browser can reuse the same engine.
     - That is needed but the browser tier is missing: say so and print `searchts install --browser` (**F22**).
     - Scroll: the first step is a probe (nothing new loads: not a feed, stop). Each step copies items keyed by link or text hash, so lists that unmount old rows still count. A stalled scroll with a "Load more" button clicks it (same intent). Stops at N, after 2 empty steps, on a sign-in wall or captcha, or at the ceiling. Always says what it got and why it stopped.
