@@ -64,6 +64,24 @@ def test_a_card_list_that_only_lost_its_links_still_has_to_be_the_extract():
     assert more.list_index(html, "https://example.com/blog", essay + "\n\n" + titles) is None
 
 
+def test_a_long_byline_link_is_still_the_detail_row():
+    user = "a" * 40
+    rows = "".join(
+        f'<tr class="athing" id="{i}"><td class="title"><span class="titleline">'
+        f'<a href="https://example{i}.com/post">Story {i} about tools</a></span></td></tr>'
+        f'<tr><td class="subtext"><span class="score">{i} points</span> by '
+        f'<a href="user?id={user}" class="hnuser">{user}</a></td></tr>'
+        for i in range(1, 31)
+    )
+    html = f"<html><body><table>{rows}</table></body></html>"
+    text = "\n".join(f"Story {i} about tools" for i in range(1, 31))
+    rebuilt = more.list_index(html, "https://news.ycombinator.com/", text)
+    assert rebuilt is not None
+    md, _note = rebuilt
+    assert user in md
+    assert "1 points" in md
+
+
 def test_bing_results_get_titles_and_real_links_back():
     rebuilt = _index("bing_results.html", "https://www.bing.com/search?q=searchts")
     assert rebuilt is not None
