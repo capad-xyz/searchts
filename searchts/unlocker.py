@@ -238,6 +238,18 @@ def _spend_jina() -> None:
     _jina_spent = True
 
 
+def reset_jina_spend() -> None:
+    """Forget a Jina 403 from an earlier call.
+
+    MCP calls this at the start of each tool call. A long-lived server must
+    not lose the relay for every later read because one page returned 403.
+    A CLI process does not call this, so one 403 still skips Jina for the
+    rest of that process, including a later page of the same read.
+    """
+    global _jina_spent
+    _jina_spent = False
+
+
 def jina_enabled() -> bool:
     """Whether the Jina Reader relay is allowed (P3.5 / Q4).
 
