@@ -1,0 +1,2578 @@
+{
+ "built": "2026-10-06",
+ "rows": [
+  {
+   "case": "269-v1",
+   "pr": 269,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.4,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 33448,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    "",
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "269-v1",
+   "pr": 269,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 21.0,
+   "error": "",
+   "diff_chars": 33448,
+   "prompt_tokens": 18311,
+   "answer_tokens": 765,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    "",
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 4,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 1213,
+     "text": "`_log_tail` strips the timestamp with a regex but leaves the `##[group]` marker's leading `##[group]` text handling inconsistent: it keeps the step name but the comment says markers are stripped, while `##[endgroup]` lines are dropped entirely. The docstring overpromises slightly. Docstring says group markers stripped; the step name is kept on purpose. Reword the docstring to say the step name is kept and endgroup lines dropped."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 1247,
+     "text": "`job_log` falls back to `run.get(\"id\")` when `details_url` has no `/job/`, but a check run id and its job id are not the same number; the PR body claims they share one id, which is not true in general. Fallback uses run id as job id; those are not the same. Drop the `run.get(\"id\")` fallback or look up the job id from the run's jobs list."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 1263,
+     "text": "`failed_log_tails` silently skips a failed job whose log read raises, printing to stderr only. The note then says nothing about that job, which is fine, but the limit of 2 means a third failed job's tail is dropped without a word. Third failed job's tail is dropped silently past the limit of 2. Note in the fold when more than `limit` jobs failed, or raise the limit."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 1895,
+     "text": "`tails` is only fetched when `check_state == \"fail\"`, so a timed-out job that classifies as something else gets no tail. Minor, since `classify_checks` maps timed_out to fail in practice. Log tails only on fail state; a timed_out classified otherwise is skipped. Fetch tails for any run whose conclusion is failure or timed_out, regardless of the aggregated state."
+    }
+   ]
+  },
+  {
+   "case": "269-v1",
+   "pr": 269,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 80.4,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 33448,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    "",
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "269-v1",
+   "pr": 269,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 6.9,
+   "error": "",
+   "diff_chars": 33448,
+   "prompt_tokens": 20150,
+   "answer_tokens": 173,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    "",
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 1895,
+     "text": "The log tail fetch uses the token directly, which is fine, but it's good to ensure the token has the right permissions. Log tail fetch uses the token directly. The logic is sound."
+    }
+   ]
+  },
+  {
+   "case": "269-v1",
+   "pr": 269,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 33448,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    "",
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "269-v1",
+   "pr": 269,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 300.0,
+   "error": "LLM empty content https://inference-api.nousresearch.com/v1 meituan/longcat-2.5-preview:free (finish_reason=?, max_tokens=32000)",
+   "diff_chars": 33448,
+   "prompt_tokens": 0,
+   "answer_tokens": 4307,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    "",
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "269-v1",
+   "pr": 269,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 80.4,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 33448,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    "",
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "269-v1",
+   "pr": 269,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 7.9,
+   "error": "",
+   "diff_chars": 33448,
+   "prompt_tokens": 20150,
+   "answer_tokens": 155,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    "",
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 696,
+     "text": "The log tail logic uses a hardcoded limit of 25 lines, which might be too short for some complex errors. Log tail limit of 25 lines might be too short for complex errors. Increase the limit or make it configurable."
+    }
+   ]
+  },
+  {
+   "case": "271-v1",
+   "pr": 271,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 25936,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "271-v1",
+   "pr": 271,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 25.0,
+   "error": "",
+   "diff_chars": 25936,
+   "prompt_tokens": 13337,
+   "answer_tokens": 808,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 1,
+   "findings": 4,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "real",
+     "path": "benchmarks/measure_relay_demand.py",
+     "line": 41,
+     "text": "`\"datadome-co\"` is a case name, not a backend or reason string. `classify` only ever sees `last_why` and `last_backend`, so this marker can never match and `datadome-co` is caught by `\"datadome\"` instead. Dead entry in the tuple. `datadome-co` is a case name, never appears in the blob; dead marker. Drop the `\"datadome-co\"` entry; `\"datadome\"` already covers it."
+    },
+    {
+     "sev": "skip",
+     "path": "benchmarks/measure_relay_demand.py",
+     "line": 70,
+     "text": "`unlocker._MIN_CHARS` reaches into a private module constant. It works today, but a rename breaks the benchmark silently rather than at import. Private `_MIN_CHARS` reach-in; a rename breaks the benchmark quietly. Import the public name if one exists, or define the floor locally with a comment."
+    },
+    {
+     "sev": "skip",
+     "path": "benchmarks/measure_relay_demand.py",
+     "line": 90,
+     "text": "The per-case loop is O(n^2): for every case it rescans all rows. Harmless at 19 cases, wrong shape if the suites grow. Per-case loop rescans all rows; O(n^2) on suite size. Build a dict keyed by case name, or iterate rows once."
+    },
+    {
+     "sev": "skip",
+     "path": "benchmarks/measure_relay_demand.py",
+     "line": 100,
+     "text": "`tally[\"READ OK\"]` is read on the success path and again for `fails`, but `total` is computed from the tally itself, so a case counted under neither bucket would silently shrink the denominator. Denominator comes from the tally, so an uncounted case shrinks it. Count cases separately and assert the tally sums to it."
+    }
+   ]
+  },
+  {
+   "case": "271-v1",
+   "pr": 271,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 80.4,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 25936,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "271-v1",
+   "pr": 271,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 3.0,
+   "error": "LLM 503 https://generativelanguage.googleapis.com/v1beta/openai gemini-3.1-flash-lite: [{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently ",
+   "diff_chars": 25936,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "271-v1",
+   "pr": 271,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 25936,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "271-v1",
+   "pr": 271,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 277.7,
+   "error": "",
+   "diff_chars": 25936,
+   "prompt_tokens": 13334,
+   "answer_tokens": 14766,
+   "reasoning_tokens": 14261,
+   "caught": [
+    ""
+   ],
+   "reals": 1,
+   "findings": 3,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "real",
+     "path": "benchmarks/measure_relay_demand.py",
+     "line": 84,
+     "text": "The script makes network requests that take >1s and prints all results to stdout via print(). P4.6 says work that can sit >1s must tick on stderr, never stdout. print() to stdout for >1s network work violates P4.6. Route all print() output to sys.stderr, e.g. print(..., file=sys.stderr)."
+    },
+    {
+     "sev": "skip",
+     "path": "benchmarks/measure_relay_demand.py",
+     "line": 44,
+     "text": "classify() takes a url parameter that is never used in the function body. classify() has an unused url parameter. Remove url from the signature and update the call site at line 75."
+    },
+    {
+     "sev": "skip",
+     "path": "benchmarks/measure_relay_demand.py",
+     "line": 40,
+     "text": "\"datadome-co\" in RELAY_FIXABLE_MARKERS is redundant; \"datadome\" on line 30 already matches it. \"datadome-co\" marker is redundant with \"datadome\". Remove the \"datadome-co\" entry from RELAY_FIXABLE_MARKERS."
+    }
+   ]
+  },
+  {
+   "case": "271-v1",
+   "pr": 271,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 80.3,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 25936,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "271-v1",
+   "pr": 271,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.3,
+   "error": "LLM 503 https://generativelanguage.googleapis.com/v1beta/openai gemini-3.1-flash-lite: [{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently ",
+   "diff_chars": 25936,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "274-v1",
+   "pr": 274,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.3,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 12714,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "274-v1",
+   "pr": 274,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 14.3,
+   "error": "",
+   "diff_chars": 12714,
+   "prompt_tokens": 12014,
+   "answer_tokens": 461,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": ".github/workflows/hare-ci.yml",
+     "line": 26,
+     "text": "The App token mint is `continue-on-error: true`, so a bad PEM or missing secret silently falls back to `secrets.GITHUB_TOKEN`, which cannot edit a review the App posted. The refresh then no-ops on every PR and the note stays at Wait. Mint failure falls back to a token that cannot edit Hare's note, so the refresh silently does nothing. Fail the step when the mint fails, or at least surface a loud warning, so a broken App config is visible instead of a permanently stale note."
+    }
+   ]
+  },
+  {
+   "case": "274-v1",
+   "pr": 274,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 80.2,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 12714,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "274-v1",
+   "pr": 274,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 13.6,
+   "error": "",
+   "diff_chars": 12714,
+   "prompt_tokens": 13207,
+   "answer_tokens": 101,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "274-v1",
+   "pr": 274,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 12714,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "274-v1",
+   "pr": 274,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 300.0,
+   "error": "LLM empty content https://inference-api.nousresearch.com/v1 meituan/longcat-2.5-preview:free (finish_reason=?, max_tokens=32000)",
+   "diff_chars": 12714,
+   "prompt_tokens": 0,
+   "answer_tokens": 4387,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "274-v1",
+   "pr": 274,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 80.2,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 12714,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "274-v1",
+   "pr": 274,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 9.6,
+   "error": "",
+   "diff_chars": 12714,
+   "prompt_tokens": 13207,
+   "answer_tokens": 232,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": ".github/workflows/hare-ci.yml",
+     "line": 48,
+     "text": "The script uses `HARE_ACTIONS_TOKEN` for reading logs, but the environment variable is passed as `HARE_ACTIONS_TOKEN` while the code expects it via `_env`. Environment variable naming for log reading is slightly redundant but functional. The current setup is correct as the script reads the token from the environment."
+    }
+   ]
+  },
+  {
+   "case": "275-v1",
+   "pr": 275,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 10230,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "275-v1",
+   "pr": 275,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 15.9,
+   "error": "",
+   "diff_chars": 10230,
+   "prompt_tokens": 11371,
+   "answer_tokens": 564,
+   "reasoning_tokens": 0,
+   "caught": [
+    "skip"
+   ],
+   "reals": 0,
+   "findings": 3,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 1355,
+     "text": "The byte cap counts bytes read, not bytes kept, so a log with a huge first line still pulls that line into memory before the cap trips. Byte cap counts bytes read, not kept; a giant first line still loads. Decode and check the line length before yielding, or note the cap is on bytes read not bytes held."
+    },
+    {
+     "sev": "skip",
+     "path": "tests/test_hare_r1.py",
+     "line": 233,
+     "text": "The test asserts the exact order but does not assert that `read_checks` was called exactly once, which was the original bug's shape. Order is asserted, call count is not; the original bug was two reads. Add an assertion that the checks function was called exactly once."
+    },
+    {
+     "sev": "skip",
+     "path": "tests/test_hare_r1.py",
+     "line": 255,
+     "text": "The byte-cap test uses a 25-byte cap on a 100-byte stream, which is a different scale from the 64 MB production cap and does not exercise a realistic boundary. Cap test uses 25 bytes, not a realistic boundary near 64 MB. Use a cap closer to the production value or a generator that yields a known total, so the boundary is meaningful."
+    }
+   ]
+  },
+  {
+   "case": "275-v1",
+   "pr": 275,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 80.2,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 10230,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "275-v1",
+   "pr": 275,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 8.4,
+   "error": "",
+   "diff_chars": 10230,
+   "prompt_tokens": 12463,
+   "answer_tokens": 129,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "275-v1",
+   "pr": 275,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 10230,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "275-v1",
+   "pr": 275,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 300.0,
+   "error": "LLM empty content https://inference-api.nousresearch.com/v1 meituan/longcat-2.5-preview:free (finish_reason=?, max_tokens=32000)",
+   "diff_chars": 10230,
+   "prompt_tokens": 0,
+   "answer_tokens": 4324,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "275-v1",
+   "pr": 275,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 80.6,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 10230,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "275-v1",
+   "pr": 275,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 1.6,
+   "error": "LLM 503 https://generativelanguage.googleapis.com/v1beta/openai gemini-3.1-flash-lite: [{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently ",
+   "diff_chars": 10230,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "245",
+   "pr": 245,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 5994,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "245",
+   "pr": 245,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 12.8,
+   "error": "",
+   "diff_chars": 5994,
+   "prompt_tokens": 7935,
+   "answer_tokens": 401,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 2,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 845,
+     "text": "The restart branch parses the partial through `repair_json` and `extract_json` on every `{` continuation, even when the partial is already valid JSON. Restart branch reparses the partial on every `{` continuation. Parse the partial once before the loop, or skip the comparison when `extract_json(partial)` already succeeds."
+    },
+    {
+     "sev": "skip",
+     "path": "tests/test_hare_r1.py",
+     "line": 1058,
+     "text": "The restart test asserts `not hare_r1.LAST_CUT[\"continued\"]`, which is a side effect of the branch rather than the behavior under test. Test asserts a LAST_CUT flag instead of the stitched result. Drop the flag assertion; the finding count and the absence of line 99 already pin the behavior."
+    }
+   ]
+  },
+  {
+   "case": "245",
+   "pr": 245,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 5.3,
+   "error": "",
+   "diff_chars": 5994,
+   "prompt_tokens": 6746,
+   "answer_tokens": 2165,
+   "reasoning_tokens": 1163,
+   "caught": [
+    "real"
+   ],
+   "reals": 3,
+   "findings": 3,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "real",
+     "path": "scripts/hare_r1.py",
+     "line": 562,
+     "text": "The new _walk returns a variable `in_str` that is never defined, causing a NameError. Undefined `in_str` in _walk return causes a NameError. Define and maintain a boolean flag for open strings inside _walk."
+    },
+    {
+     "sev": "real",
+     "path": "scripts/hare_r1.py",
+     "line": 845,
+     "text": "`stitched` may be used without being assigned when a restart is shorter than the kept findings. `stitched` can be referenced before assignment in wrap_up. Initialize `stitched` to the continuation case before the restart logic or add an else branch."
+    },
+    {
+     "sev": "real",
+     "path": "scripts/hare_r1.py",
+     "line": null,
+     "text": "Other calls to `_walk` still expect a two\u2011value return, which will raise a ValueError after the signature change. Unupdated `_walk` callers will break due to mismatched return unpacking. Update all remaining `_walk` call sites to accept the third boolean or ignore it."
+    }
+   ]
+  },
+  {
+   "case": "245",
+   "pr": 245,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 12.7,
+   "error": "",
+   "diff_chars": 5994,
+   "prompt_tokens": 8675,
+   "answer_tokens": 95,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "245",
+   "pr": 245,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 5994,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "245",
+   "pr": 245,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 300.0,
+   "error": "LLM empty content https://inference-api.nousresearch.com/v1 meituan/longcat-2.5-preview:free (finish_reason=?, max_tokens=32000)",
+   "diff_chars": 5994,
+   "prompt_tokens": 0,
+   "answer_tokens": 4320,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "245",
+   "pr": 245,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 5.1,
+   "error": "",
+   "diff_chars": 5994,
+   "prompt_tokens": 6746,
+   "answer_tokens": 2077,
+   "reasoning_tokens": 1615,
+   "caught": [
+    "real"
+   ],
+   "reals": 1,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "real",
+     "path": "scripts/hare_r1.py",
+     "line": 837,
+     "text": "wrap_up may reference undefined variable `stitched` when a restart JSON does not contain more findings than the partial, causing UnboundLocalError. Potential UnboundLocalError in wrap_up when restart is not longer than kept findings. Add an else branch to assign stitched = partial + tail when the restart is not longer."
+    }
+   ]
+  },
+  {
+   "case": "245",
+   "pr": 245,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 9.7,
+   "error": "",
+   "diff_chars": 5994,
+   "prompt_tokens": 8675,
+   "answer_tokens": 255,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 842,
+     "text": "The comment mentions '800-token restart', but the actual limit is defined by LLM_MAX_TOKENS. Comment refers to a hardcoded 800 tokens instead of the variable. Update the comment to reference LLM_MAX_TOKENS."
+    }
+   ]
+  },
+  {
+   "case": "246",
+   "pr": 246,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 58501,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "246",
+   "pr": 246,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 41.1,
+   "error": "",
+   "diff_chars": 58501,
+   "prompt_tokens": 29123,
+   "answer_tokens": 1704,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 3,
+   "findings": 8,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "real",
+     "path": "docs/hare-ledger.json",
+     "line": 1,
+     "text": "The PR body says \"0 scores\" and the summary block says `\"scores\": 0`, yet the same file records a score on PR 235 (`/hare score 2 thin on the tests`, 2026-10-03T20:40:48Z). The ledger's own first build disproves the claim, and the markdown repeats it as \"Owner scores: 0 given.\" Body and summary say 0 scores; the JSON records one on PR 235. Rebuild the ledger from the live repo so the summary and the markdown agree with the entries, and correct the PR body's \"0 scores\" line."
+    },
+    {
+     "sev": "real",
+     "path": "scripts/hare_ledger.py",
+     "line": 37,
+     "text": "`score_from` matches `/hare score 3` anywhere in a comment, so a review or a PR body that quotes the command (as this very PR body does) is read as an owner verdict. `is_score` in `hare_r1.py` has the same looseness, so a quoted command would make the Action exit without a note. Score regex matches a quoted `/hare score 3` in prose, not just a command. Anchor the match to the start of the trimmed comment and require the score to be the first token after the tag."
+    },
+    {
+     "sev": "real",
+     "path": "scripts/hare_ledger.py",
+     "line": 196,
+     "text": "`build` walks every PR on the repo (up to 200) and issues four API calls per PR that has a Hare note, with no cache and no `--since`. On this repo that is roughly 180 GraphQL and REST calls on a weekly schedule, and the workflow has a 10 minute timeout. Full rebuild is four API calls per PR, no cache, inside a 10 minute job. Add a `--since` / incremental mode that only revisits PRs with notes or activity newer than the last build, or cache per-PR payloads keyed on the note's submitted_at."
+    },
+    {
+     "sev": "skip",
+     "path": ".github/workflows/hare-ledger.yml",
+     "line": 36,
+     "text": "The workflow force-pushes the same branch every week and falls back to `|| echo \"PR already open\"`, so a week whose ledger changed while the previous PR was still open is silently dropped rather than pushed onto the open PR. Force-push plus the echo fallback drops a week when the PR is still open. Push to the existing open `chore/hare-ledger-*` branch instead of failing, or reopen the branch when the PR was closed unmerged."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_ledger.py",
+     "line": 100,
+     "text": "`pr_rows` hardcodes `\"files\": []`, so the ledger never records which files a note touched. `prior_findings` still works because it reads `loc`, but the field is dead and the markdown cannot show it. `files` is always empty; the ledger never records a note's files. Populate `files` from the review's `comments[].path` (or drop the field) so the markdown can show what each note covered."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_ledger.py",
+     "line": 12,
+     "text": "The module imports `hare_r1` for `_no_em` and `_plain`, so the ledger inherits the review script's whole import surface. Harmless today, but the two are coupled for two one-line helpers. Ledger imports the review script for two text helpers. Move `_no_em` and `_plain` into a small shared module, or inline them, so the ledger does not import the reviewer."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_ledger.py",
+     "line": 163,
+     "text": "`render_md` builds the hop table and the By-PR table with no blank line between them, so the markdown renders the last hop row as part of the next heading. The committed `docs/hare-ledger.md` shows exactly that. Missing blank line between the hop table and `## By PR`. Append an empty line after the hop table rows."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_ledger.py",
+     "line": 104,
+     "text": "A finding whose thread is resolved is marked `resolved` even when a later Since line said `fixed` or `still applies`, because the resolved check runs last and only looks at `fate == \"open\"`. It is guarded, but a resolved thread on a finding that a later note called `still applies` will read as resolved. Resolved thread can override a later `still applies` verdict. Only mark `resolved` when no later note gave the finding an explicit fate."
+    }
+   ]
+  },
+  {
+   "case": "246",
+   "pr": 246,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 82.1,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 58501,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "246",
+   "pr": 246,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 78.9,
+   "error": "",
+   "diff_chars": 58501,
+   "prompt_tokens": 31980,
+   "answer_tokens": 234,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 2,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "scripts/hare_ledger.py",
+     "line": 18,
+     "text": "The script uses `sys.path.insert` to import `hare_r1`. While common in this repo, it's a bit brittle. Use of `sys.path.insert` for imports is a bit brittle. Consider a more robust import mechanism if the script structure grows."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 1115,
+     "text": "The `ledger_block` function reads the ledger file every time a review runs. For a large ledger, this might be slow, though it's likely fine for now. Reading the ledger file on every review might be slow if it grows large. Consider caching the ledger content if performance becomes an issue."
+    }
+   ]
+  },
+  {
+   "case": "246",
+   "pr": 246,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 58501,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "246",
+   "pr": 246,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 300.0,
+   "error": "LLM empty content https://inference-api.nousresearch.com/v1 meituan/longcat-2.5-preview:free (finish_reason=?, max_tokens=32000)",
+   "diff_chars": 58501,
+   "prompt_tokens": 0,
+   "answer_tokens": 4489,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "246",
+   "pr": 246,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 81.8,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 58501,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "246",
+   "pr": 246,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 6.3,
+   "error": "",
+   "diff_chars": 58501,
+   "prompt_tokens": 31980,
+   "answer_tokens": 507,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 2,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "scripts/hare_ledger.py",
+     "line": 135,
+     "text": "The `summarize` function uses `round(sum(scores) / len(scores), 2)`, which will raise a `ZeroDivisionError` if `scores` is empty. Division by zero in `summarize` if `scores` is empty. Add a check for empty scores before dividing."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_ledger.py",
+     "line": 223,
+     "text": "The `main` function prints to stdout, which violates the P4.6 rule (diagnostics must go to stderr). Diagnostic output goes to stdout instead of stderr. Change the print statement to use `file=sys.stderr`."
+    }
+   ]
+  },
+  {
+   "case": "248",
+   "pr": 248,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 13809,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "248",
+   "pr": 248,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 16.8,
+   "error": "",
+   "diff_chars": 13809,
+   "prompt_tokens": 10717,
+   "answer_tokens": 707,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 1,
+   "findings": 4,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "real",
+     "path": ".github/workflows/hare-ledger.yml",
+     "line": 30,
+     "text": "The PR body says the rules block comes from low scores, but on a first run with no scores the block is the placeholder text. The body overstates what the PR contains. PR body claims rules from low scores, but first run ships placeholder text. Make the body conditional on whether rules were actually written, or soften the claim to say the block is written from scores when they exist."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_ledger.py",
+     "line": 178,
+     "text": "The dedup key strips trailing periods and lowercases, so 'Thin on the tests.' and 'thin on the tests' fold together. That is correct, but the output preserves the first-seen casing, which may look inconsistent across runs. Dedup folds on reason text, but output keeps first-seen casing. Consider normalizing the reason text to a consistent casing before writing the rule line."
+    },
+    {
+     "sev": "skip",
+     "path": "scripts/hare_r1.py",
+     "line": 871,
+     "text": "The system prompt says 'HARE.md: that is the owner's own list of what Hare missed before.' The file also holds owner-written rules outside the block, not just learned ones. Prompt calls HARE.md the missed list, but it also holds owner rules. Widen the prompt wording to cover both kinds of line the file carries."
+    },
+    {
+     "sev": "skip",
+     "path": "HARE.md",
+     "line": 1,
+     "text": "The file header says 'Hare reads both before every note,' but the fetch is best-effort and silently empty on any error. The claim is true in the happy path only. Header says Hare reads both, but fetch is best-effort and silent on failure. Either surface a stderr note when HARE.md cannot be read, or soften the header claim."
+    }
+   ]
+  },
+  {
+   "case": "248",
+   "pr": 248,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 80.4,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 13809,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "248",
+   "pr": 248,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 10.5,
+   "error": "",
+   "diff_chars": 13809,
+   "prompt_tokens": 11734,
+   "answer_tokens": 337,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 1,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "real",
+     "path": "AGENTS.md",
+     "line": 22,
+     "text": "This rules block is added to AGENTS.md, but the ledger script only updates HARE.md. It will become stale immediately. Stale rules block in AGENTS.md; the script only updates HARE.md. Remove the hare-ledger:rules block from AGENTS.md."
+    }
+   ]
+  },
+  {
+   "case": "248",
+   "pr": 248,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 13809,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "248",
+   "pr": 248,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 300.0,
+   "error": "LLM empty content https://inference-api.nousresearch.com/v1 meituan/longcat-2.5-preview:free (finish_reason=?, max_tokens=32000)",
+   "diff_chars": 13809,
+   "prompt_tokens": 0,
+   "answer_tokens": 4985,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "248",
+   "pr": 248,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 80.5,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 13809,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "248",
+   "pr": 248,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 2.9,
+   "error": "",
+   "diff_chars": 13809,
+   "prompt_tokens": 11734,
+   "answer_tokens": 212,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "scripts/hare_ledger.py",
+     "line": 204,
+     "text": "The logic for deduplicating rules uses a simple string strip and lower, which might be too aggressive if rules differ only by punctuation. Deduplication logic might be too aggressive. Consider if exact string matching is safer than stripping punctuation."
+    }
+   ]
+  },
+  {
+   "case": "249",
+   "pr": 249,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 15190,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "249",
+   "pr": 249,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 28.3,
+   "error": "",
+   "diff_chars": 15190,
+   "prompt_tokens": 9138,
+   "answer_tokens": 1486,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "PLAN.md",
+     "line": 259,
+     "text": "The rewritten failover chain lists `poolside/laguna-s-2.1:free` twice in a row, once under OpenRouter and once under Nous. The next line explains the Nous copy is deliberately unmeasured, so it reads as intentional, but a reader skimming the chain sees a duplicate hop. Failover chain lists poolside/laguna-s-2.1:free twice in a row, OpenRouter then Nous. Mark the second occurrence as the Nous copy so the repeat reads as deliberate, e.g. `\u2192 Nous poolside/laguna-s-2.1:free (unmeasured copy)`."
+    }
+   ]
+  },
+  {
+   "case": "249",
+   "pr": 249,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 80.4,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 15190,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "249",
+   "pr": 249,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 5.2,
+   "error": "",
+   "diff_chars": 15190,
+   "prompt_tokens": 9420,
+   "answer_tokens": 89,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "249",
+   "pr": 249,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 15190,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "249",
+   "pr": 249,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 172.8,
+   "error": "",
+   "diff_chars": 15190,
+   "prompt_tokens": 9135,
+   "answer_tokens": 9976,
+   "reasoning_tokens": 9513,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "PLAN.md",
+     "line": 272,
+     "text": "The R1e line still presents 'Pause after a few reviewed pushes until `/hare` or `@hare`.' as current behavior in the main text, with a note at the end saying this spec line is superseded. The main text could be updated to reflect the owner's call. R1e main text still says 'Pause after a few reviewed pushes' despite supersession note. Qualify the 'Pause after a few reviewed pushes' language in the main text to note it is off by default."
+    }
+   ]
+  },
+  {
+   "case": "249",
+   "pr": 249,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 81.7,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 15190,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "249",
+   "pr": 249,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 6.2,
+   "error": "",
+   "diff_chars": 15190,
+   "prompt_tokens": 9420,
+   "answer_tokens": 198,
+   "reasoning_tokens": 0,
+   "caught": [
+    ""
+   ],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "PLAN.md",
+     "line": 269,
+     "text": "The spec line about pausing after three reviewed pushes is marked as superseded, but the text remains in the list. The superseded spec line about pausing after three pushes remains in the list. Remove the sentence 'Pause after a few reviewed pushes until /hare or @hare' to avoid confusion."
+    }
+   ]
+  },
+  {
+   "case": "258",
+   "pr": 258,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 9455,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "258",
+   "pr": 258,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 12.2,
+   "error": "",
+   "diff_chars": 9455,
+   "prompt_tokens": 10009,
+   "answer_tokens": 516,
+   "reasoning_tokens": 0,
+   "caught": [
+    "skip",
+    ""
+   ],
+   "reals": 0,
+   "findings": 2,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "AGENTS.md",
+     "line": 45,
+     "text": "The trigger line still says the brain is Groq then OpenRouter then Nous then Gemini then Zen, which is the order this PR replaces. AGENTS.md trigger line still lists the old chain order. Update the brain order in AGENTS.md to OpenRouter then Nous then Groq then Gemini then Zen."
+    },
+    {
+     "sev": "skip",
+     "path": "tests/test_hare_r1.py",
+     "line": 646,
+     "text": "The comment above the fixed-order assertion still says OpenRouter's qwen leads, then Nous, then Gemini, which is right, but the old Gemini-fallback sentence above it is now stale. Stale comment says Gemini is the fallback, not the default. Trim the comment to the new order and drop the Gemini-fallback sentence."
+    }
+   ]
+  },
+  {
+   "case": "258",
+   "pr": 258,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 80.8,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 9455,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "258",
+   "pr": 258,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.5,
+   "error": "LLM 503 https://generativelanguage.googleapis.com/v1beta/openai gemini-3.1-flash-lite: [{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently ",
+   "diff_chars": 9455,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "258",
+   "pr": 258,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.2,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 9455,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "258",
+   "pr": 258,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 209.7,
+   "error": "",
+   "diff_chars": 9455,
+   "prompt_tokens": 10006,
+   "answer_tokens": 13575,
+   "reasoning_tokens": 13300,
+   "caught": [
+    "real",
+    ""
+   ],
+   "reals": 1,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "real",
+     "path": "AGENTS.md",
+     "line": null,
+     "text": "AGENTS.md L45 still says 'Brain: Groq then OpenRouter then Nous then Gemini then Zen,' but the code now starts with OpenRouter and Nous. The contract doc contradicts the code. AGENTS.md says old chain order; code now starts with OpenRouter and Nous. Update the AGENTS.md trigger line to say 'OpenRouter then Nous then Groq then Gemini then Zen.'"
+    }
+   ]
+  },
+  {
+   "case": "258",
+   "pr": 258,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 80.9,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 9455,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "258",
+   "pr": 258,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.4,
+   "error": "LLM 503 https://generativelanguage.googleapis.com/v1beta/openai gemini-3.1-flash-lite: [{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently ",
+   "diff_chars": 9455,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [
+    "",
+    ""
+   ],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "270",
+   "pr": 270,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 4601,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "270",
+   "pr": 270,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 9.6,
+   "error": "",
+   "diff_chars": 4601,
+   "prompt_tokens": 6020,
+   "answer_tokens": 380,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "PLAN.md",
+     "line": 525,
+     "text": "The row says the weekly ledger run merges 'unless Hare finds a real problem', which matches HARE.md, but the row does not mention that the run is pushed with GITHUB_TOKEN and therefore fires no CI or Hare, the open question from the third pass. Row omits the GITHUB_TOKEN open question from the third pass. Add a clause noting the weekly run still fires no CI or Hare on GITHUB_TOKEN, the owner's call."
+    }
+   ]
+  },
+  {
+   "case": "270",
+   "pr": 270,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 4.0,
+   "error": "",
+   "diff_chars": 4601,
+   "prompt_tokens": 5910,
+   "answer_tokens": 1656,
+   "reasoning_tokens": 1052,
+   "caught": [],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "PLAN.md",
+     "line": null,
+     "text": "The added table row exceeds typical line\u2011length limits, making the file hard to read. Table row is excessively long; consider shortening. shorten the description to a concise summary."
+    }
+   ]
+  },
+  {
+   "case": "270",
+   "pr": 270,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 8.3,
+   "error": "",
+   "diff_chars": 4601,
+   "prompt_tokens": 6206,
+   "answer_tokens": 78,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "270",
+   "pr": 270,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 4601,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "270",
+   "pr": 270,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 69.2,
+   "error": "",
+   "diff_chars": 4601,
+   "prompt_tokens": 6017,
+   "answer_tokens": 4386,
+   "reasoning_tokens": 4073,
+   "caught": [],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "PLAN.md",
+     "line": 525,
+     "text": "The PR body says it folds #258 to #268, but #260 is not mentioned anywhere in the row. Either it was trivial and intentionally skipped, or the range claim is slightly overstated. Body claims folds #258 to #268, but #260 is missing from the row. Check whether #260 was substantive; if so, add a clause, or note in the body why it was excluded."
+    }
+   ]
+  },
+  {
+   "case": "270",
+   "pr": 270,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 4.0,
+   "error": "",
+   "diff_chars": 4601,
+   "prompt_tokens": 5910,
+   "answer_tokens": 1624,
+   "reasoning_tokens": 1378,
+   "caught": [],
+   "reals": 1,
+   "findings": 1,
+   "false_reals": 1,
+   "raw_findings": [
+    {
+     "sev": "real",
+     "path": "PLAN.md",
+     "line": 525,
+     "text": "Action script contains a `print` that violates P4.6; the PR only mentions it without fixing. Unresolved P4.6 stdout print in Action script, mentioned but not fixed. remove or replace the stdout print in the Action script to comply with P4.6."
+    }
+   ]
+  },
+  {
+   "case": "270",
+   "pr": 270,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 6.6,
+   "error": "",
+   "diff_chars": 4601,
+   "prompt_tokens": 6206,
+   "answer_tokens": 114,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "276",
+   "pr": 276,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 49721,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "276",
+   "pr": 276,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 21.6,
+   "error": "",
+   "diff_chars": 49721,
+   "prompt_tokens": 22878,
+   "answer_tokens": 648,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 3,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "docs/hare-bot-log-2026-10-04.json",
+     "line": 1,
+     "text": "860 lines of hand-shaped JSON with no parse check in the diff. A stray comma or brace would land in the file compare_reviewers.py reads. 860 lines of JSON, no parse check in the diff Run python -m json.tool on the new file before merging, and add that to the Test plan."
+    },
+    {
+     "sev": "skip",
+     "path": "docs/hare-bot-log-2026-10-04.md",
+     "line": 256,
+     "text": "The Markdown section for #258 lists 'Findings:' with no bullet under it, then the findings as bare lines. Reads like a dropped list marker. 'Findings:' header with no bullet under it Drop the empty 'Findings:' line, or turn each following line into a bullet."
+    },
+    {
+     "sev": "skip",
+     "path": "docs/hare-bot-log-2026-10-04.md",
+     "line": 296,
+     "text": "The #269 section title is truncated to 'CI read once, right before the note' while the JSON and JSONL rows carry the full title with the Wait and red-job parts. #269 markdown title truncated vs JSON and JSONL Use the full title from the JSON row so the three shapes match."
+    }
+   ]
+  },
+  {
+   "case": "276",
+   "pr": 276,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 80.4,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 49721,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "276",
+   "pr": 276,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.4,
+   "error": "LLM 503 https://generativelanguage.googleapis.com/v1beta/openai gemini-3.1-flash-lite: [{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently ",
+   "diff_chars": 49721,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "276",
+   "pr": 276,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 49721,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "276",
+   "pr": 276,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 300.0,
+   "error": "LLM empty content https://inference-api.nousresearch.com/v1 meituan/longcat-2.5-preview:free (finish_reason=?, max_tokens=32000)",
+   "diff_chars": 49721,
+   "prompt_tokens": 0,
+   "answer_tokens": 4175,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "276",
+   "pr": 276,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 80.6,
+   "error": "LLM 413 https://api.groq.com/openai/v1 openai/gpt-oss-120b: {\"error\":{\"message\":\"Request too large for model `openai/gpt-oss-120b` in organization `org_01m419mk",
+   "diff_chars": 49721,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "276",
+   "pr": 276,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 1.4,
+   "error": "LLM 503 https://generativelanguage.googleapis.com/v1beta/openai gemini-3.1-flash-lite: [{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently ",
+   "diff_chars": 49721,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "278",
+   "pr": 278,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.5,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 1555,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "278",
+   "pr": 278,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 12.3,
+   "error": "",
+   "diff_chars": 1555,
+   "prompt_tokens": 5242,
+   "answer_tokens": 419,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "HARE.md",
+     "line": 33,
+     "text": "The 'changed rule leaves no old copy' rule is added, but the diff does not check AGENTS.md or the docs for lines that still say the old thing, which is what the rule asks for. New 'no old copy' rule added without the sweep it demands. Either run the contradiction sweep across AGENTS.md and docs in this PR, or soften the rule to say Hare checks on the next note."
+    }
+   ]
+  },
+  {
+   "case": "278",
+   "pr": 278,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 2.9,
+   "error": "",
+   "diff_chars": 1555,
+   "prompt_tokens": 5252,
+   "answer_tokens": 1128,
+   "reasoning_tokens": 762,
+   "caught": [],
+   "reals": 0,
+   "findings": 2,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "HARE.md",
+     "line": 31,
+     "text": "The rule \"One read path\" duplicates an existing rule in AGENTS.md, creating unnecessary redundancy. Duplicate \"One read path\" rule \u2013 already defined in AGENTS.md. remove the duplicate rule or rephrase to avoid redundancy"
+    },
+    {
+     "sev": "skip",
+     "path": "HARE.md",
+     "line": 32,
+     "text": "The rule \"Doctor only reads\" mirrors the existing \"doctor probes only\" guidance in AGENTS.md, adding redundant wording. Duplicate \"Doctor only reads\" rule \u2013 already covered elsewhere. remove or consolidate this rule with the existing guidance"
+    }
+   ]
+  },
+  {
+   "case": "278",
+   "pr": 278,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.4,
+   "error": "LLM 503 https://generativelanguage.googleapis.com/v1beta/openai gemini-3.1-flash-lite: [{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently ",
+   "diff_chars": 1555,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "278",
+   "pr": 278,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 1555,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "278",
+   "pr": 278,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 300.0,
+   "error": "LLM empty content https://inference-api.nousresearch.com/v1 meituan/longcat-2.5-preview:free (finish_reason=?, max_tokens=32000)",
+   "diff_chars": 1555,
+   "prompt_tokens": 0,
+   "answer_tokens": 5217,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "278",
+   "pr": 278,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 2.9,
+   "error": "",
+   "diff_chars": 1555,
+   "prompt_tokens": 5252,
+   "answer_tokens": 1162,
+   "reasoning_tokens": 1034,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "278",
+   "pr": 278,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 3.7,
+   "error": "",
+   "diff_chars": 1555,
+   "prompt_tokens": 5437,
+   "answer_tokens": 93,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "279",
+   "pr": 279,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 1156,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "279",
+   "pr": 279,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 10.2,
+   "error": "",
+   "diff_chars": 1156,
+   "prompt_tokens": 5298,
+   "answer_tokens": 263,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "HARE.md",
+     "line": 39,
+     "text": "The rule says scripts under `.github/` do not import searchts, but the PR body only verifies that for `hare_r1.py`, `hare_ledger.py`, and `compare_reviewers.py`. `.github/` no-import claim is broader than the three scripts actually checked. Either verify the `.github/` scripts import nothing from searchts, or scope the rule to the scripts that were checked."
+    }
+   ]
+  },
+  {
+   "case": "279",
+   "pr": 279,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 4.6,
+   "error": "",
+   "diff_chars": 1156,
+   "prompt_tokens": 5310,
+   "answer_tokens": 1917,
+   "reasoning_tokens": 1558,
+   "caught": [],
+   "reals": 0,
+   "findings": 1,
+   "false_reals": 0,
+   "raw_findings": [
+    {
+     "sev": "skip",
+     "path": "HARE.md",
+     "line": null,
+     "text": "The phrasing \"A `print` there is not a finding.\" could be clearer. Clarify wording of print statement rule. Replace \"is not a finding\" with \"is not considered a finding\"."
+    }
+   ]
+  },
+  {
+   "case": "279",
+   "pr": 279,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "off",
+   "graph": "on",
+   "seconds": 0.7,
+   "error": "LLM 503 https://generativelanguage.googleapis.com/v1beta/openai gemini-3.1-flash-lite: [{\n  \"error\": {\n    \"code\": 503,\n    \"message\": \"This model is currently ",
+   "diff_chars": 1156,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "279",
+   "pr": 279,
+   "provider": "openrouter",
+   "model": "qwen/qwen3.8-27b:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 0.1,
+   "error": "LLM 404 https://openrouter.ai/api/v1 qwen/qwen3.8-27b:free: {\"error\":{\"message\":\"This model is unavailable for free. The paid version is available now - use thi",
+   "diff_chars": 1156,
+   "prompt_tokens": 0,
+   "answer_tokens": 0,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "279",
+   "pr": 279,
+   "provider": "nous",
+   "model": "meituan/longcat-2.5-preview:free",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 18.8,
+   "error": "",
+   "diff_chars": 1156,
+   "prompt_tokens": 5295,
+   "answer_tokens": 933,
+   "reasoning_tokens": 785,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  },
+  {
+   "case": "279",
+   "pr": 279,
+   "provider": "groq",
+   "model": "openai/gpt-oss-120b",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 23.8,
+   "error": "",
+   "diff_chars": 1156,
+   "prompt_tokens": 5310,
+   "answer_tokens": 1560,
+   "reasoning_tokens": 1248,
+   "caught": [],
+   "reals": 1,
+   "findings": 1,
+   "false_reals": 1,
+   "raw_findings": [
+    {
+     "sev": "real",
+     "path": "HARE.md",
+     "line": 39,
+     "text": "The new rule allowing `print` in CI scripts contradicts the existing P4.6 rule that forbids stdout for progress, leaving ambiguous guidance. New CI print rule conflicts with existing 'never stdout' rule, causing confusion. Reconcile the new rule with the existing P4.6 rule to avoid contradictory guidance."
+    }
+   ]
+  },
+  {
+   "case": "279",
+   "pr": 279,
+   "provider": "gemini",
+   "model": "gemini-3.1-flash-lite",
+   "mode": "on",
+   "graph": "on",
+   "seconds": 2.2,
+   "error": "",
+   "diff_chars": 1156,
+   "prompt_tokens": 5490,
+   "answer_tokens": 104,
+   "reasoning_tokens": 0,
+   "caught": [],
+   "reals": 0,
+   "findings": 0,
+   "false_reals": 0,
+   "raw_findings": []
+  }
+ ]
+}
