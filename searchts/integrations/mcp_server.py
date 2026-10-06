@@ -314,6 +314,8 @@ def read_url(url: str) -> str:
     blocked = ssrf.guard_mcp_url(url)
     if blocked:
         return blocked
+    # One 403 must not disable Jina for every later tool call on this server.
+    unlocker.reset_jina_spend()
     try:
         result = unlocker.fetch(url)
     except unlocker.UnlockerError as e:
@@ -421,7 +423,7 @@ def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
     """
     from urllib.parse import urlparse
 
-    from searchts import assets, ssrf
+    from searchts import assets, ssrf, unlocker
 
     if not url:
         return "Error: grab_site requires a 'url' argument."
@@ -429,6 +431,7 @@ def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
     blocked = ssrf.guard_mcp_url(url)
     if blocked:
         return blocked
+    unlocker.reset_jina_spend()
     host = urlparse(assets.normalize(url)).netloc.replace(":", "_") or "site"
     default = f"searchts-grab-{host}"
     folder, bad = _mcp_out_dir(out_dir, default)
