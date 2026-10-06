@@ -389,8 +389,10 @@ def test_read_pages_follows_next_then_stops_on_a_loop(monkeypatch):
         "https://example.org/blog/page/2": ("page two", "https://example.org/blog"),
     }
 
-    def fake(url, **_k):
+    def fake(url, **k):
         text, nxt = pages[url]
+        if url.endswith("/page/2"):
+            assert k.get("backends") == ["curl_cffi"]
         return unlocker.FetchResult(backend="curl_cffi", text=text, status=200, final_url=url, next_url=nxt)
 
     monkeypatch.setattr(unlocker, "fetch", fake)
