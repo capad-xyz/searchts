@@ -63,7 +63,7 @@ _LIST_MAX_KEPT = 0.3
 class More:
     """One finding: what kind, the note text, and a URL when there is one."""
 
-    kind: str  # next-page | feed | fold | list | count | index
+    kind: str  # next-page | feed | fold | list | count | index | region
     note: str
     url: Optional[str] = None
 
@@ -683,6 +683,77 @@ def _plural(n: int, one: str, many: str) -> str:
     return one if n == 1 else many
 
 
+def _is_side_region(el) -> bool:
+    """A side panel: aside, complementary, or a sidebar class. Not the article."""
+    tag = el.tag.lower() if isinstance(el.tag, str) else ""
+    if tag == "aside" or (el.get("role") or "").lower() == "complementary":
+        return True
+    return bool(_SIDE_CLASS.search(el.get("class") or ""))
+
+
+_JUNK_REGION = re.compile(
+    r"(?:cookie|consent|gdpr|advert|ads|ad-slot)",
+    re.I,
+)
+
+
+def _junk_region(el) -> bool:
+    """Nav, header, footer, a cookie bar or an ad. Those are not a left-out card."""
+    if _in_nav(el):
+        return True
+    node = el
+    while node is not None:
+        tag = node.tag.lower() if isinstance(node.tag, str) else ""
+        role = (node.get("role") or "").lower()
+        if tag in {"footer", "header"} or role in {"contentinfo", "banner"}:
+            return True
+        if _JUNK_REGION.search(f"{node.get('class') or ''} {node.get('id') or ''}"):
+            return True
+        node = node.getparent()
+    return False
+
+
+def _region_heading(el) -> str:
+    for h in el.xpath(".//h1|.//h2|.//h3|.//h4|.//h5|.//h6"):
+        title = _norm(h.text_content()).replace('"', "'")
+        if len(title) >= 2:
+            return title[:80]
+    return ""
+
+
+def _nested_side(el) -> bool:
+    parent = el.getparent()
+    while parent is not None:
+        if isinstance(parent.tag, str) and _is_side_region(parent):
+            return True
+        parent = parent.getparent()
+    return False
+
+
+def left_out(doc, text: str) -> List[More]:
+    """Headed side panels the extract did not keep. The text is not added back.
+
+    Nav, cookie bars, ads and footers never count. F21b is the pass that
+    would append the text, and it waits on a saved two-region page.
+    """
+    lowered = _norm(text).lower()
+    out: List[More] = []
+    for el in doc.iter():
+        if not isinstance(el.tag, str) or not _is_side_region(el):
+            continue
+        if _nested_side(el) or _junk_region(el):
+            continue
+        heading = _region_heading(el)
+        if not heading or len(_visible_text(el)) < 80:
+            continue
+        if heading.lower() in lowered:
+            continue
+        out.append(More("region", f'[left out: a side panel headed "{heading}"]'))
+        if len(out) >= 3:
+            break
+    return out
+
+
 def detect(html: str, url: str, text: str) -> List[More]:
     """Findings for one read: the page HTML, its URL, and the extracted text."""
     doc = _parse(html)
@@ -727,6 +798,7 @@ def detect(html: str, url: str, text: str) -> List[More]:
             found.append(More("list", f"[partial: the page lists {total} items; this read kept {kept}]"))
         for said in _counts(doc):
             found.append(More("count", f"[page says: {said}]"))
+        found.extend(left_out(doc, text))
     except Exception:  # noqa: BLE001 - a detection bug must never fail a read
         return found
     return found
@@ -943,7 +1015,7 @@ def annotate(text: str, found: List[More]) -> str:
 
 def summary(found: List[More]) -> str:
     """Short stderr tick, e.g. ``more: next page, folded``."""
-    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index"}
+    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out"}
     seen: List[str] = []
     for m in found:
         name = names.get(m.kind, m.kind)

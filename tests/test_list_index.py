@@ -44,6 +44,57 @@ def test_sidebar_archive_does_not_beat_the_main_list():
     assert all("/archive/" not in (a.get("href") or "") for a in items[0].xpath(".//a"))
     assert items[0].xpath(".//a[contains(@href, '/p/')]")
 
+
+def test_a_huge_archive_does_not_drop_the_post_dates():
+    posts = "".join(
+        f'<article class="post"><h3><a href="/p/{i}">Post number {i} on the weblog</a></h3>'
+        f"<p>Posted by Writer {i} on Sept. {i + 1}, 2026</p>"
+        f"<p>A teaser for post {i} that is long enough to be the item.</p></article>"
+        for i in range(10)
+    )
+    months = "".join(
+        f'<li class="month"><a href="/archive/{y}/{m}">Month {m} of {y}</a></li>'
+        for y in range(2004, 2026)
+        for m in range(1, 13)
+    )
+    html = (
+        f"<html><body><main>{posts}</main>"
+        f'<div class="sidebar"><h2>Archive</h2><ul>{months}</ul></div></body></html>'
+    )
+    text = "\n\n".join(
+        f"Post number {i} on the weblog\n\nA teaser for post {i} that is long enough to be the item."
+        for i in range(10)
+    )
+    rebuilt = more.list_index(html, "https://www.djangoproject.com/weblog/", text)
+    assert rebuilt is not None
+    md, note = rebuilt
+    assert "Posted by Writer 0 on Sept. 1, 2026" in md
+    assert "/archive/" not in md
+    assert "dates" in note.note
+
+
+def test_a_headed_side_panel_is_named_and_its_text_stays_out():
+    article = "The article " + ("word " * 40)
+    card = "task details " * 20
+    html = (
+        "<html><body><main><article><h1>The article</h1><p>"
+        + article
+        + "</p></article></main>"
+        + '<aside><h2>prommer.net</h2><p>'
+        + card
+        + "</p></aside>"
+        + '<footer><h2>Site footer</h2><p>'
+        + ("footer words " * 20)
+        + "</p></footer></body></html>"
+    )
+    found = more.detect(html, "https://example.com/post", article)
+    notes = [m.note for m in found if m.kind == "region"]
+    assert notes == ['[left out: a side panel headed "prommer.net"]']
+    annotated = more.annotate(article, found)
+    assert "task details" not in annotated
+    assert "Site footer" not in annotated
+
+
 def test_hacker_news_table_rows_keep_title_link_and_points():
     rows = "".join(
         f'<tr class="athing" id="{i}"><td class="title"><span class="rank">{i}.</span></td>'
