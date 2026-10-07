@@ -597,37 +597,31 @@ def _looks_cookie_wall(text: str) -> bool:
 def _looks_login_wall(text: str) -> bool:
     """True when *text* is an auth shell, not the page the URL named.
 
+    Delegates to :mod:`searchts.walls`. This used to consult a phrase list,
+    and that list was LinkedIn's own copy, so it caught LinkedIn and almost
+    nothing else: Instagram's login form says "Log into Instagram", "Forgot
+    password?" and "Create new account", none of which were in it, and was
+    returned as a successful 913-character read.
+
     LinkedIn ``/feed/`` (and similar) extract to 500–900 chars of Sign in /
     Join now — above ``_MIN_CHARS``, so thin-gate would miss them. Bare
-    "sign in" in a long article or site chrome must not trip this.
+    "sign in" in a long article or site chrome must not trip this, which is
+    what the density ratio in the classifier is for.
     """
-    raw = text or ""
-    head = raw[:8192].lower()
-    if not head:
-        return False
-    for phrase in _LOGIN_WALL_PHRASES:
-        if phrase in head:
-            return True
-    # Density, which does not care which site wrote the form. Checked against
-    # the whole extract rather than the head, because an auth page is short and
-    # an article is long, and the ratio is what separates them.
-    words = len(raw.split())
-    if words >= _AUTH_DENSITY_MIN_WORDS:
-        per_100 = 100.0 * len(_AUTH_WORDS.findall(raw)) / words
-        if per_100 >= _AUTH_DENSITY_PER_100:
-            return True
-    if len(raw.strip()) >= 1500:
-        return False
-    t = raw.lower()
-    has_auth = "sign in" in t or "log in" in t
-    has_signup = (
-        "join now" in t
-        or "create an account" in t
-        or "new to " in t
-        or "don't have an account" in t
-        or "do not have an account" in t
-    )
-    return has_auth and has_signup
+    return _wall_is(text, "auth")
+
+
+def _looks_cookie_wall(text: str) -> bool:
+    """True when the extract IS the consent dialog, not the page behind it."""
+    return _wall_is(text, "consent")
+
+
+def _wall_is(text: str, kind: str) -> bool:
+    """Is this extract a wall of ``kind``? See :mod:`searchts.walls`."""
+    from searchts import walls
+
+    found = walls.classify(text)
+    return found is not None and found.kind == kind
 
 
 #: A page whose words the extraction recovered fewer than this share of are not
