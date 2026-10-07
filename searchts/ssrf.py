@@ -117,24 +117,54 @@ def _embedded_v4(ip: "ipaddress.IPv6Address") -> "Optional[ipaddress.IPv4Address
 
 
 def _encoded_ip(host: str) -> "Optional[ipaddress.IPv4Address]":
-    """Recognize decimal/hex integer IPv4 encodings (classic SSRF bypasses).
+    """Recognize every legacy integer IPv4 encoding libcurl will accept.
 
-    e.g. ``2130706433`` -> 127.0.0.1, ``0x7f000001`` -> 127.0.0.1. Dotted
-    forms are left to the normal parser. Returns None when `host` is not a
-    single encoded integer.
+    Not just decimal and hex. ``inet_aton`` - which is what curl, and most
+    resolvers, use for a numeric host - also reads octal (``017700000001``)
+    and the short forms (``127.1``, ``127.0.1``, ``127.000.000.001``). Those
+    were treated as DNS names here and then allowed, which is the bypass this
+    function exists to stop: the connection was made and only discarded later
+    by ``private_hop``, so an attacker got a blind request into loopback.
+    Returns None when `host` is not a numeric IPv4 form at all.
     """
     h = host.strip()
-    if h and h.isdigit():
-        try:
-            return ipaddress.IPv4Address(int(h))
-        except (ValueError, ipaddress.AddressValueError):
-            return None
+    if not h:
+        return None
     if h.startswith("0x") or h.startswith("0X"):
         try:
             return ipaddress.IPv4Address(int(h, 16))
         except ValueError:
             return None
-    return None
+
+    parts = h.split(".")
+    if len(parts) > 4 or not all(parts):
+        return None
+    last = len(parts) - 1
+    total = 0
+    for i, part in enumerate(parts):
+        if not part.isdigit():
+            return None
+        # inet_aton reads a leading 0 as octal, except a bare "0".
+        base = 8 if (len(part) > 1 and part[0] == "0") else 10
+        try:
+            val = int(part, base)
+        except ValueError:
+            return None
+        # Parts before the last take one octet each from the top of the
+        # address; the last one lands in the bottom octet. That is why "127.1"
+        # is 127.0.0.1, not 0.0.127.1.
+        if i < last:
+            if val > 0xFF:
+                return None
+            total |= val << (8 * (3 - i))
+        else:
+            if val > 0xFFFFFFFF:
+                return None
+            total |= val
+    try:
+        return ipaddress.IPv4Address(total)
+    except (ValueError, ipaddress.AddressValueError):
+        return None
 
 
 def _classify_host(host: str) -> Optional[str]:

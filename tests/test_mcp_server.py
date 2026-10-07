@@ -485,6 +485,13 @@ _SSRF_BLOCKED = [
     "http://127.0.0.1:8080/admin",             # loopback v4 + port
     "https://2130706433/",                     # decimal-encoded 127.0.0.1
     "http://0x7f000001/",                      # hex-encoded 127.0.0.1
+    # The forms inet_aton reads and the guard used to pass as DNS names. libcurl
+    # resolves all of them to loopback, so the connection was made and only
+    # discarded afterwards by private_hop: a blind request into loopback.
+    "http://017700000001/",                    # octal-encoded 127.0.0.1
+    "http://127.1/",                           # inet_aton short form
+    "http://127.0.1/",                         # inet_aton short form
+    "http://127.000.000.001/",                 # zero-padded quad
     "http://[::1]/",                           # loopback v6
     "http://localhost/",                       # loopback hostname
     "http://localhost:9000/",                  # loopback hostname + port
