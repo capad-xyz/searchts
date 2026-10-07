@@ -223,6 +223,9 @@ def probe_pins() -> int:
     exits 1 if a pin that could be tested could not answer, so it can gate a
     model swap. Exits 2 when pins were skipped for want of a key: that is
     untested, not proven good, and it is not a reason to call a pin dead.
+
+    Manual only. Nothing in CI calls it, deliberately: it fires one real call
+    per pin, and a perishable check belongs in a schedule, not in every push.
     """
     keys = {
         "openrouter": _env("SEARCHTS_HARE_API_KEY_OR"),
@@ -232,11 +235,11 @@ def probe_pins() -> int:
         "zen": _env("SEARCHTS_HARE_API_KEY_ZEN"),
     }
     bases = {
-        "openrouter": "https://openrouter.ai/api/v1",
-        "nous": "https://inference-api.nousresearch.com/v1",
-        "groq": "https://api.groq.com/openai/v1",
+        "openrouter": OR_BASE,
+        "nous": NOUS_BASE,
+        "groq": GROQ_BASE,
         "gemini": GEMINI_BASE,
-        "zen": "https://opencode.ai/zen/v1",
+        "zen": ZEN_BASE,
     }
     pins = {
         "openrouter": _csv_models("HARE_OR_MODEL", HARE_OR_DEFAULT),
@@ -246,7 +249,18 @@ def probe_pins() -> int:
         "gemini": _csv_models("HARE_GEMINI_MODEL", HARE_GEMINI_DEFAULT),
         "zen": _csv_models("HARE_ZEN_MODEL", HARE_ZEN_DEFAULT),
     }
+    # Take the request options from build_provider_chain rather than repeating
+    # them here. The probe used to send OpenRouter's nested reasoning shape to
+    # every provider: right for openrouter, wrong for gemini (which wants the
+    # top-level reasoning_effort) and for groq and zen (which production sends
+    # no knob to at all). A pin that passes here was then not evidence about
+    # the hop that runs.
+    with_keys = {p: (keys.get(p) or "probe") for p in pins}
+    options_by_model = {
+        model: dict(opts) for (_n, _b, _k, model, opts) in build_provider_chain(with_keys, pins)
+    }
     dead: list[str] = []
+    throttled: list[str] = []
     unprovable: list[str] = []
     for provider, models in pins.items():
         key = keys.get(provider) or ""
@@ -265,35 +279,49 @@ def probe_pins() -> int:
                 "model": model,
                 "messages": [{"role": "user", "content": _PROBE_ASK}],
                 "max_tokens": 200,
-                "reasoning": NOUS_REASONING if provider == "nous" else OR_REASONING,
             }
+            body.update(options_by_model.get(model, {}))
             req = urllib.request.Request(
                 url, data=json.dumps(body).encode("utf-8"),
                 headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"},
             )
             try:
-                with urllib.request.urlopen(req, timeout=PROBE_TIMEOUT_SEC) as r:
-                    data = json.loads(r.read().decode("utf-8", "replace"))
-                text = str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "")
-                if text.strip():
-                    print(f"{provider}:{model}: answers")
-                else:
-                    print(f"{provider}:{model}: EMPTY (returned no content)")
-                    dead.append(f"{provider}:{model}")
-            except urllib.error.HTTPError as e:
-                why = e.read()[:160].decode("utf-8", "replace").replace("\n", " ")
-                print(f"{provider}:{model}: HTTP {e.code} {why}")
-                dead.append(f"{provider}:{model}")
+                data, code, why = _probe_call(req, body, url)
             except Exception as e:  # noqa: BLE001 - a probe reports, it never raises
                 print(f"{provider}:{model}: {type(e).__name__} {str(e)[:120]}")
+                dead.append(f"{provider}:{model}")
+                continue
+            if code is not None:
+                print(f"{provider}:{model}: HTTP {code} {why}")
+                # A throttle and a retirement want opposite responses: a 429
+                # clears on its own, a 404 means the pin has to change. Filing
+                # them together is what let "busy or blocked" mislead a reader,
+                # and this is the tool meant to produce the evidence instead.
+                if code == 429 or "rate" in why.lower():
+                    throttled.append(f"{provider}:{model}")
+                else:
+                    dead.append(f"{provider}:{model}")
+                continue
+            text = str(((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "")
+            if text.strip():
+                print(f"{provider}:{model}: answers")
+            elif data.get("choices") and (data["choices"][0].get("finish_reason") == "length"):
+                print(f"{provider}:{model}: RAN OUT OF TOKENS while thinking, not dead")
+                throttled.append(f"{provider}:{model}")
+            else:
+                print(f"{provider}:{model}: EMPTY (returned no content)")
                 dead.append(f"{provider}:{model}")
     if unprovable:
         print(f"\n{len(unprovable)} pinned hop(s) were NOT tested, for want of a key:")
         for d in unprovable:
             print(f"  {d}")
         print("  Run this where the key exists before trusting a pin.")
+    if throttled:
+        print(f"\n{len(throttled)} pinned hop(s) were throttled, not dead. Retry later:")
+        for d in throttled:
+            print(f"  {d}")
     if dead:
-        print(f"\n{len(dead)} pinned hop(s) cannot answer right now:")
+        print(f"\n{len(dead)} pinned hop(s) cannot answer:")
         for d in dead:
             print(f"  {d}")
         return 1
@@ -304,6 +332,41 @@ def probe_pins() -> int:
     # whole chain. Exit 2, not 1: 1 means a pin is broken, 2 means nobody looked.
     print("\nevery tested pin answered. The rest are untested, not proven good.")
     return 2
+
+
+def _probe_call(
+    req: urllib.request.Request, body: dict[str, Any], url: str
+) -> tuple[dict[str, Any], "int | None", str]:
+    """One probe call, with the same reasoning-knob fallback the hop loop has.
+
+    Production retries without the knob when a gateway rejects it with a 400 or
+    422 mentioning "reason". The probe had no such path, so a gateway that
+    dislikes the knob made every pin look dead, which is the opposite of what
+    it is for. Returns (payload, None, "") on success and (payload, code, why)
+    on an HTTP failure that survived the retry.
+    """
+    try:
+        with urllib.request.urlopen(req, timeout=PROBE_TIMEOUT_SEC) as r:
+            return json.loads(r.read().decode("utf-8", "replace")), None, ""
+    except urllib.error.HTTPError as e:
+        why = e.read()[:160].decode("utf-8", "replace").replace("\n", " ")
+        if "reasoning" not in body or e.code not in {400, 404, 422} or "reason" not in why.lower():
+            return {}, e.code, why
+        plain = {k: v for k, v in body.items() if k != "reasoning"}
+        retry = urllib.request.Request(
+            url, data=json.dumps(plain).encode("utf-8"),
+            headers={"Authorization": req.get_header("Authorization"), "Content-Type": "application/json"},
+        )
+        print(f"    (knob rejected, retried {model_of(plain)})")
+        try:
+            with urllib.request.urlopen(retry, timeout=PROBE_TIMEOUT_SEC) as r:
+                return json.loads(r.read().decode("utf-8", "replace")), None, ""
+        except urllib.error.HTTPError as e2:
+            return {}, e2.code, e2.read()[:160].decode("utf-8", "replace").replace("\n", " ")
+
+
+def model_of(body: dict[str, Any]) -> str:
+    return str(body.get("model") or "?").split("/")[-1]
 
 
 def _csv_models(name: str, default: str) -> list[str]:
@@ -2280,7 +2343,9 @@ def run() -> int:
     gemini_key = _env("SEARCHTS_HARE_API_KEY_GEMINI")
     groq_models = _csv_models("HARE_GROQ_MODEL", HARE_GROQ_DEFAULT)
     gemini_models = _csv_models("HARE_GEMINI_MODEL", HARE_GEMINI_DEFAULT)
-    nous_models = _csv_models("HARE_NOUS_MODEL", HARE_NOUS_DEFAULT)
+    nous_models = _csv_models("HARE_NOUS_MODEL", HARE_NOUS_DEFAULT) + _csv_models(
+        "HARE_NOUS_EXTRA_MODEL", HARE_NOUS_EXTRA_DEFAULT
+    )
     or_models = _csv_models("HARE_OR_MODEL", HARE_OR_DEFAULT)
     zen_models = _csv_models("HARE_ZEN_MODEL", HARE_ZEN_DEFAULT)
     if not token or not repo_full or not pr:

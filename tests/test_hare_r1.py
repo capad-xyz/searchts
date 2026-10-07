@@ -672,7 +672,8 @@ def test_probe_pins_asks_every_pin_and_names_the_dead_ones(monkeypatch, capsys) 
         body = json.loads(req.data)
         asked.append((body["model"], req.full_url))
         if "gemma" in body["model"]:
-            raise urllib.error.HTTPError(req.full_url, 429, "rate-limited upstream", {}, io.BytesIO(b"{}"))
+            # 404, not 429: a retired slug is the case that must exit 1.
+            raise urllib.error.HTTPError(req.full_url, 404, "model not available", {}, io.BytesIO(b"{}"))
         return FakeResp({"choices": [{"message": {"content": "the next page is not guarded"}}]})
 
     monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
@@ -683,11 +684,147 @@ def test_probe_pins_asks_every_pin_and_names_the_dead_ones(monkeypatch, capsys) 
     rc = hare_r1.probe_pins()
     out = capsys.readouterr().out
     assert "nvidia/nemotron-3.5-lightning:free: answers" in out
-    assert "google/gemma-4-31b-it:free: HTTP 429" in out
+    assert "google/gemma-4-31b-it:free: HTTP 404" in out
     assert rc == 1
     assert any("gemma" in m for m, _ in asked), "the probe must call the hop, not read a catalog"
     # The prompt it sends has a real defect in it, so "answers" means something.
     assert any("security" in _PROBE for _PROBE in [hare_r1._PROBE_ASK])
+
+
+def test_a_throttled_pin_is_not_reported_as_dead(monkeypatch, capsys) -> None:
+    # 429 and 404 want opposite responses: a throttle clears on its own, a
+    # retired slug means the pin has to change. Filing them together is what
+    # let the old nag say "busy or blocked" and send a reader after a pin
+    # change when the provider was merely busy.
+    for var in ("GROQ", "GEMINI", "ZEN", "NOUS"):
+        monkeypatch.setenv(f"SEARCHTS_HARE_API_KEY_{var}", "")
+    monkeypatch.setenv("SEARCHTS_HARE_API_KEY_OR", "k")
+
+    class FakeResp:
+        def __init__(self, payload): self._b = json.dumps(payload).encode()
+        def read(self): return self._b
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_urlopen(req, timeout=0):
+        body = json.loads(req.data)
+        if "gemma" in body["model"]:
+            raise urllib.error.HTTPError(req.full_url, 429, "temporarily rate-limited upstream", {}, io.BytesIO(b"{}"))
+        return FakeResp({"choices": [{"message": {"content": "unguarded"}}]})
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setenv("HARE_OR_MODEL", "google/gemma-4-31b-it:free")
+    rc = hare_r1.probe_pins()
+    out = capsys.readouterr().out
+    assert "throttled, not dead" in out
+    assert "HTTP 429" in out
+    assert "cannot answer:" not in out
+    # 2, not 1: nothing is dead, but the rest of the chain went untested.
+    assert rc == 2
+
+
+def test_the_probe_sends_each_provider_the_options_production_sends(monkeypatch) -> None:
+    # The probe used to send OpenRouter's nested reasoning shape to everyone.
+    # That is wrong for gemini (production sends a top-level reasoning_effort)
+    # and for groq and zen (production sends no knob at all), so a pin could
+    # pass here and still fail as a review hop. Take them from
+    # build_provider_chain so the two cannot drift again.
+    for var in ("OR", "NOUS", "GROQ", "GEMINI", "ZEN"):
+        monkeypatch.setenv(f"SEARCHTS_HARE_API_KEY_{var}", "k")
+    seen: dict[str, dict] = {}
+
+    class FakeResp:
+        def __init__(self, payload): self._b = json.dumps(payload).encode()
+        def read(self): return self._b
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_urlopen(req, timeout=0):
+        body = json.loads(req.data)
+        seen[body["model"]] = {k: v for k, v in body.items() if "reasoning" in k}
+        return FakeResp({"choices": [{"message": {"content": "unguarded"}}]})
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+    assert hare_r1.probe_pins() == 0
+
+    # Spot-check the real defaults rather than synthetic slugs.
+    real = {
+        model: {k: v for k, v in opts.items() if "reasoning" in k}
+        for (_n, _b, _k, model, opts) in hare_r1.build_provider_chain(
+            {p: "k" for p in ("groq", "gemini", "nous", "openrouter", "zen")},
+            {
+                "groq": [hare_r1.HARE_GROQ_DEFAULT],
+                "gemini": [hare_r1.HARE_GEMINI_DEFAULT.split(",")[0]],
+                "nous": [hare_r1.HARE_NOUS_DEFAULT.split(",")[0]],
+                "openrouter": [hare_r1.HARE_OR_DEFAULT.split(",")[0]],
+                "zen": [hare_r1.HARE_ZEN_DEFAULT],
+            },
+        )
+    }
+    for model, opts in real.items():
+        assert seen[model] == opts, f"{model}: probe sent {seen[model]}, production sends {opts}"
+    # And the two shapes that were wrong are now right.
+    assert seen[hare_r1.HARE_GEMINI_DEFAULT.split(",")[0]] == {"reasoning_effort": "low"}
+    assert seen[hare_r1.HARE_GROQ_DEFAULT] == {}
+    assert seen[hare_r1.HARE_ZEN_DEFAULT] == {}
+
+
+def test_a_gateway_that_rejects_the_reasoning_knob_does_not_look_like_a_dead_pin(monkeypatch, capsys) -> None:
+    # Production retries without the knob on a 400 mentioning "reason". The
+    # probe did not, so any gateway that dislikes it reported every pin dead,
+    # which is the opposite of what the probe is for.
+    for var in ("GROQ", "GEMINI", "ZEN", "NOUS"):
+        monkeypatch.setenv(f"SEARCHTS_HARE_API_KEY_{var}", "")
+    monkeypatch.setenv("SEARCHTS_HARE_API_KEY_OR", "k")
+    monkeypatch.setenv("HARE_OR_MODEL", "nvidia/nemotron-3.5-lightning:free")
+    calls: list[bool] = []
+
+    class FakeResp:
+        def __init__(self, payload): self._b = json.dumps(payload).encode()
+        def read(self): return self._b
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_urlopen(req, timeout=0):
+        body = json.loads(req.data)
+        has_knob = "reasoning" in body
+        calls.append(has_knob)
+        if has_knob:
+            # The reason has to be in the body, not only the reason phrase:
+            # production matches _err_body(e) too, and a gateway that says so in
+            # the status line alone is not the case being handled.
+            raise urllib.error.HTTPError(
+                req.full_url, 400, "Bad Request", {},
+                io.BytesIO(b'{"error":{"message":"unknown field reasoning"}}'),
+            )
+        return FakeResp({"choices": [{"message": {"content": "unguarded"}}]})
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+    rc = hare_r1.probe_pins()
+    out = capsys.readouterr().out
+    assert calls == [True, False], "must retry once without the knob"
+    assert "answers" in out
+    assert "cannot answer:" not in out
+    assert rc == 2
+
+
+def test_the_extra_nous_pin_is_reachable_from_the_review_chain(monkeypatch) -> None:
+    # #326 added HARE_NOUS_EXTRA_MODEL and the workflow env for it, but run()
+    # never read the variable. The probe "proved" a hop the review chain could
+    # not call, and the env override was inert.
+    from scripts import hare_r1 as hr
+
+    for var in ("HARE_NOUS_MODEL", "HARE_NOUS_EXTRA_MODEL"):
+        monkeypatch.delenv(var, raising=False)
+    nous = (
+        hr._csv_models("HARE_NOUS_MODEL", hr.HARE_NOUS_DEFAULT)
+        + hr._csv_models("HARE_NOUS_EXTRA_MODEL", hr.HARE_NOUS_EXTRA_DEFAULT)
+    )
+    assert "inclusionai/ling-3.0-flash-sante:free" in nous
+    # run() must build the same list the probe does, or the probe proves nothing.
+    import inspect
+    src = inspect.getsource(hr.run)
+    assert "HARE_NOUS_EXTRA_MODEL" in src, "run() must read the extra nous pin"
 
 
 def test_a_pin_with_no_key_is_untested_not_dead(monkeypatch, capsys) -> None:
