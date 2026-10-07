@@ -95,6 +95,17 @@ _BLOCK_PHRASES = (
     "accounts are required to access old reddit",
     "to keep reddit safe",
     "log in, or continue without an account",
+    # Google served its bot-check on HTTP 200 and it read as content: 964
+    # characters beginning "Our systems have detected unusual traffic from
+    # your computer network", returned to the agent as the search results.
+    # Search engines are the first thing an agent is asked to read, so a
+    # silent block here is worse than a hard failure anywhere else.
+    "detected unusual traffic from your computer network",
+    "this page appears when google automatically detects requests",
+    "solving the above captcha will let you continue",
+    # DuckDuckGo and other engines answering a challenge on 200.
+    "please solve the below captcha to continue",
+    "unusual traffic from your computer network",
 )
 
 #: Login *shells* (HTTP 200, often longer than ``_MIN_CHARS`` after extract).
@@ -110,6 +121,44 @@ _LOGIN_WALL_PHRASES = (
     "you must be logged in",
     "you must be signed in",
 )
+
+#: Auth vocabulary, for the density check below. A login page is made of these;
+#: an article that happens to carry a "Sign in" link in its header carries two.
+_AUTH_WORDS = re.compile(
+    r"(?i)\b(sign in|sign-in|log in|log-in|login|log into|password|username|"
+    r"email address|forgot password|create (?:a )?(?:new )?account|sign up|"
+    r"join now|continue with|remember me)\b"
+)
+
+#: Auth words per 100 words above which the extract IS the auth form. Measured
+#: across the dogfood corpus: instagram 5.79, and every page that reads
+#: correctly sits at 0.40 or below (pypi 0.37, amazon 0.40, guardian 0.21,
+#: wikipedia 0.00). The 15x gap is why a threshold in the middle is safe.
+#:
+#: The phrase list above missed Instagram entirely: its login page says "Log
+#: into Instagram", "Forgot password?" and "Create new account", none of which
+#: are in that list, so a login form was returned as a successful read.
+_AUTH_DENSITY_PER_100 = 2.0
+
+#: Below this many words the density ratio is not trustworthy: one "Sign in"
+#: in an eleven-word line is 9 per 100 and is not a login form. An auth page
+#: always has more to it than that, and this floor is what keeps
+#: "Welcome. Sign in from the menu if you have an account." reading normally.
+_AUTH_DENSITY_MIN_WORDS = 60
+
+#: Cookie-consent vocabulary, same shape of check and same reasoning. A consent
+#: wall is the page *about* cookies, so the words are most of the text. Measured:
+#: app.slack.com/client 11.68 per 100 and everything that reads correctly at
+#: 0.23 or below (notion 0.23, nature 0.13, pypi 0.08, guardian 0.05).
+#: That page returned its banner as the content of a 1026-character read, which
+#: is the same class of lie as the login wall and the Google bot-check.
+_COOKIE_WORDS = re.compile(
+    r"(?i)\b(cookies?|consent|accept all|reject all|privacy settings|"
+    r"manage preferences|always active|gdpr|cookie policy|"
+    r"accept additional|allow all|your privacy,? your choice)\b"
+)
+_COOKIE_DENSITY_PER_100 = 2.0
+_COOKIE_DENSITY_MIN_WORDS = 60
 
 _MIN_CHARS = 500
 
@@ -526,7 +575,23 @@ def looks_blocked(
             return "challenge"
     if login_wall and _looks_login_wall(text):
         return "login-wall"
+    if _looks_cookie_wall(text):
+        return "cookie-wall"
     return None
+
+
+def _looks_cookie_wall(text: str) -> bool:
+    """True when the extract IS the consent dialog, not the page behind it.
+
+    Checked by density, because a cookie policy page is *about* cookies. A
+    privacy article legitimately discusses them at length and scores low,
+    which is why this is a ratio and not a phrase list.
+    """
+    raw = text or ""
+    words = len(raw.split())
+    if words < _COOKIE_DENSITY_MIN_WORDS:
+        return False
+    return 100.0 * len(_COOKIE_WORDS.findall(raw)) / words >= _COOKIE_DENSITY_PER_100
 
 
 def _looks_login_wall(text: str) -> bool:
@@ -543,6 +608,14 @@ def _looks_login_wall(text: str) -> bool:
     for phrase in _LOGIN_WALL_PHRASES:
         if phrase in head:
             return True
+    # Density, which does not care which site wrote the form. Checked against
+    # the whole extract rather than the head, because an auth page is short and
+    # an article is long, and the ratio is what separates them.
+    words = len(raw.split())
+    if words >= _AUTH_DENSITY_MIN_WORDS:
+        per_100 = 100.0 * len(_AUTH_WORDS.findall(raw)) / words
+        if per_100 >= _AUTH_DENSITY_PER_100:
+            return True
     if len(raw.strip()) >= 1500:
         return False
     t = raw.lower()
@@ -557,8 +630,52 @@ def _looks_login_wall(text: str) -> bool:
     return has_auth and has_signup
 
 
+#: A page whose words the extraction recovered fewer than this share of are not
+#: trustworthy, and the crude strip is used instead. trafilatura's precision
+#: heuristic looks for an article: on a page whose content *is* a link list
+#: (a news front page, a docs index, a package registry) it discards the
+#: entries and keeps the navigation, then returns that as a success because it
+#: is non-empty. Measured against the crude strip as ground truth:
+#: theguardian.com/uk 2%, bbc.com/news 4%, postgresql docs index 13%.
+#: Wikipedia, Hacker News and lite.cnn score high and keep the good extract.
+_EXTRACT_MIN_RECALL = 0.35
+
+#: Below this many words in the crude strip there is nothing to compare, so the
+#: extract is taken as-is. Prevents a short article from being judged on noise.
+_RECALL_MIN_WORDS = 40
+
+_WORD_RE = re.compile(r"[a-z][a-z'-]{2,}")
+
+
+def _word_recall(kept: str, whole: str) -> float:
+    """Share of ``whole``'s distinct words that survive into ``kept``."""
+    a = set(_WORD_RE.findall(whole.lower()))
+    if not a:
+        return 1.0
+    b = set(_WORD_RE.findall(kept.lower()))
+    return len(a & b) / len(a)
+
+
+def _strip_html(html: str) -> str:
+    """Crude tag strip, so we never hard-fail on extraction."""
+    import html as _html
+
+    t = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", html)
+    t = re.sub(r"(?s)<[^>]+>", "\n", t)
+    t = _html.unescape(t)
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n\s*\n+", "\n\n", t)
+    return t.strip()
+
+
 def html_to_text(html: str, url: Optional[str] = None) -> str:
-    """Extract clean main-content markdown from raw HTML (trafilatura, with fallback)."""
+    """Extract clean main-content markdown from raw HTML (trafilatura, with fallback).
+
+    The extract is only trusted when it accounts for most of the page. A page
+    that is mostly links loses its content to an article-shaped heuristic and
+    comes back as navigation, so on those the crude strip wins: whole beats
+    clean when clean is chrome.
+    """
     try:
         import trafilatura
 
@@ -570,17 +687,30 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
             include_links=True, include_tables=True, favor_recall=True,
         )
         if out and out.strip():
-            return tidy_markdown(out).strip()
+            kept = tidy_markdown(out).strip()
+            crude = _strip_html(html)
+            # Cheap gate first: an extract that is nearly as long as the page
+            # cannot be the one that dropped it.
+            if len(kept) >= _EXTRACT_MIN_RECALL * len(crude) or len(
+                _WORD_RE.findall(crude)
+            ) < _RECALL_MIN_WORDS:
+                return kept
+            if _word_recall(kept, crude) >= _EXTRACT_MIN_RECALL:
+                return kept
+            return _tidy_crude(crude, url)
     except Exception:
         pass
-    # Fallback: crude tag strip so we never hard-fail on extraction.
-    import html as _html
-    t = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", html)
-    t = re.sub(r"(?s)<[^>]+>", "\n", t)
-    t = _html.unescape(t)
-    t = re.sub(r"[ \t]+", " ", t)
-    t = re.sub(r"\n\s*\n+", "\n\n", t)
-    return t.strip()
+    return _tidy_crude(_strip_html(html), url)
+
+
+def _tidy_crude(text: str, url: Optional[str] | None) -> str:
+    """Clean up the crude strip without trafilatura's article heuristic."""
+    try:
+        from searchts.more import tidy_markdown
+
+        return tidy_markdown(text).strip() or text
+    except Exception:  # noqa: BLE001 - the strip is the fallback, never raise
+        return text.strip()
 
 
 # ── F25: a short page that is the whole page ──────────────────────────────────
