@@ -95,6 +95,17 @@ _BLOCK_PHRASES = (
     "accounts are required to access old reddit",
     "to keep reddit safe",
     "log in, or continue without an account",
+    # Google served its bot-check on HTTP 200 and it read as content: 964
+    # characters beginning "Our systems have detected unusual traffic from
+    # your computer network", returned to the agent as the search results.
+    # Search engines are the first thing an agent is asked to read, so a
+    # silent block here is worse than a hard failure anywhere else.
+    "detected unusual traffic from your computer network",
+    "this page appears when google automatically detects requests",
+    "solving the above captcha will let you continue",
+    # DuckDuckGo and other engines answering a challenge on 200.
+    "please solve the below captcha to continue",
+    "unusual traffic from your computer network",
 )
 
 #: Login *shells* (HTTP 200, often longer than ``_MIN_CHARS`` after extract).
@@ -134,6 +145,20 @@ _AUTH_DENSITY_PER_100 = 2.0
 #: always has more to it than that, and this floor is what keeps
 #: "Welcome. Sign in from the menu if you have an account." reading normally.
 _AUTH_DENSITY_MIN_WORDS = 60
+
+#: Cookie-consent vocabulary, same shape of check and same reasoning. A consent
+#: wall is the page *about* cookies, so the words are most of the text. Measured:
+#: app.slack.com/client 11.68 per 100 and everything that reads correctly at
+#: 0.23 or below (notion 0.23, nature 0.13, pypi 0.08, guardian 0.05).
+#: That page returned its banner as the content of a 1026-character read, which
+#: is the same class of lie as the login wall and the Google bot-check.
+_COOKIE_WORDS = re.compile(
+    r"(?i)\b(cookies?|consent|accept all|reject all|privacy settings|"
+    r"manage preferences|always active|gdpr|cookie policy|"
+    r"accept additional|allow all|your privacy,? your choice)\b"
+)
+_COOKIE_DENSITY_PER_100 = 2.0
+_COOKIE_DENSITY_MIN_WORDS = 60
 
 _MIN_CHARS = 500
 
@@ -550,7 +575,23 @@ def looks_blocked(
             return "challenge"
     if login_wall and _looks_login_wall(text):
         return "login-wall"
+    if _looks_cookie_wall(text):
+        return "cookie-wall"
     return None
+
+
+def _looks_cookie_wall(text: str) -> bool:
+    """True when the extract IS the consent dialog, not the page behind it.
+
+    Checked by density, because a cookie policy page is *about* cookies. A
+    privacy article legitimately discusses them at length and scores low,
+    which is why this is a ratio and not a phrase list.
+    """
+    raw = text or ""
+    words = len(raw.split())
+    if words < _COOKIE_DENSITY_MIN_WORDS:
+        return False
+    return 100.0 * len(_COOKIE_WORDS.findall(raw)) / words >= _COOKIE_DENSITY_PER_100
 
 
 def _looks_login_wall(text: str) -> bool:
