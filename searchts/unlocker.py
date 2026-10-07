@@ -1445,12 +1445,18 @@ def _is_refusal(err: UnlockerError) -> bool:
 
 
 def _note_walk_stopped(last: "FetchResult", url: str, err: UnlockerError) -> None:
-    """Say on the last page that the walk stopped there and why."""
+    """Say on the last page that the walk stopped there and why.
+
+    The URL is scrubbed on the way in. It comes from the page's own markup, so
+    a query string can carry an injection payload into a note that lands after
+    _finalize ran, which is exactly where the text is no longer scanned.
+    """
+    from searchts import sanitize
+
     reasons = "; ".join(f"{backend}: {why}" for backend, why in (err.attempts or []))
-    last.text = (
-        (last.text or "").rstrip()
-        + f"\n\n[read: stopped before {url}. {reasons}]"
-    )
+    note = sanitize.scrub(f"[read: stopped before {url}. {reasons}]", redact=True)
+    last.warnings = list(last.warnings or []) + note.findings
+    last.text = (last.text or "").rstrip() + f"\n\n{note.text}"
 
 
 def _browser_installed() -> bool:
