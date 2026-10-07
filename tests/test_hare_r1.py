@@ -690,6 +690,66 @@ def test_probe_pins_asks_every_pin_and_names_the_dead_ones(monkeypatch, capsys) 
     assert any("security" in _PROBE for _PROBE in [hare_r1._PROBE_ASK])
 
 
+def test_a_pin_with_no_key_is_untested_not_dead(monkeypatch, capsys) -> None:
+    # Run once with every key absent, the probe reported all ten pins dead and
+    # exited 1. That reads exactly like a catalog outage, which is the failure
+    # mode the probe exists to prevent. A laptop has no keys; that is normal.
+    for var in ("OR", "NOUS", "GROQ", "GEMINI", "ZEN"):
+        monkeypatch.setenv(f"SEARCHTS_HARE_API_KEY_{var}", "")
+    monkeypatch.setattr(
+        hare_r1.urllib.request, "urlopen",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not call a hop without a key")),
+    )
+    rc = hare_r1.probe_pins()
+    out = capsys.readouterr().out
+    assert "not tested" in out
+    assert "NOT tested, for want of a key" in out
+    assert "cannot answer right now" not in out
+    # 2, not 1: the gate has not run, which is not the same as a broken pin.
+    assert rc == 2
+    assert "untested, not proven good" in out
+
+
+def test_a_tested_pin_that_answers_leaves_the_skipped_ones_at_untested(monkeypatch, capsys) -> None:
+    # One live key and three absent: the live one answers, so nothing is dead,
+    # but the chain is not fully covered. Still 2, and the skip stays named.
+    monkeypatch.setenv("SEARCHTS_HARE_API_KEY_OR", "k")
+    for var in ("NOUS", "GROQ", "GEMINI", "ZEN"):
+        monkeypatch.setenv(f"SEARCHTS_HARE_API_KEY_{var}", "")
+
+    class FakeResp:
+        def __init__(self, payload): self._b = json.dumps(payload).encode()
+        def read(self): return self._b
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", lambda req, timeout=0: FakeResp(
+        {"choices": [{"message": {"content": "the next page is not guarded"}}]}))
+    rc = hare_r1.probe_pins()
+    out = capsys.readouterr().out
+    assert "answers" in out
+    assert "cannot answer right now" not in out
+    assert "NOT tested, for want of a key" in out
+    assert rc == 2
+
+
+def test_every_tested_pin_answering_exits_zero(monkeypatch, capsys) -> None:
+    # The gate is only usable if zero is reachable when the whole chain answers.
+    for var in ("OR", "NOUS", "GROQ", "GEMINI", "ZEN"):
+        monkeypatch.setenv(f"SEARCHTS_HARE_API_KEY_{var}", "k")
+
+    class FakeResp:
+        def __init__(self, payload): self._b = json.dumps(payload).encode()
+        def read(self): return self._b
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(hare_r1.urllib.request, "urlopen", lambda req, timeout=0: FakeResp(
+        {"choices": [{"message": {"content": "the next page is not guarded"}}]}))
+    assert hare_r1.probe_pins() == 0
+    assert "every pinned hop answered" in capsys.readouterr().out
+
+
 def test_workflow_model_overrides_do_not_undo_the_python_defaults() -> None:
     """An env override re-asserts the order in CI, which is where the code runs.
 

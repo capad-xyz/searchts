@@ -220,7 +220,9 @@ def probe_pins() -> int:
     only evidence is a nag that used to say "busy or blocked" for every cause.
 
     Needs the provider keys in the environment. Prints one line per pin and
-    exits 1 if any pinned hop cannot answer, so it can gate a model swap.
+    exits 1 if a pin that could be tested could not answer, so it can gate a
+    model swap. Exits 2 when pins were skipped for want of a key: that is
+    untested, not proven good, and it is not a reason to call a pin dead.
     """
     keys = {
         "openrouter": _env("SEARCHTS_HARE_API_KEY_OR"),
@@ -245,12 +247,17 @@ def probe_pins() -> int:
         "zen": _csv_models("HARE_ZEN_MODEL", HARE_ZEN_DEFAULT),
     }
     dead: list[str] = []
+    unprovable: list[str] = []
     for provider, models in pins.items():
         key = keys.get(provider) or ""
         if not key:
-            print(f"{provider}: no key in this environment, skipped")
+            # No key is not a dead pin. It is an untested claim, and it is the
+            # normal case on a laptop: this ran once with every key absent and
+            # reported all ten pins dead, which reads exactly like a catalog
+            # outage and is the failure mode the probe exists to prevent.
+            print(f"{provider}: no key in this environment, not tested")
             for m in models:
-                dead.append(f"{provider}:{m}")
+                unprovable.append(f"{provider}:{m}")
             continue
         for model in models:
             url = f"{bases[provider]}/chat/completions"
@@ -280,13 +287,23 @@ def probe_pins() -> int:
             except Exception as e:  # noqa: BLE001 - a probe reports, it never raises
                 print(f"{provider}:{model}: {type(e).__name__} {str(e)[:120]}")
                 dead.append(f"{provider}:{model}")
+    if unprovable:
+        print(f"\n{len(unprovable)} pinned hop(s) were NOT tested, for want of a key:")
+        for d in unprovable:
+            print(f"  {d}")
+        print("  Run this where the key exists before trusting a pin.")
     if dead:
         print(f"\n{len(dead)} pinned hop(s) cannot answer right now:")
         for d in dead:
             print(f"  {d}")
         return 1
-    print("\nevery pinned hop answered.")
-    return 0
+    if not unprovable:
+        print("\nevery pinned hop answered.")
+        return 0
+    # Nothing tested was found dead, but the gate has not actually run over the
+    # whole chain. Exit 2, not 1: 1 means a pin is broken, 2 means nobody looked.
+    print("\nevery tested pin answered. The rest are untested, not proven good.")
+    return 2
 
 
 def _csv_models(name: str, default: str) -> list[str]:
