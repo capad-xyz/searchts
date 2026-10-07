@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from searchts import assets
-from searchts.ssrf import guard_mcp_url
+from searchts.ssrf import _encoded_ip, guard_mcp_url
 
 
 @pytest.mark.parametrize(
@@ -42,6 +42,47 @@ def test_blocked(url):
 )
 def test_public_allowed(url):
     assert guard_mcp_url(url, resolve_dns=False) is None
+
+
+@pytest.mark.parametrize(
+    "host,decoded",
+    [
+        ("2130706433", "127.0.0.1"),      # plain decimal
+        ("0x7f000001", "127.0.0.1"),      # hex
+        ("017700000001", "127.0.0.1"),    # octal: isdigit() is True, so the old
+                                          # decimal branch int()'d it and gave up
+        ("127.1", "127.0.0.1"),           # inet_aton short forms
+        ("127.0.1", "127.0.0.1"),
+        ("192.168.1", "192.168.0.1"),
+        ("127.000.000.001", "127.0.0.1"),
+        ("16909060", "1.2.3.4"),
+        ("1", "0.0.0.1"),
+        ("0", "0.0.0.0"),
+    ],
+)
+def test_numeric_hosts_decode_the_way_inet_aton_reads_them(host, decoded):
+    # Every one of these is a distinct bypass shape. libcurl resolves all of
+    # them, so a guard that treats the host as a DNS name is a hole, not a
+    # conservative choice.
+    assert str(_encoded_ip(host)) == decoded
+
+
+@pytest.mark.parametrize("host", ["example.com", "localhost", "1.example.com", "a1.b2"])
+def test_ordinary_dns_names_are_not_decoded(host):
+    assert _encoded_ip(host) is None
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://017700000001:8080/admin",
+        "http://127.1:8080/admin",
+        "http://127.0.1/",
+        "http://127.000.000.001/",
+    ],
+)
+def test_a_loopback_encoded_any_other_way_is_still_refused(url):
+    assert guard_mcp_url(url, resolve_dns=False) is not None
 
 
 def test_asset_fetch_refuses_private_ip_literal(monkeypatch):
