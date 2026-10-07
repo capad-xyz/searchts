@@ -35,7 +35,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-__all__ = ["Wall", "classify", "FAMILIES", "WALL_NAMES"]
+__all__ = ["Wall", "classify", "classify_all", "FAMILIES", "WALL_NAMES"]
 
 
 @dataclass(frozen=True)
@@ -66,8 +66,13 @@ _AUTH = re.compile(
     r"create (?:a |an )?(?:new |free )?account|sign ?up|register|"
     r"join now|join (?:today|free|now)|continue with|remember me|"
     r"already have an account|don'?t have an account|need an account|"
-    r"members? only|subscribers? only|to (?:view|read|continue|see) (?:this|the)?"
-    r"(?:page|article|story|content|rest)"
+    r"members? only|subscribers? only|"
+    # Narrower than "to view this". "to view this article" is what an article
+    # says about itself; the wall needs the login verb attached to it.
+    r"(?:sign|log) in to (?:view|read|continue|see)|"
+    r"must be (?:logged|signed) in|"
+    r"(?:view|read|continue|see) (?:the )?(?:full|rest of (?:the|this)) "
+    r"(?:page|article|story|content)"
     r")\b"
 )
 
@@ -118,10 +123,8 @@ FAMILIES: Tuple[Family, ...] = (
     Family("ratelimit", _RATELIMIT, 1.5, 50),
 )
 
-WALL_NAMES = frozenset(f.name for f in FAMILIES)
-
 #: Every wall kind, for callers that only need "content or not".
-ANY_WALL = WALL_NAMES
+WALL_NAMES = frozenset(f.name for f in FAMILIES)
 
 
 @dataclass(frozen=True)
@@ -142,8 +145,24 @@ def density(text: str, words: "re.Pattern[str]") -> Tuple[int, int, float]:
     n = len(raw.split())
     if not n:
         return 0, 0, 0.0
-    hits = len(words.findall(raw))
-    return hits, n, 100.0 * hits / n
+    found = words.findall(raw)
+    return len(found), n, 100.0 * len(found) / n
+
+
+def distinct_term_count(text: str, words: "re.Pattern[str]") -> int:
+    """How many *different* pieces of this family's wording appear in ``text``.
+
+    Breadth, not volume. "Log in to your account. Email address. Password.
+    Forgot your password? New to this service? Create an account." is a
+    thirty-one word auth shell that names six different things; "sign in" said
+    forty times in one menu link is one thing said a lot. Counting distinct
+    alternations is what tells those apart at a length where no ratio works.
+    """
+    raw = text or ""
+    seen = set()
+    for m in words.finditer(raw):
+        seen.add(m.group(0).lower())
+    return len(seen)
 
 
 #: Phrases so specific that no ordinary page contains them. These fire at any
@@ -188,6 +207,15 @@ MARKERS: "Dict[str, Tuple[str, ...]]" = {
     ),
 }
 
+#: Below a family's ``min_words``, a ratio has no denominator to be a ratio
+#: against. The rule that works at that length is breadth instead: a short auth
+#: shell names many *different* things it wants from you (log in, account,
+#: password, email address, create an account), while prose about scraping
+#: mentions one of them once and moves on. Counted as distinct families of
+#: wording rather than raw occurrences, so "sign in" repeated twenty times in
+#: one link does not reach the bar on its own.
+SHORT_SHELL_MIN_TERMS = 3
+
 
 def classify(text: str) -> Optional[Wall]:
     """Return the wall this extract is, or None if it looks like content.
@@ -207,6 +235,8 @@ def classify(text: str) -> Optional[Wall]:
     for fam in FAMILIES:
         hits, total, per_100 = density(raw, fam.words)
         if total < fam.min_words:
+            if distinct_term_count(raw, fam.words) >= SHORT_SHELL_MIN_TERMS:
+                return Wall(fam.name, round(per_100, 2), total)
             continue
         if per_100 >= fam.per_100:
             return Wall(fam.name, round(per_100, 2), total)
