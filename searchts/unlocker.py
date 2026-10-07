@@ -1408,7 +1408,17 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
         if i:
             call["backends"] = ["curl_cffi"]
             call["allow_human"] = False
-        result = fetch(current, **call)
+        try:
+            result = fetch(current, **call)
+        except UnlockerError as e:
+            # Page one is the URL the caller asked for: nothing to return, so
+            # the error stands. A later hop failing means the caller already
+            # has real content, and throwing it away to report a URL they never
+            # asked for is a bad trade. Keep the pages, say why the walk ended.
+            if i == 0 or _is_refusal(e):
+                raise
+            _note_walk_stopped(out[-1], current, e)
+            break
         out.append(result)
         nxt = result.next_url
         if not nxt:
@@ -1423,6 +1433,30 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
 
 _MAX_ITEMS = 300
 _ITEM_LINE = re.compile(r"(?m)^- \[")
+
+
+def _is_refusal(err: UnlockerError) -> bool:
+    """True when the error is the SSRF guard refusing, not a page that failed.
+
+    A refused address is a security event and must reach the caller as an
+    error even mid-walk. A challenge on page 3 is just a page that failed.
+    """
+    return any(str(backend).strip() == "ssrf" for backend, _ in (err.attempts or []))
+
+
+def _note_walk_stopped(last: "FetchResult", url: str, err: UnlockerError) -> None:
+    """Say on the last page that the walk stopped there and why.
+
+    The URL is scrubbed on the way in. It comes from the page's own markup, so
+    a query string can carry an injection payload into a note that lands after
+    _finalize ran, which is exactly where the text is no longer scanned.
+    """
+    from searchts import sanitize
+
+    reasons = "; ".join(f"{backend}: {why}" for backend, why in (err.attempts or []))
+    note = sanitize.scrub(f"[read: stopped before {url}. {reasons}]", redact=True)
+    last.warnings = list(last.warnings or []) + note.findings
+    last.text = (last.text or "").rstrip() + f"\n\n{note.text}"
 
 
 def _browser_installed() -> bool:
@@ -1456,6 +1490,7 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     out: List[FetchResult] = []
     current = url
     got = 0
+    broke = False
     for i in range(_MAX_PAGES):
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
@@ -1465,7 +1500,14 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         if i:
             call["backends"] = ["curl_cffi"]
             call["allow_human"] = False
-        result = fetch(current, **call)
+        try:
+            result = fetch(current, **call)
+        except UnlockerError as e:
+            if i == 0 or _is_refusal(e):
+                raise
+            _note_walk_stopped(out[-1], current, e)
+            broke = True
+            break
         out.append(result)
         got += item_count(result.text)
         nxt = result.next_url
@@ -1479,7 +1521,9 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     if asked > ceiling:
         extra += f"\n\n[items: asked for {asked}, the ceiling is {ceiling}]"
     last = out[-1]
-    if got < want and not last.next_url and "[feed:" in (out[0].text or "") and not _browser_installed():
+    # The walk stopped because a page failed, and _note_walk_stopped already
+    # wrote that on the last page. Say nothing more about running out.
+    if not broke and got < want and not last.next_url and "[feed:" in (out[0].text or "") and not _browser_installed():
         extra += "\n\n[items: more of this list loads in the browser. Run: searchts install --browser]"
     if extra:
         last.text = (last.text or "").rstrip() + extra
