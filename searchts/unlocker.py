@@ -557,8 +557,52 @@ def _looks_login_wall(text: str) -> bool:
     return has_auth and has_signup
 
 
+#: A page whose words the extraction recovered fewer than this share of are not
+#: trustworthy, and the crude strip is used instead. trafilatura's precision
+#: heuristic looks for an article: on a page whose content *is* a link list
+#: (a news front page, a docs index, a package registry) it discards the
+#: entries and keeps the navigation, then returns that as a success because it
+#: is non-empty. Measured against the crude strip as ground truth:
+#: theguardian.com/uk 2%, bbc.com/news 4%, postgresql docs index 13%.
+#: Wikipedia, Hacker News and lite.cnn score high and keep the good extract.
+_EXTRACT_MIN_RECALL = 0.35
+
+#: Below this many words in the crude strip there is nothing to compare, so the
+#: extract is taken as-is. Prevents a short article from being judged on noise.
+_RECALL_MIN_WORDS = 40
+
+_WORD_RE = re.compile(r"[a-z][a-z'-]{2,}")
+
+
+def _word_recall(kept: str, whole: str) -> float:
+    """Share of ``whole``'s distinct words that survive into ``kept``."""
+    a = set(_WORD_RE.findall(whole.lower()))
+    if not a:
+        return 1.0
+    b = set(_WORD_RE.findall(kept.lower()))
+    return len(a & b) / len(a)
+
+
+def _strip_html(html: str) -> str:
+    """Crude tag strip, so we never hard-fail on extraction."""
+    import html as _html
+
+    t = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", html)
+    t = re.sub(r"(?s)<[^>]+>", "\n", t)
+    t = _html.unescape(t)
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n\s*\n+", "\n\n", t)
+    return t.strip()
+
+
 def html_to_text(html: str, url: Optional[str] = None) -> str:
-    """Extract clean main-content markdown from raw HTML (trafilatura, with fallback)."""
+    """Extract clean main-content markdown from raw HTML (trafilatura, with fallback).
+
+    The extract is only trusted when it accounts for most of the page. A page
+    that is mostly links loses its content to an article-shaped heuristic and
+    comes back as navigation, so on those the crude strip wins: whole beats
+    clean when clean is chrome.
+    """
     try:
         import trafilatura
 
@@ -570,17 +614,30 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
             include_links=True, include_tables=True, favor_recall=True,
         )
         if out and out.strip():
-            return tidy_markdown(out).strip()
+            kept = tidy_markdown(out).strip()
+            crude = _strip_html(html)
+            # Cheap gate first: an extract that is nearly as long as the page
+            # cannot be the one that dropped it.
+            if len(kept) >= _EXTRACT_MIN_RECALL * len(crude) or len(
+                _WORD_RE.findall(crude)
+            ) < _RECALL_MIN_WORDS:
+                return kept
+            if _word_recall(kept, crude) >= _EXTRACT_MIN_RECALL:
+                return kept
+            return _tidy_crude(crude, url)
     except Exception:
         pass
-    # Fallback: crude tag strip so we never hard-fail on extraction.
-    import html as _html
-    t = re.sub(r"(?is)<(script|style|noscript)[^>]*>.*?</\1>", " ", html)
-    t = re.sub(r"(?s)<[^>]+>", "\n", t)
-    t = _html.unescape(t)
-    t = re.sub(r"[ \t]+", " ", t)
-    t = re.sub(r"\n\s*\n+", "\n\n", t)
-    return t.strip()
+    return _tidy_crude(_strip_html(html), url)
+
+
+def _tidy_crude(text: str, url: Optional[str] | None) -> str:
+    """Clean up the crude strip without trafilatura's article heuristic."""
+    try:
+        from searchts.more import tidy_markdown
+
+        return tidy_markdown(text).strip() or text
+    except Exception:  # noqa: BLE001 - the strip is the fallback, never raise
+        return text.strip()
 
 
 # ── F25: a short page that is the whole page ──────────────────────────────────
