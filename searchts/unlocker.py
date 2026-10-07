@@ -580,20 +580,6 @@ def looks_blocked(
     return None
 
 
-def _looks_cookie_wall(text: str) -> bool:
-    """True when the extract IS the consent dialog, not the page behind it.
-
-    Checked by density, because a cookie policy page is *about* cookies. A
-    privacy article legitimately discusses them at length and scores low,
-    which is why this is a ratio and not a phrase list.
-    """
-    raw = text or ""
-    words = len(raw.split())
-    if words < _COOKIE_DENSITY_MIN_WORDS:
-        return False
-    return 100.0 * len(_COOKIE_WORDS.findall(raw)) / words >= _COOKIE_DENSITY_PER_100
-
-
 def _looks_login_wall(text: str) -> bool:
     """True when *text* is an auth shell, not the page the URL named.
 
