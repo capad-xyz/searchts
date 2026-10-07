@@ -677,12 +677,13 @@ def test_provider_chain_is_the_fixed_order() -> None:
     keys = {"groq": "g", "gemini": "m", "nous": "n", "openrouter": "o", "zen": "z"}
     models = {"groq": ["g1"], "gemini": ["m1"], "nous": ["n1", "n2"], "openrouter": ["o1"], "zen": ["z1"]}
     chain = hare_r1.build_provider_chain(keys, models)
-    # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is
-    # fast and misses things. OpenRouter's qwen leads, then Nous, then Gemini.
-    # OpenRouter and Nous first, the fast hops (Groq, Gemini) after them: owner's call, 2026-10-04.
-    assert [hop[0] for hop in chain] == ["openrouter", "nous", "nous", "groq", "gemini", "zen"]
-    assert [hop[3] for hop in chain] == ["o1", "n1", "n2", "g1", "m1", "z1"]
-    assert [hop[2] for hop in chain] == ["o", "n", "n", "g", "m", "z"]
+    # Nous first (owner's call, 2026-10-06): on a live probe of the
+    # swallowed-SSRF diff laguna named it in 4s on Nous, while Nemotron
+    # Lightning took 9s and opened with prose instead of the JSON. The fast
+    # hops (Groq, Gemini) stay after, and Zen last: it only runs with a key.
+    assert [hop[0] for hop in chain] == ["nous", "nous", "openrouter", "groq", "gemini", "zen"]
+    assert [hop[3] for hop in chain] == ["n1", "n2", "o1", "g1", "m1", "z1"]
+    assert [hop[2] for hop in chain] == ["n", "n", "o", "g", "m", "z"]
 
 
 def test_provider_chain_drops_a_provider_with_no_key() -> None:
@@ -726,9 +727,11 @@ def test_hop_loop_sends_every_provider_its_own_options() -> None:
         except RuntimeError:
             continue
 
-    assert [c[0] for c in calls] == ["o1", "n1", "g1"]
-    assert [c[1] for c in calls] == ["o", "n", "g"]
-    assert [c[2] for c in calls] == [{"reasoning": {"effort": "low", "exclude": True}}, {"reasoning": {"effort": "none"}}, {}]
+    # Nous first since 2026-10-06, so the walk opens on n1 and each provider
+    # still gets its own reasoning option.
+    assert [c[0] for c in calls] == ["n1", "o1", "g1"]
+    assert [c[1] for c in calls] == ["n", "o", "g"]
+    assert [c[2] for c in calls] == [{"reasoning": {"effort": "none"}}, {"reasoning": {"effort": "low", "exclude": True}}, {}]
     assert parsed == {"summary": "ok", "findings": []}
 
 
