@@ -1431,9 +1431,12 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
         # short read with exit 0, which is the opposite of fail loud.
         current = nxt
     else:
-        # The loop ran out with pages still coming. Without this the caller
-        # cannot tell a finished list from one cut off at the cap.
-        if out and out[-1].next_url:
+        # The loop ran out with pages still coming. Only worth saying when the
+        # cap actually cut the request short: asking for 1 and getting 1 is not
+        # a truncation, and read_pages(url, 1) is the default single-page read
+        # on both the CLI and the MCP tool. Noting it there put a false "you
+        # hit a cap" line on every ordinary read of a paginated page.
+        if out and len(out) < wanted and out[-1].next_url:
             _note_walk_capped(out[-1], len(out), wanted, out[-1].next_url)
     return out
 
@@ -1441,10 +1444,20 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
 def _note_walk_capped(
     last: "FetchResult", got_pages: int, asked: int, nxt: str, rows: str = ""
 ) -> None:
-    """Say the walk stopped at a cap, not because the list ended."""
-    got = f"asked for {asked}, got {got_pages}" if asked > got_pages else f"stopped at the {got_pages}-page cap"
+    """Say the walk stopped at a cap, not because the list ended.
+
+    Only called when the caller asked for more than it got, so the wording is
+    always "asked N, got M". Scrubbed for the same reason as
+    :func:`_note_walk_stopped`: the note lands after _finalize, and the
+    next-page URL is page-supplied.
+    """
+    from searchts import sanitize
+
+    got = f"asked for {asked}, got {got_pages}"
     got = f"{rows}, {got}" if rows else got
-    last.text = (last.text or "").rstrip() + f"\n\n[pages: {got}. The next page is {nxt}]"
+    note = sanitize.scrub(f"[pages: {got}. The next page is {nxt}]", redact=True)
+    last.warnings = list(last.warnings or []) + note.findings
+    last.text = (last.text or "").rstrip() + f"\n\n{note.text}"
 
 
 _MAX_ITEMS = 300
