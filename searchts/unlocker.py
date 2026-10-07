@@ -111,6 +111,30 @@ _LOGIN_WALL_PHRASES = (
     "you must be signed in",
 )
 
+#: Auth vocabulary, for the density check below. A login page is made of these;
+#: an article that happens to carry a "Sign in" link in its header carries two.
+_AUTH_WORDS = re.compile(
+    r"(?i)\b(sign in|sign-in|log in|log-in|login|log into|password|username|"
+    r"email address|forgot password|create (?:a )?(?:new )?account|sign up|"
+    r"join now|continue with|remember me)\b"
+)
+
+#: Auth words per 100 words above which the extract IS the auth form. Measured
+#: across the dogfood corpus: instagram 5.79, and every page that reads
+#: correctly sits at 0.40 or below (pypi 0.37, amazon 0.40, guardian 0.21,
+#: wikipedia 0.00). The 15x gap is why a threshold in the middle is safe.
+#:
+#: The phrase list above missed Instagram entirely: its login page says "Log
+#: into Instagram", "Forgot password?" and "Create new account", none of which
+#: are in that list, so a login form was returned as a successful read.
+_AUTH_DENSITY_PER_100 = 2.0
+
+#: Below this many words the density ratio is not trustworthy: one "Sign in"
+#: in an eleven-word line is 9 per 100 and is not a login form. An auth page
+#: always has more to it than that, and this floor is what keeps
+#: "Welcome. Sign in from the menu if you have an account." reading normally.
+_AUTH_DENSITY_MIN_WORDS = 60
+
 _MIN_CHARS = 500
 
 
@@ -542,6 +566,14 @@ def _looks_login_wall(text: str) -> bool:
         return False
     for phrase in _LOGIN_WALL_PHRASES:
         if phrase in head:
+            return True
+    # Density, which does not care which site wrote the form. Checked against
+    # the whole extract rather than the head, because an auth page is short and
+    # an article is long, and the ratio is what separates them.
+    words = len(raw.split())
+    if words >= _AUTH_DENSITY_MIN_WORDS:
+        per_100 = 100.0 * len(_AUTH_WORDS.findall(raw)) / words
+        if per_100 >= _AUTH_DENSITY_PER_100:
             return True
     if len(raw.strip()) >= 1500:
         return False
