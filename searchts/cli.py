@@ -124,6 +124,11 @@ def _run():
     _verbose.add_argument("-v", "--verbose", action="store_true",
                           default=argparse.SUPPRESS, help="Show debug logs")
 
+    # One registry, so a browser supported by the reader is never rejected by a
+    # stale list in the parser. `configure --from-browser` used to accept only
+    # five browsers and refused `zen`, which the reader handles fine.
+    from searchts.session_cookies import ALL_BROWSERS as _BROWSER_CHOICES
+
     # ── setup ──
     sub.add_parser("setup", parents=[_verbose], help="Interactive configuration wizard")
 
@@ -168,8 +173,9 @@ def _run():
                              "--cookies-from-browser <browser>")
     p_conf.add_argument("value", nargs="*", help="The value(s) to set")
     p_conf.add_argument("--from-browser", metavar="BROWSER",
-                        choices=["chrome", "firefox", "edge", "brave", "opera"],
-                        help="Auto-extract ALL platform cookies from browser (chrome/firefox/edge/brave/opera)")
+                        choices=_BROWSER_CHOICES,
+                        help="Auto-extract ALL platform cookies from browser "
+                             "(any supported browser: Zen, Firefox, Chrome, Vivaldi, Edge, Brave, Opera, Arc, ...)")
 
     # ── read ──
     p_read = sub.add_parser("read", parents=[_verbose],
@@ -187,7 +193,23 @@ def _run():
                         help="Keep following next pages until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300)")
     p_read.add_argument("--scrub", action="store_true",
                         help="Redact prompt-injection spans from the content (invisible-char "
-                             "stripping + indicator scanning always run regardless)")
+"stripping + indicator scanning always run regardless)")
+    p_read.add_argument(
+        "--cookies-from-browser",
+        metavar="BROWSER",
+        choices=_BROWSER_CHOICES,
+        help="Read YOUR browser's cookies for this site only (opt-in)",
+    )
+    p_read.add_argument(
+        "--cookies",
+        metavar="PATH",
+        help="Read a searchts-owned cookie file for this site only (opt-in)",
+    )
+    p_read.add_argument(
+        "--cdp-port",
+        metavar="PORT",
+        help="Read this site's cookies from your localhost debugger port (opt-in)",
+    )
 
     # ── search ──
     p_search = sub.add_parser("search", parents=[_verbose],
@@ -1636,6 +1658,8 @@ def _cmd_read(args):
         print(f"searchts read: {problem}", file=sys.stderr)
         sys.exit(2)
 
+    cookies = _read_command_cookies(args)
+
     backends = [args.backend] if args.backend else None
     # Progress is narration ("trying curl_cffi..."), not diagnosis. The reasons
     # are printed once, together, below. Passing progress=False keeps them from
@@ -1648,17 +1672,17 @@ def _cmd_read(args):
                 print("--items and --pages are mutually exclusive; using --items.", file=sys.stderr)
             pages = unlocker.read_items(
                 args.url, args.items, backends=backends, allow_human=args.human,
-                scrub=args.scrub, progress=False,
+                scrub=args.scrub, progress=False, cookies=cookies,
             )
         elif getattr(args, "pages", 1) > 1:
             pages = unlocker.read_pages(
                 args.url, args.pages, backends=backends, allow_human=args.human,
-                scrub=getattr(args, "scrub", False), progress=False,
+                scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
             )
         else:
             pages = [unlocker.fetch(
                 args.url, backends=backends, allow_human=args.human,
-                scrub=getattr(args, "scrub", False), progress=False,
+                scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
             )]
         result = pages[0]
     except unlocker.UnlockerError as e:
@@ -1696,6 +1720,98 @@ def _cmd_read(args):
         print(result.text)
         for extra in pages[1:]:
             print(f"\n# {extra.final_url}\n\n{extra.text}")
+
+
+def _read_command_cookies(args):
+    """Resolve opt-in cookies for one read, reporting only safe provenance."""
+    from searchts.session_cookies import CookieReadError
+
+    requested = getattr(args, "cookies", None) or getattr(args, "cookies_from_browser", None)
+    cdp_port = getattr(args, "cdp_port", None)
+    if not requested and not cdp_port:
+        return None
+
+    try:
+        if cdp_port:
+            # Validate before importing/connecting to any CDP client. The
+            # connection helper validates too, but this keeps rejection local.
+            from searchts.cdp_profile import connect_existing_cdp, parse_endpoint
+
+            parse_endpoint(cdp_port)
+            source = connect_existing_cdp(cdp_port, args.url)
+        elif getattr(args, "cookies", None):
+            source = _read_cookie_file(args.cookies, args.url)
+        else:
+            from searchts.session_cookies import for_site
+
+            source = for_site(args.url, args.cookies_from_browser)
+    except CookieReadError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:  # CDP clients can expose non-CookieReadError failures.
+        print(f"could not read cookies: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not source.cookies:
+        print("no cookies were found for this site", file=sys.stderr)
+        sys.exit(1)
+    if not getattr(source, "count", 0):
+        source.count = len(source.cookies)
+    print(f"cookies: {source.describe()}", file=sys.stderr)
+    return source.cookies
+
+
+def _read_cookie_file(path, site):
+    """Read a searchts-owned JSON cookie file and scope it to ``site``."""
+    from pathlib import Path
+    from urllib.parse import urlparse
+
+    from searchts.session_cookies import (
+        CookieReadError,
+        CookieRecord,
+        CookieSource,
+        filter_for_host,
+    )
+
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise CookieReadError(f"could not read cookie file {path!r} ({type(e).__name__})") from None
+
+    host = (urlparse(site if "://" in site else "https://" + site).hostname or "").lower()
+    raw = data
+    if isinstance(data, dict) and isinstance(data.get("cookies"), list):
+        raw = data["cookies"]
+    elif isinstance(data, dict):
+        entry = data.get(host)
+        if isinstance(entry, dict):
+            raw = entry.get("cookies", [])
+        elif isinstance(entry, list):
+            raw = entry
+        else:
+            raw = []
+    if not isinstance(raw, list):
+        raw = []
+
+    records = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name", item.get("n", ""))
+        value = item.get("value", item.get("v", ""))
+        domain = item.get("domain", item.get("d", host))
+        if not name or not domain:
+            continue
+        records.append(CookieRecord(
+            str(name), str(value), str(domain), str(item.get("path", item.get("p", "/"))),
+            bool(item.get("secure", item.get("s", False))),
+            bool(item.get("http_only", item.get("h", False))),
+        ))
+    scoped = filter_for_host(records, host)
+    if not scoped:
+        raise CookieReadError(f"no cookies for {host} in {path!r}")
+    return CookieSource(site=site, cookies=scoped, via="file", count=len(scoped),
+                        names=sorted({c.name for c in scoped}))
 
 
 def _cmd_get(args):

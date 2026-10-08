@@ -35,75 +35,94 @@ PLATFORM_SPECS: List[PlatformSpec] = [
 ]
 
 
+def _backend_for(browser: str):
+    """Return a zero-arg callable that returns this browser's cookies.
+
+    Chromium-derived browsers go through ``browser_cookie3`` (it handles the
+    profile layout and the OS keychain). Firefox-derived ones need no library at
+    all: their cookie database is an unencrypted SQLite file on Windows and
+    Linux, so we read it directly rather than adding a dependency that cannot
+    install on modern Python (rookiepy pins pyo3 0.20, which has no wheel for
+    3.13+, and its build fails).
+
+    Returns ``(callable, kind)`` where kind is ``"records"`` or ``"jar"``.
+    """
+    from searchts import session_cookies as sc
+
+    fam = sc.family_of(browser)  # raises ValueError listing what is supported
+
+    if fam == "firefox":
+        return (lambda: sc.read_all_firefox(browser), "records")
+
+    try:
+        import browser_cookie3
+    except ImportError as e:
+        raise RuntimeError(
+            f"Reading {browser} cookies needs browser-cookie3.\n"
+            f"  pip install browser-cookie3\n"
+            f"(rookiepy is no longer suggested: it does not install on "
+            f"Python 3.13+.)"
+        ) from e
+
+    getter = getattr(browser_cookie3, browser, None)
+    if getter is None:  # e.g. an Arc/Opera variant browser_cookie3 names differently
+        raise RuntimeError(
+            f"browser-cookie3 cannot read {browser} cookies on this machine. "
+            f"For Chromium browsers whose cookies are locked, use --cdp-port."
+        )
+    return (getter, "jar")
+
+
+#: What the underlying libraries say when a Chromium cookie store refuses to
+#: open, mapped to what is actually true. The raw message is "This operation
+#: requires admin", which sends people off to run a terminal as administrator
+#: for a request that will still fail, because the real cause is that modern
+#: Chromium wraps the key in App-Bound Encryption.
+_LOCKED_MARKS = (
+    "requires admin",
+    "unable to get key",
+    "decryption failed",
+    "crypt",
+    "permission denied",
+)
+
+
+def _as_records(raw, kind: str):
+    """Normalise a backend result to objects with .name/.value/.domain."""
+    if kind == "records":
+        return raw  # already a list of CookieRecord
+    return raw
+
+
 def extract_all(browser: str = "chrome") -> Dict[str, dict]:
     """
     Extract cookies for all supported platforms from the specified browser.
-    
+
     Returns:
         {
             "twitter": {"auth_token": "xxx", "ct0": "yyy"},
         }
     """
-    # Try rookiepy first (Rust-based, more stable), fallback to browser_cookie3
-    use_rookiepy = False
+    browser = (browser or "").strip().lower()
+    load, kind = _backend_for(browser)
+
     try:
-        import rookiepy
-        use_rookiepy = True
-    except ImportError:
-        try:
-            import browser_cookie3
-        except ImportError:
+        jar = _as_records(load(), kind)
+    except Exception as e:
+        detail = str(e)
+        if any(m in detail.lower() for m in _LOCKED_MARKS):
             raise RuntimeError(
-                "Cookie extraction requires rookiepy or browser_cookie3.\n"
-                "Install: pip install rookiepy  (recommended)\n"
-                "     or: pip install browser-cookie3"
-            )
-
-    browser = browser.lower()
-    supported = ["chrome", "firefox", "edge", "brave", "opera"]
-    if browser not in supported:
-        raise ValueError(
-            f"Unsupported browser: {browser}. Supported: {', '.join(supported)}"
+                f"{browser}'s cookie store is locked. Modern Chromium wraps the "
+                f"decryption key in App-Bound Encryption, which refuses to hand it "
+                f"to another program, so this cannot be fixed by running as admin.\n"
+                f"  To read it: start the browser yourself with a debugger port and "
+                f"use --cdp-port <port>.\n"
+                f"  Firefox-family browsers (Zen, Firefox, LibreWolf) have no such lock."
+            ) from e
+        raise RuntimeError(
+            f"Could not read {browser} cookies: {e}\n"
+            f"Make sure {browser} is closed and you have permission."
         )
-
-    if use_rookiepy:
-        # rookiepy returns list of dicts with name/value/domain/path keys
-        try:
-            browser_funcs = {
-                "chrome": rookiepy.chrome,
-                "firefox": rookiepy.firefox,
-                "edge": rookiepy.edge,
-                "brave": rookiepy.brave,
-                "opera": rookiepy.opera,
-            }
-            raw_cookies = browser_funcs[browser]()
-            # Wrap into objects with .name, .value, .domain for compatibility
-            class _Cookie:
-                def __init__(self, d):
-                    self.name = d.get("name", "")
-                    self.value = d.get("value", "")
-                    self.domain = d.get("domain", "")
-            cookie_jar = [_Cookie(c) for c in raw_cookies]
-        except Exception as e:
-            raise RuntimeError(
-                f"Could not read {browser} cookies via rookiepy: {e}\n"
-                f"Make sure {browser} is closed and you have permission."
-            )
-    else:
-        browser_funcs = {
-            "chrome": browser_cookie3.chrome,
-            "firefox": browser_cookie3.firefox,
-            "edge": browser_cookie3.edge,
-            "brave": browser_cookie3.brave,
-            "opera": browser_cookie3.opera,
-        }
-        try:
-            cookie_jar = browser_funcs[browser]()
-        except Exception as e:
-            raise RuntimeError(
-                f"Could not read {browser} cookies: {e}\n"
-                f"Make sure {browser} is closed and you have permission."
-            )
 
     results = {}
 
@@ -111,7 +130,7 @@ def extract_all(browser: str = "chrome") -> Dict[str, dict]:
         platform_cookies = {}
         all_cookies_for_domain = []
 
-        for cookie in cookie_jar:
+        for cookie in jar:
             # Check if cookie belongs to this platform
             domain_match = any(
                 cookie.domain.endswith(d) or cookie.domain == d.lstrip(".")
