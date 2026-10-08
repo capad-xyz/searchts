@@ -157,7 +157,11 @@ HARE_GEMINI_DEFAULT = "gemini-3.1-flash-lite,gemini-3.5-flash"
 # until Zen retires it (a gone model fails in under a second and falls through).
 # Laguna first on Nous (2026-10-06): LongCat wrote the three notes on #299 and
 # contradicted itself, shorten then lengthen. LongCat stays in the flow.
+# Step 5 Preview is free on Nous for one week from 2026-10-08. Drop it after
+# 2026-10-15. OpenRouter's stepfun/step-5-preview is paid ($1 / $2.70 per 1M)
+# and has no :free slug, so it does not go in HARE_OR_DEFAULT.
 HARE_NOUS_DEFAULT = (
+    "stepfun/step-5-preview:free,"
     "poolside/laguna-s-2.1:free,"
     "meituan/longcat-2.5-preview:free"
 )

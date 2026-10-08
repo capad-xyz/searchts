@@ -974,7 +974,7 @@ def test_space_bunny_is_off_openrouter_and_nous_after_its_free_period() -> None:
     space-bunny-free is its own offer and stays until Zen retires it."""
     assert "stealth/space-bunny-alpha" not in hare_r1.HARE_NOUS_DEFAULT.split(",")
     assert "stealth/space-bunny-alpha" not in hare_r1.HARE_OR_DEFAULT.split(",")
-    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "poolside/laguna-s-2.1:free"
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stepfun/step-5-preview:free"
 
 
 def test_dead_hops_are_printed_on_success() -> None:
