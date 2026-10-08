@@ -113,6 +113,27 @@ def test_report_counts_drift_and_latency():
     assert s["max_read_seconds"] == 3.0
 
 
+def test_sweep_progress_goes_to_stderr_not_stdout(capsys, monkeypatch):
+    """P4.6, and it applies because this imports searchts.unlocker.
+
+    A probe can sit well over a second (gitlab reads in 7-15s), so progress on
+    stdout would corrupt `--json` piped into jq. Found by Hare on #343.
+    """
+    monkeypatch.setattr(
+        dogfood,
+        "probe",
+        lambda case: {
+            "url": case["url"], "expect": case["expect"], "corpus": "",
+            "outcome": "read", "chars": 1234, "lines": 5, "seconds": 1.0,
+            "matches_expectation": True,
+        },
+    )
+    dogfood.sweep(["browser"])
+    captured = capsys.readouterr()
+    assert captured.out == "", f"stdout must stay pipeable, got {captured.out!r}"
+    assert "browser" in captured.err
+
+
 def test_every_corpus_entry_declares_an_expectation():
     """A probe with no expectation cannot produce drift, so it is decoration."""
     for name, cases in dogfood.CORPORA.items():

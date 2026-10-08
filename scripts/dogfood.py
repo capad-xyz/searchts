@@ -141,10 +141,14 @@ def sweep(corpora: Optional[List[str]] = None) -> List[Dict[str, Any]]:
             row = probe(case)
             row["corpus"] = name
             rows.append(row)
+            # stderr, not stdout: this imports searchts.unlocker, so P4.6 applies
+            # and a probe can sit well over a second (gitlab reads in 7-15s).
+            # stdout stays clean for `--json` to be pipeable.
             print(
                 f"  {'ok ' if row['matches_expectation'] else 'DRIFT'} "
                 f"{name:<10}{row['outcome']:<8}{row['chars']:>8,} ch "
                 f"{row['lines']:>5} ln {row['seconds']:>6.1f}s  {row['url'][:52]}",
+                file=sys.stderr,
                 flush=True,
             )
     return rows
