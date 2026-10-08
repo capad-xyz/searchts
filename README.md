@@ -50,7 +50,7 @@ Paid unlockers mostly charge for pools of residential IP addresses. searchts doe
 
 If no tier comes back with real content, an optional human-in-the-loop step opens a real browser so you can clear the page once and continue. That covers interactive CAPTCHAs and soft walls alike: a login page served as HTTP 200 is not a challenge, but it is still a page only a human gets past. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
 
-**What it won't do.** searchts isn't a wall-bypass service. Pages behind a login (LinkedIn, X), DataDome and some Cloudflare setups fail loudly, with the reason. It won't route your traffic through paid residential proxies or a keyed commercial unlocker by default, and a release never claims a site reads until it does.
+**What it won't do.** searchts isn't a wall-bypass service. Pages behind a login (LinkedIn, X), DataDome and some Cloudflare setups fail loudly, with the reason. It won't route your traffic through paid residential proxies or a keyed commercial unlocker by default, and a release never claims a site reads until it does. Reusing a login for `read` is [F27](PLAN.md) and is not in this release.
 
 ## AI-chat share links
 
@@ -203,7 +203,7 @@ Latest run: [docs/scorecard.md](https://github.com/capad-xyz/searchts/blob/main/
 Search works with no keys (DuckDuckGo). Everything else is optional, via `searchts configure` or a `.env` (see `.env.example`):
 
 - **Search providers**: Exa, Brave, Tavily API keys, or a self-hosted `SEARXNG_URL`, for more and better results.
-- **Transcription**: a Groq or OpenAI (Whisper) key, plus `ffmpeg` and `yt-dlp`. Login-gated video: `searchts transcribe URL --cookies-from-browser chrome` (opt-in; never used by `read`).
+- **Transcription**: a Groq or OpenAI (Whisper) key, plus `ffmpeg` and `yt-dlp`. Login-gated video: `searchts transcribe URL --cookies-from-browser chrome` (opt-in; `read` does not use it yet, PLAN **F27**).
 - **GitHub token** for higher rate limits.
 
 Run `searchts doctor` to check what is configured and working.
