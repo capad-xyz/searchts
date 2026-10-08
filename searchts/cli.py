@@ -75,6 +75,24 @@ def _maybe_print_command_suggestion(argv, commands):
         print(f"did you mean '{matches[0]}'?", file=sys.stderr)
 
 
+#: Shown when `searchts` is run with no arguments. argparse prints sixteen
+#: subcommands and no first action, and for a tool pitched as "point your agent
+#: at this" that wall of text is the first thing a new user sees.
+_FIRST_RUN = """\
+Give your AI agent eyes. The two commands almost everyone needs:
+
+  searchts read <url>          fetch a page through the escalating unlocker
+  searchts search "<query>"    multi-provider web search, no API key
+
+Wiring an agent to use them automatically:
+
+  searchts mcp serve           the MCP server (read_url, web_search, ...)
+  searchts skill install       register the Claude Code skill
+
+Everything else: searchts --help
+"""
+
+
 def _run():
     """Parse argv and dispatch to a command handler.
 
@@ -309,6 +327,9 @@ def _run():
     _configure_logging(getattr(args, "verbose", False))
 
     if not args.command:
+        # Orient first, then the full reference. argparse's help is the right
+        # thing to print and the wrong thing to print first.
+        print(_FIRST_RUN, file=sys.stderr)
         parser.print_help()
         sys.exit(0)
 
