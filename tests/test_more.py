@@ -654,7 +654,15 @@ def test_fetch_without_findings_is_unchanged(monkeypatch):
     assert "[" not in r.text.splitlines()[-1]
 
 
-def test_mcp_read_url_reports_next_url(monkeypatch):
+def test_mcp_read_url_reports_more_but_not_the_page_s_next_url(monkeypatch):
+    """The page detects its own next page; the MCP envelope does not carry it.
+
+    This used to assert ``data["next_url"] == ...``. The next URL is the page's
+    own choice, so putting it in the envelope gave one page-chosen URL two trust
+    presentations: once fenced inside ``text`` by ``more.annotate``, once
+    unfenced beside it. ``next_cursor`` is what an agent may act on; humans get
+    the URL from ``searchts read --json``. See tests/test_mcp_next_url.py.
+    """
     from searchts.integrations import mcp_server
 
     html = _page("", head='<link rel="next" href="/blog/page/2/">')
@@ -663,8 +671,16 @@ def test_mcp_read_url_reports_next_url(monkeypatch):
     real_fetch = unlocker.fetch
     monkeypatch.setattr(unlocker, "fetch", lambda url, **kw: real_fetch(url, backends=["curl_cffi"], use_memory=False))
     data = json.loads(mcp_server.read_url(URL))
-    assert data["next_url"] == "https://example.org/blog/page/2/"
+    assert "next_url" not in data
     assert data["more"][0]["kind"] == "next-page"
+    # ``text`` and ``pages[].text`` are the annotated body, which is fenced and
+    # is allowed to name the page's own next URL. The envelope proper is not.
+    envelope = {
+        k: v for k, v in data.items() if k not in ("text", "pages")
+    }
+    assert "/blog/page/2/" not in json.dumps(envelope)
+    # Still there, inside the fence, where it is labelled as page data.
+    assert "/blog/page/2/" in data["text"]
 
 
 # ── next-page follow-up: links that name themselves, and links that are another document ──
