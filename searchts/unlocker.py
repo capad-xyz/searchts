@@ -30,6 +30,7 @@ import os
 import re
 import stat
 import sys
+import threading
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -652,6 +653,58 @@ def _word_recall(kept: str, whole: str) -> float:
     return len(a & b) / len(a)
 
 
+# ── S1.1: resource caps ────────────────────────────────────────────────────────
+#: Largest HTML body any rung will parse. 20 MB is far above a real article and
+#: far below the 140 MB one page in the security research served, which is a
+#: perfectly marked, perfectly fenced untrusted string that still cost the caller
+#: gigabytes. The fence was never the resource limit.
+MAX_HTML_BYTES = 20 * 1024 * 1024
+
+#: Largest extract returned. Sized for prose, not for a page: a 400,000-character
+#: book page is already beyond what an agent will read, and every consumer here
+#: (MCP response, search index, transcript) pays for it more than once.
+MAX_TEXT_CHARS = 400_000
+
+#: Wall-clock budget for the extraction parse itself. This is the CPU class the
+#: other two caps do not cover: a small, pathological document can burn arbitrary
+#: CPU in a regex backtrack. Enforced in a worker thread so a hang cannot take the
+#: caller with it.
+EXTRACTION_TIMEOUT = 20.0
+
+
+class _ExtractionTimeout(Exception):
+    """The parse outran its budget. The crude strip is the answer."""
+
+
+def _extract_within(html: str, url: Optional[str], budget: float) -> Optional[str]:
+    """Run ``_extract_inner`` under a wall-clock budget, or return None.
+
+    Threads rather than signals: signals only interrupt the main thread, and
+    extraction also runs inside MCP worker threads where SIGALRM is not available
+    or not safe. A daemon thread that is still running when the budget expires is
+    abandoned rather than joined, because joining it would be the hang we are
+    trying to avoid.
+    """
+    box: Dict[str, object] = {}
+
+    def run() -> None:
+        try:
+            box["out"] = _extract_inner(html, url)
+        except BaseException as e:  # noqa: BLE001 - reported through the box
+            box["err"] = e
+
+    worker = threading.Thread(target=run, name="searchts-extract", daemon=True)
+    worker.start()
+    worker.join(budget)
+    if worker.is_alive():
+        raise _ExtractionTimeout(
+            f"extraction exceeded {budget:.0f}s and was abandoned"
+        )
+    if "err" in box:
+        raise box["err"]  # type: ignore[misc]
+    return box.get("out")  # type: ignore[return-value]
+
+
 def _strip_html(html: str) -> str:
     """Crude tag strip, so we never hard-fail on extraction."""
     import html as _html
@@ -664,14 +717,65 @@ def _strip_html(html: str) -> str:
     return t.strip()
 
 
-def html_to_text(html: str, url: Optional[str] = None) -> str:
-    """Extract clean main-content markdown from raw HTML (trafilatura, with fallback).
+def cap_html(body: str) -> str:
+    """Drop a body too large to parse.
 
-    The extract is only trusted when it accounts for most of the page. A page
-    that is mostly links loses its content to an article-shaped heuristic and
-    comes back as navigation, so on those the crude strip wins: whole beats
+    Truncation is not silent: a cut body loses its tail, so it says so, and the
+    marker is placed where a reader will see it rather than at the end of a
+    string nobody reads.
+    """
+    if len(body) <= MAX_HTML_BYTES:
+        return body
+    head = body[:MAX_HTML_BYTES]
+    return (
+        head
+        + f"\n\n[searchts: truncated at {MAX_HTML_BYTES:,} bytes of HTML. "
+        "The rest of this page was not read.]"
+    )
+
+
+def cap_text(text: str) -> str:
+    """Bound the extract, on the way out of every rung including Jina."""
+    if len(text) <= MAX_TEXT_CHARS:
+        return text
+    return (
+        text[:MAX_TEXT_CHARS]
+        + f"\n\n[searchts: truncated at {MAX_TEXT_CHARS:,} characters. "
+        "The rest of this page was not read.]"
+    )
+
+
+def html_to_text(html: str, url: Optional[str] = None) -> str:
+    """Extract clean main-content markdown, under a size and time budget.
+
+    Three caps, each covering a different failure:
+
+    - the body is truncated at :data:`MAX_HTML_BYTES` before anything parses it
+    - the parse runs in a worker thread with a wall-clock budget
+      (:data:`EXTRACTION_TIMEOUT`), because a small document can burn arbitrary
+      CPU in a regex backtrack
+    - the result is truncated at :data:`MAX_TEXT_CHARS`, which is the only cap
+      that also covers Jina, since it returns markdown rather than HTML
+
+    The extract itself is only trusted when it accounts for most of the page. A
+    page that is mostly links loses its content to an article-shaped heuristic
+    and comes back as navigation, so on those the crude strip wins: whole beats
     clean when clean is chrome.
     """
+    body = cap_html(html)
+    try:
+        return cap_text(
+            _extract_within(body, url, EXTRACTION_TIMEOUT) or ""
+        )
+    except _ExtractionTimeout:
+        return cap_text(_tidy_crude(_strip_html(body), url))
+    except Exception:
+        pass
+    return cap_text(_tidy_crude(_strip_html(body), url))
+
+
+def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
+    """The extraction itself, unbounded. Run via :func:`_extract_within`."""
     try:
         import trafilatura
 
@@ -706,6 +810,14 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     except Exception:
         pass
     return _tidy_crude(_strip_html(html), url)
+
+
+def extract_text(html: str, url: Optional[str] = None) -> str:
+    """Alias kept so callers can be explicit about which entry point they mean.
+
+    :func:`html_to_text` is the historical name and is what tests import.
+    """
+    return html_to_text(html, url)
 
 
 def _tidy_crude(text: str, url: Optional[str] | None) -> str:
