@@ -43,7 +43,11 @@ def test_looks_blocked_ignores_nav_sign_in_on_a_real_page():
 def test_looks_blocked_raw_html_skips_login_wall():
     # A real page can embed "sign in to continue" in a header modal. Raw HTML
     # must not trip login-wall; the extract check is the gate.
-    html = "<script>sign in to continue</script>" + ("<p>article</p>" * 80)
+    #
+    # The phrase is in markup, not a script: copy inside a script is not shown
+    # to a reader and walls.classify drops script bodies, which is a separate
+    # rule with its own tests in test_walls.py.
+    html = "<div>sign in to continue</div>" + ("<p>article</p>" * 80)
     assert looks_blocked(200, html) is None
     assert looks_blocked(200, html, login_wall=True) == "login-wall"
 
