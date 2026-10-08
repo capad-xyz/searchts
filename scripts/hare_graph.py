@@ -66,7 +66,15 @@ METHOD = re.compile(
 )
 CALLISH = re.compile(r"([A-Za-z_][A-Za-z0-9_]{3,})\s*\(")
 JS_FN = re.compile(r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]{3,})\s*=\s*(?:async\s*)?(?:\(|function\b|[A-Za-z_$][\w$]*\s*=>)")
-CONST = re.compile(r"^\s*(?:export\s+)?(?:const\s+|let\s+|var\s+)?([A-Z][A-Z0-9_]{3,})\s*(?::[^=]*)?=(?!=)")
+# A module constant: SCREAMING_CASE, with an optional leading underscore. The
+# underscore matters more than it looks. Without it, `[A-Z]` fails at position
+# 0 and every *private* module constant is invisible to the whole graph:
+# _MIN_CHARS, _EXTRACT_MIN_RECALL, _AUTH_DENSITY_PER_100, _REFUSAL_REPEAT_LIMIT.
+# On #338 a diff whose only new name was `_REFUSAL_REPEAT_LIMIT = 2` yielded
+# zero names from the parser, so the graph had nothing to search for and
+# returned a file list about paths instead. Measured over six real merges, one
+# of them returned no names at all for exactly this reason.
+CONST = re.compile(r"^\s*(?:export\s+)?(?:const\s+|let\s+|var\s+)?(_?[A-Z][A-Z0-9_]{2,})\s*(?::[^=]*)?=(?!=)")
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@ ?(.*)$")
 FILE = re.compile(r"^diff --git a/(\S+) b/(\S+)")
 
