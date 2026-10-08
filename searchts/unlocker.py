@@ -629,6 +629,12 @@ _RECALL_MIN_WORDS = 40
 #: only bbc.com/news does this: 1 kept line against 279 crude.
 _MIN_CRUDE_LINES = 20
 
+#: How many rungs may return the same 4xx refusal before the ladder stops
+#: escalating. Two, not one: the first refusal is a fact about this request, the
+#: second is a fact about the site, and the browser is the rung most likely to
+#: differ. A third identical answer is the server telling us plainly.
+_REFUSAL_REPEAT_LIMIT = 2
+
 _WORD_RE = re.compile(r"[a-z][a-z'-]{2,}")
 
 
@@ -1299,8 +1305,16 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     attempts: List[Tuple[str, str]] = []
     best: Optional[FetchResult] = None  # richest non-blocked but thin result so far
     status: Optional[int] = None
+    #: The refusal status seen so far, and how many rungs have repeated it. A
+    #: server that says 403 to curl says 403 to a browser; see _ESCALATE_UNLESS.
+    refusal_status: Optional[int] = None
+    refusal_count = 0
 
     for backend in order:
+        if refusal_count >= _REFUSAL_REPEAT_LIMIT:
+            attempts.append((backend, "skipped-no-new-tls"))
+            _tick(f"  {backend}: skipped, {refusal_status} already refused twice")
+            continue
         _tick(f"trying {backend}…")
         try:
             final_url = url
@@ -1320,6 +1334,26 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     unpin(domain)
                     remembered = None
                 continue
+
+            if status is not None and 400 <= status < 500 and status not in (404, 429):
+                # A refusal status that survives a change of TLS fingerprint and
+                # user agent is the server declining on the request itself, not
+                # on how it arrived. Measured across 13 sites: stackoverflow,
+                # economist and science return 403 to curl AND 403 to the
+                # stealth browser; arstechnica 405 and 405; reuters 401 and 401.
+                # Each browser launch cost 18-20s to confirm the refusal.
+                #
+                # GitLab is the case this must not break, and it does not: curl
+                # returns 200 there with a thin 279-char extract, so there is no
+                # refusal to repeat and the ladder escalates on thinness as
+                # before. 404 and 429 are excluded because both can legitimately
+                # differ per client - a path may exist only in the rendered
+                # app, and a rate limit may reset between rungs.
+                if status == refusal_status:
+                    refusal_count += 1
+                else:
+                    refusal_status = status
+                    refusal_count = 1
 
             hop = private_hop(url, final_url)
             if hop:
