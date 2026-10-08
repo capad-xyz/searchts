@@ -26,9 +26,9 @@ especially [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont)).
 - **PDF & document reading** — first-class handling for PDF/document URLs.
 - **Result caching** — optional content cache for repeat reads of the same URL.
 - **Sitemap / small multi-page crawl** — read a handful of related pages in one call.
+- **Logged-in read** — copy a login that already exists, or sign in once when it does not. Not shipped. [PLAN F27](PLAN.md). No vendor.
 
 ## Not planned
 
-- Paid-proxy / residential-IP pools, a hosted service, or paid-API backends as defaults — these cut
-  against the keyless, own-IP identity that makes searchts different. See
+- Paid-proxy / residential-IP pools or paid-API backends as defaults. A paid hosted `read` is [F18](PLAN.md), later, and not a default. A logged-in read is [F27](PLAN.md), not shipped, and names no vendor. See
   [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont).
