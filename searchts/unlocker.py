@@ -624,7 +624,17 @@ _EXTRACT_MIN_RECALL = 0.35
 #: extract is taken as-is. Prevents a short article from being judged on noise.
 _RECALL_MIN_WORDS = 40
 
+#: A one-line extract next to a crude strip this many lines long has lost its
+#: block structure rather than found a short page. Measured across 16 pages,
+#: only bbc.com/news does this: 1 kept line against 279 crude.
+_MIN_CRUDE_LINES = 20
+
 _WORD_RE = re.compile(r"[a-z][a-z'-]{2,}")
+
+
+def _line_count(text: str) -> int:
+    """Non-blank lines. Structure, as opposed to length."""
+    return sum(1 for line in (text or "").splitlines() if line.strip())
 
 
 def _word_recall(kept: str, whole: str) -> float:
@@ -669,6 +679,15 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
         if out and out.strip():
             kept = tidy_markdown(out).strip()
             crude = _strip_html(html)
+            # An extract of one line means the block structure was lost, not that
+            # the page had one block. bbc.com/news comes back as 7,356 characters
+            # of correct headlines run together: "...hospital bed.3 hrs agoUS &
+            # CanadaWhat could happen next..." The character gate below would
+            # have kept it, because length is what that gate measures and here
+            # the extract is longer than a third of the page. Structure is a
+            # separate property from size, so it is checked separately.
+            if _line_count(kept) <= 1 and _line_count(crude) >= _MIN_CRUDE_LINES:
+                return _tidy_crude(crude, url)
             # Cheap gate first: an extract that is nearly as long as the page
             # cannot be the one that dropped it.
             if len(kept) >= _EXTRACT_MIN_RECALL * len(crude) or len(

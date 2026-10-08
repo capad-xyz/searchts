@@ -155,6 +155,63 @@ def test_html_to_text_strips_markup_and_keeps_text():
     assert "<script" not in out and "evil()" not in out
 
 
+def test_recall_gate_keeps_links_on_a_link_list_page(monkeypatch):
+    """#331: a page whose content *is* a link list keeps its links.
+
+    trafilatura looks for an article and discards the entries, returning the
+    navigation as a success because it is non-empty. Pinned here so the
+    35% gate cannot be quietly loosened.
+    """
+    import trafilatura
+
+    links = "".join(
+        f'<li><a href="/story/{i}">Distinctive headline number {i}</a></li>'
+        for i in range(40)
+    )
+    html = f"<html><body><ul>{links}</ul></body></html>"
+    monkeypatch.setattr(
+        trafilatura, "extract", lambda *a, **k: "Home News Sport Culture Travel"
+    )
+    out = html_to_text(html, "https://example.com/")
+    assert "Distinctive headline number 39" in out
+    assert unlocker._word_recall(out, unlocker._strip_html(html)) >= 0.35
+
+
+def test_one_line_extract_loses_to_the_crude_strip(monkeypatch):
+    """#336: a single-line extract means the block structure was lost.
+
+    bbc.com/news comes back as 7,356 characters of correct headlines run
+    together on one line. The character-length gate could not catch it,
+    because the extract really is longer than a third of the page. Size and
+    structure are different properties and need different checks.
+    """
+    import trafilatura
+
+    body = "".join(
+        f"<h2><a href='/n/{i}'>Headline about subject {i} and its consequences</a></h2>"
+        f"<p>Standfirst paragraph for item {i} with a few more words.</p>"
+        for i in range(30)
+    )
+    html = f"<html><body>{body}</body></html>"
+    glued = "".join(f"Headline about subject {i} and its consequences" for i in range(30))
+    monkeypatch.setattr(trafilatura, "extract", lambda *a, **k: glued)
+
+    out = html_to_text(html, "https://example.com/news")
+    lines = [ln for ln in out.splitlines() if ln.strip()]
+    assert len(lines) > 20, f"expected the structured strip, got {len(lines)} lines"
+    assert "Headline about subject 29" in out
+
+
+def test_a_genuinely_short_page_keeps_its_extract(monkeypatch):
+    """The line-structure rule must not fire on a page that really is short."""
+    import trafilatura
+
+    html = "<html><body><p>" + ("A sentence of prose. " * 60) + "</p></body></html>"
+    monkeypatch.setattr(trafilatura, "extract", lambda *a, **k: "One line of prose. " * 40)
+    out = html_to_text(html, "https://example.com/p")
+    assert "One line of prose." in out
+
+
 def test_normalize_headers_lowercases_names_and_stringifies_values():
     headers = unlocker._normalize_headers({"Server": "cloudflare", "X-Retry": 2})
     assert headers == {"server": "cloudflare", "x-retry": "2"}
