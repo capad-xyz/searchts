@@ -41,6 +41,36 @@ def test_changed_names_come_from_defs_constants_and_hunk_headers() -> None:
     assert hare_graph.changed("diff --git a/a.py b/a.py\n@@ -1 +1 @@\n-def test_x():\n+def main():\n")[0] == []
 
 
+def test_private_module_constants_are_names() -> None:
+    """A leading underscore must not hide a constant from the whole graph.
+
+    ``CONST`` started with ``[A-Z]``, which fails at position 0, so every
+    *private* module constant was invisible: ``_MIN_CHARS``,
+    ``_EXTRACT_MIN_RECALL``, ``_AUTH_DENSITY_PER_100``. Measured over six real
+    merges, #338 returned **zero** names from the parser for exactly this
+    reason: its only new name was ``_REFUSAL_REPEAT_LIMIT = 2``. With no name,
+    the graph had nothing to search and fell back to path matching.
+    """
+    diff = (
+        "diff --git a/searchts/unlocker.py b/searchts/unlocker.py\n"
+        "index e8c848a..38b1a2c 100644\n"
+        "--- a/searchts/unlocker.py\n"
+        "+++ b/searchts/unlocker.py\n"
+        "@@ -631,2 +631,3 @@ _MIN_CRUDE_LINES = 20\n"
+        " \n"
+        "+_REFUSAL_REPEAT_LIMIT = 2\n"
+    )
+    names, _paths, _ranges = hare_graph.changed(diff)
+    assert names == ["_REFUSAL_REPEAT_LIMIT"]
+
+
+def test_private_constants_are_found_by_name_not_just_declared() -> None:
+    """The point of a name is to be searched for, so prove the search works."""
+    assert hare_graph.CONST.match("_MIN_CHARS = 500")
+    assert hare_graph.CONST.match("_AUTH_DENSITY_PER_100 = 2.0")
+    assert not hare_graph.CONST.match("_lower_case = 1"), "lowercase is not a constant"
+
+
 def test_uses_are_ranked_code_then_config_then_docs_and_skip_the_diff(tmp_path) -> None:
     found = hare_graph.uses(_repo(tmp_path), DIFF)
     files = [u["file"] for u in found]
