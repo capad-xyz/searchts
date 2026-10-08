@@ -35,7 +35,35 @@ import re
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-__all__ = ["Wall", "classify", "classify_all", "FAMILIES", "WALL_NAMES"]
+__all__ = [
+    "Wall",
+    "classify",
+    "classify_all",
+    "scrub",
+    "FAMILIES",
+    "WALL_NAMES",
+]
+
+#: Script and style bodies are not page text, they are code. A wall is
+#: something a page *shows* a person; the same sentence inside a locale bundle
+#: is marketing copy describing a banner that is not there. Stripe's homepage
+#: ships ``"cookie_description":"We use cookies to improve your experience"``
+#: in a 698 KB script, which reads as a consent wall and is not one. Its real
+#: extract is 7,356 characters of article prose.
+_SCRIPTISH = re.compile(
+    r"(?is)<(script|style|noscript|template)\b.*?</\1\s*>"
+    r"|<(script|style|noscript|template)\b[^>]*/>"
+)
+
+
+def scrub(html: str) -> str:
+    """Drop script and style bodies so classifiers see only what a reader sees.
+
+    Cheap, linear, and deliberately does not try to be a parser. Removing these
+    elements cannot remove a wall: every real interstitial renders its message
+    in ordinary markup, because if it did not the user would not see it.
+    """
+    return _SCRIPTISH.sub(" ", html or "")
 
 
 @dataclass(frozen=True)
@@ -220,12 +248,17 @@ SHORT_SHELL_MIN_TERMS = 3
 def classify(text: str) -> Optional[Wall]:
     """Return the wall this extract is, or None if it looks like content.
 
-    Two layers, because they fail in different ways. Markers are exact and fire
-    anywhere, including a fourteen-word extract. Families are a ratio and need
-    a denominator, so they catch the walls whose copy we never wrote down and
-    are what makes this work on a site nobody has heard of.
+    Three layers, because they fail in different ways. Markers are exact and
+    fire anywhere, including a fourteen-word extract. Families are a ratio and
+    need a denominator, so they catch the walls whose copy we never wrote down
+    and are what makes this work on a site nobody has heard of. Breadth covers
+    the gap between them, where a ratio has no denominator to divide by.
+
+    Accepts either an extract or raw HTML. Script and style bodies are dropped
+    first, because a wall is something a page shows a person and copy inside a
+    script is not shown to anyone. See :func:`scrub`.
     """
-    raw = text or ""
+    raw = scrub(text)
     if not raw.strip():
         return None
     low = raw.lower()
@@ -245,8 +278,9 @@ def classify(text: str) -> Optional[Wall]:
 
 def classify_all(text: str) -> Dict[str, float]:
     """Every family's density, for reporting and for setting thresholds."""
+    raw = scrub(text)
     out: Dict[str, float] = {}
     for fam in FAMILIES:
-        _hits, total, per_100 = density(text, fam.words)
+        _hits, total, per_100 = density(raw, fam.words)
         out[fam.name] = round(per_100, 2) if total >= fam.min_words else 0.0
     return out

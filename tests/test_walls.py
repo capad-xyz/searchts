@@ -126,3 +126,55 @@ def test_short_shell_is_caught_by_breadth_not_volume():
     # Repeating "sign in" forty times *is* a wall, by the density rule, and
     # correctly so: a page that is nothing but "sign in" is a login page.
     assert walls.classify("Sign in\n" * 40) is not None
+
+
+def test_script_copy_is_not_a_wall():
+    """Stripe's homepage was gated as a cookie wall because of a locale string.
+
+    Its 698 KB of HTML contains
+    ``"cookie_description":"We use cookies to improve your experience"`` inside a
+    script, which the marker layer matched. The real extract is 7,356
+    characters of prose about payments, so ``searchts read https://stripe.com/``
+    failed on all three rungs and reported "cookie-wall".
+
+    Copy inside a script is not shown to a reader. A wall is something a page
+    shows a person.
+    """
+    decoy = (
+        '<html><script>var m={"cookie_description":'
+        '"We use cookies to improve your experience and for marketing"};</script>'
+        "<article>" + "Real prose about payments and invoices. " * 40 + "</article>"
+        "</html>"
+    )
+    assert walls.classify(decoy) is None
+    assert "cookie_description" not in walls.scrub(decoy)
+
+
+def test_a_wall_in_markup_still_counts_despite_a_script_decoy():
+    """Scrubbing must not become a way to smuggle a wall past the classifier."""
+    html = (
+        '<html><script>var m={"cookie_description":"We use cookies"};</script>'
+        "<body><p>Please sign in to continue</p></body></html>"
+    )
+    found = walls.classify(html)
+    assert found is not None
+    assert found.kind == "auth"
+
+
+def test_interstitial_in_markup_is_still_a_wall():
+    html = (
+        '<html><body><div class="consent">We value your privacy. '
+        "Accept all cookies to continue.</div></body></html>"
+    )
+    found = walls.classify(html)
+    assert found is not None
+    assert found.kind == "consent"
+
+
+def test_style_block_copy_is_not_a_wall():
+    html = (
+        "<style>.a{content:'Accept all cookies'}</style><p>"
+        + "Ordinary documentation text here. " * 40
+        + "</p>"
+    )
+    assert walls.classify(html) is None
