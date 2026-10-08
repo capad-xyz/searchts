@@ -36,7 +36,10 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Mapping, Optional, Tuple, TypeVar
+from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Optional, Tuple, TypeVar
+
+if TYPE_CHECKING:
+    from searchts.session_cookies import CookieRecord
 
 _T = TypeVar("_T")
 
@@ -916,14 +919,25 @@ def _normalize_headers(headers: Mapping[str, object]) -> Dict[str, str]:
     return {str(name).lower(): str(value) for name, value in headers.items()}
 
 
-def _fetch_curl_cffi(url: str, timeout: int = 30) -> Tuple[int, str, str, Dict[str, str]]:
+def _fetch_curl_cffi(url: str, timeout: int = 30,
+                     extra_headers: Optional[Mapping[str, str]] = None
+                     ) -> Tuple[int, str, str, Dict[str, str]]:
+    """Hit `url` directly, impersonating Chrome.
+
+    The one rung that talks to the target host itself, so it is the only rung
+    allowed to carry cookie material (see :func:`fetch`). ``extra_headers`` is
+    merged onto the fixed set; None leaves the request byte-identical to a
+    cookie-free read.
+    """
     from curl_cffi import requests as cr
 
     from searchts.ssrf import curl_resolve_options, curl_safe_redirects
+    req_headers = {"Accept-Language": "en-US,en;q=0.9"}
+    req_headers.update(extra_headers or {})
     r = cr.get(url, impersonate="chrome", timeout=timeout,
                allow_redirects=curl_safe_redirects(),
                curl_options=curl_resolve_options(url),
-               headers={"Accept-Language": "en-US,en;q=0.9"})
+               headers=req_headers)
     final = str(getattr(r, "url", None) or url)
     return r.status_code, r.text, final, _normalize_headers(dict(r.headers.items()))
 
@@ -931,6 +945,11 @@ def _fetch_curl_cffi(url: str, timeout: int = 30) -> Tuple[int, str, str, Dict[s
 def _fetch_jina(url: str, timeout: int = 40) -> Tuple[int, str, str, Dict[str, str]]:
     # Jina is a relay: we asked for `url`, so report that as the final source URL
     # (the wire URL is r.jina.ai/... which is not useful for citations).
+    #
+    # FENCE: this signature takes a URL and nothing else, on purpose. r.jina.ai
+    # is a third party, so there is no parameter through which cookie material
+    # could reach this rung -- a Cookie header here would hand a live login to
+    # someone else's server. Adding one would be the bug, not the feature.
     req = urllib.request.Request(
         "https://r.jina.ai/" + url,
         headers={"User-Agent": _UA_REAL, "Accept": "text/plain"},
@@ -1303,7 +1322,8 @@ def _finalize(
 def fetch(url: str, backends: Optional[List[str]] = None,
           min_chars: int = _MIN_CHARS, use_memory: bool = True,
           allow_human: bool = False, scrub: bool = False,
-          allow_thin: bool = False, progress: Optional[bool] = None) -> FetchResult:
+          allow_thin: bool = False, progress: Optional[bool] = None,
+          cookies: Optional[List["CookieRecord"]] = None) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -1333,6 +1353,22 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     progress:
         True: stderr ticks per ladder rung. False: never (CLI ``--json``).
         None: follow ``SEARCHTS_PROGRESS=1``. MCP/library omit the arg.
+    cookies:
+        Session cookies to present as an already-logged-in reader, from
+        ``searchts.session_cookies``. Default None: no cookie material anywhere,
+        and every rung behaves exactly as it did before.
+
+        They are filtered to the normalized target's own host before use, so a
+        jar holding cookies for several sites contributes only the ones this
+        host would really have been sent. ``.amazon.in`` rides along on
+        ``www.amazon.in``; ``notamazon.in`` gets nothing.
+
+        THE FENCE: a Cookie header is attached to exactly one rung, the
+        direct-host ``curl_cffi`` fetch. It never goes to ``Jina Reader`` (a
+        cookie sent to r.jina.ai is a live login handed to a third party), and
+        this change does not wire cookies into ``stealth-browser`` either. The
+        value is never logged, printed, or put in an error message or on the
+        FetchResult.
     """
     if progress is None:
         progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
@@ -1359,6 +1395,22 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     if blocked:
         why = blocked[7:] if blocked.startswith("Error: ") else blocked
         raise UnlockerError(url, [("ssrf", why)])
+
+    # Host-scoped cookie material, resolved ONCE and used by ONE rung. Scoped
+    # here, against the normalized URL's host, because that is the only place
+    # the target host is known: by the time the ladder runs, `final_url` may be
+    # a redirect and `url` is the only host the caller actually asked about.
+    # filter_for_host owns the suffix rule (.amazon.in yes, notamazon.in no), so
+    # this does not re-implement it.
+    cookie_header = ""
+    if cookies:
+        from searchts.session_cookies import build_header, filter_for_host
+        target_host = (urllib.parse.urlparse(url).hostname or "").lower().rstrip(".")
+        scoped_cookies = filter_for_host(cookies, target_host)
+        if scoped_cookies:
+            cookie_header = build_header(scoped_cookies)
+        # A jar with nothing for this host is not an error: it just means this
+        # read is anonymous. The ladder runs unchanged.
 
     # Tier-0: AI-chat share links (chatgpt.com/share, claude.ai/share, poe.com/s)
     # carry their conversation in provider-specific data channels that generic
@@ -1434,7 +1486,17 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             final_url = url
             headers: Dict[str, str] = {}
             if backend == "curl_cffi":
-                status, body, final_url, headers = _fetch_curl_cffi(url)
+                # The one rung that talks to the target host, so the one rung
+                # that may carry its cookies. Passed only when there is a header
+                # to pass, so a cookie-free read calls the fetcher exactly as
+                # before. Jina's and the browser's call sites below stay bare:
+                # that is the fence, and it is a call-site fence, not a filter.
+                if cookie_header:
+                    status, body, final_url, headers = _fetch_curl_cffi(
+                        url, extra_headers={"Cookie": cookie_header}
+                    )
+                else:
+                    status, body, final_url, headers = _fetch_curl_cffi(url)
             elif backend == "Jina Reader":
                 status, body, final_url, headers = _fetch_jina(url)
             elif backend == "stealth-browser":
