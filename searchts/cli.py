@@ -1604,9 +1604,21 @@ def _cmd_read(args):
     stderr. On total failure, print the per-backend breakdown to stderr and
     exit nonzero.
     """
-    from searchts import unlocker
+    from searchts import unlocker, ux
+
+    # A typo is the most common mistake and used to be the most expensive: a
+    # bare word is a valid hostname, so `read not-a-url` walked the whole ladder
+    # including a browser launch, 18.6s, to say "could not resolve host". Cost:
+    # instant and specific, and nothing that used to work is rejected.
+    problem = ux.check_url(args.url)
+    if problem:
+        print(f"searchts read: {problem}", file=sys.stderr)
+        sys.exit(2)
 
     backends = [args.backend] if args.backend else None
+    # Progress is narration ("trying curl_cffi..."), not diagnosis. The reasons
+    # are printed once, together, below. Passing progress=False keeps them from
+    # being announced twice.
     try:
         if getattr(args, "items", 0):
             if getattr(args, "pages", 1) > 1:
@@ -1615,23 +1627,23 @@ def _cmd_read(args):
                 print("--items and --pages are mutually exclusive; using --items.", file=sys.stderr)
             pages = unlocker.read_items(
                 args.url, args.items, backends=backends, allow_human=args.human,
-                scrub=args.scrub, progress=True,
+                scrub=args.scrub, progress=False,
             )
         elif getattr(args, "pages", 1) > 1:
             pages = unlocker.read_pages(
                 args.url, args.pages, backends=backends, allow_human=args.human,
-                scrub=getattr(args, "scrub", False), progress=True,
+                scrub=getattr(args, "scrub", False), progress=False,
             )
         else:
             pages = [unlocker.fetch(
                 args.url, backends=backends, allow_human=args.human,
-                scrub=getattr(args, "scrub", False), progress=True,
+                scrub=getattr(args, "scrub", False), progress=False,
             )]
         result = pages[0]
     except unlocker.UnlockerError as e:
         print(f"Failed to read {e.url}", file=sys.stderr)
         for backend, why in e.attempts:
-            print(f"  {backend}: {why}", file=sys.stderr)
+            print(f"  {backend}: {ux.tidy_reason(why)}", file=sys.stderr)
         sys.exit(1)
 
     # Surface prompt-injection findings to stderr so stdout stays clean content.
