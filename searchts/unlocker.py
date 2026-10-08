@@ -1575,6 +1575,25 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             why = f"{type(e).__name__}: {e}"
             attempts.append((backend, why))
             _tick(f"  {backend}: {why}")
+            # A rung that REFUSES by raising still counts toward the repeat
+            # limit. Jina is the common case: urllib raises HTTPError on a 4xx
+            # rather than returning it, so before this the refusal count only
+            # ever advanced on curl, the fail-fast in #338 fired on one rung,
+            # and stackoverflow still paid a browser launch - 29.9s where the
+            # intent was to stop at two.
+            refused = getattr(e, "code", None)
+            if not isinstance(refused, int):
+                refused = getattr(getattr(e, "status", None), "code", None)
+            if (
+                isinstance(refused, int)
+                and 400 <= refused < 500
+                and refused not in (404, 429)
+            ):
+                if refused == refusal_status:
+                    refusal_count += 1
+                else:
+                    refusal_status = refused
+                    refusal_count = 1
             if backend == remembered:
                 unpin(domain)
                 remembered = None
