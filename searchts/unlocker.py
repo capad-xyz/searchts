@@ -36,7 +36,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Dict, List, Mapping, Optional, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, TypeVar
 
 if TYPE_CHECKING:
     from searchts.session_cookies import CookieRecord
@@ -920,24 +920,29 @@ def _normalize_headers(headers: Mapping[str, object]) -> Dict[str, str]:
 
 
 def _fetch_curl_cffi(url: str, timeout: int = 30,
-                     extra_headers: Optional[Mapping[str, str]] = None
+                     extra_headers: Optional[Mapping[str, str]] = None,
+                     proxy: Optional[str] = None
                      ) -> Tuple[int, str, str, Dict[str, str]]:
     """Hit `url` directly, impersonating Chrome.
 
     The one rung that talks to the target host itself, so it is the only rung
     allowed to carry cookie material (see :func:`fetch`). ``extra_headers`` is
     merged onto the fixed set; None leaves the request byte-identical to a
-    cookie-free read.
+    cookie-free read. ``proxy`` routes the request through a proxy, which is how
+    a read escapes a block decided on our egress address rather than our
+    request; curl_cffi is the rung that can honour it.
     """
     from curl_cffi import requests as cr
 
     from searchts.ssrf import curl_resolve_options, curl_safe_redirects
     req_headers = {"Accept-Language": "en-US,en;q=0.9"}
     req_headers.update(extra_headers or {})
+    # Passed only when set, so a proxy-free read calls curl exactly as before.
+    proxy_kwargs: Dict[str, object] = {"proxy": proxy} if proxy else {}
     r = cr.get(url, impersonate="chrome", timeout=timeout,
                allow_redirects=curl_safe_redirects(),
                curl_options=curl_resolve_options(url),
-               headers=req_headers)
+               headers=req_headers, **proxy_kwargs)
     final = str(getattr(r, "url", None) or url)
     return r.status_code, r.text, final, _normalize_headers(dict(r.headers.items()))
 
@@ -1116,7 +1121,8 @@ def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:
 
 
 def _fetch_stealth(
-    url: str, timeout: int = 60, progress: Optional[bool] = None
+    url: str, timeout: int = 60, progress: Optional[bool] = None,
+    proxy: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     """Tier-2: render with an undetected headless Chromium (patchright).
 
@@ -1132,11 +1138,16 @@ def _fetch_stealth(
 
     Safe under MCP/FastMCP: see ``_call_sync_browser``.
     """
+    if proxy:
+        return _call_sync_browser(_fetch_stealth_impl, url, timeout, progress, proxy)
+    # No proxy: delegate exactly as before. An impl stub may take only the
+    # original three arguments, and an extra positional is a TypeError.
     return _call_sync_browser(_fetch_stealth_impl, url, timeout, progress)
 
 
 def _fetch_stealth_impl(
-    url: str, timeout: int = 60, progress: Optional[bool] = None
+    url: str, timeout: int = 60, progress: Optional[bool] = None,
+    proxy: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     try:
         from patchright.sync_api import sync_playwright
@@ -1149,6 +1160,10 @@ def _fetch_stealth_impl(
     ms = int(timeout * 1000)
     from searchts.ssrf import chromium_pin_args
     pin_args = chromium_pin_args(url)
+    # A proxy changes the browser's egress address, which is the whole point
+    # when a wall is blocking the address rather than the request. Passed only
+    # when set so a proxy-free read launches exactly as before.
+    proxy_kwargs: Dict[str, Any] = {"proxy": proxy} if proxy else {}
     with sync_playwright() as p:
         persistent = _use_persistent_profile()
         if persistent:
@@ -1158,9 +1173,11 @@ def _fetch_stealth_impl(
                 args=pin_args,
                 user_agent=_UA_REAL, locale="en-US",
                 viewport={"width": 1280, "height": 800},
+                **proxy_kwargs,
             )
         else:
-            browser = p.chromium.launch(headless=True, args=pin_args)
+            browser = p.chromium.launch(headless=True, args=pin_args,
+                                        **proxy_kwargs)
         try:
             if persistent:
                 page = browser.new_page()
@@ -1323,7 +1340,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
           min_chars: int = _MIN_CHARS, use_memory: bool = True,
           allow_human: bool = False, scrub: bool = False,
           allow_thin: bool = False, progress: Optional[bool] = None,
-          cookies: Optional[List["CookieRecord"]] = None) -> FetchResult:
+          cookies: Optional[List["CookieRecord"]] = None,
+          proxy: Optional[str] = None, proxy_trusted: bool = False) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -1369,6 +1387,19 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         this change does not wire cookies into ``stealth-browser`` either. The
         value is never logged, printed, or put in an error message or on the
         FetchResult.
+    proxy:
+        ``scheme://[user:pass@]host:port`` to route the direct and browser rungs
+        through. This is the lever for a block decided on our egress ADDRESS
+        rather than our request, which no fingerprint or cookie can move.
+        Measured: some sites 403 this network on principle, with byte-identical
+        responses for Chrome-impersonated curl and plain requests, while
+        Wikipedia/GitHub/BBC read 200 from the same IP in the same minute.
+
+        None (the default) keeps every rung on the user's own address, which is
+        today's behaviour. The Jina rung is deliberately NOT proxied: it fetches
+        from r.jina.ai's address, not yours, so your proxy cannot move it.
+    proxy_trusted:
+        Acknowledge that a remote proxy's operator will see the cookie header.
     """
     if progress is None:
         progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
@@ -1411,6 +1442,41 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             cookie_header = build_header(scoped_cookies)
         # A jar with nothing for this host is not an error: it just means this
         # read is anonymous. The ladder runs unchanged.
+
+    # Proxy resolution, and the second fence. A proxy is a third party in the
+    # path, so a Cookie header through one hands that operator a live login.
+    # Refused for a remote proxy unless the caller says they accept it; a proxy
+    # on loopback or a private network is this machine and is trusted by
+    # default, because that is a property of the connection rather than
+    # something the far side can assert.
+    proxy_spec = None
+    proxy_curl: Optional[str] = None
+    proxy_browser: Optional[Dict[str, Any]] = None
+    if proxy:
+        from searchts.egress import (
+            ProxyError,
+            cookies_may_travel,
+            curl_proxy_url,
+            normalize_proxy,
+            playwright_proxy,
+            redact,
+        )
+
+        try:
+            proxy_spec = normalize_proxy(proxy)
+        except ProxyError as e:
+            raise UnlockerError(url, [("proxy", str(e))]) from e
+        if cookie_header and not cookies_may_travel(proxy_spec, proxy_trusted):
+            # Never log the proxy credentials, not even here.
+            raise UnlockerError(url, [("proxy", (
+                f"refusing to send cookies through {redact(proxy)}: a proxy "
+                f"operator can read the Cookie header, which is a live login. "
+                f"Use a proxy on this machine, run the read without cookies, or "
+                f"pass proxy_trusted=True to accept it."
+            ))])
+        proxy_curl = curl_proxy_url(proxy_spec)
+        proxy_browser = playwright_proxy(proxy_spec)
+        _tick(f"  proxy: {redact(proxy)}")
 
     # Tier-0: AI-chat share links (chatgpt.com/share, claude.ai/share, poe.com/s)
     # carry their conversation in provider-specific data channels that generic
@@ -1491,18 +1557,39 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 # to pass, so a cookie-free read calls the fetcher exactly as
                 # before. Jina's and the browser's call sites below stay bare:
                 # that is the fence, and it is a call-site fence, not a filter.
-                if cookie_header:
-                    status, body, final_url, headers = _fetch_curl_cffi(
-                        url, extra_headers={"Cookie": cookie_header}
-                    )
+                if cookie_header or proxy_curl:
+                    # Both kwargs are passed only when they carry something, so a
+                    # plain read calls the fetcher with the identical argument
+                    # list it always had. That is not only tidiness: existing
+                    # test stubs are `lambda url, timeout=30`, and passing a
+                    # keyword they do not declare is a TypeError, not a no-op.
+                    kwargs: Dict[str, Any] = {}
+                    if cookie_header:
+                        kwargs["extra_headers"] = {"Cookie": cookie_header}
+                    if proxy_curl:
+                        kwargs["proxy"] = proxy_curl
+                    status, body, final_url, headers = _fetch_curl_cffi(url, **kwargs)
                 else:
                     status, body, final_url, headers = _fetch_curl_cffi(url)
             elif backend == "Jina Reader":
+                # FENCE, and deliberately unchanged by the proxy work: this rung
+                # takes a URL and nothing else. It fetches from r.jina.ai's
+                # address, so our proxy cannot move it either, and a cookie here
+                # would be a live login handed to a third party.
                 status, body, final_url, headers = _fetch_jina(url)
             elif backend == "stealth-browser":
-                status, body, final_url, headers = _fetch_stealth(
-                    url, progress=progress
-                )
+                # No cookie header here, ever. The browser may carry the proxy,
+                # because that changes the address the challenge is judged from.
+                # Passed only when set, for the same stub-signature reason as
+                # curl above.
+                if proxy_browser:
+                    status, body, final_url, headers = _fetch_stealth(
+                        url, progress=progress, proxy=proxy_browser,
+                    )
+                else:
+                    status, body, final_url, headers = _fetch_stealth(
+                        url, progress=progress,
+                    )
             else:
                 attempts.append((backend, "unknown-backend"))
                 _tick(f"  {backend}: unknown-backend")

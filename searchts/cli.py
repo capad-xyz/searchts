@@ -210,6 +210,19 @@ def _run():
         metavar="PORT",
         help="Read this site's cookies from your localhost debugger port (opt-in)",
     )
+    p_read.add_argument(
+        "--proxy",
+        metavar="URL",
+        help="Route the read through a proxy (http/https/socks), e.g. "
+             "socks5://127.0.0.1:7890. For blocks decided on your address, "
+             "which no fingerprint can move. Falls back to the `proxy` config "
+             "value. Omitted means your own IP, as before.",
+    )
+    p_read.add_argument(
+        "--proxy-trusted",
+        action="store_true",
+        help="Accept that a remote proxy operator can see the Cookie header",
+    )
 
     # ── search ──
     p_search = sub.add_parser("search", parents=[_verbose],
@@ -1659,6 +1672,7 @@ def _cmd_read(args):
         sys.exit(2)
 
     cookies = _read_command_cookies(args)
+    proxy = _read_command_proxy(args)
 
     backends = [args.backend] if args.backend else None
     # Progress is narration ("trying curl_cffi..."), not diagnosis. The reasons
@@ -1673,16 +1687,19 @@ def _cmd_read(args):
             pages = unlocker.read_items(
                 args.url, args.items, backends=backends, allow_human=args.human,
                 scrub=args.scrub, progress=False, cookies=cookies,
+                proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )
         elif getattr(args, "pages", 1) > 1:
             pages = unlocker.read_pages(
                 args.url, args.pages, backends=backends, allow_human=args.human,
                 scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
+                proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )
         else:
             pages = [unlocker.fetch(
                 args.url, backends=backends, allow_human=args.human,
                 scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
+                proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )]
         result = pages[0]
     except unlocker.UnlockerError as e:
@@ -1720,6 +1737,34 @@ def _cmd_read(args):
         print(result.text)
         for extra in pages[1:]:
             print(f"\n# {extra.final_url}\n\n{extra.text}")
+
+
+def _read_command_proxy(args):
+    """Resolve the proxy for one read: flag first, then the saved config value.
+
+    Returns None when neither is set, which keeps the ladder on the user's own
+    address exactly as it was before this existed.
+    """
+    raw = getattr(args, "proxy", None)
+    if not raw:
+        try:
+            from searchts.config import Config
+
+            raw = (Config().get("proxy") or "").strip() or None
+        except Exception:
+            raw = None
+    if not raw:
+        return None
+    from searchts.egress import ProxyError, normalize_proxy, redact
+
+    try:
+        normalize_proxy(raw)
+    except ProxyError as e:
+        print(f"proxy: {e}", file=sys.stderr)
+        sys.exit(1)
+    # One line, credentials stripped, so a long read can be traced later.
+    print(f"proxy: {redact(raw)}", file=sys.stderr)
+    return raw
 
 
 def _read_command_cookies(args):
