@@ -2608,15 +2608,20 @@ def _hare_once(
     hops_start = time.time()
     salvaged: list[dict[str, Any]] = []
     salvage_notes: list[str] = []
+    #: Hops that never ran because the fallback reserve was already bigger than
+    #: the time left. They are candidates for the HB.3 replay below.
+    skipped_for_budget: list[tuple[str, str, str, str, dict[str, Any]]] = []
     for i, (name, base, key, model, request_options) in enumerate(providers):
         if time.time() - hops_start > hop_budget:
             errs.append(f"hop budget ({hop_budget} s) spent before {name}:{model}")
-            break
+            skipped_for_budget.append((name, base, key, model, request_options))
+            continue
         timeout = call_timeout
         if name not in FAST_FALLBACKS and any(p[0] in FAST_FALLBACKS for p in providers[i + 1:]):
             left = hop_budget - (time.time() - hops_start) - FALLBACK_RESERVE_S
             if left < MIN_HOP_S:
                 errs.append(f"{name}:{model}: skipped, the last {FALLBACK_RESERVE_S} s are kept for the fast fallbacks")
+                skipped_for_budget.append((name, base, key, model, request_options))
                 continue
             timeout = int(min(call_timeout, left))
         try:
@@ -2648,6 +2653,55 @@ def _hare_once(
                 salvaged.extend(kept)
                 salvage_notes.append(f"- {len(kept)} finished findings kept from `{name}:{model}`, which died mid-answer")
             continue
+
+    # HB.3: deferred retry. A hop skipped to keep time for a fast fallback, or
+    # cut for want of budget, has not been *refused* - it has not run. Once the
+    # chain finishes with no answer, replay what was skipped or cut against
+    # whatever budget is left.
+    #
+    # Why replay rather than a smaller reserve: the reserve is evaluated before
+    # any fallback has had its turn, so at the moment a hop is skipped there is
+    # no evidence about how long the fallback takes. The evidence arrives when
+    # the chain ends, which is the only moment the decision can be made properly.
+    # Measured on #321: the two fallbacks answered in under a second each, so
+    # 150 s was reserved against a fact that took 453 s to become visible and
+    # 4 hops were held for it.
+    if parsed is None and (deferred := skipped_for_budget):
+        left = hop_budget - (time.time() - hops_start)
+        print(f"hare: replaying {len(deferred)} skipped hop(s) with {left:.0f}s left")
+        for name, base, key, model, request_options in deferred:
+            left = hop_budget - (time.time() - hops_start)
+            if left < MIN_HOP_S:
+                errs.append(f"{name}:{model}: replay skipped, only {left:.0f}s left")
+                continue
+            try:
+                call_start = time.time()
+                SALVAGE.clear()
+                hop_messages = messages
+                graph_line = ""
+                if graph and hare_graph is not None:
+                    more = hare_graph.section(graph, hare_graph.budget_for(name))
+                    if more:
+                        files = more.count("\n### ")
+                        graph_line = f"\n- graph: {files} file{'' if files == 1 else 's'} from the repo, {len(more):,} characters"
+                        hop_messages = [messages[0], {"role": "user", "content": f"{messages[1]['content']}\n\n{more}"}]
+                raw = chat_complete(
+                    base, key, model, hop_messages, request_options,
+                    timeout=int(min(call_timeout, left)),
+                )
+                parsed = extract_json(raw)
+                if parsed is None:
+                    raise RuntimeError("no JSON object in model output")
+                used = f"{name}:{model} (replay)" + (" · deep" if deep else "")
+                cost = cost_line(LAST_USAGE, used, time.time() - call_start) + graph_line
+                break
+            except Exception as e:
+                errs.append(f"{name}:{model} (replay): {e}")
+                kept = salvage(str(SALVAGE.get("text") or ""), f"{name}:{model} replay")
+                if kept:
+                    salvaged.extend(kept)
+                    salvage_notes.append(f"- {len(kept)} finished findings kept from the `{name}:{model}` replay")
+                continue
 
     if parsed is None and salvaged:
         # Every model died, but findings one of them finished survived: post
