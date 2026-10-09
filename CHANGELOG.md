@@ -2,6 +2,55 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.14.0](https://github.com/capad-xyz/searchts/compare/v0.13.1...v0.14.0) (2026-10-09)
+
+
+### Added
+
+* **dogfood:** a repeatable corpus sweep, so a tuned threshold can be noticed rotting ([#343](https://github.com/capad-xyz/searchts/issues/343)) ([4724ecf](https://github.com/capad-xyz/searchts/commit/4724ecf7c3c2946617edbffbe7390222456099bd))
+* **hare:** Groq plus Gemini hops, wider token budget ([#224](https://github.com/capad-xyz/searchts/issues/224)) ([a3123d0](https://github.com/capad-xyz/searchts/commit/a3123d0dff9f3c9db5ab145a82c9e49869a7b95c))
+* **install:** uninstall --browser removes only the browser extra ([#304](https://github.com/capad-xyz/searchts/issues/304)) ([27a9d84](https://github.com/capad-xyz/searchts/commit/27a9d84ff5bcbe2dae26b4927dc298e1a818ad51))
+* **mcp:** a server-signed cursor so the page stops authoring the next read ([#339](https://github.com/capad-xyz/searchts/issues/339)) ([8e63962](https://github.com/capad-xyz/searchts/commit/8e6396207feb12e2ee687ac03ffe26d9f89b939d))
+* **read:** --items follows the next page until the list is long enough ([#321](https://github.com/capad-xyz/searchts/issues/321)) ([02469e1](https://github.com/capad-xyz/searchts/commit/02469e1fcf0ca609947485f4b3c5a37e6e0ddc40))
+* **read:** a headed side panel is named, and its text stays out ([#320](https://github.com/capad-xyz/searchts/issues/320)) ([43a4640](https://github.com/capad-xyz/searchts/commit/43a464044170a53f62fcf9d7c12f4b8095edf21a))
+* **read:** a sidebar list does not beat the main column ([#306](https://github.com/capad-xyz/searchts/issues/306)) ([c67c5f9](https://github.com/capad-xyz/searchts/commit/c67c5f9d5c583411da7f8de4c18d720f86f2f7a0))
+* **read:** follow the next page, curl only, with a cap ([#303](https://github.com/capad-xyz/searchts/issues/303)) ([c98d621](https://github.com/capad-xyz/searchts/commit/c98d6216b5b612bd37808f42bcbbb244b8753d6d))
+* **read:** skip Jina for the rest of the run after a 403 ([#305](https://github.com/capad-xyz/searchts/issues/305)) ([2273d29](https://github.com/capad-xyz/searchts/commit/2273d29d44d7993bb5ae4b147149c48aa9d3116e))
+* **read:** table lists keep the title, the link, and the row under it ([#302](https://github.com/capad-xyz/searchts/issues/302)) ([22c53c0](https://github.com/capad-xyz/searchts/commit/22c53c0f4cbca57d5e22861687e119cf8701e481))
+* **unlocker:** a fence was never a resource limit ([#340](https://github.com/capad-xyz/searchts/issues/340)) ([8f46060](https://github.com/capad-xyz/searchts/commit/8f46060542d38bb20a11b30330b935e37bbeff73))
+* **ux:** a typo is not a wall ([#347](https://github.com/capad-xyz/searchts/issues/347)) ([8ab1fce](https://github.com/capad-xyz/searchts/commit/8ab1fce4504c6e728bec00c1f80e6e77280fc654))
+* **ux:** the zero-arg first run should say what to do first ([#348](https://github.com/capad-xyz/searchts/issues/348)) ([47e6c07](https://github.com/capad-xyz/searchts/commit/47e6c07b325570afe0fbacd81317d6695a3451e0))
+
+
+### Fixed
+
+* **extract:** a link-list page keeps its links, not its navigation ([#331](https://github.com/capad-xyz/searchts/issues/331)) ([63d54d6](https://github.com/capad-xyz/searchts/commit/63d54d635a8d4c5f29879a9d24972f8251658d30))
+* **extract:** size is not structure, so check them separately ([#337](https://github.com/capad-xyz/searchts/issues/337)) ([a21522d](https://github.com/capad-xyz/searchts/commit/a21522d1f55dab8c5a0679a8e7105b8c1660dc24))
+* **graph:** a private module constant was invisible to the whole graph ([#342](https://github.com/capad-xyz/searchts/issues/342)) ([fcfc689](https://github.com/capad-xyz/searchts/commit/fcfc6893bfdc822ac07c4c6199b15bf7e47f6695))
+* **hare:** /hare, /hare deep and /hare think run even on a reviewed commit ([#277](https://github.com/capad-xyz/searchts/issues/277)) ([c4ca7d9](https://github.com/capad-xyz/searchts/commit/c4ca7d9d4b85a22fbfb8010ef8525577ae3d6551))
+* **hare:** a Hare Bot note cannot enter the ledger ([#308](https://github.com/capad-xyz/searchts/issues/308)) ([cea0cb1](https://github.com/capad-xyz/searchts/commit/cea0cb1fcea921a8a588d2160d3fbd334dc3b6af))
+* **hare:** a merge from the base is not the pull request ([#318](https://github.com/capad-xyz/searchts/issues/318)) ([441c412](https://github.com/capad-xyz/searchts/commit/441c4128a5f2de088ffad58bb988fa5afd7394cd))
+* **hare:** a quoted Hare Bot marker does not drop a score ([a3f3691](https://github.com/capad-xyz/searchts/commit/a3f3691de93d2d38804b8ce8d2f9bf1a803143b2))
+* **hare:** a real finding cannot say Fix: no ([034ab19](https://github.com/capad-xyz/searchts/commit/034ab195b4de718f286cc883d9f805cd48ff3925))
+* **hare:** an eval report does not wait for CI that cannot start ([#319](https://github.com/capad-xyz/searchts/issues/319)) ([0ac5d35](https://github.com/capad-xyz/searchts/commit/0ac5d35d778c36753425513afb2924aa431962b7))
+* **hare:** force the eval checkout, and say Laguna is first ([#307](https://github.com/capad-xyz/searchts/issues/307)) ([2fbbdbc](https://github.com/capad-xyz/searchts/commit/2fbbdbc12bb08d1425825d28f75603e4deed7234))
+* **hare:** replay the hops the fallback reserve held back ([#341](https://github.com/capad-xyz/searchts/issues/341)) ([de1ccd9](https://github.com/capad-xyz/searchts/commit/de1ccd9e4db8b5564a2c75111ac9c8cf0b867af6))
+* **hare:** the nag names the cause instead of calling every hop busy ([#322](https://github.com/capad-xyz/searchts/issues/322)) ([23185d9](https://github.com/capad-xyz/searchts/commit/23185d91c1b21c61db02d809b9f8de982e084195))
+* **hare:** what CodeRabbit found on [#269](https://github.com/capad-xyz/searchts/issues/269) ([#275](https://github.com/capad-xyz/searchts/issues/275)) ([448b4d9](https://github.com/capad-xyz/searchts/commit/448b4d99352be2731d6b28cdcc14bdadd4017db6))
+* **inject:** the fence cannot be forged, and marks no longer hide a payload ([#330](https://github.com/capad-xyz/searchts/issues/330)) ([92efa7a](https://github.com/capad-xyz/searchts/commit/92efa7aff1da2ae80e338534deb83bd68de8726e))
+* **install:** uninstall --chromium does not wipe config ([473c19f](https://github.com/capad-xyz/searchts/commit/473c19f53435be6ba8b87ef4fe7ff551cdd0db7f))
+* **mcp:** the page stops naming the agent's next URL, in any form ([#344](https://github.com/capad-xyz/searchts/issues/344)) ([502adaf](https://github.com/capad-xyz/searchts/commit/502adafb7b66698450e51b068c33215f5eeb96c1))
+* **read:** a card list that lost its links still has to be the extract ([5d04486](https://github.com/capad-xyz/searchts/commit/5d04486e3a8bd499a9bf1ea46988ff85be09b291))
+* **read:** a Jina 403 does not stick to the MCP server ([67f4fbe](https://github.com/capad-xyz/searchts/commit/67f4fbea9db3b6a397cbb7de72e7fc2be65f025d))
+* **read:** a long byline is still the detail row ([ad6fc7e](https://github.com/capad-xyz/searchts/commit/ad6fc7efb60b1cce6e4f82449ff400f29f5dc128))
+* **read:** a next page the SSRF guard refuses raises, not a short read ([#323](https://github.com/capad-xyz/searchts/issues/323)) ([da459ac](https://github.com/capad-xyz/searchts/commit/da459acecc82923c9f2f83cd17aed97215f2aa68))
+* **read:** a page that fails mid-walk keeps the pages already read ([#324](https://github.com/capad-xyz/searchts/issues/324)) ([6d7169e](https://github.com/capad-xyz/searchts/commit/6d7169eb580144ae4dbc33734068230b8c5c4c48))
+* **read:** a walk that hits a cap says so, and ordered rows count ([#325](https://github.com/capad-xyz/searchts/issues/325)) ([b4bbd65](https://github.com/capad-xyz/searchts/commit/b4bbd65ec206db872c0c5c6ae3f5c4d291980950))
+* **release:** a version already on PyPI is not a failed release ([#352](https://github.com/capad-xyz/searchts/issues/352)) ([00c4a00](https://github.com/capad-xyz/searchts/commit/00c4a006f1514a9aa287ef68ae828e0fac2ff7f1))
+* **ssrf:** octal and inet_aton short forms are loopback, not DNS names ([#328](https://github.com/capad-xyz/searchts/issues/328)) ([da12026](https://github.com/capad-xyz/searchts/commit/da12026c55cf4783c7ffb45a969f25c037df02fb))
+* **unlocker:** a refusal that repeats is a statement about the request, not the TLS ([#338](https://github.com/capad-xyz/searchts/issues/338)) ([c27b56c](https://github.com/capad-xyz/searchts/commit/c27b56cfe6c57a3b98f3dee8a113444b155e5893))
+* **walls:** a locale string in a script is not a consent wall ([#335](https://github.com/capad-xyz/searchts/issues/335)) ([c78a847](https://github.com/capad-xyz/searchts/commit/c78a8475acb3d72466ef535fd51e41202437014b))
+
 ## [0.13.1](https://github.com/capad-xyz/searchts/compare/v0.13.0...v0.13.1) (2026-10-03)
 
 
