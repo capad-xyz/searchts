@@ -1205,9 +1205,14 @@ def test_a_dead_chain_says_in_one_line_that_nothing_was_reviewed(monkeypatch) ->
     assert headline == hare_r1.NO_ANSWER == "Hare: no model answered, not reviewed."
     assert "m1" in why  # the dead hop is still named for whoever fixes the pin
     body = hare_r1.needed_body(why, hare_r1.NO_ANSWER)
-    assert body.startswith(hare_r1.NEEDED)
-    assert body.split("\n\n")[1] == hare_r1.NO_ANSWER  # the short line leads
-    assert "/hare" in body and "answered nothing" in body  # the cause still follows
+    assert body.startswith(hare_r1.NEEDED)  # R1e's post-once matcher still finds it
+    lead = body.split("\n\n")[1]
+    assert lead.startswith(hare_r1.NO_ANSWER + " ")
+    # The cause line stays beside the short line, not behind the fold: "no model
+    # answered" alone says the run failed, the cause says which pin to change.
+    assert lead == f"{hare_r1.NO_ANSWER} {hare_r1.cause_line([why])}"
+    assert "did not answer" in body and "answered nothing" in body
+    assert "/hare" in body
     # A pass that failed for another reason must not claim no model answered.
     delivery = hare_r1.needed_body("review delivery failed: 500")
     assert delivery.split("\n\n")[1].startswith("🐰 Could not finish this pass.")

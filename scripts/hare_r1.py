@@ -1965,13 +1965,16 @@ def needed_body(why: str, headline: str = "") -> str:
     """Graceful nag that names the cause. Raw errors stay behind a fold.
 
     `headline` leads the note when the caller knows more than "a pass failed".
-    The no-answer path passes NO_ANSWER; a delivery failure has its own cause
-    and keeps the default line, which must not claim no model answered.
+    The no-answer path passes NO_ANSWER, which is added to the cause line and
+    not swapped for it: "no model answered" on its own says the run failed,
+    the cause beside it says which pin to go and change. A delivery failure has
+    its own cause and keeps the default line, which must not claim no model
+    answered.
     """
     parts = [x.strip() for x in why.split(" | ") if x.strip()] or [why.strip()]
     hops = "\n".join(f"- {_short_fail(x)}" for x in parts)
     cause = cause_line(parts)
-    lead = headline or f"🐰 Could not finish this pass. {cause} This is not a review."
+    lead = f"{headline} {cause}" if headline else f"🐰 Could not finish this pass. {cause} This is not a review."
     return _no_em(
         f"{NEEDED}\n\n"
         f"{lead}\n\n"
