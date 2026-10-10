@@ -328,11 +328,11 @@ def reasoning_options(
     provider allows it and is a no-op where it does not, because Gemini 3 cannot
     be asked to stop thinking.
 
-    `shape` picks between the two bounded shapes: `auto` is production (a token
-    budget where the model takes one, an effort otherwise), `effort` is always
-    an effort and `budget` is always a token cap. They are separate because the
-    docs are silent on what happens if both are sent, and the proof run measured
-    them separately for exactly that reason.
+    `shape` picks between the two bounded shapes: `effort` is production and always
+    asks the model for its own strongest published level, `budget` sends the
+    token cap and exists so the proof run can measure it. They are separate
+    because a gateway takes `effort` or `max_tokens` and not both, and because
+    the measurement said to keep them apart.
     """
     field = REASONING_SHAPE.get(provider, "none")
     if field == "none":
@@ -349,13 +349,17 @@ def reasoning_options(
         return {"reasoning_effort": clamp_effort(level, efforts)}
     if field == "nested":
         budgetable = budget > 0 and efforts_support_budget(provider, model, catalog)
-        if shape == "effort" or (shape == "auto" and not budgetable):
-            return {"reasoning": {"effort": clamp_effort(level, efforts), "exclude": True}}
-        if shape == "budget" and not budgetable:
-            # Asked for a cap the model cannot take: fall back to the effort
-            # rather than send a field that is ignored at best and a 400 at worst.
-            return {"reasoning": {"effort": clamp_effort(level, efforts), "exclude": True}}
-        return {"reasoning": {"max_tokens": budget, "exclude": True}}
+        # `effort` is the production shape, and `budget` is measured rather than
+        # sent. The proof run (#359, 5 PRs, docs/proofs/hare-reasoning/) is the
+        # reason: `reasoning.max_tokens` returned empty content 5 of 5 on
+        # OpenRouter's Nemotron Ultra and 5 of 5 on Nous, while `reasoning.effort`
+        # answered 5 of 5 on the same model with a median 489 reasoning tokens. A
+        # cap that reliably returns nothing is not a cap, it is a way to spend a
+        # call and get no review, so the hop asks for the model's own level and
+        # the budget stays available for a run that wants to measure it.
+        if shape == "budget" and budgetable:
+            return {"reasoning": {"max_tokens": budget, "exclude": True}}
+        return {"reasoning": {"effort": clamp_effort(level, efforts), "exclude": True}}
     return {}
 
 # Fixed list, not a router. Read against the live catalogs 2026-10-06:

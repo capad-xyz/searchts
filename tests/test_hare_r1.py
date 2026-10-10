@@ -675,19 +675,32 @@ def test_hop_budget_fits_inside_the_job_timeout() -> None:
 
 def _workflow_env(name: str) -> str:
     """The literal a HARE_*_MODEL line pins, or "" when it is absent or an expression."""
+    return _workflow_pin(name)[0]
+
+
+def _workflow_pin(name: str) -> tuple[str, bool]:
+    """(literal, present) for a HARE_*_MODEL line in hare.yml.
+
+    Present and empty are different, and a chain slot that the owner emptied on
+    purpose is the case that gets lost: `HARE_NOUS_EXTRA_MODEL: ''` says "this
+    slot is deliberately empty", while a missing line says "no override, so the
+    Python default runs", and only one of those two matches a script default of
+    "". Reading them as the same value made a deliberate empty pin look like
+    drift.
+    """
     import re
 
     wf = _hare_workflow()
     m = re.search(rf"^\s*{name}:\s*(.+?)\s*$", wf, re.MULTILINE)
     if not m:  # no override at all, so the Python default is what runs
-        return ""
+        return "", False
     value = m.group(1).strip().strip("'\"")
     if "${{" in value:
         # `${{ inputs.x || 'literal' }}`: the literal after `||` is what runs when
         # nobody overrides, so it is the pin. An expression with no fallback is "".
         fb = re.search(r"""\|\|\s*(['"])(.*?)\1""", value)
-        return fb.group(2) if fb else ""
-    return value
+        return (fb.group(2) if fb else ""), True
+    return value, True
 
 
 def test_workflow_groq_models_match_the_live_default() -> None:
@@ -965,8 +978,8 @@ def test_the_nous_and_openrouter_slugs_are_written_in_both_places() -> None:
         ("HARE_NOUS_EXTRA_MODEL", hare_r1.HARE_NOUS_EXTRA_DEFAULT),
         ("HARE_OR_MODEL", hare_r1.HARE_OR_DEFAULT),
     ):
-        pinned = _workflow_env(env_name)
-        assert pinned, f"{env_name} is not pinned in hare.yml, so the two places can drift unseen"
+        pinned, present = _workflow_pin(env_name)
+        assert present, f"{env_name} is not pinned in hare.yml, so the two places can drift unseen"
         assert pinned.split(",") == default.split(","), f"{env_name} pins {pinned!r}, the default is {default!r}"
 
 
@@ -2297,25 +2310,46 @@ def test_an_owner_cap_is_never_raised_by_the_clamp() -> None:
     }
 
 
-def test_the_reasoning_budget_goes_out_as_a_token_cap_not_an_effort() -> None:
-    """The one thing that stops thinking from eating max_tokens.
+def test_the_production_shape_is_the_effort_not_the_token_cap() -> None:
+    """The proof run settled which of the two bounded shapes a hop sends.
 
     Reasoning tokens count against max_tokens (OpenRouter's reasoning guide), so
-    an unbounded reasoning hop returns finish_reason=length with empty content
-    and its tokens are thrown away. `reasoning.max_tokens` is the only field that
-    bounds it, only models whose catalog entry carries `supports_max_tokens` take
-    it, and the docs say one of effort or max_tokens, not both.
+    an unbounded hop returns finish_reason=length with empty content. The first
+    answer to that was `reasoning.max_tokens`, which looked right because it is
+    the field the docs describe. The measurement says otherwise: on 5 PRs
+    (#359, docs/proofs/hare-reasoning/) `max_tokens` returned empty content 5 of
+    5 on Nemotron Ultra and 5 of 5 on Nous, while `reasoning.effort` answered 5
+    of 5 on the same model with a median 489 reasoning tokens. Production sends
+    the effort; the cap is kept so a run can measure it again.
     """
     cat = CATALOG_2026_10_10
-    capped = hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "max", 12000, cat)
-    assert capped == {"reasoning": {"max_tokens": 12000, "exclude": True}}
-    assert "effort" not in capped["reasoning"], "effort and max_tokens together are undefined in the docs"
-    # A budget of 0 means no budget, not no thinking.
-    assert hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "max", 0, cat) == {
+    # What production sends now: the model's own strongest level, for every
+    # nested-gateway model, budgetable or not.
+    assert hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "max", 12000, cat) == {
         "reasoning": {"effort": "high", "exclude": True}
     }
-    # Lightning publishes no supports_max_tokens, so it gets an effort, not a cap.
+    assert hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3-super-120b-a12b:free", "max", 12000, cat) == {
+        "reasoning": {"effort": "medium", "exclude": True}  # clamped to what Super publishes
+    }
+    # effort and max_tokens together are undefined in the docs, so never both.
+    for model in ("nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3-super-120b-a12b:free"):
+        got = hare_r1.reasoning_options("openrouter", model, "high", 12000, cat)
+        assert "max_tokens" not in got["reasoning"]
+    # Lightning publishes no supports_max_tokens, so it also gets an effort.
     assert hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3.5-lightning:free", "high", 12000, cat) == {
+        "reasoning": {"effort": "high", "exclude": True}
+    }
+    # The cap is still reachable, for the run that wants to measure it.
+    assert hare_r1.reasoning_options(
+        "openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "max", 12000, cat, shape="budget"
+    ) == {"reasoning": {"max_tokens": 12000, "exclude": True}}
+    # Asked for a cap on a model that cannot take one: fall back to the effort
+    # rather than send a field that is ignored at best and a 400 at worst.
+    assert hare_r1.reasoning_options(
+        "openrouter", "nvidia/nemotron-3.5-lightning:free", "high", 12000, cat, shape="budget"
+    ) == {"reasoning": {"effort": "high", "exclude": True}}
+    # A budget of 0 means no budget, not no thinking.
+    assert hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "max", 0, cat) == {
         "reasoning": {"effort": "high", "exclude": True}
     }
 

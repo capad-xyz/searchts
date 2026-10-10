@@ -1,0 +1,39 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 1,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 17521,
+  "completion_tokens": 1631,
+  "total_tokens": 19152,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "answer": "{\n  \"effort\": \"high\",\n  \"summary\": \"Hare gets a brain transplant: reasoning off by default, smarter JSON extraction, and a local runner for fast loops.\\n\\n1. **Reasoning knobs** `effort=none` for Nous, Groq, Zen; `reasoning_effort=low` for Gemini; `effort=low` for OpenRouter \u2014 measured to make hops answer instead of burning the whole token budget thinking.\\n2. **JSON extraction** rewritten to match braces with string awareness, search from the end, and survive quoted `${{ secrets }}` braces that previously swallowed a whole review.\\n3. **Local runner** `scripts/hare_local.py` added for dry-run reviews from a terminal on the same free keys.\\n4. **Timeouts** raised: job 20\u219230 min, LLM call 60\u2192180 s, hop budget 360\u2192600 s, max_tokens 8000\u219232000 \u2014 backstops, not targets; measured reviews land in 9\u201363 s with reasoning off.\\n5. **Failure messages** now distinguish budget exhaustion from other empty-content causes, and the nag headline names the pattern (all budget, all prose, all empty) instead of a generic \\\"busy or blocked\\\".\\n6. **Manual runs** (workflow_dispatch, local script) now count as asks so `HARE_ASK` is read for any non-push event.\",\n  \"aim\": \"Make the Hare review hop actually return a review by turning off reasoning on the free models that were spending 100% of their token budget thinking and returning empty content, while hardening the JSON parser and adding a local development loop.\",\n  \"case\": \"Ship. The measurement doc proves the core problem: 6/6 thinking-on runs returned nothing in 8\u201310 minutes; 6/7 thinking-off runs returned a review in 9\u201363 seconds with zero reasoning tokens. The fix wires `effort=none` into the provider chain for Nous, Groq, and Zen, which is the only change that made the hop answer. The JSON extractor fixes a real data-loss bug (PR 222 payload) where a quoted Actions expression caused the old slice to discard a complete review with a real finding. The local runner is a pure dev convenience. Timeouts are widened as backstops only; the test `test_hop_budget_fits_inside_the_job_timeout` validates the arithmetic. All new behavior is pinned by tests. No scope creep beyond the stated fix.\",\n  \"findings\": [\n    {\n      \"sev\": \"skip\",\n      \"path\": \"docs/hare-thinking-ab.md\",\n      \"line\": 93,\n      \"issue\": \"File ends without a trailing newline (POSIX text file convention).\",\n      \"short\": \"Missing final newline in the new measurement doc.\",\n      \"fix\": \"yes\",\n      \"change\": \"Add a trailing newline at end of file.\",\n      \"original\": \"\\\\ No newline at end of file\",\n      \"suggestion\": \"\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_local.py\",\n      \"line\": 201,\n      \"issue\": \"File ends without a trailing newline.\",\n      \"short\": \"Missing final newline in the new local runner script.\",\n      \"fix\": \"yes\",\n      \"change\": \"Add a trailing newline at end of file.\",\n      \"original\": \"\\\\ No newline at end of file\",\n      \"suggestion\": \"\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 228,\n      \"issue\": \"The `json_objects` function uses a `while` loop with manual index manipulation that could be simplified with a regex-based approach, but the current logic is correct and handles edge cases (escaped quotes, unclosed braces). No functional issue.\",\n      \"short\": \"Manual brace matching is verbose but correct; consider regex for readability if it handles strings.\",\n      \"fix\": \"no\",\n      \"change\": \"\"\n    },\n    {\n      \"sev\": \"real\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 459,\n      \"issue\": \"`chat_complete` catches `TimeoutError` but `urllib.request.urlopen` with a timeout raises `urllib.error.URLError` wrapping a `socket.timeout`, not a bare `TimeoutError`. The `except TimeoutError` block will never trigger.\",\n      \"short\": \"TimeoutError catch is wrong exception type for urllib; should catch URLError with socket.timeout cause.\",\n      \"fix\": \"later\",\n      \"change\": \"Catch `urllib.error.URLError` and check `isinstance(e.reason, socket.timeout)` or `isinstance(e.reason, TimeoutError)` to properly handle request timeouts.\",\n      \"original\": \"    except TimeoutError as e:\\n        raise RuntimeError(\\n            f\\\"LLM timeout after {LLM_TIMEOUT_SEC}s {base} {model} (raise HARE_LLM_TIMEOUT_S)\\\"\\n        ) from e\",\n      \"suggestion\": \"    except urllib.error.URLError as e:\\n        if isinstance(e.reason, (socket.timeout, TimeoutError)):\\n            raise RuntimeError(\\n                f\\\"LLM timeout after {LLM_TIMEOUT_SEC}s {base} {model} (raise HARE_LLM_TIMEOUT_S)\\\"\\n            ) from e\\n        raise\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 566,\n      \"issue\": \"The `needed_body` function builds a lead message by checking if all hops failed the same way. The condition `all(r.endswith(\\\"empty answer\\\") for r in real)` matches both \\\"empty answer\\\" and \\\"empty answer (reasoning ate the token budget)\\\" because the latter ends with the former. This conflates budget exhaustion with other empty-answer causes in the 'not the token budget' headline.\",\n      \"short\": \"String suffix check conflates 'empty answer' and 'empty answer (reasoning ate the token budget)' in the all-empty headline.\",\n      \"fix\": \"later\",\n      \"change\": \"Use exact string matching or a structured error code instead of suffix check to distinguish budget exhaustion from other empty-answer causes.\",\n      \"original\": \"    elif real and all(r.endswith(\\\"empty answer\\\") for r in real):\\n        lead = \\\"Every review hop came back with no answer at all, and it was not the token budget.\\\"\",\n      \"suggestion\": \"    elif real and all(r == \\\"nous: empty answer\\\" or r == \\\"groq: empty answer\\\" or r == \\\"zen: empty answer\\\" or r == \\\"gemini: empty answer\\\" or r == \\\"openrouter: empty answer\\\" for r in real):\\n        lead = \\\"Every review hop came back with no answer at all, and it was not the token budget.\\\"\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"tests/test_hare_r1.py\",\n      \"line\": 690,\n      \"issue\": \"Test file ends without a trailing newline.\",\n      \"short\": \"Missing final newline in test file.\",\n      \"fix\": \"yes\",\n      \"change\": \"Add a trailing newline at end of file.\",\n      \"original\": \"\\\\ No newline at end of file\",\n      \"suggestion\": \"\"\n    }\n  ]\n}"
+}

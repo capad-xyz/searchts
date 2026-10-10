@@ -1,0 +1,17 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "nous",
+ "model": "stepfun/step-5-preview:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 1,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "LLM 400 https://inference-api.nousresearch.com/v1 stepfun/step-5-preview:free: {\"status\":400,\"message\":\"This request is not valid. Check the model name and othe",
+ "usage": {},
+ "answer": ""
+}

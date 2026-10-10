@@ -1,0 +1,39 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 10343,
+  "completion_tokens": 905,
+  "total_tokens": 11248,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "answer": "{\n  \"effort\": \"low\",\n  \"summary\": \"Hare's brain transplant: slower models first, fast ones as fallbacks.\\n\\n1. **Provider chain** reordered: OpenRouter \u2192 Nous \u2192 Groq \u2192 Gemini \u2192 Zen.\\n2. **Tests** updated to match the new order and hop options.\",\n  \"aim\": \"Put the slower, more thorough models at the front of Hare's failover chain and demote Groq and Gemini to fallback positions.\",\n  \"case\": \"The change is a pure reordering of the provider chain with matching test updates. The owner explicitly called for this order because fast models have missed issues that slower ones caught. The diff is self-contained, tests pass, and no other code paths are affected. Safe to ship.\",\n  \"findings\": [\n    {\n      \"sev\": \"skip\",\n      \"path\": \"PLAN.md\",\n      \"line\": 265,\n      \"issue\": \"The comment says 'Space Bunny is last on Nous, not dropped' but the new chain puts stealth/space-bunny-alpha on OpenRouter as the second hop and on Nous as the sixth hop. The wording could be clearer about which provider's Space Bunny is kept.\",\n      \"short\": \"Comment about Space Bunny placement is slightly ambiguous with new order.\",\n      \"fix\": \"later\",\n      \"change\": \"Clarify which provider's Space Bunny hop is retained and why.\",\n      \"original\": \"   - **Space Bunny is last on Nous, not dropped.** The empty-content failure was measured against that slug **on OpenRouter**; the Nous copy is unmeasured, so removing it would be a guess. Nous hops now send effort none, so a miss there is cheap, but it keeps the order the measurement earned.\",\n      \"suggestion\": \"   - **Space Bunny on Nous is kept, not dropped.** The empty-content failure was measured against that slug **on OpenRouter** (where it now runs second); the Nous copy (now sixth) is unmeasured, so removing it would be a guess. Nous hops send effort none, so a miss there is cheap, but it keeps the order the measurement earned.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 1363,\n      \"issue\": \"The comment says 'OpenRouter and Nous go first because their models take their time with the diff' but the chain has two Nous hops (n1, n2) before Groq. The comment could mention the double-Nous explicitly.\",\n      \"short\": \"Comment doesn't mention the two Nous hops in the new order.\",\n      \"fix\": \"later\",\n      \"change\": \"Update comment to reflect the two Nous hops before Groq.\",\n      \"original\": \"    # Order is the owner's call (2026-10-04), not the ledger's: the ledger's\\n    # notes mostly predate the fixes that landed that day, so it cannot rank\\n    # hops yet. OpenRouter and Nous go first because their models take their\\n    # time with the diff. Groq and Gemini answer in seconds and the owner has\\n    # watched them miss what a slower reviewer caught on the same PR, so both\\n    # are fallbacks: Groq after Nous (it 413s on a big prompt anyway), Gemini\\n    # after Groq. The ledger's per-hop scores decide the order later.\",\n      \"suggestion\": \"    # Order is the owner's call (2026-10-04), not the ledger's: the ledger's\\n    # notes mostly predate the fixes that landed that day, so it cannot rank\\n    # hops yet. OpenRouter leads, then two Nous hops, because their models take\\n    # their time with the diff. Groq and Gemini answer in seconds and the owner\\n    # has watched them miss what a slower reviewer caught on the same PR, so both\\n    # are fallbacks: Groq after the two Nous hops (it 413s on a big prompt\\n    # anyway), Gemini after Groq. The ledger's per-hop scores decide the order later.\"\n    }\n  ]\n}"
+}

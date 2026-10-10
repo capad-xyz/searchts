@@ -1,0 +1,46 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "nous",
+ "model": "poolside/laguna-s-2.1:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "no JSON in the answer",
+ "usage": {
+  "prompt_tokens": 11279,
+  "completion_tokens": 397,
+  "total_tokens": 11676,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  },
+  "cost": 0,
+  "cost_details": {
+   "source": "nas_model_override",
+   "floor_applied": false,
+   "rate_source": "nas_model_override"
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 393,
+  "answer_chars": 1355,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "## Summary\n\nLedger learns to write HARE.md from low scores, and Hare starts reading it.\n\n1. **Ledger** adds `--rules HARE.md`, a `proposed_rules` + `apply_rules` pair, and a fresh `HARE.md` head.\n2. **Hare** fetches `HARE.md` from the base branch and feeds it to the model as \"the owner's rules for Hare on this repo\".\n3. **AGENTS.md** gets the same marked block the ledger rewrites, so the owner's hand-written rules and the scored rules live in one place.\n4. **Tests** cover dedup, owner-line survival, and that HARE.md reaches the prompt.\n\nCI on `abc1234`: green.\n\nIntent: give Hare a per-repo memory of what it missed, written by the owner's scores, without letting the bot rewrite AGENTS.md by hand.\n\n### Findings\n\n#### \ud83d\udfe1 skip \u00b7 `scripts/hare_ledger.py:186`\n\n**Issue:** `proposed_rules` sorts by `sc[\"at\"]` as a string, which works for ISO-8601 UTC but would mis-order if a score ever lacked a timezone or used a different format.\n\n**Fix:** later. Parse `at` into a datetime for the sort key, or document the ISO-8601 assumption.\n\n<details>\n<summary>\ud83d\udc30 checks & computer run</summary>\n\n- head `abc1234`\n- CI lint / typecheck / test \u2192 green\n- test-full / wheel-gate skipped by design\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) \u00b7 purpose: review and report \u00b7 `nous:poolside/laguna-s-2.1` | low |"
+}

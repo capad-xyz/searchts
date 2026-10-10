@@ -1,0 +1,39 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 11189,
+  "completion_tokens": 839,
+  "total_tokens": 12028,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "answer": "{\n  \"effort\": \"medium\",\n  \"summary\": \"Hare gets its own diary. HARE.md splits the owner's hand-written rules from the ledger's auto-written ones, and the weekly job now feeds that block back into the model prompt.\",\n  \"aim\": \"Move Hare's learned rules out of AGENTS.md into a dedicated HARE.md so the ledger can rewrite its block without touching the contract every agent signs.\",\n  \"case\": \"The split is clean: AGENTS.md keeps the contract, HARE.md holds the bot's memory. The ledger script writes the rules block atomically, preserves owner lines outside the markers, and the reviewer now reads HARE.md from the base branch before every note. Tests cover the dedup logic, the apply_rules merge, and that the prompt actually receives the file. No behavior change for callers; this is plumbing for R2c.\",\n  \"findings\": [\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_ledger.py\",\n      \"line\": 195,\n      \"issue\": \"The HARE_MD_HEAD constant hardcodes '- (none yet)' for the owner's rules section, but apply_rules only preserves content outside the marked block. If an owner adds hand-written rules, they live above the block and survive; the placeholder text is only used when the file is empty or missing the markers.\",\n      \"short\": \"Placeholder text in HARE_MD_HEAD only shows on fresh files; owner lines above the block are preserved.\",\n      \"fix\": \"no\",\n      \"change\": \"No change needed; the design intentionally separates owner rules (above) from ledger rules (inside the block).\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_ledger.py\",\n      \"line\": 295,\n      \"issue\": \"proposed_rules is called twice when the file changes: once for the print line and once inside apply_rules. Cheap but wasteful.\",\n      \"short\": \"proposed_rules(ledger) runs twice on write path.\",\n      \"fix\": \"later\",\n      \"change\": \"Store the result in a variable and reuse it for both the print and the apply_rules call.\"\n    },\n    {\n      \"sev\": \"real\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 1475,\n      \"issue\": \"The base_ref used to fetch HARE.md falls back to 'main' when base.sha is missing. On a PR from a fork, base.sha exists but the file may not exist on that ref; the try/except swallows the 404 and returns empty string, which is fine. However, if the base branch is not 'main' (e.g., a release branch), the fallback to 'main' could fetch the wrong HARE.md. The PR's base ref should be used consistently.\",\n      \"short\": \"Fallback to 'main' for HARE.md fetch may read wrong branch when base is not main.\",\n      \"fix\": \"later\",\n      \"change\": \"Use base_ref from the PR's base.sha without a 'main' fallback; if the file is missing on that ref, let the exception return empty string.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \".github/workflows/hare-ledger.yml\",\n      \"line\": 45,\n      \"issue\": \"The PR body template in the workflow still says 'wrote | scripts/hare_ledger.py (no model) | low | AI wrote it' but the script now also writes HARE.md. The Models table should reflect that the ledger job updates two artifacts.\",\n      \"short\": \"Workflow PR body Models table doesn't mention HARE.md output.\",\n      \"fix\": \"later\",\n      \"change\": \"Update the PR body template to note HARE.md is also written by the ledger run.\"\n    }\n  ]\n}"
+}
