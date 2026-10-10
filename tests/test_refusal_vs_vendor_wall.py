@@ -116,6 +116,21 @@ def test_raised_body_is_bounded_and_total() -> None:
     assert u._raised_body(_Raised(None)) == ""
 
     # A reader that hands back a str longer than the bound is trimmed again, so
-    # the cap holds even when the reader ignores it.
-    assert len(u._raised_body(_Raised("y" * (u._VENDOR_WALL_SCAN + 999)))) == (
-        u._VENDOR_WALL_SCAN)
+    # the cap holds even when the reader ignores it. The cap is a literal on
+    # purpose: re-deriving it from the constant keeps the test green through a
+    # rename while quietly changing what is pinned.
+    assert len(u._raised_body(_Raised("y" * (u._VENDOR_WALL_SCAN + 999)))) == 65536
+    assert u._VENDOR_WALL_SCAN == 65536
+
+
+def test_a_str_returning_reader_against_a_real_httperror() -> None:
+    """The same trim, run through urllib's own exception rather than a double.
+
+    HTTPError.read delegates to its file object, so an io.StringIO stands in
+    for the str-returning reader case on the real type.
+    """
+    err = HTTPError("https://example.com/", 403, "Forbidden", {}, io.StringIO(
+        VENDOR_BODY + "y" * 200000))
+    body = u._raised_body(err)
+    assert len(body) == 65536
+    assert body.startswith(VENDOR_BODY)
