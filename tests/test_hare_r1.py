@@ -2148,6 +2148,12 @@ def test_finished_findings_survive_the_model_that_found_them(monkeypatch) -> Non
     seen = _salvage_world(monkeypatch, ["m1", "m2"], all_die)
     assert [(f["path"], f["line"]) for f in seen["findings"]] == [("a.py", 3)]  # one finding, not one per dead hop
     assert seen["used"].startswith("salvage") and "needed" not in seen
+    # Salvage overwrote `cost` with the salvage notes, so the note lost the caps
+    # line. Salvage is the run where a cap did the most work: it is exactly the
+    # note that has to say which caps fired, because it is the one that shows a
+    # default is too tight. Both lines, not one or the other.
+    assert "- caps:" in str(seen["cost"]), "the salvage path dropped the caps line"
+    assert "kept from" in str(seen["cost"]), "the salvage notes went missing"
 
 
 def test_slow_hops_leave_time_for_the_fast_fallbacks(monkeypatch) -> None:

@@ -3360,7 +3360,13 @@ def _hare_once(
         # those, marked, instead of nothing.
         parsed = {"summary": "Every model was cut off before it finished. The findings below were complete when that happened; ask again with `/hare` for a full pass.", "findings": []}
         used = "salvage (every model was cut off)"
-        cost = "\n".join(salvage_notes)
+        # Salvage is the run where a cap did the most work, so it is the run
+        # whose caps line matters most: it is the note that shows a default is
+        # too tight. Every hop died, so no hop reported a cost and `cost` above
+        # is empty, which means the caps line was never built. Build it here
+        # instead of inheriting one that does not exist, and keep the salvage
+        # notes underneath it.
+        cost = caps_line(CAPS, attempts) + "\n" + "\n".join(salvage_notes)
         salvage_notes = []
     if parsed is None:
         try:
