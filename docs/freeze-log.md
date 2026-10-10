@@ -112,6 +112,7 @@ Append a new row under the right heading. Do not append it to either plan.
 | 2026-10-03 | Distribution: version-free stories (**X8** thread, **LI2** motion video on real output), reach rules in section 5. Show HN after **F25** (0.13.1); the scorecard is #227. |
 | 2026-10-03 | #227, #225, #228, #229 merged. **F25** ticked. Both Show HN gates are clear; **0.13.1** is a `fix:` release-please tag off #228, so the gate is really "0.13.1 on PyPI". README now says why searchts exists (#229) and six docs stopped calling example.com thin. |
 | 2026-10-10 | Hare's operating record left this file. R1, R1c, cadence, the model list, HareBot, Laya, F15's detail, The diary of what landed, searchts and Hare, is docs/freeze-log.md. This file stays the searchts plan. |
+| 2026-10-10 | DataDome is not the ceiling. A device-check, including one simple click, is the stealth rung. An image puzzle still stops. The address is a separate layer: no bought IP in that PR. **N1** is "not a default of the free CLI", not "never an exit" (**F18**). `docs/mcp.md` tunnel line is HTTPS-to-loopback only. |
 
 ## Hare
 

@@ -22,7 +22,7 @@ A plan says what is true now and what is next. A log says what already happened.
 
 ## Identity
 
-Free, open-source, **keyless** web layer for agents. Fetch a URL or admit you can't. Won by reliability and being easy to reach for, not by feature count.
+Free, open-source, **keyless** package for agents. Fetch a URL or admit you can't. Won by reliability and being easy to reach for, not by feature count. Do not cite "keyless" as a ban on clearing a DataDome script, or as "a hosted read can never exist" (**F18**).
 
 ## Do not violate
 
@@ -30,7 +30,7 @@ Free, open-source, **keyless** web layer for agents. Fetch a URL or admit you ca
 2. **Fail loud** — thin, challenge, login-wall, or Playwright "page is navigating" is an error unless the caller opts into thin. Do not return half-HTML as a pass.
 3. **P4.6** — work that can sit >1s ticks on **stderr**. Never stdout. Never the MCP protocol. Plain stderr, not Rich, not loguru (`-v` is for loguru).
 4. **No connector framework** (**N4**). Share extractors stay fail-open modules. Known-host JSON (F5b) is the same pattern, not a plugin system.
-5. **Out of scope** unless the PR *is* that PLAN id: Solari (**F14**), hosted MCP (**N2**), cookies inside `read_url` (**F7** is transcribe-only), paid proxies (**N1**), "beat Reddit."
+5. **Out of scope** unless the PR *is* that PLAN id: Solari (**F14**), a public hosted URL for the free CLI (**N2**), paid proxy pools as a default of the free CLI (**N1**), "beat Reddit." A DataDome device-check on the stealth rung is in scope, including one simple click. A bought IP is not part of that pull request. **F7** is the transcribe cookie flag. Do not cite it as "cookies can never be used by read."
 
 ## R1 — Hare (`searchts-hare[bot]`)
 

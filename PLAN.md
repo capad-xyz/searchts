@@ -349,7 +349,7 @@ Hare is not this plan. The operating record (R1, R1c, cadence, the model list, H
 
 ### N — Not planned (explicit)
 
-- **N1** Paid residential proxy pools as defaults
+- **N1** Paid residential proxy pools as defaults of the free CLI. An exit we operate is **F18**, not a flag in `pip install`. Do not cite this line as "never pass DataDome" or "never try a VPN the user already has."
 - **N2** A public hosted URL for the free CLI. A paid hosted `read` is **F18**, not a default, and not before its trigger.
 - **N3** Keyed commercial unlockers as default backends
 - **N4** Generic plugin/connector architecture for platforms

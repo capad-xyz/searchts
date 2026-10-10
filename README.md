@@ -27,7 +27,7 @@ The first versions, which I built with Claude, failed the other way. When they c
 ## What it does
 
 - Reads pages your agent's own fetch can't: browser-fingerprint checks, JavaScript-only pages and some bot walls
-- Fails loudly on the walls it can't pass (login walls, DataDome, some Cloudflare setups) and says which tier failed and why
+- Fails loudly when the read is not the real page (a login the user did not hand over, a puzzle that needs a person, a block that is the address) and says which tier failed and why
 - Reads complete ChatGPT / Claude / Gemini / Grok / Poe / DeepSeek / Perplexity / Copilot shared conversations
 - Works with Claude, Codex, and MCP agents
 - Extracts clean Markdown, ready to feed a model
@@ -36,9 +36,9 @@ The first versions, which I built with Claude, failed the other way. When they c
 - Downloads a page's assets (images, fonts, palette)
 - Transcribes videos, subtitles-first
 
-## Why it's free
+## Why the package is free
 
-Paid unlockers mostly charge for pools of residential IP addresses. searchts doesn't need one: the fetch and browser tiers run on your machine, from your own connection, at personal volume. The one hosted tier, Jina Reader, is free and can be turned off. That gets it past fingerprint checks and JavaScript-only pages. It doesn't get past every wall, and the [scorecard](docs/scorecard.md) shows which ones it can't.
+The package you install is free and keyless. The fetch and the browser run on your machine, from your connection. It does not bundle a residential proxy. Jina Reader, the one hosted rung, is free and can be turned off. That is not a promise that every hard page is free forever. A read that needs an exit we operate is a different product, not a default of this package. The [scorecard](docs/scorecard.md) is what this build actually read, not a list of walls that can never be passed.
 
 ## The unlocker
 
@@ -50,7 +50,7 @@ Paid unlockers mostly charge for pools of residential IP addresses. searchts doe
 
 If no tier comes back with real content, an optional human-in-the-loop step opens a real browser so you can clear the page once and continue. That covers interactive CAPTCHAs and soft walls alike: a login page served as HTTP 200 is not a challenge, but it is still a page only a human gets past. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
 
-**What it won't do.** searchts isn't a wall-bypass service. Pages behind a login (LinkedIn, X), DataDome and some Cloudflare setups fail loudly, with the reason. It won't route your traffic through paid residential proxies or a keyed commercial unlocker by default, and a release never claims a site reads until it does.
+**What it won't do.** It will not pretend a wall page is the article. A login the user did not hand over still fails, with the reason. A DataDome device-check is not a permanent failure: the stealth browser is supposed to let that script finish, and to take a simple click (continue, a checkbox, a press-and-hold that is one action). A puzzle that asks a person to recognize images still stops. The package will not route you through a paid residential proxy by default. A release never claims a site reads until it does. `datadome.co` is still a fail on the current scorecard. That is a measurement, not a rule.
 
 ## AI-chat share links
 
@@ -193,8 +193,8 @@ Latest run: [docs/scorecard.md](https://github.com/capad-xyz/searchts/blob/main/
 
 ## How it works, and its limits
 
-- It runs from your own residential IP at personal volume, which is why it needs no paid proxy pool. It is a personal-grade research tool, not a mass-scraping system.
-- Interactive CAPTCHAs (DataDome / Turnstile press-and-hold) and login walls are the honest ceiling. Use `--human` for those.
+- The free package runs from your own connection at personal volume. It does not ship a proxy pool.
+- A script check, including one simple click, is work for the stealth browser. A puzzle that needs a person, and a login the user did not hand over, still stop. `--human` is for those. A block that is only the address is a separate layer. It is not this fix, and it is not a reason to call DataDome impossible.
 - Some platforms (notably Instagram, and YouTube in 2026) may need your browser cookies or fail intermittently; that is platform-side.
 - Anti-bot systems evolve; this is an arms race and the techniques may need occasional updates. Respect each site's terms of service and use responsibly.
 

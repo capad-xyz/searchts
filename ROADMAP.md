@@ -29,6 +29,6 @@ especially [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont)).
 
 ## Not planned
 
-- Paid-proxy / residential-IP pools, a hosted service, or paid-API backends as defaults — these cut
-  against the keyless, own-IP identity that makes searchts different. See
-  [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont).
+- Paid-proxy pools and keyed commercial unlockers as defaults of the free package. A hosted
+  read is a separate product ([PLAN.md](PLAN.md) **F18**), not a default here, and not a standing
+  "never". See [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont).
