@@ -15,6 +15,7 @@ import urllib.parse
 import urllib.request
 from collections import deque
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 try:  # scripts/ is on sys.path when run as `python scripts/hare_r1.py`
@@ -56,17 +57,20 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 # models spend max_tokens thinking and return content "" with
 # finish_reason=length: measured 2026-10-02 (PR 222 payload, space-bunny-alpha,
 # 2500 and 8000) and 2026-10-03 (12000 on PR 224, still empty). So where the
-# gateway honours the knob, the hop is told not to think: Nous with
-# effort=none answered the same payload with 0 reasoning tokens. Where it does
-# not, the budget is the floor. A 60 s call cut off the hops that did answer.
-LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "300"))
+# gateway honours the knob, the hop is told how much thinking it may spend
+# (CAPS.reasoning_budget); where it does not, the budget is the floor and the
+# hop is retried with reasoning off. A bounded reasoning hop takes longer than a
+# no-think one, so the call ceiling went 300 -> 600 s: a hop cut off at 300 s
+# leaves a good answer unfinished, which is the one outcome the caps must not buy.
+LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "600"))
 # Model hops stop after this, so the needed note posts before the job timeout.
-# Live on PR 235 (2026-10-03): three Nous hops hung for the whole 60 s each and
-# spent a 360 s budget before the one OpenRouter hop that answers got its turn.
-# 600 s holds one full 300 s hang plus the quick failures around it and still
-# reaches a live hop; two full hangs spend it, and that is the case the Nous
-# effort knob is there to prevent.
-HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "600"))
+# Raised 600 -> 1800 s with reasoning on. The old ceiling was sized for a chain
+# that answered in 1 to 6 s thinking off; with a 12,000-token thinking budget a
+# single hop can legitimately use several minutes, and a 600 s chain budget
+# meant one slow hop spent everything before the fast fallbacks got a turn.
+# Still a guard, not a budget: the wall-clock cap below is the review-wide net.
+HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "1800"))
+
 # Slow hops go first (#258), so slow failures can spend the whole budget before
 # the fast fallbacks get a turn: on #287 two Nous hops answered nothing and the
 # 600 s ran out before Groq, so a /hare deep posted no note. While a fallback is
@@ -79,13 +83,71 @@ LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "32000"))
 # diff gets twice the time, and only a very big diff, so a one-file change
 # never pays for a 40-minute job.
 BIG_DIFF_LINES = int(os.environ.get("HARE_BIG_DIFF_LINES", "1000"))
-BIG_LLM_TIMEOUT_SEC = int(os.environ.get("HARE_BIG_LLM_TIMEOUT_S", "600"))
-BIG_HOP_BUDGET_S = int(os.environ.get("HARE_BIG_HOP_BUDGET_S", "1200"))
+BIG_LLM_TIMEOUT_SEC = int(os.environ.get("HARE_BIG_LLM_TIMEOUT_S", "900"))
+BIG_HOP_BUDGET_S = int(os.environ.get("HARE_BIG_HOP_BUDGET_S", "3300"))
+
+
+
+def _env(name: str, default: str = "") -> str:
+    return os.environ.get(name, default).strip()
+
 # HARE_REASONING: the owner's cap on the quiet pass, one word for every hop
-# that takes one (none, minimal, low, medium, high). Empty keeps the per-provider
-# defaults below. /hare deep ignores it and uses the deep set.
+# that takes one (none, minimal, low, medium, high, max). Empty keeps the
+# per-provider defaults below. /hare deep ignores it and uses the deep set.
 HARE_REASONING = os.environ.get("HARE_REASONING", "").strip().lower()
-REASONING_WORDS = frozenset({"none", "minimal", "low", "medium", "high"})
+REASONING_WORDS = frozenset({"none", "minimal", "low", "medium", "high", "max"})
+# The caps, in one place. Every one of them is 0 for "uncapped", and 0 means the
+# job's own timeout is the only ceiling left. Rate-limit backoff is the one
+# exception: it is never off, because hammering a 429 is what the free tiers
+# punish the account for. Sources for each default are in docs/hare-next.md.
+#
+# reasoning_budget: tokens of thinking allowed per call, spent inside
+#   max_tokens. This is the knob that makes reasoning usable at all: reasoning
+#   tokens count against max_tokens (openrouter.ai/docs/guides/best-practices/
+#   reasoning-tokens), so a hop that thinks without a bound returns
+#   finish_reason=length with empty content and its tokens are thrown away.
+#   12000 is the measured shape of a reasoning hop that still answers; the
+#   answer budget is the rest of LLM_MAX_TOKENS.
+# wall_clock_s: the whole review, all hops, retries and backoffs. Fits the job
+#   timeout with room left to read CI and post, so the needed note still lands.
+# max_attempts: calls per review across the whole chain. A dead model must not
+#   be able to spend every model on the list.
+@dataclass(frozen=True)
+class Caps:
+    reasoning_budget: int = 12_000
+    wall_clock_s: int = 3_600
+    max_attempts: int = 6
+    rate_backoff_s: int = 20
+    rate_max_backoff_s: int = 120
+
+    @classmethod
+    def from_env(cls) -> Caps:
+        def num(name: str, default: int) -> int:
+            try:
+                return int(_env(name) or default)
+            except ValueError:
+                return default
+
+        return cls(
+            reasoning_budget=num("HARE_REASONING_BUDGET", cls.reasoning_budget),
+            wall_clock_s=num("HARE_REVIEW_WALL_CLOCK_S", cls.wall_clock_s),
+            max_attempts=num("HARE_MAX_ATTEMPTS", cls.max_attempts),
+            rate_backoff_s=num("HARE_RATE_BACKOFF_S", cls.rate_backoff_s),
+            rate_max_backoff_s=num("HARE_RATE_MAX_BACKOFF_S", cls.rate_max_backoff_s),
+        )
+
+    def override(self, pairs: dict[str, int]) -> Caps:
+        """Apply `/hare budget=... wall=... attempts=...` on top of the env."""
+        return replace(self, **{k: v for k, v in pairs.items() if v >= 0})
+
+
+CAPS = Caps.from_env()
+# Cap names a `/hare` or workflow_dispatch can set, and the env each one mirrors.
+CAP_OVERRIDES = {
+    "budget": "reasoning_budget",
+    "wall": "wall_clock_s",
+    "attempts": "max_attempts",
+}
 # Near the limit, wrap up instead of throwing the answer away. The hop streams,
 # so the script holds a live meter. Past SEAM_FRAC of the budget it stops the
 # stream at the next seam (a closed finding), keeps the valid partial, and asks
@@ -98,27 +160,190 @@ THINK_CUT_FRAC = float(os.environ.get("HARE_THINK_CUT_FRAC", "0.6"))
 # --probe-pins gives every hop one short call. Long enough for a 200-token
 # answer on a free tier, short enough to walk the whole chain by hand.
 PROBE_TIMEOUT_SEC = int(os.environ.get("HARE_PROBE_TIMEOUT_S", "90"))
+# The probe now asks each pin to reason the way production does, so the request
+# has to leave room for the thinking as well as the sentence. 1,200 tokens with
+# 400 of them allowed for reasoning is a 200-token answer with headroom.
+PROBE_MAX_TOKENS = int(os.environ.get("HARE_PROBE_MAX_TOKENS", "1200"))
+PROBE_REASONING_BUDGET = int(os.environ.get("HARE_PROBE_REASONING_BUDGET", "400"))
 WRAP_UP_TOKENS = int(os.environ.get("HARE_WRAP_UP_TOKENS", "800"))
 WRAP_UP = (
     "Your answer was cut at the token budget. Finish the JSON from exactly where "
     "it stopped: close the open structures and return only the remaining "
     "characters. No new findings, no prose, no repeat of what is already written."
 )
-NOUS_REASONING = {"effort": "none"}
-OR_REASONING = {"effort": "low", "exclude": True}
-# `/hare deep`: thinking on, one notch. docs/hare-thinking-ab.md measured thinking
-# with no knob at 6 of 6 empty on the free hops at any budget, so deep is the
-# lowest effort that still reasons, not an open budget. Untested until the first
-# deep run; that run is the test.
-DEEP_NOUS_REASONING = {"effort": "low"}
-DEEP_OR_REASONING = {"effort": "medium", "exclude": True}
-DEEP_GEMINI_REASONING = {"reasoning_effort": "medium"}
-# Gemini's OpenAI-compatibility layer maps a top-level reasoning_effort onto the
-# thinking budget: "low" is 1024 tokens for the 2.5 models. Without it, 2.5 Flash
-# spends the shared output budget thinking and returns empty content, which is
-# the failure this whole chain exists to escape. This is NOT the OpenRouter
-# shape (a nested "reasoning" object), so the hop carries its own.
-GEMINI_REASONING = {"reasoning_effort": "low"}
+# ── Reasoning: one field per provider, one level per model ────────────────────
+#
+# Reasoning is not one API field. Read from each provider's own docs on
+# 2026-10-10, and re-probed from the live /v1/models catalogs:
+#
+#   Groq     top-level `reasoning_effort`, enum none|default|minimal|low|medium|
+#            high|xhigh|max. gpt-oss accepts low|medium|high only, and anything
+#            else is a 400 (console.groq.com/docs/reasoning).
+#   Gemini   top-level `reasoning_effort`, minimal|low|medium|high through the
+#            OpenAI-compat layer (ai.google.dev/gemini-api/docs/openai). Thinking
+#            cannot be switched off on Gemini 3 at all
+#            (ai.google.dev/gemini-api/docs/thinking).
+#   OpenRouter, Nous   nested `reasoning: {effort, max_tokens, exclude}`, enum
+#            max|xhigh|high|medium|low|minimal|none. Nous mirrors the OpenRouter
+#            catalog schema on /v1/models and its own client sends this shape.
+#   Zen      no documented reasoning field, so it carries none.
+#
+# The level is the model's, not a global one: sending a level a model does not
+# publish is a 400 on Groq and ignored elsewhere, so each hop asks for the
+# highest level that model actually accepts.
+#
+# `max_tokens` under `reasoning` is the one way to bound thinking on OpenRouter
+# and Nous, and only models whose catalog entry carries `supports_max_tokens`
+# take it. The two shapes are sent one at a time: the docs say "one of the
+# following (not both)" and are silent on what happens if both arrive.
+REASONING_SHAPE = {
+    "groq": "top",
+    "gemini": "top",
+    "nous": "nested",
+    "openrouter": "nested",
+    "zen": "none",
+}
+# Effort ladders, weakest to strongest. A level is clamped into the model's own
+# list, so "the highest this model supports" is one lookup, not a guess.
+EFFORT_LADDER = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
+# Pinned fallback for the models in the chain, read from the live catalogs on
+# 2026-10-10. A model missing here publishes no list, so the provider's
+# fallback level is used and the hop is not told a level it may reject.
+PINNED_EFFORTS: dict[str, tuple[str, ...]] = {
+    # openrouter + nous, slug without the ":free" tag
+    "nvidia/nemotron-3-ultra-550b-a55b": ("medium", "high"),
+    "nvidia/nemotron-3-super-120b-a12b": ("low", "medium"),
+    "nvidia/nemotron-3.5-lightning": (),  # reasoning present, no effort published
+    "stepfun/step-5-preview": ("low", "medium", "high"),
+}
+# What each provider is asked for when the model publishes nothing. Gemini and
+# Groq publish their ladder in prose, not in a catalog, so these are the top of
+# the documented set for the model families the chain pins.
+PROVIDER_FALLBACK_LEVEL = {"groq": "high", "gemini": "high", "nous": "high", "openrouter": "high", "zen": ""}
+# Reasoning that cannot be bounded is the failure this chain exists to escape,
+# so it is worth one retry without reasoning before the hop is given up on.
+DEEP_LEVEL = {"nous": "high", "openrouter": "high", "gemini": "high", "groq": "high", "zen": ""}
+
+
+def _base_slug(model: str) -> str:
+    return (model or "").split(":")[0].strip().lower()
+
+
+def _catalog_url(base: str) -> str:
+    return f"{base.rstrip('/')}/models"
+
+
+def fetch_reasoning_catalog(base: str, timeout: int = 20) -> dict[str, dict[str, Any]]:
+    """Per-model reasoning metadata from a provider's own /models.
+
+    Both OpenRouter and Nous publish the same schema, and Nous's is keyless, so
+    this is where "what level does this model take" comes from instead of a
+    table that drifts. A gateway that 404s, times out or answers something
+    unexpected yields {}, and the pinned table stands in. Never raises: a review
+    must not die because a catalog lookup did.
+    """
+    try:
+        req = urllib.request.Request(_catalog_url(base), headers={"User-Agent": "searchts-hare/1"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            payload = json.loads(resp.read())
+    except Exception as e:
+        print(f"hare: no reasoning catalog from {base}: {str(e)[:120]}")
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for m in payload.get("data") or []:
+        if isinstance(m, dict) and m.get("id"):
+            out[_base_slug(str(m["id"]))] = {"reasoning": m.get("reasoning") or {}}
+    return out
+
+
+def model_efforts(provider: str, model: str, catalog: dict[str, dict[str, Any]] | None = None) -> tuple[str, ...]:
+    """The effort levels this model accepts, weakest first. Empty = no dial.
+
+    The catalog wins over the pinned table, so a model that gains an effort dial
+    is used at its real level without a code change, and one that loses it stops
+    being sent a level that would 400.
+    """
+    slug = _base_slug(model)
+    entry = (catalog or {}).get(slug)
+    if entry is not None:
+        meta = entry.get("reasoning")
+        if not isinstance(meta, dict) or not meta:
+            # A catalog entry with no reasoning block is a model that publishes
+            # no ladder (longcat) or a gateway that omits it (lightning).
+            return PINNED_EFFORTS.get(slug, ())
+        listed = meta.get("supported_efforts")
+        if isinstance(listed, list) and listed:
+            return tuple(str(x) for x in listed if str(x) in EFFORT_LADDER)
+        return PINNED_EFFORTS.get(slug, ())
+    return PINNED_EFFORTS.get(slug, ())
+
+
+def efforts_support_budget(provider: str, model: str, catalog: dict[str, dict[str, Any]] | None = None) -> bool:
+    """Whether this model takes `reasoning.max_tokens`, the only way to bound
+    thinking on a gateway that shares one budget between thinking and the answer.
+
+    Groq and Gemini publish no such field on any model, so they are never told
+    one: an unknown key is at best ignored and at worst a 400.
+    """
+    if REASONING_SHAPE.get(provider) != "nested":
+        return False
+    slug = _base_slug(model)
+    entry = (catalog or {}).get(slug)
+    if isinstance(entry, dict) and isinstance(entry.get("reasoning"), dict):
+        return bool(entry["reasoning"].get("supports_max_tokens"))
+    return False
+
+
+def clamp_effort(level: str, efforts: tuple[str, ...]) -> str:
+    """The strongest level that is at or below `level` and this model accepts.
+
+    Never returns something stronger than asked for: a cap of `low` must not be
+    raised to the provider's default, or the owner's cap is not a cap. An empty
+    `efforts` means the model publishes no ladder, not that it has one at the
+    top, so the level passes through untouched and the no-reasoning retry covers
+    a gateway that rejects it.
+    """
+    if level not in EFFORT_LADDER:
+        level = "high"
+    if not efforts or level in efforts:
+        return level
+    lower = [e for e in efforts if EFFORT_LADDER.index(e) <= EFFORT_LADDER.index(level)]
+    return max(lower, key=EFFORT_LADDER.index) if lower else min(efforts, key=EFFORT_LADDER.index)
+
+
+def reasoning_options(
+    provider: str,
+    model: str,
+    level: str,
+    budget: int = 0,
+    catalog: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """The request body one hop carries for its provider's real reasoning field.
+
+    `budget` > 0 and a model that takes `reasoning.max_tokens` gets a bounded
+    thinking budget instead of an effort level, which is the only shape that can
+    stop thinking from eating max_tokens. Everything else gets the model's
+    strongest level it accepts. `level` "none" turns reasoning off where the
+    provider allows it and is a no-op where it does not, because Gemini 3 cannot
+    be asked to stop thinking.
+    """
+    shape = REASONING_SHAPE.get(provider, "none")
+    if shape == "none":
+        return {}
+    efforts = model_efforts(provider, model, catalog)
+    if level == "none":
+        # off. Gemini 3 has no thinking-off, so its hop carries nothing and
+        # keeps whatever the gateway gives it.
+        return {"reasoning_effort": "none"} if shape == "top" and provider == "groq" else (
+            {"reasoning": {"enabled": False}} if shape == "nested" else {}
+        )
+    if shape == "top":
+        # Groq takes low|medium|high for gpt-oss; anything else is a 400.
+        return {"reasoning_effort": clamp_effort(level, efforts)}
+    if budget > 0 and efforts_support_budget(provider, model, catalog):
+        # effort and max_tokens together are undefined in the docs, so one only.
+        return {"reasoning": {"max_tokens": budget, "exclude": True}}
+    return {"reasoning": {"effort": clamp_effort(level, efforts), "exclude": True}}
 
 # Fixed list, not a router. Read against the live catalogs 2026-10-06:
 # OpenRouter /api/v1/models (pricing 0/0), Groq docs/models, Zen by probe.
@@ -160,11 +385,26 @@ HARE_GEMINI_DEFAULT = "gemini-3.1-flash-lite,gemini-3.5-flash"
 # Step 5 Preview is free on Nous for one week from 2026-10-08. Drop it after
 # 2026-10-15. OpenRouter's stepfun/step-5-preview is paid ($1 / $2.70 per 1M)
 # and has no :free slug, so it does not go in HARE_OR_DEFAULT.
+#
+# Ordered by what the catalog says each model can do (2026-10-10), not by taste:
+# a model that publishes an effort ladder goes first, then the reasoning models
+# whose thinking is on with no dial, then a model that publishes no reasoning at
+# all. Step 5 Preview is the only Nous pin with a ladder (low|medium|high, and
+# mandatory, so it cannot be turned off). Laguna and Ling are reasoning models
+# with `default_enabled: true` and no dial. LongCat's catalog entry has no
+# reasoning block at all, so it is the one hop that does not reason, and a
+# non-reasoning model now sits behind the reasoning ones instead of ahead of one.
 HARE_NOUS_DEFAULT = (
     "stepfun/step-5-preview:free,"
     "poolside/laguna-s-2.1:free,"
+    "inclusionai/ling-3.0-flash-sante:free,"
     "meituan/longcat-2.5-preview:free"
 )
+# The owner's additive slot: whatever is set here is appended after every pin in
+# HARE_NOUS_DEFAULT. Ling used to live here, which put a reasoning model behind
+# the one non-reasoning pin, so it moved into the ordered list above and this
+# defaults to empty.
+HARE_NOUS_EXTRA_DEFAULT = ""
 # Inkling (inkling-small:free, inkling:free) left 2026-10-05: OpenRouter's free
 # Inkling endpoint now serves only agentic harnesses, so a direct API call gets
 # 403 (both did on #287's /hare deep), and it logs prompts to train on.
@@ -184,18 +424,21 @@ HARE_NOUS_DEFAULT = (
 # answers, so keep it on the one that works.
 # Inkling is back on the catalog (thinkingmachines/inkling:free, 1M ctx) and
 # stays off: its free endpoint served agentic harnesses only as of 2026-10-05.
+#
+# Ordered by what the catalog publishes (2026-10-10). Ultra and Super carry a
+# `supported_efforts` list and `supports_max_tokens: true`, so they are the two
+# hops whose thinking can be bounded, and they now go first. Lightning publishes
+# a reasoning block with neither, so it has no dial to turn and no budget to
+# bound, and it moved behind them: same live probe, same 1 to 2 s answer, but a
+# hop that cannot be asked to stop thinking is the one that comes back empty.
 HARE_OR_DEFAULT = (
-    "nvidia/nemotron-3.5-lightning:free,"
+    "nvidia/nemotron-3-ultra-550b-a55b:free,"
     "nvidia/nemotron-3-super-120b-a12b:free,"
-    "nvidia/nemotron-3-ultra-550b-a55b:free"
+    "nvidia/nemotron-3.5-lightning:free"
 )
 # Nous probed live the same day: laguna 6s, longcat 3s, ling-3.0-flash-sante 2s.
-HARE_NOUS_EXTRA_DEFAULT = "inclusionai/ling-3.0-flash-sante:free"
 HARE_ZEN_DEFAULT = "space-bunny-free"
 
-
-def _env(name: str, default: str = "") -> str:
-    return os.environ.get(name, default).strip()
 
 
 # A tiny code diff with a real defect in it. A pin is not proven by appearing
@@ -259,9 +502,21 @@ def probe_pins() -> int:
     # top-level reasoning_effort) and for groq and zen (which production sends
     # no knob to at all). A pin that passes here was then not evidence about
     # the hop that runs.
+    #
+    # The probe gets a probe-sized caps, not the production one. Production
+    # allows 12,000 thinking tokens; a 200-token probe request could not pay a
+    # reasoning hop its own thinking budget and would come back empty, which the
+    # probe would then report as a dead pin. The shape is the production shape,
+    # the size is the probe's.
+    probe_caps = Caps(
+        reasoning_budget=PROBE_REASONING_BUDGET,
+        wall_clock_s=0,
+        max_attempts=0,
+    )
     with_keys = {p: (keys.get(p) or "probe") for p in pins}
     options_by_model = {
-        model: dict(opts) for (_n, _b, _k, model, opts) in build_provider_chain(with_keys, pins)
+        model: dict(opts)
+        for (_n, _b, _k, model, opts) in build_provider_chain(with_keys, pins, caps=probe_caps)
     }
     dead: list[str] = []
     throttled: list[str] = []
@@ -282,7 +537,7 @@ def probe_pins() -> int:
             body: dict[str, Any] = {
                 "model": model,
                 "messages": [{"role": "user", "content": _PROBE_ASK}],
-                "max_tokens": 200,
+                "max_tokens": PROBE_MAX_TOKENS,
             }
             body.update(options_by_model.get(model, {}))
             req = urllib.request.Request(
@@ -359,7 +614,7 @@ def _probe_call(
         plain = {k: v for k, v in body.items() if k != "reasoning"}
         retry = urllib.request.Request(
             url, data=json.dumps(plain).encode("utf-8"),
-            headers={"Authorization": req.get_header("Authorization"), "Content-Type": "application/json"},
+            headers={"Authorization": req.get_header("Authorization") or "", "Content-Type": "application/json"},
         )
         print(f"    (knob rejected, retried {model_of(plain)})")
         try:
@@ -1407,6 +1662,27 @@ def cost_line(usage: dict[str, Any], hop: str, seconds: float) -> str:
     return f"- cost: {about}{prompt:,} prompt + {answer:,} answer + {reasoning:,} reasoning tokens on `{hop}`, {seconds:.0f} s"
 
 
+def caps_line(caps: Caps, attempts: int) -> str:
+    """The caps that were in force, and the ones that actually bit.
+
+    Printed under the cost so a note says what it was allowed to spend as well as
+    what it did. The fired list is the number the ledger aggregates: a cap that
+    never fires is a cap that can be raised, and one that fires every run is a
+    cap that is costing reviews.
+    """
+    def shown(value: int, unit: str) -> str:
+        return f"{unit} uncapped" if value <= 0 else f"{value:,}{unit}"
+
+    head = (
+        f"- caps: {shown(caps.reasoning_budget, ' reasoning tokens')}, "
+        f"{shown(caps.wall_clock_s, 's wall clock')}, "
+        f"{shown(caps.max_attempts, ' attempts')}, {attempts} used"
+    )
+    if not CAP_EVENTS:
+        return head + "; none fired"
+    return head + "; fired: " + "; ".join(CAP_EVENTS)
+
+
 def salvage(partial: str, model: str) -> list[dict[str, Any]]:
     """The findings a model had finished when it died mid-answer. The partial
     is repaired the same way a budget cut is, and only complete findings are
@@ -1446,6 +1722,85 @@ def merge_salvage(findings: list[dict[str, Any]], salvaged: list[dict[str, Any]]
     return out
 
 
+class RateLimited(RuntimeError):
+    """A provider said 429, or a quota that behaves like one.
+
+    The hop loop uses this to stop asking that provider for the rest of the run
+    instead of hammering a free tier into a longer ban. `retry_after` is seconds
+    when the gateway sent a Retry-After we understood, else 0.0 so the caller
+    falls back to its own backoff. Gemini documents no Retry-After at all and
+    OpenRouter only sends one when every upstream gave a hint, so the 0.0 case
+    is the normal one, not the rare one.
+    """
+
+    def __init__(self, message: str, retry_after: float = 0.0) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+# Free tiers answer a 429 in one of a few shapes. The body is read for a marker
+# rather than trusted for a status code, because "quota" arrives as 429 and 403
+# depending on the gateway and means the same thing to a hop loop.
+_QUOTA_MARKERS = (
+    "rate limit",
+    "rate_limit",
+    "ratelimit",
+    "quota",
+    "too many requests",
+    "resource_exhausted",
+    "resourceexhausted",
+    "insufficient_quota",
+    "at capacity",
+    "temporarily rate-limited",
+)
+
+
+def looks_rate_limited(status: int, body: str) -> bool:
+    """Whether this error means "ask me later", not "you did it wrong".
+
+    429 is the plain case. A quota that a gateway reports as 403 or 400 is still
+    a quota, and retrying it as a bad request just burns the hop budget, so the
+    body is checked too.
+    """
+    low = (body or "").lower()
+    if status == 429:
+        return True
+    if any(m in low for m in _QUOTA_MARKERS) and not any(
+        m in low for m in ("invalid_request", "bad request", "unknown model", "model not found")
+    ):
+        return True
+    return False
+
+
+def retry_after_seconds(e: urllib.error.HTTPError) -> float:
+    """Retry-After in seconds, from the header or from a JSON body.
+
+    OpenRouter documents the header as optional on 429 and absent on a plain
+    free-tier RPM/RPD 429; Groq sends it in seconds; Gemini documents none. A
+    body that carries `retry_after` (the Nous anonymous tier does) is read too.
+    Returns 0.0 when nothing usable is there, which means "use our own backoff".
+    """
+    raw = ""
+    try:
+        hdr = e.headers.get("Retry-After") if e.headers else None
+        raw = str(hdr or "").strip()
+    except Exception:
+        raw = ""
+    if not raw:
+        try:
+            body = _err_body(e).decode("utf-8", errors="replace")
+            import json as _json
+
+            raw = str((_json.loads(body) or {}).get("retry_after") or "").strip()
+        except Exception:
+            raw = ""
+    try:
+        secs = float(raw)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(secs, 900.0))
+
+
 def chat_complete(
     base: str,
     key: str,
@@ -1478,6 +1833,10 @@ def chat_complete(
         content, finish, usage, cut = _call(req, body, timeout)
     except urllib.error.HTTPError as e:
         err = _err_body(e).decode("utf-8", errors="replace")
+        if looks_rate_limited(e.code, err):
+            # Not this hop's fault and not fixed by retrying the same call: the
+            # loop backs off and drops the provider for the rest of the run.
+            raise RateLimited(f"LLM {e.code} {base} {model}: {err[:400]}", retry_after_seconds(e)) from e
         if not ("reasoning" in body and e.code in {400, 404, 422} and "reason" in err.lower()):
             raise RuntimeError(f"LLM {e.code} {base} {model}: {err[:400]}") from e
         # A gateway that does not know the reasoning knob must not cost the hop.
@@ -1487,6 +1846,8 @@ def chat_complete(
             content, finish, usage, cut = _call(req, plain, timeout)
         except urllib.error.HTTPError as e2:
             err2 = _err_body(e2).decode("utf-8", errors="replace")
+            if looks_rate_limited(e2.code, err2):
+                raise RateLimited(f"LLM {e2.code} {base} {model} (without reasoning knob): {err2[:400]}", retry_after_seconds(e2)) from e2
             raise RuntimeError(f"LLM {e2.code} {base} {model} (without reasoning knob): {err2[:400]}") from e2
     LAST_USAGE.clear()
     LAST_USAGE.update(usage or {})
@@ -2386,6 +2747,11 @@ def run() -> int:
     if not token or not repo_full or not pr:
         print("missing GITHUB_TOKEN / GITHUB_REPOSITORY / PR_NUMBER")
         return 0
+    # A `/hare budget=... wall=... attempts=...` or a workflow_dispatch input
+    # moves the caps for this run only. 0 is uncapped, and an unknown key is
+    # ignored so a typo leaves the default in place.
+    global CAPS
+    CAPS = CAPS.from_env().override(caps_override_from_command(_env("HARE_ASK")))
     owner, repo = repo_full.split("/", 1)
     n = int(pr)
     try:
@@ -2420,13 +2786,22 @@ def build_provider_chain(
     keys: dict[str, str],
     models: dict[str, list[str]],
     deep: bool = False,
+    caps: Caps | None = None,
+    catalog: dict[str, dict[str, Any]] | None = None,
 ) -> list[tuple[str, str, str, str, dict[str, Any]]]:
     """The fixed hop list, in order, as (name, base, key, model, request options).
 
     A missing key drops that provider entirely rather than falling through to
     the next one with the wrong credential. The order is the contract
     (docs/hare-next.md), so this stays a pure function and a test pins the order.
+
+    The request options are per hop, not per provider: each model gets the
+    strongest effort level it publishes, and a bounded thinking budget where the
+    gateway can take one. A model with no published dial is not sent a level it
+    might reject, and `caps.reasoning_budget` of 0 means "no budget", not "no
+    thinking". `catalog` is the provider /models data when the caller has it.
     """
+    caps = caps or CAPS
     bases = {
         "groq": GROQ_BASE,
         "gemini": GEMINI_BASE,
@@ -2434,17 +2809,14 @@ def build_provider_chain(
         "openrouter": OR_BASE,
         "zen": ZEN_BASE,
     }
-    options: dict[str, dict[str, Any]] = {
-        "groq": {},
-        "gemini": DEEP_GEMINI_REASONING if deep else GEMINI_REASONING,
-        "nous": {"reasoning": DEEP_NOUS_REASONING if deep else NOUS_REASONING},
-        "openrouter": {"reasoning": DEEP_OR_REASONING if deep else OR_REASONING},
-        "zen": {},
+    level = (DEEP_LEVEL if deep else None) or {
+        p: PROVIDER_FALLBACK_LEVEL.get(p, "high") for p in bases
     }
-    if not deep and HARE_REASONING in REASONING_WORDS:
-        options["gemini"] = {"reasoning_effort": HARE_REASONING}
-        options["nous"] = {"reasoning": {"effort": HARE_REASONING}}
-        options["openrouter"] = {"reasoning": {"effort": HARE_REASONING, "exclude": True}}
+    if deep:
+        level = dict(DEEP_LEVEL)
+    elif HARE_REASONING in REASONING_WORDS:
+        # The owner's cap on the quiet pass overrides the per-model ladder.
+        level = {p: HARE_REASONING for p in bases}
     chain: list[tuple[str, str, str, str, dict[str, Any]]] = []
     # Order is the owner's call, not the ledger's: the ledger's notes mostly
     # predate the fixes that landed on 2026-10-04, so it cannot rank hops yet.
@@ -2462,8 +2834,255 @@ def build_provider_chain(
         if not key:
             continue
         for model in models.get(name, []):
-            chain.append((name, bases[name], key, model, dict(options[name])))
+            opts = reasoning_options(name, model, level.get(name, "high"), caps.reasoning_budget, catalog)
+            chain.append((name, bases[name], key, model, opts))
     return chain
+
+
+#: Every cap that actually stopped or reshaped something this run, in order.
+#: The cost line prints them and the ledger counts them, so a default that is
+#: wrong shows up as a number instead of a hunch.
+CAP_EVENTS: list[str] = []
+
+
+def _cap_fired(event: str) -> None:
+    CAP_EVENTS.append(event)
+    print(f"hare cap: {event}")
+
+
+def wall_clock_left(caps: Caps, start: float, now: float | None = None) -> float:
+    """Seconds left in the review's wall-clock cap. inf when the cap is 0."""
+    if caps.wall_clock_s <= 0:
+        return float("inf")
+    return caps.wall_clock_s - ((now if now is not None else time.time()) - start)
+
+
+def attempts_left(caps: Caps, used: int) -> int:
+    """Calls still allowed this review. A cap of 0 is uncapped, not zero."""
+    if caps.max_attempts <= 0:
+        return max(1, used + 1)
+    return max(0, caps.max_attempts - used)
+
+
+def _secs(left: float) -> str:
+    """A duration for a log line. An uncapped cap has no number to print."""
+    return "no cap" if left == float("inf") else f"{left:.0f}s"
+
+
+def rate_backoff(caps: Caps, strikes: int, retry_after: float) -> float:
+    """How long to wait after a provider said 429.
+
+    A Retry-After the gateway sent wins, because it is the only number that
+    knows when that provider will answer again. Otherwise this backs off
+    exponentially from the configured base and stops at the ceiling, so a
+    provider that is down for the run costs one wait rather than N. Never 0:
+    hammering a free tier is what gets the account limited, which then costs the
+    live reviews too.
+    """
+    if retry_after > 0:
+        return min(retry_after, caps.rate_max_backoff_s) if caps.rate_max_backoff_s > 0 else retry_after
+    wait = float(caps.rate_backoff_s) * (2 ** max(0, strikes - 1))
+    if caps.rate_max_backoff_s > 0:
+        wait = min(wait, float(caps.rate_max_backoff_s))
+    return wait
+
+
+def caps_override_from_command(command: str) -> dict[str, int]:
+    """`/hare budget=0 wall=1800 attempts=3` on top of the env caps.
+
+    Read as data from a comment body, never executed. An unknown key or a value
+    that is not a non-negative integer is ignored, so a typo leaves the default
+    in place rather than silently uncapping a review. 0 is meaningful for all
+    three and means uncapped.
+    """
+    out: dict[str, int] = {}
+    for key, raw in re.findall(r"\b(budget|wall|attempts)\s*=\s*(\d+)\b", command or ""):
+        field = CAP_OVERRIDES.get(key)
+        if field is None:
+            continue
+        try:
+            out[field] = int(raw)
+        except ValueError:
+            continue
+    return out
+
+
+def _call_hop(
+    provider: str,
+    base: str,
+    key: str,
+    model: str,
+    messages: list[dict[str, str]],
+    request_options: dict[str, Any],
+    timeout: int,
+    deadline: float | None = None,
+) -> tuple[str, int]:
+    """One hop's call: reasoning first, then once with reasoning off.
+
+    docs/hare-thinking-ab.md measured thinking with no bound at 6 of 6 empty on
+    the free hops at every budget tried, so reasoning is bounded where the
+    gateway can bound it and retried off where it cannot. When the reasoning call
+    still dies - a level the model rejects, a 400 on the object, a timeout - the
+    same model gets exactly one more call with the reasoning field removed, so a
+    reasoning knob can cost one call but never the chain.
+
+    The retry is bounded by `deadline`, not by `timeout` again: a hop that hung
+    for its whole allowance has nothing left, and re-spending it would double
+    every slow hop's cost and starve the fallbacks behind it.
+
+    Returns (content, calls_made). The first failure is the one reported when
+    the retry also fails: a timeout with reasoning on says more about the hop
+    than the same timeout without it.
+    """
+    try:
+        return chat_complete(base, key, model, messages, request_options, timeout=timeout), 1
+    except RateLimited:
+        raise
+    except Exception as first:
+        off = reasoning_options(provider, model, "none")
+        if not request_options or off == request_options:
+            raise
+        left = int((deadline - time.time())) if deadline is not None else timeout
+        if left < MIN_HOP_S:
+            _cap_fired(f"reasoning retry on `{provider}:{model}` skipped, {max(0, left)}s left in the hop")
+            raise
+        try:
+            text = chat_complete(base, key, model, messages, off, timeout=min(timeout, left))
+        except RateLimited:
+            raise
+        except Exception:
+            raise first from None
+        _cap_fired(f"reasoning retried off on `{provider}:{model}` after {str(first)[:70]}")
+        return text, 2
+
+
+def _walk_chain(
+    hops: list[tuple[str, str, str, str, dict[str, Any]]],
+    messages: list[dict[str, str]],
+    graph: list[dict[str, Any]],
+    call_timeout: int,
+    hop_budget: int,
+    caps: Caps,
+    started: float,
+    deep: bool,
+    errs: list[str],
+    salvaged: list[dict[str, Any]],
+    salvage_notes: list[str],
+    attempts: int,
+    rate_limited: set[str],
+    strikes: dict[str, int],
+    sleep: Any = time.sleep,
+    label: str = "",
+) -> tuple[dict[str, Any] | None, str, str, int]:
+    """Try each hop in order until one answers. Returns (parsed, used, cost, attempts).
+
+    One walker for the main pass and the HB.3 replay, because the caps have to
+    hold for both: a wall clock that only guarded the first loop would let the
+    replay spend the whole job. `attempts` and `rate_limited` are threaded in
+    and out so the two passes share one budget between them.
+    """
+    parsed: dict[str, Any] | None = None
+    used = ""
+    cost = ""
+    suffix = f" ({label})" if label else ""
+    for i, (name, base, key, model, request_options) in enumerate(hops):
+        if name in rate_limited:
+            errs.append(f"{name}:{model}{suffix}: skipped, {name} is rate limited for this run")
+            continue
+        left_hop = hop_budget - (time.time() - started)
+        left_wall = wall_clock_left(caps, started)
+        left = min(left_hop, left_wall)
+        if left < MIN_HOP_S:
+            which = "wall clock" if left_wall < left_hop else f"hop budget ({hop_budget} s)"
+            _cap_fired(f"{which} spent before {name}:{model}{suffix}")
+            errs.append(f"{name}:{model}{suffix}: {which} spent")
+            continue
+        timeout = int(min(call_timeout, left))
+        if name not in FAST_FALLBACKS and any(p[0] in FAST_FALLBACKS for p in hops[i + 1:]):
+            # While a fast fallback is still ahead, keep a reserve so a slow
+            # hop cannot spend the whole budget before the answerable one runs.
+            if left - FALLBACK_RESERVE_S < MIN_HOP_S:
+                _cap_fired(f"fallback reserve ({FALLBACK_RESERVE_S} s) kept {name}:{model}{suffix} on hold")
+                errs.append(f"{name}:{model}{suffix}: skipped, the last {FALLBACK_RESERVE_S} s are kept for the fast fallbacks")
+                continue
+            timeout = int(min(timeout, left - FALLBACK_RESERVE_S))
+        if attempts >= caps.max_attempts > 0:
+            _cap_fired(f"attempt cap ({caps.max_attempts}) reached before {name}:{model}{suffix}")
+            errs.append(f"{name}:{model}{suffix}: attempt cap ({caps.max_attempts}) reached")
+            break
+        call_start = time.time()
+        SALVAGE.clear()
+        hop_messages = messages
+        graph_line = ""
+        if graph and hare_graph is not None:
+            more = hare_graph.section(graph, hare_graph.budget_for(name))
+            if more:
+                files = more.count("\n### ")
+                graph_line = f"\n- graph: {files} file{'' if files == 1 else 's'} from the repo, {len(more):,} characters"
+                hop_messages = [messages[0], {"role": "user", "content": f"{messages[1]['content']}\n\n{more}"}]
+        try:
+            raw, calls = _call_hop(
+                name, base, key, model, hop_messages, request_options, timeout,
+                deadline=call_start + timeout,
+            )
+            attempts += calls
+            got = extract_json(raw)
+            if got is None:
+                raise RuntimeError("no JSON object in model output")
+            parsed = got
+            used = f"{name}:{model}{suffix}" + (" · deep" if deep else "")
+            cost = cost_line(LAST_USAGE, used, time.time() - call_start) + graph_line
+            if LAST_CUT.get("cut"):
+                how = "finished by one continuation call" if LAST_CUT.get("continued") else "closed by the script"
+                cost += f"\n- cut at the budget ({LAST_CUT.get('why')}) after {LAST_CUT.get('kept', 0)} findings, {how}"
+            break
+        except RateLimited as e:
+            attempts += 1
+            strikes[name] = strikes.get(name, 0) + 1
+            wait = rate_backoff(caps, strikes[name], getattr(e, "retry_after", 0.0))
+            # One provider saying 429 says the account is near a limit, so the
+            # rest of that provider's models are skipped rather than each one
+            # earning its own 429. The others keep going: a busy free tier on
+            # one gateway is not a busy account on the next.
+            rate_limited.add(name)
+            _cap_fired(
+                f"{name} rate limited ({strikes[name]}x), skipped for the rest of the run"
+                + (f", Retry-After {getattr(e, 'retry_after', 0.0):.0f}s" if getattr(e, "retry_after", 0.0) > 0 else "")
+            )
+            errs.append(f"{name}:{model}{suffix}: rate limited, {name} dropped for this run ({str(e)[:120]})")
+            if wall_clock_left(caps, started) > wait + MIN_HOP_S:
+                print(f"hare: waiting {wait:.0f}s after a {name} 429")
+                sleep(wait)
+            continue
+        except Exception as e:
+            attempts += 1
+            errs.append(f"{name}:{model}{suffix}: {e}")
+            parsed = None
+            kept = salvage(str(SALVAGE.get("text") or ""), f"{name}:{model}{suffix}")
+            if kept:  # finished findings survive the model that found them
+                salvaged.extend(kept)
+                salvage_notes.append(f"- {len(kept)} finished findings kept from `{name}:{model}{suffix}`, which died mid-answer")
+            continue
+    return parsed, used, cost, attempts
+
+
+def replay_candidates(
+    providers: list[tuple[str, str, str, str, dict[str, Any]]],
+    errs: list[str],
+    rate_limited: set[str],
+) -> list[tuple[str, str, str, str, dict[str, Any]]]:
+    """The hops HB.3 replays: skipped for the fast-fallback reserve, not refused.
+
+    A hop a cap held back is not a candidate. The wall clock and the hop budget
+    do not refill, so replaying one just walks the same empty list a second time
+    and prints the same cap line twice. A pure function so that rule is testable
+    without driving a whole run.
+    """
+    return [
+        hop for hop in providers
+        if hop[0] not in rate_limited
+        and any(f"{hop[0]}:{hop[3]}: skipped," in e for e in errs)
+    ]
 
 
 def _hare_once(
@@ -2614,6 +3233,17 @@ def _hare_once(
         except Exception as e:  # never fail a review over extra context
             print(f"hare: graph skipped: {str(e)[:120]}")
 
+    # What level each model accepts is published by the gateway itself, so read
+    # it rather than keep a table that drifts. Both catalogs are keyless and
+    # best effort: a lookup that fails falls back to the pinned table.
+    catalog: dict[str, dict[str, Any]] = {}
+    for cat_name, cat_key in (("nous", nous_key), ("openrouter", or_key)):
+        if not cat_key:
+            continue
+        base_for = {"nous": NOUS_BASE, "openrouter": OR_BASE}[cat_name]
+        for slug, entry in fetch_reasoning_catalog(base_for).items():
+            catalog.setdefault(slug, entry)
+
     providers = build_provider_chain(
         {
             "groq": groq_key,
@@ -2630,6 +3260,8 @@ def _hare_once(
             "zen": zen_models,
         },
         deep=deep,
+        caps=CAPS,
+        catalog=catalog,
     )
 
     last_err = "no provider"
@@ -2643,100 +3275,39 @@ def _hare_once(
     hops_start = time.time()
     salvaged: list[dict[str, Any]] = []
     salvage_notes: list[str] = []
-    #: Hops that never ran because the fallback reserve was already bigger than
-    #: the time left. They are candidates for the HB.3 replay below.
-    skipped_for_budget: list[tuple[str, str, str, str, dict[str, Any]]] = []
-    for i, (name, base, key, model, request_options) in enumerate(providers):
-        if time.time() - hops_start > hop_budget:
-            errs.append(f"hop budget ({hop_budget} s) spent before {name}:{model}")
-            skipped_for_budget.append((name, base, key, model, request_options))
-            continue
-        timeout = call_timeout
-        if name not in FAST_FALLBACKS and any(p[0] in FAST_FALLBACKS for p in providers[i + 1:]):
-            left = hop_budget - (time.time() - hops_start) - FALLBACK_RESERVE_S
-            if left < MIN_HOP_S:
-                errs.append(f"{name}:{model}: skipped, the last {FALLBACK_RESERVE_S} s are kept for the fast fallbacks")
-                skipped_for_budget.append((name, base, key, model, request_options))
-                continue
-            timeout = int(min(call_timeout, left))
-        try:
-            call_start = time.time()
-            SALVAGE.clear()
-            hop_messages = messages
-            graph_line = ""
-            if graph and hare_graph is not None:
-                more = hare_graph.section(graph, hare_graph.budget_for(name))
-                if more:
-                    files = more.count("\n### ")
-                    graph_line = f"\n- graph: {files} file{'' if files == 1 else 's'} from the repo, {len(more):,} characters"
-                    hop_messages = [messages[0], {"role": "user", "content": f"{messages[1]['content']}\n\n{more}"}]
-            raw = chat_complete(base, key, model, hop_messages, request_options, timeout=timeout)
-            parsed = extract_json(raw)
-            if parsed is None:
-                raise RuntimeError("no JSON object in model output")
-            used = f"{name}:{model}" + (" · deep" if deep else "")
-            cost = cost_line(LAST_USAGE, used, time.time() - call_start) + graph_line
-            if LAST_CUT.get("cut"):
-                how = "finished by one continuation call" if LAST_CUT.get("continued") else "closed by the script"
-                cost += f"\n- cut at the budget ({LAST_CUT.get('why')}) after {LAST_CUT.get('kept', 0)} findings, {how}"
-            break
-        except Exception as e:
-            errs.append(f"{name}:{model}: {e}")
-            parsed = None
-            kept = salvage(str(SALVAGE.get("text") or ""), f"{name}:{model}")
-            if kept:  # finished findings survive the model that found them
-                salvaged.extend(kept)
-                salvage_notes.append(f"- {len(kept)} finished findings kept from `{name}:{model}`, which died mid-answer")
-            continue
+    attempts = 0
+    rate_limited: set[str] = set()
+    strikes: dict[str, int] = {}
+    CAP_EVENTS.clear()
 
-    # HB.3: deferred retry. A hop skipped to keep time for a fast fallback, or
-    # cut for want of budget, has not been *refused* - it has not run. Once the
-    # chain finishes with no answer, replay what was skipped or cut against
-    # whatever budget is left.
+    parsed, used, cost, attempts = _walk_chain(
+        providers, messages, graph, call_timeout, hop_budget, CAPS, hops_start, deep,
+        errs, salvaged, salvage_notes, attempts, rate_limited, strikes,
+    )
+    # HB.3: deferred retry. A hop that never ran because the fast-fallback
+    # reserve was bigger than the time left has not been *refused*. Once the
+    # chain finishes with no answer, replay those against whatever is left.
     #
     # Why replay rather than a smaller reserve: the reserve is evaluated before
-    # any fallback has had its turn, so at the moment a hop is skipped there is
+    # any fallback has had a turn, so at the moment a hop is skipped there is
     # no evidence about how long the fallback takes. The evidence arrives when
     # the chain ends, which is the only moment the decision can be made properly.
     # Measured on #321: the two fallbacks answered in under a second each, so
     # 150 s was reserved against a fact that took 453 s to become visible and
     # 4 hops were held for it.
-    if parsed is None and (deferred := skipped_for_budget):
-        left = hop_budget - (time.time() - hops_start)
-        print(f"hare: replaying {len(deferred)} skipped hop(s) with {left:.0f}s left")
-        for name, base, key, model, request_options in deferred:
-            left = hop_budget - (time.time() - hops_start)
-            if left < MIN_HOP_S:
-                errs.append(f"{name}:{model}: replay skipped, only {left:.0f}s left")
-                continue
-            try:
-                call_start = time.time()
-                SALVAGE.clear()
-                hop_messages = messages
-                graph_line = ""
-                if graph and hare_graph is not None:
-                    more = hare_graph.section(graph, hare_graph.budget_for(name))
-                    if more:
-                        files = more.count("\n### ")
-                        graph_line = f"\n- graph: {files} file{'' if files == 1 else 's'} from the repo, {len(more):,} characters"
-                        hop_messages = [messages[0], {"role": "user", "content": f"{messages[1]['content']}\n\n{more}"}]
-                raw = chat_complete(
-                    base, key, model, hop_messages, request_options,
-                    timeout=int(min(call_timeout, left)),
-                )
-                parsed = extract_json(raw)
-                if parsed is None:
-                    raise RuntimeError("no JSON object in model output")
-                used = f"{name}:{model} (replay)" + (" · deep" if deep else "")
-                cost = cost_line(LAST_USAGE, used, time.time() - call_start) + graph_line
-                break
-            except Exception as e:
-                errs.append(f"{name}:{model} (replay): {e}")
-                kept = salvage(str(SALVAGE.get("text") or ""), f"{name}:{model} replay")
-                if kept:
-                    salvaged.extend(kept)
-                    salvage_notes.append(f"- {len(kept)} finished findings kept from the `{name}:{model}` replay")
-                continue
+    #
+    # The replay shares one wall clock, one attempt count and one rate-limit set
+    # with the first pass. A cap that only guarded the first loop would let the
+    # replay spend the whole job, which is the drift this one walker removes.
+    deferred = replay_candidates(providers, errs, rate_limited)
+    if parsed is None and deferred and wall_clock_left(CAPS, hops_start) >= MIN_HOP_S:
+        print(f"hare: replaying {len(deferred)} skipped hop(s), {_secs(wall_clock_left(CAPS, hops_start))} left")
+        parsed, used, cost, attempts = _walk_chain(
+            deferred, messages, graph, call_timeout, hop_budget, CAPS, hops_start, deep,
+            errs, salvaged, salvage_notes, attempts, rate_limited, strikes, label="replay",
+        )
+    if cost:
+        cost += "\n" + caps_line(CAPS, attempts)
 
     if parsed is None and salvaged:
         # Every model died, but findings one of them finished survived: post

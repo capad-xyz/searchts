@@ -30,6 +30,7 @@ def _hare_world(monkeypatch, order, event, ask="", reviewed=True):
     monkeypatch.setenv("GITHUB_EVENT_NAME", event)
     monkeypatch.setenv("HARE_ASK", ask)
     monkeypatch.setattr(hare_r1, "QUIET_S", 0)
+    monkeypatch.setattr(hare_r1, "fetch_reasoning_catalog", lambda base, timeout=20: {})
     monkeypatch.setattr(hare_r1, "github_api", api)
     monkeypatch.setattr(hare_r1, "github_list", lambda *a, **k: [])
     monkeypatch.setattr(hare_r1, "already_reviewed", lambda *a, **k: reviewed)
@@ -57,10 +58,11 @@ def test_a_hare_command_runs_even_on_a_reviewed_commit(monkeypatch) -> None:
     assert order == []  # an automatic run still skips a reviewed commit
 
 def test_a_call_gets_time_to_answer() -> None:
-    # 60 s cut off the hops that did answer (2026-10-03). The ceiling is a guard
-    # against a hung provider, not a budget: with reasoning off a hop answers in
-    # well under a minute.
-    assert hare_r1.LLM_TIMEOUT_SEC == 300
+    # 60 s cut off the hops that did answer (2026-10-03), and 300 s cut them off
+    # again once each hop was allowed to think: a bounded reasoning hop spends
+    # real seconds thinking before it writes anything. The ceiling is a guard
+    # against a hung provider, not a budget.
+    assert hare_r1.LLM_TIMEOUT_SEC == 600
     assert hare_r1.LLM_MAX_TOKENS == 32000
 
 
@@ -660,12 +662,15 @@ def test_hop_budget_fits_inside_the_job_timeout() -> None:
 
     wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
     minutes = int(re.search(r"timeout-minutes:\s*(\d+)", wf).group(1))
-    # A normal diff is bounded by the script to the locked 20 min; the YAML cap is
-    # the backstop for a very big diff, which gets the big ceilings.
+    # The ceilings are guards, and they nest: the hop budget sizes to the diff,
+    # the wall clock is the review-wide net above it, and the job timeout is the
+    # backstop above that. A normal diff must finish inside the wall clock, and
+    # a big one plus its wrap-up must still fit the job with room to post.
     normal = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.HOP_BUDGET_S + hare_r1.LLM_TIMEOUT_SEC + 120
     big = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.BIG_HOP_BUDGET_S + hare_r1.BIG_LLM_TIMEOUT_SEC + 120
-    assert normal < 20 * 60
-    assert big < minutes * 60
+    assert normal < hare_r1.CAPS.wall_clock_s, "a normal diff must finish inside the wall clock"
+    assert big < minutes * 60, "a big diff plus its wrap-up must fit the job"
+    assert hare_r1.CAPS.wall_clock_s < minutes * 60, "the wall clock must leave room to post"
 
 
 def _workflow_env(name: str) -> str:
@@ -799,9 +804,12 @@ def test_the_probe_sends_each_provider_the_options_production_sends(monkeypatch)
     }
     for model, opts in real.items():
         assert seen[model] == opts, f"{model}: probe sent {seen[model]}, production sends {opts}"
-    # And the two shapes that were wrong are now right.
-    assert seen[hare_r1.HARE_GEMINI_DEFAULT.split(",")[0]] == {"reasoning_effort": "low"}
-    assert seen[hare_r1.HARE_GROQ_DEFAULT] == {}
+    # And the three shapes are now the real per-provider ones: Gemini takes a
+    # top-level reasoning_effort, Groq does too (gpt-oss takes low|medium|high),
+    # and Zen has no documented field so it gets nothing. A probe that could not
+    # pay for thinking would report a reasoning pin dead.
+    assert seen[hare_r1.HARE_GEMINI_DEFAULT.split(",")[0]] == {"reasoning_effort": "high"}
+    assert seen[hare_r1.HARE_GROQ_DEFAULT] == {"reasoning_effort": "high"}
     assert seen[hare_r1.HARE_ZEN_DEFAULT] == {}
 
 
@@ -986,13 +994,15 @@ def test_each_provider_carries_its_own_request_options() -> None:
     keys = {"groq": "g", "gemini": "m", "nous": "n", "openrouter": "o", "zen": "z"}
     models = {"groq": ["g1"], "gemini": ["m1"], "nous": ["n1"], "openrouter": ["o1"], "zen": ["z1"]}
     opts = {hop[0]: hop[4] for hop in hare_r1.build_provider_chain(keys, models)}
-    # Gemini needs a top-level reasoning_effort; OpenRouter needs a nested object.
-    # Neither shape leaks into the other hop, and the rest carry nothing.
-    assert opts["gemini"] == {"reasoning_effort": "low"}
-    assert opts["openrouter"] == {"reasoning": {"effort": "low", "exclude": True}}
-    # Nous honours the knob, so it is told not to think (0 reasoning tokens measured).
-    assert opts["nous"] == {"reasoning": {"effort": "none"}}
-    assert opts["groq"] == {} and opts["zen"] == {}
+    # Reasoning is not one field. Groq and Gemini take a top-level
+    # reasoning_effort, OpenRouter and Nous a nested `reasoning` object, and the
+    # shape never leaks into a provider that does not take it. Zen has no
+    # documented field, so it carries nothing.
+    assert opts["gemini"] == {"reasoning_effort": "high"}
+    assert opts["groq"] == {"reasoning_effort": "high"}
+    assert opts["openrouter"] == {"reasoning": {"effort": "high", "exclude": True}}
+    assert opts["nous"] == {"reasoning": {"effort": "high", "exclude": True}}
+    assert opts["zen"] == {}
 
 
 def test_hop_loop_sends_every_provider_its_own_options() -> None:
@@ -1020,7 +1030,11 @@ def test_hop_loop_sends_every_provider_its_own_options() -> None:
     # still gets its own reasoning option.
     assert [c[0] for c in calls] == ["n1", "o1", "g1"]
     assert [c[1] for c in calls] == ["n", "o", "g"]
-    assert [c[2] for c in calls] == [{"reasoning": {"effort": "none"}}, {"reasoning": {"effort": "low", "exclude": True}}, {}]
+    assert [c[2] for c in calls] == [
+        {"reasoning": {"effort": "high", "exclude": True}},
+        {"reasoning": {"effort": "high", "exclude": True}},
+        {"reasoning_effort": "high"},
+    ]
     assert parsed == {"summary": "ok", "findings": []}
 
 
@@ -1316,11 +1330,9 @@ def test_hare_deep_turns_thinking_on_one_notch() -> None:
     keys = {"nous": "n", "openrouter": "o", "gemini": "m"}
     models = {"nous": ["n1"], "openrouter": ["o1"], "gemini": ["m1"]}
     opts = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models, deep=True)}
-    assert opts["nous"] == {"reasoning": {"effort": "low"}}
-    assert opts["openrouter"] == {"reasoning": {"effort": "medium", "exclude": True}}
-    assert opts["gemini"] == {"reasoning_effort": "medium"}
-    quiet = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models)}
-    assert quiet["nous"] == {"reasoning": {"effort": "none"}}
+    assert opts["nous"] == {"reasoning": {"effort": "high", "exclude": True}}
+    assert opts["openrouter"] == {"reasoning": {"effort": "high", "exclude": True}}
+    assert opts["gemini"] == {"reasoning_effort": "high"}
 
 
 # ── cadence (owner's call, 2026-10-04) ────────────────────────────────────────
@@ -1350,18 +1362,27 @@ def test_every_note_prints_what_it_cost() -> None:
 
 
 def test_the_owner_can_cap_reasoning_for_the_quiet_pass(monkeypatch) -> None:
-    keys = {"nous": "n", "openrouter": "o", "gemini": "m"}
-    models = {"nous": ["n1"], "openrouter": ["o1"], "gemini": ["m1"]}
+    keys = {"nous": "n", "openrouter": "o", "gemini": "m", "groq": "g"}
+    models = {"nous": ["n1"], "openrouter": ["o1"], "gemini": ["m1"], "groq": ["g1"]}
     monkeypatch.setattr(hare_r1, "HARE_REASONING", "low")
     opts = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models)}
-    assert opts["nous"] == {"reasoning": {"effort": "low"}}
+    assert opts["nous"] == {"reasoning": {"effort": "low", "exclude": True}}
     assert opts["openrouter"] == {"reasoning": {"effort": "low", "exclude": True}}
     assert opts["gemini"] == {"reasoning_effort": "low"}
     deep = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models, deep=True)}
-    assert deep["openrouter"] == {"reasoning": {"effort": "medium", "exclude": True}}  # deep ignores the cap
+    assert deep["openrouter"] == {"reasoning": {"effort": "high", "exclude": True}}  # deep ignores the cap
     monkeypatch.setattr(hare_r1, "HARE_REASONING", "lots")
     quiet = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models)}
-    assert quiet["nous"] == {"reasoning": {"effort": "none"}}  # a word not on the list is ignored
+    assert quiet["nous"] == {"reasoning": {"effort": "high", "exclude": True}}  # a word not on the list is ignored
+    # Reasoning off is a shape too, and Gemini 3 has no shape for it: its
+    # thinking cannot be disabled, so the hop carries nothing and keeps whatever
+    # the gateway gives it.
+    monkeypatch.setattr(hare_r1, "HARE_REASONING", "none")
+    off = {h[0]: h[4] for h in hare_r1.build_provider_chain(keys, models)}
+    assert off["nous"] == {"reasoning": {"enabled": False}}
+    assert off["openrouter"] == {"reasoning": {"enabled": False}}
+    assert off["groq"] == {"reasoning_effort": "none"}
+    assert off["gemini"] == {}
 
 
 # ── wrap up at the limit, never throw the answer away ─────────────────────────
@@ -1689,9 +1710,15 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     # pin the head of the Nous chain: this one, and the one in
     # test_space_bunny_is_off_openrouter_and_nous_after_its_free_period.
     # That pair already bit us once: #351 moved the head and fixed only one.
+    # Ultra and Super lead because they are the two that publish an effort
+    # ladder and accept `reasoning.max_tokens`, so their thinking can be
+    # bounded; Lightning publishes neither and moved behind them (2026-10-10).
     or_list = hare_r1.HARE_OR_DEFAULT.split(",")
-    assert or_list[0] == "nvidia/nemotron-3.5-lightning:free"
-    assert "nvidia/nemotron-3-super-120b-a12b:free" in or_list
+    assert or_list[:2] == [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+    ]
+    assert "nvidia/nemotron-3.5-lightning:free" in or_list
     assert not any("gemma" in m for m in or_list), "gemma 429'd on 2026-10-06"
     assert not any("inkling" in m for m in or_list)
     # Laguna answers on Nous and 429s on OpenRouter, so it is on one list only.
@@ -1704,8 +1731,15 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     # Two Zen slugs are TUI-only by policy (403 FreeTierError from Actions).
     assert hare_r1.HARE_ZEN_DEFAULT.split(",") == ["space-bunny-free"]
     assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
+    # Step 5 Preview is the only Nous pin that publishes an effort ladder, so it
+    # leads. LongCat publishes no reasoning at all, so it is last, behind the
+    # reasoning models that have no dial (2026-10-10).
     assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stepfun/step-5-preview:free"
     assert hare_r1.HARE_NOUS_DEFAULT.endswith("meituan/longcat-2.5-preview:free")
+    assert hare_r1.HARE_NOUS_DEFAULT.index("inclusionai/ling-3.0-flash-sante:free") < hare_r1.HARE_NOUS_DEFAULT.index(
+        "meituan/longcat-2.5-preview:free"
+    ), "a reasoning model sits behind the one non-reasoning pin"
+    assert hare_r1.HARE_NOUS_EXTRA_DEFAULT == "", "ling moved into the ordered list, so the additive slot is empty"
     assert hare_r1.HARE_ZEN_DEFAULT.split(",")[0] == "space-bunny-free"
 
 
@@ -2047,6 +2081,9 @@ def _salvage_world(monkeypatch, models, hop):
 
     monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
     monkeypatch.setattr(hare_r1, "QUIET_S", 0)
+    # The /models catalog lookup is a real network call in production. Tests
+    # must not make it: a hermetic suite cannot depend on a gateway's uptime.
+    monkeypatch.setattr(hare_r1, "fetch_reasoning_catalog", lambda base, timeout=20: {})
     monkeypatch.setattr(hare_r1, "github_api", api)
     monkeypatch.setattr(hare_r1, "github_list", lambda *a, **k: [])
     monkeypatch.setattr(hare_r1, "already_reviewed", lambda *a, **k: False)
@@ -2173,3 +2210,448 @@ def test_the_learned_rules_survive_a_long_hare_md() -> None:
     out = hare_r1.hare_md_for_prompt(text, cap=2_000)
     assert len(out) <= 2_000 and block in out and out.startswith("# HARE.md") and "...[cut]..." in out
     assert hare_r1.hare_md_for_prompt("short", cap=2_000) == "short"
+
+
+# ── reasoning: the field each provider documents, the level each model takes ───
+
+# What the live /v1/models catalogs reported on 2026-10-10. These are the facts
+# the chain is built on, so a test pins them: a change to the pinned table has to
+# be argued for rather than slipped in.
+CATALOG_2026_10_10 = {
+    "nvidia/nemotron-3-ultra-550b-a55b": {
+        "reasoning": {"mandatory": False, "supported_efforts": ["medium", "high"],
+                      "default_effort": "high", "supports_max_tokens": True},
+    },
+    "nvidia/nemotron-3-super-120b-a12b": {
+        "reasoning": {"mandatory": False, "supported_efforts": ["low", "medium"],
+                      "default_effort": "medium", "supports_max_tokens": True},
+    },
+    "nvidia/nemotron-3.5-lightning": {"reasoning": {"mandatory": False}},
+    "stepfun/step-5-preview": {
+        "reasoning": {"mandatory": True, "supported_efforts": ["low", "medium", "high"],
+                      "default_effort": "medium"},
+    },
+    "meituan/longcat-2.5-preview": {},
+    "poolside/laguna-s-2.1": {"reasoning": {"mandatory": False, "default_enabled": True}},
+}
+
+
+def test_each_provider_gets_the_reasoning_field_it_documents() -> None:
+    """Reasoning is not one API field, and sending the wrong one is a wasted hop.
+
+    Groq and Gemini take a top-level `reasoning_effort`; OpenRouter and Nous take
+    a nested `reasoning` object; Zen has no documented field at all. From
+    console.groq.com/docs/reasoning, ai.google.dev/gemini-api/docs/openai,
+    openrouter.ai/docs/guides/best-practices/reasoning-tokens and the live Nous
+    catalog. Neither shape may leak into a provider that does not take it.
+    """
+    assert hare_r1.REASONING_SHAPE == {
+        "groq": "top",
+        "gemini": "top",
+        "nous": "nested",
+        "openrouter": "nested",
+        "zen": "none",
+    }
+    assert hare_r1.reasoning_options("groq", "openai/gpt-oss-120b", "high") == {"reasoning_effort": "high"}
+    assert hare_r1.reasoning_options("gemini", "gemini-3.1-flash-lite", "high") == {"reasoning_effort": "high"}
+    assert hare_r1.reasoning_options("zen", "space-bunny-free", "high") == {}
+    assert hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "high") == {
+        "reasoning": {"effort": "high", "exclude": True}
+    }
+
+
+def test_a_model_is_asked_for_the_highest_level_it_publishes() -> None:
+    """The level is the model's, not a global one.
+
+    A level a model does not take is a 400 on Groq and ignored elsewhere, so each
+    hop asks for the strongest level in that model's own published list. Ultra
+    tops out at high, Super at medium, Step 5 Preview at high.
+    """
+    cat = CATALOG_2026_10_10
+    assert hare_r1.model_efforts("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", cat) == ("medium", "high")
+    assert hare_r1.model_efforts("openrouter", "nvidia/nemotron-3-super-120b-a12b:free", cat) == ("low", "medium")
+    assert hare_r1.model_efforts("nous", "stepfun/step-5-preview:free", cat) == ("low", "medium", "high")
+    assert hare_r1.clamp_effort("max", ("medium", "high")) == "high"
+    assert hare_r1.clamp_effort("max", ("low", "medium")) == "medium"
+    assert hare_r1.reasoning_options("nous", "stepfun/step-5-preview:free", "max", catalog=cat) == {
+        "reasoning": {"effort": "high", "exclude": True}
+    }
+
+
+def test_an_owner_cap_is_never_raised_by_the_clamp() -> None:
+    """A cap of `low` that comes back as `high` is not a cap."""
+    cat = CATALOG_2026_10_10
+    assert hare_r1.clamp_effort("low", ("low", "medium", "high")) == "low"
+    assert hare_r1.clamp_effort("low", ("low",)) == "low"
+    # No published ladder means no clamp: the level goes as asked, and the
+    # no-reasoning retry covers a gateway that rejects it.
+    assert hare_r1.clamp_effort("low", ()) == "low"
+    assert hare_r1.reasoning_options("openrouter", "unknown/model", "low", catalog=cat) == {
+        "reasoning": {"effort": "low", "exclude": True}
+    }
+
+
+def test_the_reasoning_budget_goes_out_as_a_token_cap_not_an_effort() -> None:
+    """The one thing that stops thinking from eating max_tokens.
+
+    Reasoning tokens count against max_tokens (OpenRouter's reasoning guide), so
+    an unbounded reasoning hop returns finish_reason=length with empty content
+    and its tokens are thrown away. `reasoning.max_tokens` is the only field that
+    bounds it, only models whose catalog entry carries `supports_max_tokens` take
+    it, and the docs say one of effort or max_tokens, not both.
+    """
+    cat = CATALOG_2026_10_10
+    capped = hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "max", 12000, cat)
+    assert capped == {"reasoning": {"max_tokens": 12000, "exclude": True}}
+    assert "effort" not in capped["reasoning"], "effort and max_tokens together are undefined in the docs"
+    # A budget of 0 means no budget, not no thinking.
+    assert hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", "max", 0, cat) == {
+        "reasoning": {"effort": "high", "exclude": True}
+    }
+    # Lightning publishes no supports_max_tokens, so it gets an effort, not a cap.
+    assert hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3.5-lightning:free", "high", 12000, cat) == {
+        "reasoning": {"effort": "high", "exclude": True}
+    }
+
+
+def test_no_provider_that_cannot_bound_thinking_is_sent_a_budget() -> None:
+    """Groq and Gemini publish no `reasoning.max_tokens` on any model, so they
+    are never sent one. An unknown key is ignored at best and a 400 at worst."""
+    for provider, model in (
+        ("groq", "openai/gpt-oss-120b"),
+        ("gemini", "gemini-3.1-flash-lite"),
+        ("nous", "stepfun/step-5-preview:free"),
+    ):
+        opts = hare_r1.reasoning_options(provider, model, "high", 12000, CATALOG_2026_10_10)
+        assert "max_tokens" not in json.dumps(opts), f"{provider} was sent a budget it cannot take"
+
+
+def test_a_non_reasoning_model_sits_behind_the_reasoning_ones() -> None:
+    """The chain order is the contract, and it now follows what the models can do.
+
+    Reasoning-capable hops go first and a model that publishes no reasoning at
+    all goes last. On Nous that moves Ling, a reasoning model with no dial, ahead
+    of LongCat, which has no reasoning block. On OpenRouter it moves the two
+    Nemotrons that publish an effort ladder ahead of Lightning, which publishes
+    neither and so cannot be asked to stop thinking.
+    """
+    nous = hare_r1.HARE_NOUS_DEFAULT.split(",")
+    assert nous.index("inclusionai/ling-3.0-flash-sante:free") < nous.index("meituan/longcat-2.5-preview:free")
+    or_list = hare_r1.HARE_OR_DEFAULT.split(",")
+    assert or_list.index("nvidia/nemotron-3-ultra-550b-a55b:free") < or_list.index("nvidia/nemotron-3.5-lightning:free")
+    assert or_list.index("nvidia/nemotron-3-super-120b-a12b:free") < or_list.index("nvidia/nemotron-3.5-lightning:free")
+
+
+def test_reasoning_off_is_a_shape_each_provider_actually_has() -> None:
+    """Off is a request too, and Gemini 3 has no shape for it.
+
+    Thinking cannot be disabled on Gemini 3, so a Gemini hop carries nothing and
+    keeps whatever the gateway gives it. Sending `none` there would be an
+    unsupported value, and a rejected hop is worse than a thinking one.
+    """
+    assert hare_r1.reasoning_options("groq", "openai/gpt-oss-120b", "none") == {"reasoning_effort": "none"}
+    assert hare_r1.reasoning_options("openrouter", "o/anything", "none") == {"reasoning": {"enabled": False}}
+    assert hare_r1.reasoning_options("nous", "o/anything", "none") == {"reasoning": {"enabled": False}}
+    assert hare_r1.reasoning_options("gemini", "gemini-3.1-flash-lite", "none") == {}
+    assert hare_r1.reasoning_options("zen", "space-bunny-free", "none") == {}
+
+
+# ── the retry: reasoning on, then reasoning off, then the next model ───────────
+
+
+def test_a_reasoning_call_that_dies_is_retried_once_without_it(monkeypatch) -> None:
+    """A reasoning knob may cost one call. It may not cost the chain.
+
+    docs/hare-thinking-ab.md measured thinking with no knob at 6 of 6 empty on the
+    free hops, so a hop that rejects or loses the reasoning object gets one more
+    go with it removed before the chain moves on.
+    """
+    seen: list[dict] = []
+
+    def hop(base, key, model, messages, options, timeout=0):
+        seen.append(dict(options or {}))
+        if (options or {}).get("reasoning", {}).get("enabled") is not False:
+            raise RuntimeError("LLM 400 reasoning effort not supported")
+        return '{"summary": "s", "findings": []}'
+
+    out = _salvage_world(monkeypatch, ["m1"], hop)
+    assert len(seen) == 2, "one reasoning call, then one without it"
+    assert seen[0]["reasoning"]["effort"] == "high"
+    assert seen[1]["reasoning"] == {"enabled": False}
+    assert str(out["used"]).startswith("openrouter:m1")
+
+
+def test_the_reasoning_retry_does_not_buy_a_hop_more_time_than_it_had(monkeypatch) -> None:
+    """A hop that hung for its whole allowance has nothing left to retry with.
+
+    Re-spending the timeout would double every slow hop's cost and starve the fast
+    fallbacks behind it, which is the #287 failure again in a new place.
+    """
+    import time as real_time
+
+    class Clock:
+        now = 500.0
+
+        def time(self) -> float:
+            return self.now
+
+        def __getattr__(self, name):
+            return getattr(real_time, name)
+
+    clock = Clock()
+    timeouts: list[int] = []
+
+    def hop(base, key, model, messages, options, timeout=0):
+        timeouts.append(timeout)
+        clock.now += timeout  # hangs for as long as it is allowed
+        raise TimeoutError("timed out")
+
+    _salvage_world(monkeypatch, [], hop)  # installs the fakes; the empty chain posts nothing
+    monkeypatch.setattr(hare_r1, "time", clock)
+    hare_r1._hare_once("o", "r", 7, "t", "abc", "", "k", "", "", "", [], [], [], ["m1"], [])
+    # One call, not two: the first consumed the whole allowance, so the retry has
+    # nothing left and is reported as skipped rather than re-spending the timeout.
+    assert timeouts == [hare_r1.LLM_TIMEOUT_SEC]
+    assert any("reasoning retry" in e and "skipped" in e for e in hare_r1.CAP_EVENTS), hare_r1.CAP_EVENTS
+
+
+# ── the caps ──────────────────────────────────────────────────────────────────
+
+
+def _caps_world(monkeypatch, models, hop, caps, start=1000.0):
+    """`_hare_once` on one provider under `caps`, with a clock that advances by
+    whatever each hop is allowed, so a cap is shown to stop the chain rather than
+    merely asserted to. Returns the recorded note and the hop calls in order."""
+    import time as real_time
+
+    class Clock:
+        def time(self) -> float:
+            return self.now
+
+        def __getattr__(self, name):
+            return getattr(real_time, name)
+
+    clock = Clock()
+    clock.now = start
+    monkeypatch.setattr(hare_r1, "time", clock)
+    monkeypatch.setattr(hare_r1, "CAPS", caps)
+    calls: list[str] = []
+
+    def counting(base, key, model, messages, options, timeout=0):
+        calls.append(model)
+        clock.now += timeout
+        return hop(base, key, model, messages, options, timeout=timeout)
+
+    seen = _salvage_world(monkeypatch, models, counting)
+    return seen, calls
+
+
+def test_the_wall_clock_cap_stops_the_chain(monkeypatch) -> None:
+    """The wall clock is the review-wide net, above the hop budget that sizes to
+    the diff. Without it a slow chain runs until the job kills it mid-answer and
+    the note never lands, which is the one outcome the caps must not buy."""
+    caps = hare_r1.Caps(wall_clock_s=300, max_attempts=0)
+
+    def hop(base, key, model, messages, options, timeout=0):
+        raise TimeoutError("timed out")
+
+    seen, calls = _caps_world(monkeypatch, ["m1", "m2", "m3", "m4"], hop, caps)
+    # Each hop hangs for its whole allowance and the clock advances, so the chain
+    # cannot get through four models inside 300 s.
+    assert len(calls) < 4, calls
+    assert any("wall clock" in e for e in hare_r1.CAP_EVENTS), hare_r1.CAP_EVENTS
+    assert seen.get("needed") is True
+
+
+def test_the_attempt_cap_stops_the_chain(monkeypatch) -> None:
+    """One dead model must not be able to spend every model on the list.
+
+    Enforced before the call, not after: a cap checked once a hop has finished
+    is a cap that has already cost its call.
+    """
+    caps = hare_r1.Caps(max_attempts=2, wall_clock_s=0)
+
+    def hop(base, key, model, messages, options, timeout=0):
+        raise RuntimeError("LLM empty content")
+
+    seen, calls = _caps_world(monkeypatch, ["m1", "m2", "m3", "m4"], hop, caps)
+    assert len(calls) <= 2, calls
+    assert any("attempt cap" in e for e in hare_r1.CAP_EVENTS), hare_r1.CAP_EVENTS
+
+
+def test_zero_is_uncapped_for_budget_wall_and_attempts(monkeypatch) -> None:
+    """0 means "no cap of my own", not "stop now".
+
+    The job timeout is then the only ceiling left, which is what an owner asking
+    for an uncapped run means. Rate-limit backoff is the exception and has no 0:
+    hammering a free tier costs the quota the live reviews need.
+    """
+    caps = hare_r1.Caps(reasoning_budget=0, wall_clock_s=0, max_attempts=0)
+    assert hare_r1.wall_clock_left(caps, 0.0, now=10_000.0) == float("inf")
+    assert hare_r1.attempts_left(caps, 99) > 0
+    assert caps.rate_backoff_s > 0 and caps.rate_max_backoff_s > 0
+
+    # The hop budget that sizes to the diff is not one of the three caps, so lift
+    # it too: this test is about 0 meaning uncapped, not about the hop guard.
+    monkeypatch.setattr(hare_r1, "HOP_BUDGET_S", 100_000)
+    monkeypatch.setattr(hare_r1, "LLM_TIMEOUT_SEC", 1)
+    calls: list[str] = []
+
+    def hop(base, key, model, messages, options, timeout=0):
+        calls.append(model)
+        if len(calls) < 5:
+            raise RuntimeError("LLM empty content")
+        return '{"summary": "s", "findings": []}'
+
+    _caps_world(monkeypatch, ["m1", "m2", "m3", "m4", "m5", "m6"], hop, caps)
+    assert len(calls) >= 5, "an uncapped run keeps going through the chain"
+    assert not any("attempt cap" in e for e in hare_r1.CAP_EVENTS)
+    assert not any("wall clock" in e for e in hare_r1.CAP_EVENTS)
+
+
+def test_a_hare_command_can_move_each_cap() -> None:
+    """`/hare budget=0 wall=1800 attempts=3` moves the caps for that run only.
+
+    Read as data from a comment body, never executed. 0 is a real value for all
+    three and means uncapped; an unknown key or a non-number is ignored so a typo
+    leaves the default in place rather than silently uncapping a review.
+    """
+    assert hare_r1.caps_override_from_command("/hare budget=500 wall=900 attempts=2") == {
+        "reasoning_budget": 500,
+        "wall_clock_s": 900,
+        "max_attempts": 2,
+    }
+    assert hare_r1.caps_override_from_command("/hare budget=0") == {"reasoning_budget": 0}
+    assert hare_r1.caps_override_from_command("/hare") == {}
+    assert hare_r1.caps_override_from_command("/hare budget=lots wall=-5") == {}
+    moved = hare_r1.Caps().override(hare_r1.caps_override_from_command("/hare budget=0 wall=0 attempts=0"))
+    assert (moved.reasoning_budget, moved.wall_clock_s, moved.max_attempts) == (0, 0, 0)
+
+
+def test_the_caps_are_read_from_the_environment(monkeypatch) -> None:
+    for env, value, field in (
+        ("HARE_REASONING_BUDGET", "400", "reasoning_budget"),
+        ("HARE_REVIEW_WALL_CLOCK_S", "60", "wall_clock_s"),
+        ("HARE_MAX_ATTEMPTS", "2", "max_attempts"),
+    ):
+        monkeypatch.setenv(env, value)
+    caps = hare_r1.Caps.from_env()
+    assert (caps.reasoning_budget, caps.wall_clock_s, caps.max_attempts) == (400, 60, 2)
+    # A value that is not a number leaves the default rather than crashing the
+    # review before it starts.
+    monkeypatch.setenv("HARE_MAX_ATTEMPTS", "many")
+    assert hare_r1.Caps.from_env().max_attempts == hare_r1.Caps.max_attempts
+
+
+def test_a_429_drops_the_provider_for_the_rest_of_the_run(monkeypatch) -> None:
+    """One provider saying 429 says the account is near a limit.
+
+    The rest of that provider's models are skipped rather than each one earning
+    its own 429: a free tier punishes the account, and the account is what the
+    live reviews use. The other providers keep going, because a busy free tier on
+    one gateway is not a busy account on the next.
+    """
+    caps = hare_r1.Caps(wall_clock_s=0, max_attempts=0, rate_backoff_s=1)
+    calls: list[str] = []
+
+    def hop(base, key, model, messages, options, timeout=0):
+        calls.append(model)
+        raise hare_r1.RateLimited("LLM 429 rate limit exceeded")
+
+    _caps_world(monkeypatch, ["m1", "m2", "m3"], hop, caps)
+    assert calls == ["m1"], "one 429 drops the provider, not just that model"
+    assert any("rate limited" in e for e in hare_r1.CAP_EVENTS), hare_r1.CAP_EVENTS
+
+
+def test_retry_after_is_honoured_when_the_gateway_sends_it() -> None:
+    """A Retry-After is the only number that knows when that provider answers
+    again. OpenRouter documents it as optional on a free-tier 429 and Gemini
+    documents none at all, so the fallback must be a real backoff and not zero.
+    """
+    err = hare_r1.urllib.error.HTTPError("u", 429, "Too Many Requests", {"Retry-After": "42"}, io.BytesIO(b"{}"))
+    assert hare_r1.retry_after_seconds(err) == 42.0
+    bare = hare_r1.urllib.error.HTTPError("u", 429, "Too Many Requests", {}, io.BytesIO(b"{}"))
+    assert hare_r1.retry_after_seconds(bare) == 0.0, "no header means our own backoff"
+    body = hare_r1.urllib.error.HTTPError("u", 429, "x", {}, io.BytesIO(b'{"retry_after": 7}'))
+    assert hare_r1.retry_after_seconds(body) == 7.0
+    caps = hare_r1.Caps(rate_backoff_s=20, rate_max_backoff_s=120)
+    assert hare_r1.rate_backoff(caps, 1, 42.0) == 42.0
+    assert hare_r1.rate_backoff(caps, 1, 0.0) == 20.0
+    assert hare_r1.rate_backoff(caps, 2, 0.0) == 40.0
+    assert hare_r1.rate_backoff(caps, 9, 0.0) == 120.0, "backoff stops at the ceiling"
+
+
+def test_a_quota_arriving_as_something_other_than_429_is_still_a_rate_limit() -> None:
+    """A quota a gateway reports as 403 or 400 is still a quota, and retrying it
+    as a bad request just burns the hop budget."""
+    assert hare_r1.looks_rate_limited(429, "")
+    assert hare_r1.looks_rate_limited(403, '{"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}')
+    assert hare_r1.looks_rate_limited(400, "quota exceeded for this project")
+    assert not hare_r1.looks_rate_limited(400, "model not found")
+    assert not hare_r1.looks_rate_limited(400, "unknown model")
+
+
+def test_the_rate_limit_backoff_survives_every_cap_being_uncapped(monkeypatch) -> None:
+    """Backoff is not a cap and has no 0.
+
+    A run with budget, wall clock and attempts all set to 0 still waits after a
+    429, because the account hammered here is the one the live reviews use.
+    """
+    # rate_backoff_s is kept to 2 here so the test really waits rather than
+    # sitting out the production 20 s; what is asserted is that it waits at all.
+    caps = hare_r1.Caps(reasoning_budget=0, wall_clock_s=0, max_attempts=0, rate_backoff_s=2)
+    calls: list[str] = []
+
+    def hop(base, key, model, messages, options, timeout=0):
+        calls.append(model)
+        raise hare_r1.RateLimited("LLM 429")
+
+    _caps_world(monkeypatch, ["m1", "m2"], hop, caps)
+    assert calls == ["m1"], "the provider is dropped, not retried"
+    assert hare_r1.rate_backoff(caps, 1, 0.0) == 2.0, "a 429 still waits with every other cap off"
+    assert hare_r1.Caps().rate_backoff_s > 0, "the default backoff is never off"
+
+
+def test_the_cost_line_says_the_reasoning_tokens_and_the_caps() -> None:
+    """Every note prints what it spent and what it was allowed to spend.
+
+    Reasoning tokens are the number this whole change is about: a hop that
+    thought and answered has to show it, and a cap that fired has to say so, or
+    the defaults cannot be tuned from the ledger.
+    """
+    line = hare_r1.cost_line(
+        {"prompt_tokens": 24310, "completion_tokens": 1204, "completion_tokens_details": {"reasoning_tokens": 11980}},
+        "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+        41.2,
+    )
+    assert "11,980 reasoning tokens" in line
+    caps = hare_r1.Caps(reasoning_budget=12000, wall_clock_s=3600, max_attempts=6)
+    hare_r1.CAP_EVENTS.clear()
+    plain = hare_r1.caps_line(caps, 1)
+    assert "12,000 reasoning tokens" in plain and "3,600s wall clock" in plain
+    assert "6 attempts, 1 used" in plain and plain.endswith("none fired")
+    hare_r1.CAP_EVENTS.append("openrouter rate limited (1x), skipped for the rest of the run")
+    fired = hare_r1.caps_line(caps, 4)
+    assert "fired:" in fired and "rate limited" in fired
+    hare_r1.CAP_EVENTS.clear()
+    off = hare_r1.caps_line(hare_r1.Caps(reasoning_budget=0, wall_clock_s=0, max_attempts=0), 9)
+    assert "reasoning tokens uncapped" in off and "wall clock uncapped" in off and "attempts uncapped" in off
+
+
+def test_the_workflow_exposes_every_cap_with_a_default_and_an_override() -> None:
+    """Each cap is a workflow env with a default, and a workflow_dispatch input
+    that overrides it for one run. 0 is the documented uncapped value."""
+    import re
+    from pathlib import Path
+
+    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
+    for env_name, default in (
+        ("HARE_REASONING_BUDGET", "12000"),
+        ("HARE_REVIEW_WALL_CLOCK_S", "3600"),
+        ("HARE_MAX_ATTEMPTS", "6"),
+    ):
+        assert re.search(rf"^\s*{env_name}:\s*'{default}'\s*$", wf, re.MULTILINE), f"{env_name} has no default {default}"
+        assert re.search(rf"{env_name}:\s*\$\{{\{{\s*github\.event\.inputs\.", wf), f"{env_name} has no dispatch override"
+    for name in ("budget", "wall", "attempts"):
+        assert re.search(rf"^\s*{name}:\s*$", wf, re.MULTILINE), f"no workflow_dispatch input {name}"
+        assert re.search(rf"description:.*0 = uncapped", wf), "an input must say what 0 means"
