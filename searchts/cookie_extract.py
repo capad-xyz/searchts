@@ -88,9 +88,13 @@ _LOCKED_MARKS = (
 
 
 def _as_records(raw, kind: str):
-    """Normalise a backend result to objects with .name/.value/.domain."""
-    if kind == "records":
-        return raw  # already a list of CookieRecord
+    """Normalise a backend result to objects with .name/.value/.domain.
+
+    Both backends already return that shape -- a list of CookieRecord from
+    searchts's own Firefox reader, browser_cookie3's cookie objects from its
+    Chromium one -- so this is the one place a backend that did not would be
+    adapted, and today it is the identity.
+    """
     return raw
 
 

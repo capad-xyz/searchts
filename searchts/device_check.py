@@ -40,7 +40,6 @@ __all__ = [
     "find_one_action_control",
     "click_once",
     "solve_simple_click",
-    "human_required",
     "CLICK_LABELS",
     "PUZZLE_MARKERS",
 ]
