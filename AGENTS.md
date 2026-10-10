@@ -4,8 +4,8 @@ Standing rules for anyone **changing** this repo (Cursor, Codex, Claude, Grok, c
 
 This is **not** a skill. Skills (`SKILL.md`) are how to *use* searchts (`read_url`). This file is how to *change* it.
 
-- Product / order of work: [`PLAN.md`](PLAN.md) for searchts, [`docs/hare-next.md`](docs/hare-next.md) for Hare
-- What already shipped: [`docs/freeze-log.md`](docs/freeze-log.md). Not the plan.
+- What is not done: [`PLAN.md`](PLAN.md) for searchts, [`docs/hare-next.md`](docs/hare-next.md) for Hare
+- What already shipped: [`docs/plan-shipped.md`](docs/plan-shipped.md) and [`docs/freeze-log.md`](docs/freeze-log.md). Not the plan.
 - Commands and Python conventions: [`CLAUDE.md`](CLAUDE.md)
 - Who is who: [`NAMES.md`](NAMES.md)
 
@@ -15,9 +15,12 @@ A plan says what is true now and what is next. A log says what already happened.
 
 | You are writing | File |
 |---|---|
-| A searchts decision, a checklist item, parked work with a revisit | [`PLAN.md`](PLAN.md) |
+| Work that is not done yet | [`PLAN.md`](PLAN.md). Open boxes only. |
+| A box that already shipped, kept so the id is not lost | [`docs/plan-shipped.md`](docs/plan-shipped.md). Do not add. |
 | Hare's behavior, the model list, cadence, what Hare should do next | [`docs/hare-next.md`](docs/hare-next.md) |
 | What merged, a build note, a dated "we did X" | [`docs/freeze-log.md`](docs/freeze-log.md) |
+| A post | [`docs/comms.md`](docs/comms.md) |
+| Direction, not the task list | [`ROADMAP.md`](ROADMAP.md) |
 | What a user sees in a release | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ## Identity

@@ -1383,7 +1383,7 @@ def _cmd_configure(args):
             "[!] youtube-cookies is not wired and is not stored in YAML. "
             "yt-dlp does not read a searchts key. Opt-in at transcribe time:\n"
             "  searchts transcribe <url> --cookies-from-browser chrome\n"
-            "Never used by `searchts read` (PLAN.md F7)."
+            "Never used by `searchts read`."
         )
         return
 

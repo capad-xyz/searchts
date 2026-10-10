@@ -8,9 +8,12 @@ Append a new row under the right heading. Do not append it to either plan.
 
 | You are writing | File |
 |---|---|
-| A searchts decision, a checklist item, parked work with a revisit | [`PLAN.md`](../PLAN.md) |
+| Work that is not done yet | [`PLAN.md`](../PLAN.md) |
+| A box that already shipped | [`docs/plan-shipped.md`](plan-shipped.md). Do not add. |
 | Hare's behavior, the model list, cadence, what Hare should do next | [`docs/hare-next.md`](hare-next.md) |
 | What merged, a build note, a dated "we did X" | this file |
+| A post | [`docs/comms.md`](comms.md) |
+| Direction, not the task list | [`ROADMAP.md`](../ROADMAP.md) |
 | What a user sees in a release | [`CHANGELOG.md`](../CHANGELOG.md) |
 
 ## searchts
@@ -111,7 +114,7 @@ Append a new row under the right heading. Do not append it to either plan.
 | 2026-10-03 | Reddit gaps go to **F5f** in **0.15** (cursor on **F23c**, more replies on **F23d**, walls, profiles, search). **0.14** stays non-Reddit. 0.15 is heavy: **F24** may slip to 0.16 (its line says "0.15 or later"). |
 | 2026-10-03 | Distribution: version-free stories (**X8** thread, **LI2** motion video on real output), reach rules in section 5. Show HN after **F25** (0.13.1); the scorecard is #227. |
 | 2026-10-03 | #227, #225, #228, #229 merged. **F25** ticked. Both Show HN gates are clear; **0.13.1** is a `fix:` release-please tag off #228, so the gate is really "0.13.1 on PyPI". README now says why searchts exists (#229) and six docs stopped calling example.com thin. |
-| 2026-10-10 | Hare's operating record left this file. R1, R1c, cadence, the model list, HareBot, Laya, F15's detail, The diary of what landed, searchts and Hare, is docs/freeze-log.md. This file stays the searchts plan. |
+| 2026-10-10 | Hare's record moved to [`hare-next.md`](hare-next.md). This file is the diary. [`PLAN.md`](../PLAN.md) is only the open searchts work. |
 | 2026-10-10 | DataDome is not the ceiling. A device-check, including one simple click, is the stealth rung. An image puzzle still stops. The address is a separate layer: no bought IP in that PR. **N1** is "not a default of the free CLI", not "never an exit" (**F18**). `docs/mcp.md` tunnel line is HTTPS-to-loopback only. |
 
 ## Hare

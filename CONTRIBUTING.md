@@ -110,8 +110,7 @@ agents. That focus is the whole point, so we're intentionally selective about wh
 
 The free package stays keyless. Clearing a DataDome script on the stealth rung, including one
 simple click, is in scope. A puzzle that needs a person still stops. "We don't bundle a proxy"
-is not "DataDome is impossible" and not "a hosted read is forbidden." A hosted exit is PLAN
-**F18**, not a default of this package.
+is not "DataDome is impossible" and not "a hosted read is forbidden." A hosted exit is [PLAN.md](PLAN.md) **F18**, not a default of this package.
 
 **We're glad to merge:**
 

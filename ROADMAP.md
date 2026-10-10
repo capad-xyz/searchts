@@ -1,5 +1,8 @@
 # Roadmap
 
+The open boxes are [`PLAN.md`](PLAN.md). What already shipped is [`docs/plan-shipped.md`](docs/plan-shipped.md). Posts are [`docs/comms.md`](docs/comms.md). The log is [`docs/freeze-log.md`](docs/freeze-log.md). Hare is [`docs/hare-next.md`](docs/hare-next.md).
+
+
 searchts is *"the free, open-source, keyless web layer for agents"* — won by being reliable and
 easy for an agent to reach for, not by having the most features. This roadmap reflects that focus.
 It's a direction, not a promise; issues and PRs are welcome (see [CONTRIBUTING.md](CONTRIBUTING.md),
