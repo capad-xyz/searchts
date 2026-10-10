@@ -965,6 +965,9 @@ def _fetch_jina(url: str, timeout: int = 40) -> Tuple[int, str, str, Dict[str, s
 
 
 _NAV_RACE = "the page is navigating"
+#: Also a race: Playwright raises this when the renderer process dies under the
+#: page, which is what an HTTP/2 protocol error on goto looks like from here.
+_NAV_CRASH = "page has crashed"
 _NAV_CONTENT_RETRIES = 4
 _NAV_CONTENT_WAIT_MS = 400
 _SETTLE_LOAD_MS = 8000
@@ -994,8 +997,26 @@ def _use_persistent_profile() -> bool:
     return os.environ.get("SEARCHTS_NO_BROWSER_PROFILE", "") not in ("1", "true", "yes")
 
 
+#: Transport errors that mean "the connection moved under us", which is the
+#: situation the retry in `_page_content` exists for. Measured on real pages:
+#: `_fetch_stealth('https://www.lululemon.com/')` raises
+#: `Page.goto: net::ERR_HTTP2_PROTOCOL_ERROR`, and StackOverflow raises a reset
+#: while the interstitial navigates. Neither matched _NAV_RACE, so both escaped
+#: as raw Playwright errors instead of being retried and reported as a verdict.
+_TRANSPORT_RACES = (
+    _NAV_RACE,
+    _NAV_CRASH,
+    "net::err_http2_protocol_error",
+    "net::err_connection_reset",
+    "net::err_connection_closed",
+    "net::err_empty_response",
+    "net::err_stream_error",
+)
+
+
 def _is_nav_race(exc: BaseException) -> bool:
-    return _NAV_RACE in str(exc).lower()
+    msg = str(exc).lower()
+    return any(token in msg for token in _TRANSPORT_RACES)
 
 
 def _stderr_tick(msg: str, progress: bool) -> None:
@@ -1037,6 +1058,29 @@ def _wait_settled_load(
         )
     except Exception:  # noqa: BLE001
         pass
+
+
+def _is_vendor_wall(html: str) -> bool:
+    """Does this refusal body carry an anti-bot vendor's own markup?
+
+    The narrow question the repeated-4xx fast-fail cannot answer. Two identical
+    4xx usually means the server is being plain, and #338 stops the ladder there
+    to save a browser launch. But a device-check answers a browser with a
+    rendered challenge instead of repeating the status, so in that one case the
+    rungs would NOT have agreed and skipping the browser hides the only answer
+    that names the wall.
+
+    Keyed on the vendor markers in ``_INTERACTIVE_PHRASES`` plus the puzzle
+    vendor names, so it fires on evidence rather than on any 403.
+    """
+    if not html:
+        return False
+    low = html.lower()
+    from searchts.device_check import PUZZLE_MARKERS
+
+    if any(m in low for m in PUZZLE_MARKERS):
+        return True
+    return "captcha-delivery.com" in low or "px-captcha" in low
 
 
 def _page_content(
@@ -1130,11 +1174,15 @@ def _fetch_stealth(
     when this backend is reached, then torn down immediately, so it costs memory
     only on the hard pages that tier-1 could not crack (keeps a 16GB box happy).
 
-    Lets the page execute and polls until a script challenge clears. A simple
-    click (continue, a checkbox, a press-and-hold that is one action) belongs
-    on this rung and is not a reason to stop. This function does not take that
-    click yet. A puzzle that asks a person to recognize images still comes
-    back as a challenge page.
+    Lets the page execute and polls until a script challenge clears. When the page
+    is still waiting after that, takes the ONE simple action a device-check
+    wants (continue, a checkbox, a press-and-hold that is a single press) via
+    ``searchts.device_check``. At most one click is spent, and never on a page
+    whose DOM carries a puzzle vendor's markup.
+
+    A puzzle that asks a person to recognize images stops there and is named in
+    the returned headers under ``x-searchts-device-stop``, so the caller can say
+    WHICH kind of wall this was. It is not solved and it is not sent anywhere.
 
     Safe under MCP/FastMCP: see ``_call_sync_browser``.
     """
@@ -1207,12 +1255,30 @@ def _fetch_stealth_impl(
                 page.wait_for_timeout(1500)
                 waited += 1500
                 html = _page_content(page, progress=want_tick)
+            # Still a challenge after the script had its time: take the one
+            # simple action it is waiting on. A device-check is a script that
+            # finishes and then wants a single press; refusing every click is
+            # what made this look permanent. A puzzle needing a person to
+            # recognise something stops here by name instead.
+            device_stop: Optional[str] = None
+            if looks_blocked(200, html) == "challenge":
+                from searchts import device_check
+
+                html, device_stop = device_check.solve_simple_click(
+                    page, html, progress=want_tick
+                )
             # If the challenge cleared, the real status is 200 regardless of the
             # initial challenge response; otherwise keep the original status.
             status = 200 if looks_blocked(200, html) is None else init_status
             final = page.url or url
             # page.goto headers can still say "challenge" after the DOM cleared.
             headers = _drop_stale_challenge_headers(headers, html)
+            # A named stop travels back so the CLI can say WHICH kind of wall
+            # this was. "needs a person: arkoselabs" is actionable; a bare 403
+            # is not, and the two are not the same failure.
+            if device_stop:
+                headers = dict(headers)
+                headers["x-searchts-device-stop"] = device_stop
             return status, html, final, headers
         finally:
             browser.close()
@@ -1541,9 +1607,20 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     #: server that says 403 to curl says 403 to a browser; see _ESCALATE_UNLESS.
     refusal_status: Optional[int] = None
     refusal_count = 0
+    #: A status that only the non-browser rungs reported, and the fact that the
+    #: browser has not actually been asked. See _REFUSAL_REPEAT_LIMIT: two
+    #: identical 4xx normally means the server is telling us plainly. That
+    #: reasoning is wrong for a device-check, because the browser's verdict is
+    #: not a status at all, it is a rendered interstitial. datadome.co measured
+    #: 403 from curl, 403 from Jina, and then 403 carrying 1,464 characters of
+    #: geo.captcha-delivery.com from a real Chromium. Skipping the rung there
+    #: hides the only answer that names the wall.
+    browser_would_differ = False
 
     for backend in order:
-        if refusal_count >= _REFUSAL_REPEAT_LIMIT:
+        if refusal_count >= _REFUSAL_REPEAT_LIMIT and not (
+            browser_would_differ and backend == "stealth-browser"
+        ):
             attempts.append((backend, "skipped-no-new-tls"))
             _tick(f"  {backend}: skipped, {refusal_status} already refused twice")
             continue
@@ -1617,6 +1694,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 else:
                     refusal_status = status
                     refusal_count = 1
+                if status in (403, 405, 401) and _is_vendor_wall(body or ""):
+                    # The refusal carried a vendor's own wall markup, so the
+                    # browser's answer is a rendered challenge rather than the
+                    # same status. Worth the launch; see browser_would_differ.
+                    browser_would_differ = True
 
             hop = private_hop(url, final_url)
             if hop:
@@ -1642,6 +1724,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             else:
                 reason = looks_blocked(status, body, headers)
                 if reason:
+                    # Say WHICH wall it was when the rung can name one. The
+                    # stealth browser reports its device-check stop in headers,
+                    # and collapsing that to a bare "http-403" throws away the
+                    # only actionable fact in the whole run: whether a person
+                    # is required, and which vendor wants one.
+                    stop = headers.get("x-searchts-device-stop")
+                    if stop:
+                        reason = "%s (needs a person: %s)" % (reason, stop)
                     attempts.append((backend, reason))
                     _tick(f"  {backend}: {reason}")
                     if backend == remembered:
@@ -1745,6 +1835,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 else:
                     refusal_status = refused
                     refusal_count = 1
+            if refused in (403, 405, 401) and _is_vendor_wall(getattr(e, "body", "") or ""):
+                # A vendor wall is the one case where the browser is expected to
+                # answer differently, because it renders a challenge instead of
+                # repeating the status. See browser_would_differ above.
+                browser_would_differ = True
             if backend == remembered:
                 unpin(domain)
                 remembered = None
