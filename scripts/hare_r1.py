@@ -201,7 +201,42 @@ REASONING_SHAPE = {
     "gemini": "top",
     "nous": "nested",
     "openrouter": "nested",
+    # Zen is not "no reasoning": its models publish reasoning levels, and the
+    # hop is expected to ask for one. The shape is left "none" because the wire
+    # field cannot be verified. Two facts measured 2026-10-10:
+    #   1. Every Zen free model answers a direct HTTP call with
+    #      `FreeTierError: OpenCode's free tier can only be used from within
+    #      OpenCode`, whatever the User-Agent, so a hop here sends nothing that
+    #      arrives. Nothing about the request body can be confirmed from outside.
+    #   2. The client exposes the reasoning level as `--variant`, documented as
+    #      "provider-specific reasoning effort", and the levels per model are in
+    #      ZEN_EFFORTS below, read from the models.dev catalog the client uses.
+    # Guessing the field to send anyway would put an untested request in the
+    # chain and call it reasoning. ZEN_EFFORTS records what is known; the shape
+    # flips to "nested" the day a request from here is shown to get through.
     "zen": "none",
+}
+# What each Zen model publishes, from models.dev (https://models.dev/api.json,
+# provider `opencode`, field `reasoning_options`), read 2026-10-10. Empty means
+# the model is a reasoning model with no published dial, so no variant is sent
+# and its max arm equals its off arm. `variant` is what the client would be
+# asked for at the strongest level the model publishes.
+#
+# These are the client's `--variant` values, not wire fields: Zen's chat
+# completions and its responses endpoint are different APIs (Muse is served on
+# /v1/responses, the rest on /v1/chat/completions), and with the free tier
+# refusing direct calls neither body has been observed being accepted.
+ZEN_EFFORTS: dict[str, dict[str, Any]] = {
+    "step-5-preview-free": {"levels": ("low", "medium", "high"), "variant": "high"},
+    "space-bunny-free": {"levels": ("low", "medium", "high", "xhigh", "max"), "variant": "max"},
+    "mimo-v2.6-flash-free": {"levels": (), "variant": ""},
+    "muse-spark-1.3-contributor-free": {
+        "levels": ("minimal", "low", "medium", "high", "xhigh"),
+        "variant": "xhigh",
+    },
+    # LongCat is the one Zen model that publishes a toggle rather than an
+    # effort, so it is the only one whose reasoning could be switched off.
+    "longcat-2.5-preview-free": {"levels": (), "variant": "", "toggle": True},
 }
 # Effort ladders, weakest to strongest. A level is clamped into the model's own
 # list, so "the highest this model supports" is one lookup, not a guess.
@@ -309,6 +344,25 @@ def clamp_effort(level: str, efforts: tuple[str, ...]) -> str:
         return level
     lower = [e for e in efforts if EFFORT_LADDER.index(e) <= EFFORT_LADDER.index(level)]
     return max(lower, key=EFFORT_LADDER.index) if lower else min(efforts, key=EFFORT_LADDER.index)
+
+
+def zen_reasoning_variant(model: str) -> str:
+    """The `--variant` a Zen model would be asked for at its strongest published
+    level, or "" when it publishes no dial.
+
+    A separate accessor from `reasoning_options` on purpose. Zen's free models
+    refuse every direct call, so nothing here has been observed reaching the
+    gateway and no wire field is claimed for it; what this returns is the
+    client's own reasoning control, which is documented and measurable even
+    though the hop cannot send it yet. A model with no published dial returns ""
+    so a caller says "no documented level" instead of inventing one.
+    """
+    return str(ZEN_EFFORTS.get(_base_slug(model), {}).get("variant") or "")
+
+
+def zen_reasoning_levels(model: str) -> tuple[str, ...]:
+    """The levels a Zen model publishes, weakest first. () = no dial."""
+    return tuple(ZEN_EFFORTS.get(_base_slug(model), {}).get("levels") or ())
 
 
 def reasoning_options(

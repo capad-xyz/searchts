@@ -2310,6 +2310,42 @@ def test_an_owner_cap_is_never_raised_by_the_clamp() -> None:
     }
 
 
+def test_zen_reasoning_comes_from_the_catalog_and_never_from_a_guess() -> None:
+    """Zen publishes reasoning levels; the hop must not invent them.
+
+    Measured 2026-10-10: every Zen free model refuses a direct HTTP call with
+    FreeTierError ("can only be used from within OpenCode"), whatever the
+    User-Agent, so no wire field for Zen can be confirmed from a hop. The hop
+    therefore carries none, and what it does carry is the level each model
+    publishes, read from the models.dev catalog the OpenCode client itself
+    reads. A model with no published dial has to say so rather than be measured
+    at a level it does not have, or the proof compares a request against itself.
+    """
+    # What each model publishes, and the variant that is its strongest level.
+    assert hare_r1.zen_reasoning_levels("step-5-preview-free") == ("low", "medium", "high")
+    assert hare_r1.zen_reasoning_variant("step-5-preview-free") == "high"
+    assert hare_r1.zen_reasoning_variant("space-bunny-free") == "max"
+    assert hare_r1.zen_reasoning_variant("muse-spark-1.3-contributor-free") == "xhigh"
+    # MiMo is a reasoning model with no published dial: no variant, and saying so
+    # is the whole point.
+    assert hare_r1.zen_reasoning_levels("mimo-v2.6-flash-free") == ()
+    assert hare_r1.zen_reasoning_variant("mimo-v2.6-flash-free") == ""
+    # LongCat is the one that publishes a toggle, so it is the only one whose
+    # reasoning could be switched off at all.
+    assert hare_r1.ZEN_EFFORTS["longcat-2.5-preview-free"]["toggle"] is True
+    # A model nobody has looked up is not given a level.
+    assert hare_r1.zen_reasoning_variant("some-model-nobody-checked") == ""
+
+    # The hop sends Zen nothing, and that is a decision with a reason, not an
+    # oversight: an unverified field in the chain would be reasoning by faith.
+    assert hare_r1.REASONING_SHAPE["zen"] == "none"
+    assert hare_r1.reasoning_options("zen", "space-bunny-free", "max", 12000, {}) == {}
+    # And the other providers are unaffected by the Zen table.
+    assert hare_r1.reasoning_options("openrouter", "nvidia/nemotron-3.ultra-550b-a55b:free", "high", 0, {}) == {
+        "reasoning": {"effort": "high", "exclude": True}
+    }
+
+
 def test_the_production_shape_is_the_effort_not_the_token_cap() -> None:
     """The proof run settled which of the two bounded shapes a hop sends.
 

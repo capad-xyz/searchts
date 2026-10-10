@@ -29,7 +29,19 @@ Installing it does **not** give a private Jev. Zero-shot it does not beat `jev-1
       | Gemini | top-level `reasoning_effort` | `minimal`, `low`, `medium`, `high`. **Thinking cannot be switched off on Gemini 3** | ai.google.dev/gemini-api/docs/openai, …/thinking |
       | OpenRouter | nested `reasoning: {effort, max_tokens, exclude}` | `max`, `xhigh`, `high`, `medium`, `low`, `minimal`, `none` | openrouter.ai/docs/guides/best-practices/reasoning-tokens |
       | Nous | nested `reasoning: {enabled, effort}` | mirrors the OpenRouter catalog schema; its own client sends this shape | `inference-api.nousresearch.com/v1/models`, NousResearch/hermes-agent |
-      | Zen | none documented | the hop carries nothing | (no field published) |
+      | Zen | **none that a hop can use**: every free model refuses a direct HTTP call | the hop carries nothing, and that is deliberate (below) | measured 2026-10-10, `FreeTierError` |
+
+      **Zen is not "no reasoning"; Zen is "no reachable hop".** Measured 2026-10-10 on the box: every Zen free model answers a direct HTTP call with `FreeTierError: OpenCode's free tier can only be used from within OpenCode`, whatever the `User-Agent`. Nothing sent from the Action arrives, so no wire field for Zen can be confirmed from outside and the hop claims none: guessing one would put an untested request in the chain and call it reasoning. What the models *do* publish is recorded in `ZEN_EFFORTS` from the models.dev catalog the OpenCode client itself reads, and the client exposes that level as `--variant`, "provider-specific reasoning effort":
+
+      | Zen model | Published levels | Strongest |
+      | --- | --- | --- |
+      | `step-5-preview-free` | low, medium, high | high |
+      | `space-bunny-free` | low, medium, high, xhigh, max | max |
+      | `muse-spark-1.3-contributor-free` | minimal, low, medium, high, **xhigh** | xhigh |
+      | `mimo-v2.6-flash-free` | **none published** | cannot be raised |
+      | `longcat-2.5-preview-free` | a `toggle`, no effort | the only one that can be switched off |
+
+      So a Zen hop can carry reasoning only once a request from here is shown to get through; until then `scripts/zen_eval.py` drives the real client to measure these models, and `mimo-v2.6-flash-free` is the honest "cannot toggle" row. Muse is served on `/v1/responses` while the other three are on `/v1/chat/completions`, so Zen is two APIs, not one.
 
       The **level is the model's, not a global one.** Sending a level a model does not publish is a 400 on Groq and ignored elsewhere, so each hop asks for the strongest level in that model's own `reasoning.supported_efforts`, read at run time from the gateway's catalog and falling back to a pinned table when the catalog is unreachable. As of 2026-10-10: Nemotron Ultra `medium|high`, Nemotron Super `low|medium`, Nemotron Lightning none published, Step 5 Preview `low|medium|high` and mandatory, Laguna and Ling reasoning with no dial, LongCat no reasoning block at all.
     - **The effort is the shape production sends; the token cap is measured, not sent.** Reasoning tokens count against `max_tokens`, which is why thinking with no bound returned `finish_reason=length` with empty content 6 times out of 6 in [`docs/hare-thinking-ab.md`](hare-thinking-ab.md) and the tokens were still billed. `reasoning.max_tokens` looks like the fix for that, and on 2026-10-10 it was the production default. **The proof run said otherwise** (5 PRs, raw answers in [`docs/proofs/hare-reasoning/`](proofs/hare-reasoning/README.md)):
