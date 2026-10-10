@@ -515,6 +515,21 @@ def test_chromium_locked_message_does_not_name_a_cookie_value():
     assert "--cdp-port" in message and "9222" in message
 
 
+def test_the_locked_message_still_names_something_when_the_browser_is_empty():
+    """An empty name produced "''s cookies are locked".
+
+    That is the sentence a user reads at the exact moment they have least idea
+    what to do, so it has to survive a missing or blank browser name.
+    """
+    from searchts.session_cookies import chromium_locked_message
+
+    for given in ("", "   ", None):
+        message = chromium_locked_message(given)
+        assert not message.startswith("'"), message
+        assert "'s cookies are locked" in message
+        assert "--cdp-port" in message
+
+
 def test_describe_never_prints_a_cookie_value(tmp_home):
     """The one line safe for a human: a count and a site, never a value."""
     save_owned_site("https://www.amazon.com", _amazon_cookies(), browser="zen")

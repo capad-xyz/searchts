@@ -905,3 +905,38 @@ def test_the_cursor_envelope_says_it_too(monkeypatch):
     monkeypatch.setattr(unlocker_mod, "read_pages", _fake)
     out = json.loads(mcp_server.read_url("https://x.test/a", page_items=2))
     assert out["authenticated"] is True
+
+
+def test_the_receipts_key_set_is_pinned(monkeypatch):
+    """What this PR added was a receipt key. Nothing was pinning the shape.
+
+    `authenticated` joined the receipt, and the only shape assertions in the repo
+    were on tool NAMES (mcp2-compat checks `list_tools()`), so a key could be
+    renamed or dropped by any later change and every consumer would find out at
+    runtime. The tool declares no outputSchema -- it returns a string -- so this
+    list is the contract, and it is written down here instead.
+
+    Adding a key is then a deliberate act: the test fails, and whoever adds it
+    decides whether that is a change worth naming.
+    """
+    import searchts.unlocker as unlocker_mod
+    from searchts.integrations import mcp_server
+
+    page = "\n\n".join(f"Item {i} body" for i in range(6))
+
+    def _fake(url, max_pages, **kwargs):
+        return [unlocker_mod.FetchResult(
+            "curl_cffi", page, 200, final_url=url,
+            fetched_at="2026-10-10T00:00:00Z",
+        )]
+
+    monkeypatch.setattr(unlocker_mod, "read_pages", _fake)
+
+    assert set(json.loads(mcp_server.read_url("https://x.test/a"))) == {
+        "url", "final_url", "fetched_at", "backend", "status", "chars",
+        "authenticated", "text", "more", "pages",
+    }
+    assert set(json.loads(mcp_server.read_url("https://x.test/a", page_items=2))) == {
+        "url", "final_url", "fetched_at", "backend", "status", "authenticated",
+        "offset", "total_items", "has_more", "next_cursor", "items",
+    }

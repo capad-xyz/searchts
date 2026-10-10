@@ -428,7 +428,12 @@ def chromium_locked_message(browser: str) -> str:
     a headless read cannot obtain without a prompt appearing on the user's
     screen. Either way the answer for the caller is the same and is the only
     part worth acting on, so it is the last sentence in both.
+
+    ``browser`` is defaulted, not trusted: an empty name once produced a
+    sentence that opened with "''s cookies are locked", which names nothing at
+    all at the exact moment the user has least idea what to do.
     """
+    name = (browser or "").strip() or "this browser"
     if os.name == "nt":
         why = (
             "Chrome wraps that key in App-Bound Encryption, which refuses to "
@@ -442,9 +447,9 @@ def chromium_locked_message(browser: str) -> str:
             "quietly on your screen"
         )
     return (
-        f"{browser}'s cookies are locked: {why}. "
+        f"{name}'s cookies are locked: {why}. "
         f"Read them through a debugger port you open instead: start "
-        f"{browser} with --remote-debugging-port=9222 and pass --cdp-port 9222 "
+        f"{name} with --remote-debugging-port=9222 and pass --cdp-port 9222 "
         f"to read. Firefox-derived browsers (Zen, Firefox, LibreWolf) have no "
         f"such lock and can be read directly."
     )
