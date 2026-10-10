@@ -423,10 +423,25 @@ def _launch_browser(
 # ── reading through CDP ──────────────────────────────────────────────────────
 
 
+def _started(pw: Any) -> Any:
+    """Enter the object ``sync_playwright()`` hands back, when it needs entering.
+
+    Playwright and patchright return a ``PlaywrightContextManager``. It has no
+    ``.chromium`` and no ``.stop()``; entering it starts the driver and returns
+    the ``Playwright`` object that has both. Without this step every real CDP
+    read dies on ``pw.chromium`` with a bare AttributeError, which is what the
+    test doubles hide by returning the started object already.
+    """
+    enter = getattr(pw, "__enter__", None)
+    if callable(enter):
+        return enter()
+    return pw
+
+
 def _playwright(playwright_module: Optional[Any]) -> Any:
-    """The sync_playwright entry point, from an injected module or the real one."""
+    """A started Playwright, from an injected module or the real one."""
     if playwright_module is not None:
-        return playwright_module.sync_playwright()
+        return _started(playwright_module.sync_playwright())
     try:
         from patchright.sync_api import sync_playwright
     except ImportError:
@@ -434,7 +449,7 @@ def _playwright(playwright_module: Optional[Any]) -> Any:
             "the debugger-port path needs a CDP client: "
             "searchts install --browser"
         ) from None
-    return sync_playwright()
+    return _started(sync_playwright())
 
 
 def _records_from(cookies: Any) -> List[CookieRecord]:

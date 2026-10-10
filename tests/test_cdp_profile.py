@@ -20,6 +20,7 @@ not the forbidden call happened. See tests/conftest.py for why that matters.
 from __future__ import annotations
 
 import os
+import types
 from pathlib import Path
 
 import pytest
@@ -459,6 +460,92 @@ class TestConnectExistingCdpGuard:
             "this browser belongs to the user; closing it would end their session"
         )
         assert log["stopped"] == ["pw"], "the driver is dropped, which is the detach"
+
+
+class TestTheRealClientIsEntered:
+    """The bug this file's fakes were hiding.
+
+    Playwright and patchright return a ``PlaywrightContextManager`` from
+    ``sync_playwright()``. It has no ``.chromium`` and no ``.stop()``; entering
+    it is what starts the driver and yields the object that has both. The code
+    called ``pw.chromium.connect_over_cdp(...)`` on the un-entered manager, so
+    every real read died with a bare ``AttributeError`` -- reported as "could
+    not connect to the debugger", which reads like a closed port rather than a
+    bug. Found by running ``searchts read <url> --cdp-port 9227`` against a real
+    Chrome: the unit tests were green because ``FakePlaywrightModule`` returns
+    the already-started object.
+
+    These cases use the REAL module's shape, not a convenient fake, so the
+    contract under test is the one in the wild.
+    """
+
+    def test_a_context_manager_is_entered_before_it_is_used(self):
+        entered = []
+
+        class StartedPlaywright:
+            """What ``__enter__`` yields: has .chromium and .stop()."""
+
+            chromium = "the-browser-type"
+            stop_count = 0
+
+            def stop(self):
+                StartedPlaywright.stop_count += 1
+
+        class RealisticContextManager:
+            """What ``sync_playwright()`` actually returns.
+
+            No ``.chromium``, no ``.stop()`` -- so anything that touches the
+            un-entered object raises AttributeError, which is exactly the
+            failure this path had in the wild.
+            """
+
+            def __enter__(self):
+                entered.append("enter")
+                return StartedPlaywright()
+
+            def __exit__(self, *exc):
+                entered.append("exit")
+                return False
+
+        module = types.SimpleNamespace(
+            sync_playwright=lambda: RealisticContextManager()
+        )
+        pw = cdp_profile._playwright(module)
+        assert entered == ["enter"], (
+            "the context manager was never entered, so no driver ever starts"
+        )
+        # The two things every caller downstream needs, and the two the
+        # un-entered manager does not have.
+        assert getattr(pw, "chromium", None) == "the-browser-type", (
+            "_connect would raise AttributeError on the un-entered manager"
+        )
+        cdp_profile._stop_quietly(pw)
+        assert StartedPlaywright.stop_count == 1, "the driver must be stopped"
+
+    def test_an_already_started_client_is_left_alone(self):
+        """The test doubles, and any client that returns a live object."""
+
+        class Started:
+            def stop(self):
+                pass
+
+        started = Started()
+        module = types.SimpleNamespace(sync_playwright=lambda: started)
+        assert cdp_profile._playwright(module) is started
+
+    def test_stop_is_called_on_the_started_object(self):
+        stopped = []
+
+        class Started:
+            def stop(self):
+                stopped.append(True)
+
+        module = types.SimpleNamespace(
+            sync_playwright=lambda: Started()
+        )
+        pw = cdp_profile._playwright(module)
+        cdp_profile._stop_quietly(pw)
+        assert stopped == [True]
 
 
 # ── 5. scoping to the one host ───────────────────────────────────────────────
