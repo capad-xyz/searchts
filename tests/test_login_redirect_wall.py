@@ -101,10 +101,44 @@ class TestIsLoginUrl:
         A word joins this set only if no other page on the web would use it as a
         path segment of its own. That is why bare `auth` and `session` are out
         even though some sites really do put their login at `/auth`.
+
+        The ordinary-noun list is spelled out rather than left to taste: a
+        hand-picked pair would let `log` or `key` through, which is exactly the
+        kind of word that reads as authentication and is a perfectly ordinary
+        URL segment.
         """
-        ordinary = {"auth", "session", "user", "account", "token", "key",
-                    "profile", "settings", "oauth"}
-        assert not (_LOGIN_SEGMENTS & ordinary)
+        ordinary = {
+            # the pair this rule actually turned on
+            "auth", "session", "sessions", "authenticate", "authorization",
+            # other words that read like authentication and are not
+            "log", "key", "keys", "token", "tokens", "grant", "grants",
+            "access", "permission", "permissions", "identity", "credential",
+            "credentials", "certificate", "cert", "certs",
+            # ordinary nouns a documentation or blog URL would use
+            "user", "users", "account", "profile", "settings", "oauth",
+            "member", "members", "group", "groups", "role", "roles",
+            "signup", "register", "join", "guest", "admin", "dashboard",
+        }
+        assert not (_LOGIN_SEGMENTS & ordinary), (
+            f"{sorted(_LOGIN_SEGMENTS & ordinary)} would refuse a content URL "
+            f"as a login wall"
+        )
+
+    def test_the_accepted_miss_is_stated_where_a_reader_looks(self):
+        """Hare on the second cut: the miss was load-bearing but undocumented.
+
+        Dropping `auth`/`session` means a site whose login lives at a bare
+        `/auth` is no longer caught. That is a real miss and it belongs next to
+        the set, not only in the commit message.
+        """
+        import inspect
+
+        source = inspect.getsource(unlocker)
+        block = source.split("_LOGIN_SEGMENTS = ")[0][-2000:]
+        assert "ACCEPTED MISS" in block, (
+            "the trade-off must be written down where someone editing the set "
+            "will actually see it"
+        )
 
     def test_a_malformed_url_is_not_a_login_url(self):
         # urlparse raises ValueError on some shapes; a wall check must not be

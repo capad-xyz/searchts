@@ -563,13 +563,25 @@ def _drop_stale_challenge_headers(headers: Dict[str, str], html: str) -> Dict[st
 #: the page. Matched as whole segments, so an article at ``/login-tips`` or
 #: ``/signin-guide`` is untouched and only the exact segment counts.
 #:
-#: Every entry here is a word that appears in NO other page's URL: they all
-#: name the act of authenticating. Bare ``auth`` and ``session`` were here and
-#: were removed for the opposite reason -- they are ordinary nouns on the rest
-#: of the web, and a wall check that fires on ``/docs/auth`` or
-#: ``/session/2024/notes`` refuses a real article as a login page, which is a
-#: wrong answer rather than a safe one. A site that puts its login at a bare
-#: ``/auth`` is not worth breaking every documentation URL over.
+#: Every entry here names the act of authenticating and appears in no other
+#: page's URL.
+#:
+#: ACCEPTED MISS, stated here because it is load-bearing: a site that puts its
+#: login at a bare ``/auth`` or ``/session`` is NOT recognised. Those two words
+#: were in this set and were removed for the opposite reason -- they are
+#: ordinary nouns on the rest of the web, and this check fires on the EXTRACT
+#: alone, where it is the only signal. With them in, ``/docs/auth``,
+#: ``/blog/auth/2024``, ``/session/2024/notes`` and ``/podcast/session/12`` were
+#: all refused as login walls, which is a wrong answer rather than a safe one:
+#: the caller asked for an article and was told to log in.
+#:
+#: The trade is deliberate and it fails open in the worse direction, so here is
+#: what a missed wall actually costs, so nobody has to guess: a site at a bare
+#: ``/auth`` falls back to the text classifiers in :mod:`searchts.walls`. Those
+#: are the defence for a long enough shell (the Instagram case) and the known
+#: miss for a short one (reddit's 36 words), which is exactly the case that made
+#: this rule necessary. If such a site is ever hit, the fix is to widen
+#: ``walls.py`` for it, not to put an ordinary noun back here.
 _LOGIN_SEGMENTS = frozenset({
     "login", "login.php", "signin", "signin.php", "sign-in", "log-in",
     "logout", "signout", "sign-out",

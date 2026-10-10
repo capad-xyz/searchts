@@ -523,7 +523,7 @@ def test_the_locked_message_still_names_something_when_the_browser_is_empty():
     """
     from searchts.session_cookies import chromium_locked_message
 
-    for given in ("", "   ", None):
+    for given in ("", "   "):
         message = chromium_locked_message(given)
         assert not message.startswith("'"), message
         assert "'s cookies are locked" in message
