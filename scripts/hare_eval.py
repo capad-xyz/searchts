@@ -473,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    (out / f"hare-eval-{day}.json").write_text(json.dumps({"built": day, "rows": rows}, encoding="utf-8"), encoding="utf-8")
+    (out / f"hare-eval-{day}.json").write_text(json.dumps({"built": day, "rows": rows}), encoding="utf-8")
     (out / f"hare-eval-{day}.md").write_text(render(rows, cases, day), encoding="utf-8")
     print(f"hare eval: {len(rows)} runs -> {out}/hare-eval-{day}.md")
     return 0
