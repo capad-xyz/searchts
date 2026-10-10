@@ -124,6 +124,11 @@ def _run():
     _verbose.add_argument("-v", "--verbose", action="store_true",
                           default=argparse.SUPPRESS, help="Show debug logs")
 
+    # One registry, so a browser supported by the reader is never rejected by a
+    # stale list in the parser. `configure --from-browser` used to accept only
+    # five browsers and refused `zen`, which the reader handles fine.
+    from searchts.session_cookies import ALL_BROWSERS as _BROWSER_CHOICES
+
     # ── setup ──
     sub.add_parser("setup", parents=[_verbose], help="Interactive configuration wizard")
 
@@ -168,8 +173,9 @@ def _run():
                              "--cookies-from-browser <browser>")
     p_conf.add_argument("value", nargs="*", help="The value(s) to set")
     p_conf.add_argument("--from-browser", metavar="BROWSER",
-                        choices=["chrome", "firefox", "edge", "brave", "opera"],
-                        help="Auto-extract ALL platform cookies from browser (chrome/firefox/edge/brave/opera)")
+                        choices=_BROWSER_CHOICES,
+                        help="Auto-extract ALL platform cookies from browser "
+                             "(any supported browser: Zen, Firefox, Chrome, Vivaldi, Edge, Brave, Opera, Arc, ...)")
 
     # ── read ──
     p_read = sub.add_parser("read", parents=[_verbose],
@@ -187,7 +193,36 @@ def _run():
                         help="Keep following next pages until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300)")
     p_read.add_argument("--scrub", action="store_true",
                         help="Redact prompt-injection spans from the content (invisible-char "
-                             "stripping + indicator scanning always run regardless)")
+"stripping + indicator scanning always run regardless)")
+    p_read.add_argument(
+        "--cookies-from-browser",
+        metavar="BROWSER",
+        choices=_BROWSER_CHOICES,
+        help="Read YOUR browser's cookies for this site only (opt-in)",
+    )
+    p_read.add_argument(
+        "--cookies",
+        metavar="PATH",
+        help="Read a searchts-owned cookie file for this site only (opt-in)",
+    )
+    p_read.add_argument(
+        "--cdp-port",
+        metavar="PORT",
+        help="Read this site's cookies from your localhost debugger port (opt-in)",
+    )
+    p_read.add_argument(
+        "--proxy",
+        metavar="URL",
+        help="Route the read through a proxy (http/https/socks), e.g. "
+             "socks5://127.0.0.1:7890. For blocks decided on your address, "
+             "which no fingerprint can move. Falls back to the `proxy` config "
+             "value. Omitted means your own IP, as before.",
+    )
+    p_read.add_argument(
+        "--proxy-trusted",
+        action="store_true",
+        help="Accept that a remote proxy operator can see the Cookie header",
+    )
 
     # ── search ──
     p_search = sub.add_parser("search", parents=[_verbose],
@@ -1636,6 +1671,9 @@ def _cmd_read(args):
         print(f"searchts read: {problem}", file=sys.stderr)
         sys.exit(2)
 
+    cookies = _read_command_cookies(args)
+    proxy = _read_command_proxy(args)
+
     backends = [args.backend] if args.backend else None
     # Progress is narration ("trying curl_cffi..."), not diagnosis. The reasons
     # are printed once, together, below. Passing progress=False keeps them from
@@ -1648,23 +1686,32 @@ def _cmd_read(args):
                 print("--items and --pages are mutually exclusive; using --items.", file=sys.stderr)
             pages = unlocker.read_items(
                 args.url, args.items, backends=backends, allow_human=args.human,
-                scrub=args.scrub, progress=False,
+                scrub=args.scrub, progress=False, cookies=cookies,
+                proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )
         elif getattr(args, "pages", 1) > 1:
             pages = unlocker.read_pages(
                 args.url, args.pages, backends=backends, allow_human=args.human,
-                scrub=getattr(args, "scrub", False), progress=False,
+                scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
+                proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )
         else:
             pages = [unlocker.fetch(
                 args.url, backends=backends, allow_human=args.human,
-                scrub=getattr(args, "scrub", False), progress=False,
+                scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
+                proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )]
         result = pages[0]
     except unlocker.UnlockerError as e:
         print(f"Failed to read {e.url}", file=sys.stderr)
         for backend, why in e.attempts:
             print(f"  {backend}: {ux.tidy_reason(why)}", file=sys.stderr)
+        # One extra line, only when fetch had something useful to add. The
+        # per-backend reasons above are each true; none of them says what to do
+        # next, and a read that carried cookies is exactly the case where that
+        # is the whole question.
+        if e.hint:
+            print(f"  hint: {e.hint}", file=sys.stderr)
         sys.exit(1)
 
     # Surface prompt-injection findings to stderr so stdout stays clean content.
@@ -1680,6 +1727,11 @@ def _cmd_read(args):
             "backend": result.backend,
             "status": result.status,
             "chars": len(result.text),
+            # True only when this answer came from a request that carried the
+            # session cookies. Without it, a logged-in read and an anonymous one
+            # produce byte-identical receipts and the caller cannot say which
+            # one it just got.
+            "authenticated": result.authenticated,
             "text": result.text,
             "next_url": result.next_url,
             "more": result.more,
@@ -1691,11 +1743,81 @@ def _cmd_read(args):
         print(json.dumps(payload, ensure_ascii=False))
     else:
         # Status to stderr so stdout stays a clean, pipeable content stream.
-        print(f"[{result.backend}] status={result.status} chars={len(result.text)}",
-              file=sys.stderr)
+        status = f"[{result.backend}] status={result.status} chars={len(result.text)}"
+        if result.authenticated:
+            status += " (logged in)"
+        print(status, file=sys.stderr)
         print(result.text)
         for extra in pages[1:]:
             print(f"\n# {extra.final_url}\n\n{extra.text}")
+
+
+def _read_command_proxy(args):
+    """Resolve the proxy for one read: flag first, then the saved config value.
+
+    Returns None when neither is set, which keeps the ladder on the user's own
+    address exactly as it was before this existed.
+    """
+    raw = getattr(args, "proxy", None)
+    if not raw:
+        try:
+            from searchts.config import Config
+
+            raw = (Config().get("proxy") or "").strip() or None
+        except Exception:
+            raw = None
+    if not raw:
+        return None
+    from searchts.egress import ProxyError, normalize_proxy, redact
+
+    try:
+        normalize_proxy(raw)
+    except ProxyError as e:
+        print(f"proxy: {e}", file=sys.stderr)
+        sys.exit(1)
+    # One line, credentials stripped, so a long read can be traced later.
+    print(f"proxy: {redact(raw)}", file=sys.stderr)
+    return raw
+
+
+def _read_command_cookies(args):
+    """Resolve opt-in cookies for one read, reporting only safe provenance.
+
+    A thin wrapper: the rules live in ``session_cookies.resolve_cookies`` so
+    the MCP tool resolves the same jar, with the same scoping and the same
+    messages. What is added here is the CLI's own behaviour around it -- report
+    where the cookies came from without naming a value, and exit non-zero when
+    there is nothing to send.
+    """
+    from searchts.session_cookies import CookieReadError, resolve_cookies
+
+    try:
+        records = resolve_cookies(
+            args.url,
+            cookies=getattr(args, "cookies", None) or "",
+            cookies_from_browser=getattr(args, "cookies_from_browser", None) or "",
+            cdp_port=getattr(args, "cdp_port", None),
+        )
+    except CookieReadError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:  # CDP clients can expose non-CookieReadError failures.
+        print(f"could not read cookies: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not records:
+        return None
+    print(f"cookies: {_cookie_provenance(args, len(records))}", file=sys.stderr)
+    return records
+
+
+def _cookie_provenance(args, count):
+    """One line saying where the cookies came from. Never a value."""
+    cdp_port = getattr(args, "cdp_port", None)
+    if cdp_port:
+        return f"cdp port -> {count} cookies for {args.url}"
+    if getattr(args, "cookies", None):
+        return f"file {args.cookies} -> {count} cookies for {args.url}"
+    return f"browser ({args.cookies_from_browser}) -> {count} cookies for {args.url}"
 
 
 def _cmd_get(args):

@@ -439,8 +439,13 @@ def test_read_url_tool_yields_loop_while_blocked() -> None:
     browser_started = threading.Event()
     sibling_acked = threading.Event()
 
-    def _slow_fetch(unused_url: str) -> FetchResult:
+    def _slow_fetch(unused_url: str, **_kwargs) -> FetchResult:
         # Stands in for the blocking stealth-browser rung under to_thread.
+        # **kwargs on purpose: this test is about the to_thread boundary, not
+        # about fetch's signature, and a stub that rejected a keyword would
+        # raise TypeError *before* setting browser_started -- leaving `sibling`
+        # spinning on `asyncio.sleep(0)` and hanging the whole suite instead of
+        # failing this test.
         browser_started.set()
         if not sibling_acked.wait(timeout=2.0):
             raise AssertionError(
@@ -764,3 +769,174 @@ def test_grab_site_never_writes_into_the_base_or_a_used_folder(monkeypatch, tmp_
     empty.mkdir()
     json.loads(grab_site("https://x.test/", "shots"))
     assert seen[-1] == empty.resolve()
+
+
+# ── F27: an agent can reach the same cookie read the CLI can ─────────────────
+
+
+class TestReadUrlCarriesTheOptIns:
+    """The PR's whole point, checked on the surface an agent actually calls.
+
+    `searchts read --cdp-port` worked from the CLI while the MCP tool had no way
+    to ask for it at all, so an agent could not read a logged-in page no matter
+    what the user had open. Found by running the real server over stdio and
+    calling `tools/call read_url`: the schema had no cookie argument of any kind.
+    """
+
+    @pytest.mark.parametrize("name", [
+        "cookies", "cookies_from_browser", "cdp_port", "proxy", "proxy_trusted",
+    ])
+    def test_the_tool_schema_exposes_each_opt_in(self, name):
+        import inspect
+
+        params = inspect.signature(read_url).parameters
+        assert name in params, f"read_url offers an agent no way to pass {name}"
+
+    def test_the_plain_read_passes_no_cookie_kwargs(self, monkeypatch):
+        """Unset options must not reach fetch.
+
+        `read_pages` forwards **kwargs, so `cookies=None, proxy=None` changes
+        the call a stub receives: a caller written against the older signature
+        raises TypeError, and a TypeError raised inside the to_thread worker
+        never reaches the event loop (it hung the suite once already).
+        """
+        import searchts.unlocker as unlocker_mod
+        from searchts.integrations import mcp_server
+
+        seen = {}
+        page = "Ordinary page prose about invoices and receipts. " * 12
+
+        def _fake_read_pages(url, max_pages, **kwargs):
+            seen.update(kwargs)
+            return [unlocker_mod.FetchResult("curl_cffi", page, 200, final_url=url,
+                                            fetched_at="2026-10-10T00:00:00Z")]
+
+        monkeypatch.setattr(unlocker_mod, "read_pages", _fake_read_pages)
+        mcp_server.read_url("https://x.test/a")
+
+        assert "cookies" not in seen and "proxy" not in seen, (
+            f"a plain read changed its call: {seen}"
+        )
+
+    def test_a_cookie_read_forwards_the_resolved_jar(self, monkeypatch, tmp_path):
+        """The jar the resolver produced is what fetch gets, scoped already."""
+        import searchts.unlocker as unlocker_mod
+        from searchts.integrations import mcp_server
+
+        page = "Ordinary page prose about invoices and receipts. " * 12
+        jar_file = tmp_path / "jar.json"
+        jar_file.write_text(json.dumps({"cookies": [
+            {"name": "sid", "value": "v", "domain": ".x.test"},
+            {"name": "bank", "value": "LEAK", "domain": ".bank.test"},
+        ]}), encoding="utf-8")
+
+        seen = {}
+
+        def _fake_read_pages(url, max_pages, **kwargs):
+            seen.update(kwargs)
+            seen["names"] = sorted(c.name for c in kwargs.get("cookies") or [])
+            return [unlocker_mod.FetchResult("curl_cffi", page, 200, final_url=url,
+                                            fetched_at="2026-10-10T00:00:00Z")]
+
+        monkeypatch.setattr(unlocker_mod, "read_pages", _fake_read_pages)
+        mcp_server.read_url("https://x.test/a", cookies=str(jar_file))
+
+        assert seen["names"] == ["sid"], "a foreign cookie reached the request"
+        assert "LEAK" not in repr(seen["names"])
+
+    def test_a_cookie_read_error_is_an_error_string_not_a_raise(self, tmp_path):
+        from searchts.integrations import mcp_server
+
+        out = mcp_server.read_url("https://x.test/a", cookies=str(tmp_path / "nope.json"))
+        assert out.startswith("Error:"), out
+        assert "cookie" in out.lower(), out
+
+    def test_a_chromium_browser_names_the_working_alternative(self):
+        from searchts.integrations import mcp_server
+
+        out = mcp_server.read_url("https://x.test/a", cookies_from_browser="chrome")
+        assert out.startswith("Error:"), out
+        assert "cdp-port" in out, f"an agent is told the reason and not the way out: {out}"
+
+    def test_the_description_documents_the_opt_ins(self):
+        from searchts.integrations.mcp_server import READ_URL_DESCRIPTION
+
+        for token in ("cdp_port", "cookies_from_browser", "proxy"):
+            assert token in READ_URL_DESCRIPTION, (
+                f"{token} exists but no agent reading the schema would know"
+            )
+
+
+def test_the_receipt_says_whether_the_read_was_authenticated(monkeypatch):
+    """An agent must be able to tell 'your Drive' from 'Drive's public page'.
+
+    Live: with `--cdp-port` against a real login the MCP receipt was identical
+    to the anonymous one, so an agent reporting the contents of a logged-in
+    account had nothing in the receipt that said the login was in play.
+    """
+    import searchts.unlocker as unlocker_mod
+    from searchts.integrations import mcp_server
+
+    page = "Ordinary page prose about invoices and receipts. " * 12
+
+    def _fake(url, max_pages, **kwargs):
+        got_cookies = bool(kwargs.get("cookies"))
+        return [unlocker_mod.FetchResult(
+            "curl_cffi", page, 200, final_url=url,
+            fetched_at="2026-10-10T00:00:00Z", authenticated=got_cookies,
+        )]
+
+    monkeypatch.setattr(unlocker_mod, "read_pages", _fake)
+    assert json.loads(mcp_server.read_url("https://x.test/a"))["authenticated"] is False
+
+
+def test_the_cursor_envelope_says_it_too(monkeypatch):
+    import searchts.unlocker as unlocker_mod
+    from searchts.integrations import mcp_server
+
+    page = "\n\n".join(f"Item {i} body text here" for i in range(6))
+
+    def _fake(url, max_pages, **kwargs):
+        return [unlocker_mod.FetchResult(
+            "curl_cffi", page, 200, final_url=url,
+            fetched_at="2026-10-10T00:00:00Z", authenticated=True,
+        )]
+
+    monkeypatch.setattr(unlocker_mod, "read_pages", _fake)
+    out = json.loads(mcp_server.read_url("https://x.test/a", page_items=2))
+    assert out["authenticated"] is True
+
+
+def test_the_receipts_key_set_is_pinned(monkeypatch):
+    """What this PR added was a receipt key. Nothing was pinning the shape.
+
+    `authenticated` joined the receipt, and the only shape assertions in the repo
+    were on tool NAMES (mcp2-compat checks `list_tools()`), so a key could be
+    renamed or dropped by any later change and every consumer would find out at
+    runtime. The tool declares no outputSchema -- it returns a string -- so this
+    list is the contract, and it is written down here instead.
+
+    Adding a key is then a deliberate act: the test fails, and whoever adds it
+    decides whether that is a change worth naming.
+    """
+    import searchts.unlocker as unlocker_mod
+    from searchts.integrations import mcp_server
+
+    page = "\n\n".join(f"Item {i} body" for i in range(6))
+
+    def _fake(url, max_pages, **kwargs):
+        return [unlocker_mod.FetchResult(
+            "curl_cffi", page, 200, final_url=url,
+            fetched_at="2026-10-10T00:00:00Z",
+        )]
+
+    monkeypatch.setattr(unlocker_mod, "read_pages", _fake)
+
+    assert set(json.loads(mcp_server.read_url("https://x.test/a"))) == {
+        "url", "final_url", "fetched_at", "backend", "status", "chars",
+        "authenticated", "text", "more", "pages",
+    }
+    assert set(json.loads(mcp_server.read_url("https://x.test/a", page_items=2))) == {
+        "url", "final_url", "fetched_at", "backend", "status", "authenticated",
+        "offset", "total_items", "has_more", "next_cursor", "items",
+    }

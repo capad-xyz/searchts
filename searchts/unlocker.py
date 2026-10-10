@@ -36,7 +36,10 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable, Dict, List, Mapping, Optional, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Mapping, Optional, Tuple, TypeVar
+
+if TYPE_CHECKING:
+    from searchts.session_cookies import CookieRecord
 
 _T = TypeVar("_T")
 
@@ -188,6 +191,12 @@ class FetchResult:
     #: (kinds: next-page, feed, fold, list, count). The notes are also the last
     #: lines of ``text``.
     more: List[Dict[str, str]] = field(default_factory=list)
+    #: True when this read carried session cookies to the target host. Reported,
+    #: never a value: the point is that an agent can tell a logged-in read from
+    #: an anonymous one, which it otherwise cannot. A read that sent cookies and
+    #: still landed on a login wall sets this False, because the answer it got
+    #: is the anonymous answer.
+    authenticated: bool = False
     #: Page HTML kept only until ``_finalize`` runs detection; never returned.
     page_html: Optional[str] = field(default=None, repr=False, compare=False)
 
@@ -196,10 +205,17 @@ class FetchResult:
 class UnlockerError(Exception):
     url: str
     attempts: List[Tuple[str, str]] = field(default_factory=list)
+    #: One extra sentence that changes what the caller should do next, appended
+    #: to the message. Set when the ladder's reasons are all true but none of
+    #: them says the useful thing: a read that carried cookies and still got a
+    #: login page has one cause and one next step, and three copies of
+    #: "login-wall" do not say either.
+    hint: str = ""
 
     def __str__(self) -> str:
         rungs = "; ".join(f"{b}: {why}" for b, why in self.attempts)
-        return f"all backends failed for {self.url} -> {rungs}"
+        base = f"all backends failed for {self.url} -> {rungs}"
+        return f"{base} ({self.hint})" if self.hint else base
 
 
 _BLOCKED_SCHEMES = (
@@ -543,20 +559,81 @@ def _drop_stale_challenge_headers(headers: Dict[str, str], html: str) -> Dict[st
     return out
 
 
+#: Path segments that mean "this URL IS the login page", whatever the site calls
+#: the page. Matched as whole segments, so an article at ``/login-tips`` or
+#: ``/signin-guide`` is untouched and only the exact segment counts.
+#:
+#: Every entry here names the act of authenticating and appears in no other
+#: page's URL.
+#:
+#: ACCEPTED MISS, stated here because it is load-bearing: a site that puts its
+#: login at a bare ``/auth`` or ``/session`` is NOT recognised. Those two words
+#: were in this set and were removed for the opposite reason -- they are
+#: ordinary nouns on the rest of the web, and this check fires on the EXTRACT
+#: alone, where it is the only signal. With them in, ``/docs/auth``,
+#: ``/blog/auth/2024``, ``/session/2024/notes`` and ``/podcast/session/12`` were
+#: all refused as login walls, which is a wrong answer rather than a safe one:
+#: the caller asked for an article and was told to log in.
+#:
+#: The trade is deliberate and it fails open in the worse direction, so here is
+#: what a missed wall actually costs, so nobody has to guess: a site at a bare
+#: ``/auth`` falls back to the text classifiers in :mod:`searchts.walls`. Those
+#: are the defence for a long enough shell (the Instagram case) and the known
+#: miss for a short one (reddit's 36 words), which is exactly the case that made
+#: this rule necessary. If such a site is ever hit, the fix is to widen
+#: ``walls.py`` for it, not to put an ordinary noun back here.
+_LOGIN_SEGMENTS = frozenset({
+    "login", "login.php", "signin", "signin.php", "sign-in", "log-in",
+    "logout", "signout", "sign-out",
+})
+
+
+def is_login_url(url: Optional[str]) -> bool:
+    """True when `url` addresses a login page rather than the page asked for.
+
+    The text classifiers need words and a denominator, so a short auth shell
+    slips between them: reddit's `/settings/account/` redirects to
+    ``/login/?dest=...`` and extracts to 36 words naming two of the three
+    things a login shell names, which is under the breadth bar. The redirect
+    target is the stronger fact and it needs no vocabulary: a page whose own
+    canonical URL is ``/login`` is a login page on every site, in every
+    language, whether or not anyone has written its copy down here.
+    """
+    if not url:
+        return False
+    try:
+        path = urllib.parse.urlparse(url).path
+    except ValueError:
+        return False
+    path = path.lower().strip("/")
+    if not path:
+        return False
+    segments = [s for s in path.split("/") if s]
+    if not segments:
+        return False
+    # Any segment that is exactly a login word. `path in _LOGIN_SEGMENTS` would
+    # miss Reddit, which redirects to /login/ with a trailing slash and is
+    # caught here by the same rule as /login.
+    return any(seg in _LOGIN_SEGMENTS for seg in segments)
+
+
 def looks_blocked(
     status: Optional[int],
     text: str,
     headers: Optional[Mapping[str, str]] = None,
     *,
     login_wall: bool = False,
+    final_url: Optional[str] = None,
 ) -> Optional[str]:
     """Return a short reason if the response is a hard block/challenge page, else None.
 
     HTTP errors (including vendor codes like 999), known challenge phrases, and
     explicit challenge headers count as blocked. Login-wall phrases are scored
     only when ``login_wall=True`` (extracted text / Jina markdown) so a real
-    page with a sign-in modal in the raw HTML is not rejected. Thin-but-real
-    pages are not a block; ``fetch`` escalates, then fails unless ``allow_thin``.
+    page with a sign-in modal in the raw HTML is not rejected. ``final_url``
+    adds the redirect fact: a read that landed on ``/login`` is a login wall
+    whatever its text happens to score. Thin-but-real pages are not a block;
+    ``fetch`` escalates, then fails unless ``allow_thin``.
     """
     if status is None:
         return "no-response"
@@ -568,13 +645,13 @@ def looks_blocked(
         # Explicit block stamps (not "Server: AkamaiGHost" — that hosts real pages).
         if str(headers.get("x-datadome-ch") or "").lower() in ("blocked", "challenge"):
             return "challenge"
-        if str(headers.get("x-akamai-session-info") or "").lower().find("challenge") >= 0:
+        if str(headers.get("x-akamai-session-info") or "").find("challenge") >= 0:
             return "challenge"
     head = (text or "")[:8192].lower()
     for phrase in _BLOCK_PHRASES:
         if phrase in head:
             return "challenge"
-    if login_wall and _looks_login_wall(text):
+    if login_wall and (_looks_login_wall(text) or is_login_url(final_url)):
         return "login-wall"
     if _looks_cookie_wall(text):
         return "cookie-wall"
@@ -916,14 +993,30 @@ def _normalize_headers(headers: Mapping[str, object]) -> Dict[str, str]:
     return {str(name).lower(): str(value) for name, value in headers.items()}
 
 
-def _fetch_curl_cffi(url: str, timeout: int = 30) -> Tuple[int, str, str, Dict[str, str]]:
+def _fetch_curl_cffi(url: str, timeout: int = 30,
+                     extra_headers: Optional[Mapping[str, str]] = None,
+                     proxy: Optional[str] = None
+                     ) -> Tuple[int, str, str, Dict[str, str]]:
+    """Hit `url` directly, impersonating Chrome.
+
+    The one rung that talks to the target host itself, so it is the only rung
+    allowed to carry cookie material (see :func:`fetch`). ``extra_headers`` is
+    merged onto the fixed set; None leaves the request byte-identical to a
+    cookie-free read. ``proxy`` routes the request through a proxy, which is how
+    a read escapes a block decided on our egress address rather than our
+    request; curl_cffi is the rung that can honour it.
+    """
     from curl_cffi import requests as cr
 
     from searchts.ssrf import curl_resolve_options, curl_safe_redirects
+    req_headers = {"Accept-Language": "en-US,en;q=0.9"}
+    req_headers.update(extra_headers or {})
+    # Passed only when set, so a proxy-free read calls curl exactly as before.
+    proxy_kwargs: Dict[str, object] = {"proxy": proxy} if proxy else {}
     r = cr.get(url, impersonate="chrome", timeout=timeout,
                allow_redirects=curl_safe_redirects(),
                curl_options=curl_resolve_options(url),
-               headers={"Accept-Language": "en-US,en;q=0.9"})
+               headers=req_headers, **proxy_kwargs)
     final = str(getattr(r, "url", None) or url)
     return r.status_code, r.text, final, _normalize_headers(dict(r.headers.items()))
 
@@ -931,6 +1024,11 @@ def _fetch_curl_cffi(url: str, timeout: int = 30) -> Tuple[int, str, str, Dict[s
 def _fetch_jina(url: str, timeout: int = 40) -> Tuple[int, str, str, Dict[str, str]]:
     # Jina is a relay: we asked for `url`, so report that as the final source URL
     # (the wire URL is r.jina.ai/... which is not useful for citations).
+    #
+    # FENCE: this signature takes a URL and nothing else, on purpose. r.jina.ai
+    # is a third party, so there is no parameter through which cookie material
+    # could reach this rung -- a Cookie header here would hand a live login to
+    # someone else's server. Adding one would be the bug, not the feature.
     req = urllib.request.Request(
         "https://r.jina.ai/" + url,
         headers={"User-Agent": _UA_REAL, "Accept": "text/plain"},
@@ -941,6 +1039,9 @@ def _fetch_jina(url: str, timeout: int = 40) -> Tuple[int, str, str, Dict[str, s
 
 
 _NAV_RACE = "the page is navigating"
+#: Also a race: Playwright raises this when the renderer process dies under the
+#: page, which is what an HTTP/2 protocol error on goto looks like from here.
+_NAV_CRASH = "page has crashed"
 _NAV_CONTENT_RETRIES = 4
 _NAV_CONTENT_WAIT_MS = 400
 _SETTLE_LOAD_MS = 8000
@@ -970,8 +1071,26 @@ def _use_persistent_profile() -> bool:
     return os.environ.get("SEARCHTS_NO_BROWSER_PROFILE", "") not in ("1", "true", "yes")
 
 
+#: Transport errors that mean "the connection moved under us", which is the
+#: situation the retry in `_page_content` exists for. Measured on real pages:
+#: `_fetch_stealth('https://www.lululemon.com/')` raises
+#: `Page.goto: net::ERR_HTTP2_PROTOCOL_ERROR`, and StackOverflow raises a reset
+#: while the interstitial navigates. Neither matched _NAV_RACE, so both escaped
+#: as raw Playwright errors instead of being retried and reported as a verdict.
+_TRANSPORT_RACES = (
+    _NAV_RACE,
+    _NAV_CRASH,
+    "net::err_http2_protocol_error",
+    "net::err_connection_reset",
+    "net::err_connection_closed",
+    "net::err_empty_response",
+    "net::err_stream_error",
+)
+
+
 def _is_nav_race(exc: BaseException) -> bool:
-    return _NAV_RACE in str(exc).lower()
+    msg = str(exc).lower()
+    return any(token in msg for token in _TRANSPORT_RACES)
 
 
 def _stderr_tick(msg: str, progress: bool) -> None:
@@ -1013,6 +1132,62 @@ def _wait_settled_load(
         )
     except Exception:  # noqa: BLE001
         pass
+
+
+def _is_vendor_wall(html: str) -> bool:
+    """Does this refusal body carry an anti-bot vendor's own markup?
+
+    The narrow question the repeated-4xx fast-fail cannot answer. Two identical
+    4xx usually means the server is being plain, and #338 stops the ladder there
+    to save a browser launch. But a device-check answers a browser with a
+    rendered challenge instead of repeating the status, so in that one case the
+    rungs would NOT have agreed and skipping the browser hides the only answer
+    that names the wall.
+
+    Keyed on the vendor markers in ``_INTERACTIVE_PHRASES`` plus the puzzle
+    vendor names, so it fires on evidence rather than on any 403.
+    """
+    if not html:
+        return False
+    low = html.lower()
+    from searchts.device_check import PUZZLE_MARKERS
+
+    if any(m in low for m in PUZZLE_MARKERS):
+        return True
+    return "captcha-delivery.com" in low or "px-captcha" in low
+
+
+#: How much of a refused body is read when the rung raised instead of returning.
+_VENDOR_WALL_SCAN = 65536
+
+
+def _raised_body(exc: BaseException) -> str:
+    """The body of a rung that refused by raising, or "" if there is not one.
+
+    urllib's HTTPError keeps the body on its file object, not on a ``body``
+    attribute, so a rung that raises on a 4xx looks bodyless to a plain
+    ``getattr(exc, "body", "")`` and a vendor wall behind that exception would
+    never reach the fast-fail exception in :func:`fetch`. The read is bounded at
+    ``_VENDOR_WALL_SCAN``, so a large error page is not pulled into memory for a
+    substring test, and the result is trimmed again in case the reader ignored
+    the bound. Total as well: no body, no reader, a reader that raises, and a
+    reader that returns something other than text all come back "" rather than
+    out of here, because a body we cannot read is not a wall.
+    """
+    body = getattr(exc, "body", None)
+    if body is None:
+        reader = getattr(exc, "read", None)
+        if not callable(reader):
+            return ""
+        try:
+            body = reader(_VENDOR_WALL_SCAN)
+        except Exception:  # noqa: BLE001 - see the docstring
+            return ""
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", "replace")
+    if not isinstance(body, str):
+        return ""
+    return body[:_VENDOR_WALL_SCAN]
 
 
 def _page_content(
@@ -1097,7 +1272,8 @@ def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:
 
 
 def _fetch_stealth(
-    url: str, timeout: int = 60, progress: Optional[bool] = None
+    url: str, timeout: int = 60, progress: Optional[bool] = None,
+    proxy: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     """Tier-2: render with an undetected headless Chromium (patchright).
 
@@ -1105,19 +1281,28 @@ def _fetch_stealth(
     when this backend is reached, then torn down immediately, so it costs memory
     only on the hard pages that tier-1 could not crack (keeps a 16GB box happy).
 
-    Lets the page execute and polls until a script challenge clears. A simple
-    click (continue, a checkbox, a press-and-hold that is one action) belongs
-    on this rung and is not a reason to stop. This function does not take that
-    click yet. A puzzle that asks a person to recognize images still comes
-    back as a challenge page.
+    Lets the page execute and polls until a script challenge clears. When the page
+    is still waiting after that, takes the ONE simple action a device-check
+    wants (continue, a checkbox, a press-and-hold that is a single press) via
+    ``searchts.device_check``. At most one click is spent, and never on a page
+    whose DOM carries a puzzle vendor's markup.
+
+    A puzzle that asks a person to recognize images stops there and is named in
+    the returned headers under ``x-searchts-device-stop``, so the caller can say
+    WHICH kind of wall this was. It is not solved and it is not sent anywhere.
 
     Safe under MCP/FastMCP: see ``_call_sync_browser``.
     """
+    if proxy:
+        return _call_sync_browser(_fetch_stealth_impl, url, timeout, progress, proxy)
+    # No proxy: delegate exactly as before. An impl stub may take only the
+    # original three arguments, and an extra positional is a TypeError.
     return _call_sync_browser(_fetch_stealth_impl, url, timeout, progress)
 
 
 def _fetch_stealth_impl(
-    url: str, timeout: int = 60, progress: Optional[bool] = None
+    url: str, timeout: int = 60, progress: Optional[bool] = None,
+    proxy: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     try:
         from patchright.sync_api import sync_playwright
@@ -1130,6 +1315,10 @@ def _fetch_stealth_impl(
     ms = int(timeout * 1000)
     from searchts.ssrf import chromium_pin_args
     pin_args = chromium_pin_args(url)
+    # A proxy changes the browser's egress address, which is the whole point
+    # when a wall is blocking the address rather than the request. Passed only
+    # when set so a proxy-free read launches exactly as before.
+    proxy_kwargs: Dict[str, Any] = {"proxy": proxy} if proxy else {}
     with sync_playwright() as p:
         persistent = _use_persistent_profile()
         if persistent:
@@ -1139,9 +1328,11 @@ def _fetch_stealth_impl(
                 args=pin_args,
                 user_agent=_UA_REAL, locale="en-US",
                 viewport={"width": 1280, "height": 800},
+                **proxy_kwargs,
             )
         else:
-            browser = p.chromium.launch(headless=True, args=pin_args)
+            browser = p.chromium.launch(headless=True, args=pin_args,
+                                        **proxy_kwargs)
         try:
             if persistent:
                 page = browser.new_page()
@@ -1171,12 +1362,30 @@ def _fetch_stealth_impl(
                 page.wait_for_timeout(1500)
                 waited += 1500
                 html = _page_content(page, progress=want_tick)
+            # Still a challenge after the script had its time: take the one
+            # simple action it is waiting on. A device-check is a script that
+            # finishes and then wants a single press; refusing every click is
+            # what made this look permanent. A puzzle needing a person to
+            # recognise something stops here by name instead.
+            device_stop: Optional[str] = None
+            if looks_blocked(200, html) == "challenge":
+                from searchts import device_check
+
+                html, device_stop = device_check.solve_simple_click(
+                    page, html, progress=want_tick
+                )
             # If the challenge cleared, the real status is 200 regardless of the
             # initial challenge response; otherwise keep the original status.
             status = 200 if looks_blocked(200, html) is None else init_status
             final = page.url or url
             # page.goto headers can still say "challenge" after the DOM cleared.
             headers = _drop_stale_challenge_headers(headers, html)
+            # A named stop travels back so the CLI can say WHICH kind of wall
+            # this was. "needs a person: arkoselabs" is actionable; a bare 403
+            # is not, and the two are not the same failure.
+            if device_stop:
+                headers = dict(headers)
+                headers["x-searchts-device-stop"] = device_stop
             return status, html, final, headers
         finally:
             browser.close()
@@ -1303,7 +1512,9 @@ def _finalize(
 def fetch(url: str, backends: Optional[List[str]] = None,
           min_chars: int = _MIN_CHARS, use_memory: bool = True,
           allow_human: bool = False, scrub: bool = False,
-          allow_thin: bool = False, progress: Optional[bool] = None) -> FetchResult:
+          allow_thin: bool = False, progress: Optional[bool] = None,
+          cookies: Optional[List["CookieRecord"]] = None,
+          proxy: Optional[str] = None, proxy_trusted: bool = False) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -1333,6 +1544,35 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     progress:
         True: stderr ticks per ladder rung. False: never (CLI ``--json``).
         None: follow ``SEARCHTS_PROGRESS=1``. MCP/library omit the arg.
+    cookies:
+        Session cookies to present as an already-logged-in reader, from
+        ``searchts.session_cookies``. Default None: no cookie material anywhere,
+        and every rung behaves exactly as it did before.
+
+        They are filtered to the normalized target's own host before use, so a
+        jar holding cookies for several sites contributes only the ones this
+        host would really have been sent. ``.amazon.in`` rides along on
+        ``www.amazon.in``; ``notamazon.in`` gets nothing.
+
+        THE FENCE: a Cookie header is attached to exactly one rung, the
+        direct-host ``curl_cffi`` fetch. It never goes to ``Jina Reader`` (a
+        cookie sent to r.jina.ai is a live login handed to a third party), and
+        this change does not wire cookies into ``stealth-browser`` either. The
+        value is never logged, printed, or put in an error message or on the
+        FetchResult.
+    proxy:
+        ``scheme://[user:pass@]host:port`` to route the direct and browser rungs
+        through. This is the lever for a block decided on our egress ADDRESS
+        rather than our request, which no fingerprint or cookie can move.
+        Measured: some sites 403 this network on principle, with byte-identical
+        responses for Chrome-impersonated curl and plain requests, while
+        Wikipedia/GitHub/BBC read 200 from the same IP in the same minute.
+
+        None (the default) keeps every rung on the user's own address, which is
+        today's behaviour. The Jina rung is deliberately NOT proxied: it fetches
+        from r.jina.ai's address, not yours, so your proxy cannot move it.
+    proxy_trusted:
+        Acknowledge that a remote proxy's operator will see the cookie header.
     """
     if progress is None:
         progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
@@ -1360,19 +1600,82 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         why = blocked[7:] if blocked.startswith("Error: ") else blocked
         raise UnlockerError(url, [("ssrf", why)])
 
+    # Host-scoped cookie material, resolved ONCE and used by ONE rung. Scoped
+    # here, against the normalized URL's host, because that is the only place
+    # the target host is known: by the time the ladder runs, `final_url` may be
+    # a redirect and `url` is the only host the caller actually asked about.
+    # filter_for_host owns the suffix rule (.amazon.in yes, notamazon.in no), so
+    # this does not re-implement it.
+    cookie_header = ""
+    if cookies:
+        from searchts.session_cookies import build_header, filter_for_host
+        target_host = (urllib.parse.urlparse(url).hostname or "").lower().rstrip(".")
+        scoped_cookies = filter_for_host(cookies, target_host)
+        if scoped_cookies:
+            cookie_header = build_header(scoped_cookies)
+        # A jar with nothing for this host is not an error: it just means this
+        # read is anonymous. The ladder runs unchanged.
+
+    # Proxy resolution, and the second fence. A proxy is a third party in the
+    # path, so a Cookie header through one hands that operator a live login.
+    # Refused for a remote proxy unless the caller says they accept it; a proxy
+    # on loopback or a private network is this machine and is trusted by
+    # default, because that is a property of the connection rather than
+    # something the far side can assert.
+    proxy_spec = None
+    proxy_curl: Optional[str] = None
+    proxy_browser: Optional[Dict[str, Any]] = None
+    if proxy:
+        from searchts.egress import (
+            ProxyError,
+            cookies_may_travel,
+            curl_proxy_url,
+            normalize_proxy,
+            playwright_proxy,
+            redact,
+        )
+
+        try:
+            proxy_spec = normalize_proxy(proxy)
+        except ProxyError as e:
+            raise UnlockerError(url, [("proxy", str(e))]) from e
+        if cookie_header and not cookies_may_travel(proxy_spec, proxy_trusted):
+            # Never log the proxy credentials, not even here.
+            raise UnlockerError(url, [("proxy", (
+                f"refusing to send cookies through {redact(proxy)}: a proxy "
+                f"operator can read the Cookie header, which is a live login. "
+                f"Use a proxy on this machine, run the read without cookies, or "
+                f"pass --proxy-trusted (proxy_trusted=True) to accept it."
+            ))])
+        proxy_curl = curl_proxy_url(proxy_spec)
+        proxy_browser = playwright_proxy(proxy_spec)
+        _tick(f"  proxy: {redact(proxy)}")
+
     # Tier-0: AI-chat share links (chatgpt.com/share, claude.ai/share, poe.com/s)
     # carry their conversation in provider-specific data channels that generic
     # HTML extraction can't see (or sees only partially). A dedicated extractor
     # returns the COMPLETE conversation; any failure falls through to the ladder.
+    #
+    # ── does this read answer "as the logged-in user" or "as anyone"? ────────
+    # Only the direct curl rung can carry the jar, so only a curl win is an
+    # authenticated answer. Reported so an agent can tell the two apart; a
+    # boolean, never a value. Measured: with `--cdp-port` on a real login the
+    # receipt was byte-identical to the anonymous one, so "I read your Drive"
+    # and "I read Drive's public page" looked the same to the caller.
+    cookie_rung = "curl_cffi"
+
+    def _with_auth(result: FetchResult) -> FetchResult:
+        result.authenticated = bool(cookie_header) and result.backend == cookie_rung
+        return _finalize(result, scrub, tick=_tick)
+
     try:
         from searchts import share_extractors
         share = share_extractors.extract(url) if share_extractors.matches(url) else None
     except Exception:  # noqa: BLE001 - tier-0 must never break the ladder
         share = None
     if share is not None and share.markdown:
-        return _finalize(
-            FetchResult(f"share:{share.provider}", share.markdown, 200, final_url=url),
-            scrub,
+        return _with_auth(
+            FetchResult(f"share:{share.provider}", share.markdown, 200, final_url=url)
         )
 
     # Tier-0.5: known-host public-API endpoints (e.g. Reddit .json).
@@ -1388,14 +1691,13 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 _tick(
                     f"  known-host:{kh.provider}: ok ({len(kh.markdown)} chars)"
                 )
-                return _finalize(
+                return _with_auth(
                     FetchResult(
                         f"known-host:{kh.provider}",
                         kh.markdown,
                         200,
                         final_url=url,
-                    ),
-                    scrub,
+                    )
                 )
             _tick(f"  known-host:{kh_name}: miss")
     except Exception:  # noqa: BLE001 - ring must never break the ladder
@@ -1423,9 +1725,20 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     #: server that says 403 to curl says 403 to a browser; see _ESCALATE_UNLESS.
     refusal_status: Optional[int] = None
     refusal_count = 0
+    #: A status that only the non-browser rungs reported, and the fact that the
+    #: browser has not actually been asked. See _REFUSAL_REPEAT_LIMIT: two
+    #: identical 4xx normally means the server is telling us plainly. That
+    #: reasoning is wrong for a device-check, because the browser's verdict is
+    #: not a status at all, it is a rendered interstitial. datadome.co measured
+    #: 403 from curl, 403 from Jina, and then 403 carrying 1,464 characters of
+    #: geo.captcha-delivery.com from a real Chromium. Skipping the rung there
+    #: hides the only answer that names the wall.
+    browser_would_differ = False
 
     for backend in order:
-        if refusal_count >= _REFUSAL_REPEAT_LIMIT:
+        if refusal_count >= _REFUSAL_REPEAT_LIMIT and not (
+            browser_would_differ and backend == "stealth-browser"
+        ):
             attempts.append((backend, "skipped-no-new-tls"))
             _tick(f"  {backend}: skipped, {refusal_status} already refused twice")
             continue
@@ -1434,13 +1747,44 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             final_url = url
             headers: Dict[str, str] = {}
             if backend == "curl_cffi":
-                status, body, final_url, headers = _fetch_curl_cffi(url)
+                # The one rung that talks to the target host, so the one rung
+                # that may carry its cookies. Passed only when there is a header
+                # to pass, so a cookie-free read calls the fetcher exactly as
+                # before. Jina's and the browser's call sites below stay bare:
+                # that is the fence, and it is a call-site fence, not a filter.
+                if cookie_header or proxy_curl:
+                    # Both kwargs are passed only when they carry something, so a
+                    # plain read calls the fetcher with the identical argument
+                    # list it always had. That is not only tidiness: existing
+                    # test stubs are `lambda url, timeout=30`, and passing a
+                    # keyword they do not declare is a TypeError, not a no-op.
+                    kwargs: Dict[str, Any] = {}
+                    if cookie_header:
+                        kwargs["extra_headers"] = {"Cookie": cookie_header}
+                    if proxy_curl:
+                        kwargs["proxy"] = proxy_curl
+                    status, body, final_url, headers = _fetch_curl_cffi(url, **kwargs)
+                else:
+                    status, body, final_url, headers = _fetch_curl_cffi(url)
             elif backend == "Jina Reader":
+                # FENCE, and deliberately unchanged by the proxy work: this rung
+                # takes a URL and nothing else. It fetches from r.jina.ai's
+                # address, so our proxy cannot move it either, and a cookie here
+                # would be a live login handed to a third party.
                 status, body, final_url, headers = _fetch_jina(url)
             elif backend == "stealth-browser":
-                status, body, final_url, headers = _fetch_stealth(
-                    url, progress=progress
-                )
+                # No cookie header here, ever. The browser may carry the proxy,
+                # because that changes the address the challenge is judged from.
+                # Passed only when set, for the same stub-signature reason as
+                # curl above.
+                if proxy_browser:
+                    status, body, final_url, headers = _fetch_stealth(
+                        url, progress=progress, proxy=proxy_browser,
+                    )
+                else:
+                    status, body, final_url, headers = _fetch_stealth(
+                        url, progress=progress,
+                    )
             else:
                 attempts.append((backend, "unknown-backend"))
                 _tick(f"  {backend}: unknown-backend")
@@ -1468,6 +1812,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 else:
                     refusal_status = status
                     refusal_count = 1
+                if status in (403, 405, 401) and _is_vendor_wall(body or ""):
+                    # The refusal carried a vendor's own wall markup, so the
+                    # browser's answer is a rendered challenge rather than the
+                    # same status. Worth the launch; see browser_would_differ.
+                    browser_would_differ = True
 
             hop = private_hop(url, final_url)
             if hop:
@@ -1493,6 +1842,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             else:
                 reason = looks_blocked(status, body, headers)
                 if reason:
+                    # Say WHICH wall it was when the rung can name one. The
+                    # stealth browser reports its device-check stop in headers,
+                    # and collapsing that to a bare "http-403" throws away the
+                    # only actionable fact in the whole run: whether a person
+                    # is required, and which vendor wants one.
+                    stop = headers.get("x-searchts-device-stop")
+                    if stop:
+                        reason = "%s (needs a person: %s)" % (reason, stop)
                     attempts.append((backend, reason))
                     _tick(f"  {backend}: {reason}")
                     if backend == remembered:
@@ -1504,21 +1861,23 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 if reddit_hit:
                     label, listing_md = reddit_hit
                     _tick(label)
-                    return _finalize(
+                    return _with_auth(
                         FetchResult(
                             backend,
                             listing_md,
                             status,
                             final_url=final_url or url,
                             headers=headers,
-                        ),
-                        scrub,
+                        )
                     )
                 text = html_to_text(body, url)
 
             text = text or ""
             # Login-wall on the extract only (raw HTML often has a sign-in modal).
-            extract_reason = looks_blocked(200, text, login_wall=True)
+            # `final_url` rides along: a redirect onto /login is the wall, even
+            # when the shell that renders there is too short to be scored.
+            extract_reason = looks_blocked(200, text, login_wall=True,
+                                           final_url=final_url)
             if extract_reason:
                 attempts.append((backend, extract_reason))
                 _tick(f"  {backend}: {extract_reason}")
@@ -1543,7 +1902,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     remember(domain, backend)
                 _tick(f"  {backend}: ok ({len(text)} chars{', whole page' if whole else ''})")
                 # clean win, stop here — sanitize untrusted content before return
-                return _finalize(
+                return _with_auth(
                     FetchResult(
                         backend,
                         text,
@@ -1551,9 +1910,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         final_url=final_url or url,
                         headers=headers,
                         page_html=None if backend == "Jina Reader" else body,
-                    ),
-                    scrub,
-                    tick=_tick,
+                    )
                 )
             # Real but thin (e.g. JS-rendered or genuinely short): keep as a
             # fallback and escalate in case a richer backend renders more.
@@ -1596,6 +1953,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 else:
                     refusal_status = refused
                     refusal_count = 1
+            if refused in (403, 405, 401) and _is_vendor_wall(_raised_body(e)):
+                # A vendor wall is the one case where the browser is expected to
+                # answer differently, because it renders a challenge instead of
+                # repeating the status. See browser_would_differ above.
+                browser_would_differ = True
             if backend == remembered:
                 unpin(domain)
                 remembered = None
@@ -1643,7 +2005,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 except Exception as e:  # noqa: BLE001 - fail loud, not a traceback
                     text = ""
                     human_error = human_error or f"extract failed ({type(e).__name__}: {e})"
-            wall = looks_blocked(200, text, login_wall=True) if text else None
+            wall = looks_blocked(200, text, login_wall=True, final_url=final_url) if text else None
             if (
                 text
                 and wall is None
@@ -1659,7 +2021,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     page_html=None if listing_hit else html,
                 )
                 if listing_hit or len(text) >= min_chars:
-                    return _finalize(human, scrub, tick=_tick)
+                    return _with_auth(human)
                 best = human
                 attempts.append(("human-browser", f"thin-{len(text)}b"))
                 _tick(f"  human-browser: thin-{len(text)}b")
@@ -1676,9 +2038,36 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 _tick(f"  human-browser: {why}")
 
     if allow_thin and best is not None:
-        return _finalize(best, scrub, tick=_tick)
+        return _with_auth(best)
 
-    raise UnlockerError(url, attempts)
+    raise UnlockerError(url, attempts, _cookie_login_hint(cookie_header, attempts))
+
+
+def _cookie_login_hint(
+    cookie_header: str, attempts: List[Tuple[str, str]]
+) -> str:
+    """The one sentence a cookie read needs when it still lands on a login page.
+
+    Cookies were scoped to this host and attached to the direct request, and the
+    site answered with its login page anyway. Every rung then reports
+    "login-wall" and the caller is left guessing which of the three causes it
+    is: the session expired, the cookies went to the wrong profile, or the
+    browser rung simply cannot carry them (the fence). That last one is the
+    common case and it is invisible from the report, so it is named here
+    rather than left to be discovered from a third failed read.
+
+    Empty unless cookies were actually sent, so an anonymous read is unchanged.
+    """
+    if not cookie_header:
+        return ""
+    if not any("login-wall" in why for _, why in attempts):
+        return ""
+    return (
+        "cookies were sent for this host and the site still returned a login "
+        "page: the session is probably expired, or these cookies belong to a "
+        "different profile. Only the direct request carries them, so the "
+        "browser and reader rungs can never satisfy a logged-in read."
+    )
 
 
 _MAX_PAGES = 5
