@@ -27,7 +27,9 @@ write.
 | 4 | Owned store owner-only and out of git? | PASS | `owned_store_path()` = `$HOME/.searchts/cookies/owned.json`, written through a temp file + atomic `os.replace`, chmod `0600`, dir `0700`. It lives under `$HOME`, not the repo; the repo `.gitignore` also lists `.searchts/`. Read path opens SQLite with `?mode=ro` (`_open_ro`), so a read cannot checkpoint a live WAL into the browser profile. |
 | 5 | CDP: scratch profile deleted on success AND failure? | PASS | `_scratch_profile` (`cdp_profile.py:284-312`) is a generator whose `except BaseException` purges then re-raises, so the copy is deleted on success, on read failure, and on any `BaseException`. On the success path a purge failure raises rather than returning cookies while a full profile copy sits on disk; on the failure path the original exception wins and the leftover is named on stderr. |
 | 6 | CDP: localhost-only, consent-gated, no lingering port? | PASS (verified live) | `_check_endpoint` (`cdp_profile.py:617-637`) accepts only loopback names/literals and ports 1-65535, before any client is built. Reproduced: `169.254.169.254`, `evil.com`, `10.0.0.1`, `192.168.1.5` all rejected; `127.0.0.1`, `localhost`, `::1` accepted; port `70000` rejected. An IPv4-mapped literal (`::ffff:127.0.0.1`) is rejected too: `parse_endpoint` splits at the last colon, so it reads as host `::ffff` and is refused as a non-loopback name, which is the direction to fail in. Consent gates the launch and `confirm=None` aborts rather than defaulting open. |
-| 7 | Can cookies ever become the default? | PASS (verified live) | `fetch(..., cookies=None)` defaults to None. `_read_command_cookies` (`cli.py:1725-1732`) returns `None` unless `--cookies`, `--cookies-from-browser`, or `--cdp-port` is present. Live run without a flag produced no `cookies:` provenance line; with the flag it did. MCP `read_url` cannot pass cookies at all. |
+| 7 | Can cookies ever become the default? | PASS (verified live) | `fetch(..., cookies=None)` defaults to None, and `session_cookies.resolve_cookies` returns `None` unless one of `cookies` / `cookies_from_browser` / `cdp_port` was passed, on every surface. Live run without a flag produced no `cookies:` provenance line; with the flag it did.
+
+_Re-verified against a real Chrome on a real login after the live-test round:_ the CLI and the MCP `read_url` tool now both expose the three opt-ins and resolve them through that one function, so the second surface cannot grow a laxer fence than the first. Passing two sources at once is refused rather than silently resolved. The receipt now carries `authenticated` (a boolean, set only when the winning rung is the direct curl request and a scoped header went on it), so an agent can tell a logged-in answer from an anonymous one. All three properties were re-confirmed live: no flag sends nothing, `--cdp-port` against a closed port opens nothing, and the CLI and MCP receipts for the same URL agree. |
 
 ## Verdict
 
@@ -64,6 +66,9 @@ consent-gated, and cookies are never on by default.
 - On Windows the `0600`/`0700` chmod calls are skipped (`os.name == "nt"`);
   the file instead inherits the user-profile ACL. Tests do not assert the
   Windows ACL, only the POSIX mode.
-- Chromium-family cookies cannot be read from disk on this machine
-  (App-Bound Encryption); that path is reachable only through a user-opened
-  `--cdp-port`, which is the intended design rather than a gap.
+- Chromium-family cookies cannot be read from disk on this machine; that
+  path is reachable only through a user-opened `--cdp-port`, which is the
+  intended design rather than a gap. The refusal message is now
+  platform-correct: App-Bound Encryption is a Windows-only wrapper
+  (Chrome 127+), and on macOS/Linux the key lives in the system keyring,
+  so saying "App-Bound Encryption" there was false.
