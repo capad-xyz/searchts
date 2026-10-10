@@ -14,6 +14,9 @@ still launched when the refusal body carries a vendor's own markup.
 
 from __future__ import annotations
 
+import io
+from urllib.error import HTTPError
+
 from searchts import unlocker as u
 
 VENDOR_BODY = (
@@ -54,3 +57,33 @@ def test_the_stop_reason_survives_the_fast_fail_path() -> None:
     src = u.__doc__ or ""
     # The module docstring is where #354's correction lives; keep it honest.
     assert "honest ceiling" not in src.lower()
+
+
+def test_a_refusal_that_raised_still_yields_its_body() -> None:
+    """urllib keeps an HTTPError's body on its file object, not `.body`.
+
+    The fast-fail exception asks "does this refusal carry a vendor's markup?",
+    and Jina refuses by raising rather than returning, so this is the only way
+    a vendor wall behind a raised 4xx can be seen at all.
+    """
+    err = HTTPError("https://example.com/", 403, "Forbidden", {}, io.BytesIO(
+        VENDOR_BODY.encode("utf-8")))
+    assert u._is_vendor_wall(u._raised_body(err)) is True
+
+
+def test_a_raised_refusal_with_a_plain_body_stays_a_fast_fail() -> None:
+    err = HTTPError("https://example.com/", 403, "Forbidden", {}, io.BytesIO(
+        PLAIN_BODY.encode("utf-8")))
+    assert u._is_vendor_wall(u._raised_body(err)) is False
+
+
+def test_raised_body_is_bounded_and_total() -> None:
+    """A huge error page is truncated, and nothing else escapes."""
+    big = HTTPError("https://example.com/", 403, "Forbidden", {}, io.BytesIO(
+        (VENDOR_BODY + "x" * 500000).encode("utf-8")))
+    assert len(u._raised_body(big)) <= u._VENDOR_WALL_SCAN
+    # Exceptions with no body, no reader, an exploding reader, and a reader that
+    # returns the wrong type: all of them come back as "" instead of raising.
+    assert u._raised_body(ValueError("nope")) == ""
+    assert u._raised_body(RuntimeError("boom")) == ""
+    assert u._raised_body(TypeError("bad type", "not bytes", 1)) == ""

@@ -1083,6 +1083,36 @@ def _is_vendor_wall(html: str) -> bool:
     return "captcha-delivery.com" in low or "px-captcha" in low
 
 
+#: How much of a refused body is read when the rung raised instead of returning.
+_VENDOR_WALL_SCAN = 65536
+
+
+def _raised_body(exc: BaseException) -> str:
+    """The body of a rung that refused by raising, or "" if there is not one.
+
+    urllib's HTTPError keeps the body on its file object, not on a ``body``
+    attribute, so a rung that raises on a 4xx looks bodyless to a plain
+    ``getattr(exc, "body", "")`` and a vendor wall behind that exception would
+    never reach the fast-fail exception in :func:`fetch`. Bounded, so a large
+    error page is not pulled into memory for a substring test, and total: it
+    never raises, because a body we cannot read is not a wall.
+    """
+    body = getattr(exc, "body", None)
+    if body is None:
+        reader = getattr(exc, "read", None)
+        if not callable(reader):
+            return ""
+        try:
+            body = reader(_VENDOR_WALL_SCAN)
+        except Exception:  # noqa: BLE001 - see the docstring
+            return ""
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", "replace")
+    if not isinstance(body, str):
+        return ""
+    return body[:_VENDOR_WALL_SCAN]
+
+
 def _page_content(
     page,
     retries: int = _NAV_CONTENT_RETRIES,
@@ -1835,7 +1865,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 else:
                     refusal_status = refused
                     refusal_count = 1
-            if refused in (403, 405, 401) and _is_vendor_wall(getattr(e, "body", "") or ""):
+            if refused in (403, 405, 401) and _is_vendor_wall(_raised_body(e)):
                 # A vendor wall is the one case where the browser is expected to
                 # answer differently, because it renders a challenge instead of
                 # repeating the status. See browser_would_differ above.
