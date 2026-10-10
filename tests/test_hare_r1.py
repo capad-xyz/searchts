@@ -1565,6 +1565,11 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     # Probed live 2026-10-06 with a real diff: nemotron-lightning, nemotron-super
     # and nemotron-ultra all answered in 1 to 2 s. Both gemma slugs 429'd and
     # were dropped; Inkling stays off (agentic harnesses only).
+    # Step 5 Preview is free on Nous for one week from 2026-10-08, so it leads
+    # that list until 2026-10-15. Dropping it means editing BOTH assertions that
+    # pin the head of the Nous chain: this one, and the one in
+    # test_space_bunny_is_off_openrouter_and_nous_after_its_free_period.
+    # That pair already bit us once: #351 moved the head and fixed only one.
     or_list = hare_r1.HARE_OR_DEFAULT.split(",")
     assert or_list[0] == "nvidia/nemotron-3.5-lightning:free"
     assert "nvidia/nemotron-3-super-120b-a12b:free" in or_list
@@ -1580,7 +1585,7 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     # Two Zen slugs are TUI-only by policy (403 FreeTierError from Actions).
     assert hare_r1.HARE_ZEN_DEFAULT.split(",") == ["space-bunny-free"]
     assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
-    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "poolside/laguna-s-2.1:free"
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stepfun/step-5-preview:free"
     assert hare_r1.HARE_NOUS_DEFAULT.endswith("meituan/longcat-2.5-preview:free")
     assert hare_r1.HARE_ZEN_DEFAULT.split(",")[0] == "space-bunny-free"
 
