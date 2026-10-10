@@ -1093,9 +1093,12 @@ def _raised_body(exc: BaseException) -> str:
     urllib's HTTPError keeps the body on its file object, not on a ``body``
     attribute, so a rung that raises on a 4xx looks bodyless to a plain
     ``getattr(exc, "body", "")`` and a vendor wall behind that exception would
-    never reach the fast-fail exception in :func:`fetch`. Bounded, so a large
-    error page is not pulled into memory for a substring test, and total: it
-    never raises, because a body we cannot read is not a wall.
+    never reach the fast-fail exception in :func:`fetch`. The read is bounded at
+    ``_VENDOR_WALL_SCAN``, so a large error page is not pulled into memory for a
+    substring test, and the result is trimmed again in case the reader ignored
+    the bound. Total as well: no body, no reader, a reader that raises, and a
+    reader that returns something other than text all come back "" rather than
+    out of here, because a body we cannot read is not a wall.
     """
     body = getattr(exc, "body", None)
     if body is None:

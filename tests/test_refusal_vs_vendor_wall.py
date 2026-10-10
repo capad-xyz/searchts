@@ -77,13 +77,45 @@ def test_a_raised_refusal_with_a_plain_body_stays_a_fast_fail() -> None:
     assert u._is_vendor_wall(u._raised_body(err)) is False
 
 
+class _Raised:
+    """An exception stand-in that has a ``read``, the way urllib's HTTPError does.
+
+    A real one is used above for the case that matters; this one is for the
+    branches a well-behaved HTTPError never takes.
+    """
+
+    def __init__(self, value):
+        self._value = value
+        self.asked = None
+
+    def read(self, n):
+        self.asked = n
+        if isinstance(self._value, BaseException):
+            raise self._value
+        return self._value
+
+
 def test_raised_body_is_bounded_and_total() -> None:
     """A huge error page is truncated, and nothing else escapes."""
     big = HTTPError("https://example.com/", 403, "Forbidden", {}, io.BytesIO(
         (VENDOR_BODY + "x" * 500000).encode("utf-8")))
     assert len(u._raised_body(big)) <= u._VENDOR_WALL_SCAN
-    # Exceptions with no body, no reader, an exploding reader, and a reader that
-    # returns the wrong type: all of them come back as "" instead of raising.
+
+    # No body at all, and nothing that can be read.
     assert u._raised_body(ValueError("nope")) == ""
-    assert u._raised_body(RuntimeError("boom")) == ""
-    assert u._raised_body(TypeError("bad type", "not bytes", 1)) == ""
+
+    # A reader is asked for the bound and not for the whole page.
+    fp = _Raised(VENDOR_BODY.encode("utf-8"))
+    assert u._raised_body(fp) == VENDOR_BODY
+    assert fp.asked == u._VENDOR_WALL_SCAN
+
+    # A reader that raises, and one that returns something other than text,
+    # are both ignored rather than raised out of a 4xx handler.
+    assert u._raised_body(_Raised(RuntimeError("boom"))) == ""
+    assert u._raised_body(_Raised(12345)) == ""
+    assert u._raised_body(_Raised(None)) == ""
+
+    # A reader that hands back a str longer than the bound is trimmed again, so
+    # the cap holds even when the reader ignores it.
+    assert len(u._raised_body(_Raised("y" * (u._VENDOR_WALL_SCAN + 999)))) == (
+        u._VENDOR_WALL_SCAN)
