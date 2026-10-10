@@ -532,7 +532,7 @@ Three corrections to how this reads, because they change the fix:
    "open[s] with 'Here's a thinking process' instead of the JSON." So the fix for
    the *ordering* landed on 2026-10-06. What is missing is the *measurement*:
    nemotron's position in the chain is justified by one anecdote, and it is still
-   the OpenRouter default at `hare_r1.py:162`.
+   the OpenRouter default at `HARE_OR_DEFAULT` in `scripts/hare_r1.py`.
 3. **The measured result is stronger than "returned prose."** 0 catches over 4
    bugs x 10 runs is 0 out of 40 trials. Under a binomial model with zero
    successes, the exact 95% upper bound on the per-trial catch rate is
