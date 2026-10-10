@@ -168,6 +168,18 @@ def test_empty_domain_or_host_never_matches():
     assert not _domain_matches(".amazon.com", "")
 
 
+def test_a_single_label_cookie_domain_is_not_a_parent_domain():
+    """A domain with no dot is a host, never a suffix.
+
+    "com" is not a parent of example.com. A suffix rule would sweep such a
+    cookie out of the jar and onto every site under that label.
+    """
+    assert not _domain_matches("com", "example.com")
+    assert not _domain_matches(".com", "shop.example.com")
+    # An exact match is still a match, which is what a single-label host needs.
+    assert _domain_matches("localhost", "localhost")
+
+
 def test_filter_for_host_keeps_only_cookies_this_host_would_receive():
     records = [
         CookieRecord("sid", "v1", ".amazon.com"),

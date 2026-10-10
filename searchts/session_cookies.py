@@ -23,7 +23,7 @@ import os
 import sqlite3
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 # ── browsers ────────────────────────────────────────────────────────────────
 # One registry, not one dict per library. Adding a browser used to mean editing
@@ -156,6 +156,12 @@ def _domain_matches(cookie_domain: str, host: str) -> bool:
         return False
     if cd == h:
         return True
+    # A cookie domain with no dot is a host, not a suffix. "com" is not a parent
+    # of example.com, so such a cookie matches exactly or not at all: a suffix
+    # rule here would sweep a jar's stray single-label cookie onto every site
+    # under that label. Browsers reject a domain cookie in that position too.
+    if "." not in cd:
+        return False
     # .amazon.in must ride along on www.amazon.in, not on notamazon.in.
     return h.endswith("." + cd)
 
@@ -186,7 +192,10 @@ def _open_ro(db: str) -> sqlite3.Connection:
     """
     if not os.path.isfile(db):
         raise CookieReadError(f"no cookie database at {db}")
-    uri = "file:" + db.replace("\\", "/").replace("?", "%3f").replace("#", "%23")
+    # Quoted rather than string-surgery: SQLite reads %XX in a URI, so a profile
+    # path carrying a % (or a ?, or a #) would otherwise be opened as a
+    # different file than the one that was checked with isfile().
+    uri = "file:" + quote(db.replace("\\", "/"), safe="/:")
     return sqlite3.connect(uri + "?mode=ro", uri=True, timeout=2)
 
 
