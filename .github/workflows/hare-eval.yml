@@ -19,7 +19,11 @@ on:
         required: false
         default: "on"
       modes:
-        description: "Thinking modes: off, on, or off,on"
+        # Every mode named here must be in hare_eval.MODES. A mode that is not
+        # is filtered out silently, so a default naming one runs less than it
+        # says: `off,on` used to run only `off`, because `on` stopped being a
+        # mode when effort and budget became separate shapes (#359).
+        description: "Reasoning modes: off, effort, budget, max (comma separated)"
         required: false
         default: "off,on"
       repeat:

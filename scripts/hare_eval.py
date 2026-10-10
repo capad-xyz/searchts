@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Hare's eval: old PRs with known answers, run through each provider with
-thinking off and on. Posts nothing anywhere.
+reasoning off and on. Posts nothing anywhere.
 
-Modes are `off`, `on` and `max`. `off` turns reasoning off, `on` and `max` ask
-each model for the strongest effort level it publishes, with the reasoning
-budget bounded; `max` is the production setting and `on` is the same request
-without the bound, which is the pair that separates "reasoning hurts" from
-"reasoning with no bound eats the budget". Every run keeps its raw answer under
-`--raw-dir` so a row in the report can be checked against what the model said.
+Modes are `off`, `effort`, `budget` and `max`. `off` turns reasoning off. `max`
+is the production request: each hop asks its own model for the strongest effort
+level it publishes, bounded by the token budget on the gateways that take one.
+`effort` and `budget` force one shape each, because a gateway takes `effort` or
+`max_tokens` and not both, so that pair is what separates "this gateway honours
+the budget" from "this gateway honours the effort". Every run keeps its raw
+answer under `--raw-dir` so a row in the report can be checked against what the
+model said.
 
 Each review is built the way hare_r1 builds one: SYSTEM, build_user, the PR's
 diff at the commit that was reviewed, AGENTS.md at that commit and HARE.md at
@@ -475,6 +477,12 @@ def main(argv: list[str] | None = None) -> int:
         cases = [c for c in cases if c["id"] in only]
     providers = [p.strip() for p in args.providers.split(",") if p.strip() in PROVIDERS]
     modes = [m.strip() for m in args.modes.split(",") if m.strip() in MODES]
+    # A mode that is not in MODES used to be dropped without a word, so a run
+    # asked for `off,on` measured only `off` and said nothing (#359). Name what
+    # was dropped instead, the way a provider with no key is named above.
+    dropped = [m.strip() for m in args.modes.split(",") if m.strip() and m.strip() not in MODES]
+    if dropped:
+        print(f"hare eval: not a mode, skipped: {', '.join(dropped)} (modes are {', '.join(MODES)})")
     keys = {p: os.environ.get(KEY_ENV[p], "") for p in PROVIDERS}
     missing = [p for p in providers if not keys.get(p)]
     if missing:
