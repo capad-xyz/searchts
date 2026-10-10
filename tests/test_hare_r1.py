@@ -228,6 +228,36 @@ def test_missing_summary_is_visible() -> None:
     assert "(model did not say what changed)" in body
 
 
+def test_the_note_shows_real_findings_and_folds_the_nits() -> None:
+    """A page of nits reads like a page of problems and buries the one line
+    that holds the merge. The skips keep their rows, so the next push's Since
+    section and the ledger still see every one of them."""
+    f = hare_r1.normalize_findings(
+        [
+            {"sev": "real", "path": "a.py", "line": 3, "issue": "Breaks the read.", "fix": "later", "change": "Guard it."},
+            {"sev": "skip", "path": "b.py", "line": 4, "issue": "Rename it.", "fix": "yes", "change": "Name it z."},
+            {"sev": "skip", "path": "c.py", "line": None, "issue": "Doc nit."},
+        ]
+    )
+    body = hare_r1.render_comment("nous:x", "low", "hold", f, "ok", [], "S.", "abc1234")
+    assert body.index("#### 🔴 real · `a.py:3`") < body.index("<summary>🟡 2 skip findings</summary>")
+    assert "#### 🟡 skip · `b.py:4`" in body and "Rename it." in body  # folded, not dropped
+    assert "Doc nit." in body and "#### 🟡 skip · `c.py`" in body
+    assert [o["sev"] for o in hare_r1.parse_old_findings(body)] == ["real", "skip", "skip"]
+    # The fold carries the fix lines too, so a one-click fix is still announced.
+    assert "**Fix:** yes. Name it z." in body
+    # Real findings only decide the note; the skips do not enter the Verdict.
+    assert "**Verdict:** Hold (CI green, 1 real finding)." in body
+    # A note with nothing real still shows the nits rather than claiming none.
+    only_nits = hare_r1.render_comment("nous:x", "low", "ship", f[1:], "ok", [], "S.", "abc1234")
+    assert "No line findings." not in only_nits
+    assert "<summary>🟡 2 skip findings</summary>" in only_nits
+    assert "<summary>🟡 1 skip finding</summary>" in hare_r1.render_comment(
+        "nous:x", "low", "ship", f[1:2], "ok", [], "S.", "abc1234"
+    )
+    assert "No line findings." in hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [], "S.", "abc1234")
+
+
 def test_prompt_requires_a_summary_and_skip_rows() -> None:
     assert "summary is required" in hare_r1.SYSTEM
     assert "Do not return an empty findings list" in hare_r1.SYSTEM
@@ -556,13 +586,20 @@ def test_dead_hop_posts_once_until_a_review_lands() -> None:
     assert hare_r1.needed_posted_since([new_nag], []) is True
 
 
-def test_workflow_hears_at_hare_only_from_people_with_write_access() -> None:
-    from pathlib import Path
+def _hare_workflow() -> str:
+    """The doorbell itself. Several things are pinned in two places, and the
+    workflow is the one GitHub runs."""
+    return (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
 
-    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
+
+def test_workflow_hears_at_hare_only_from_people_with_write_access() -> None:
+    wf = _hare_workflow()
     assert "'@hare'" in wf
     assert "author_association" in wf and "COLLABORATOR" in wf
     assert "HARE_ASK:" in wf
+    assert "issue_comment:" in wf and "contains(github.event.comment.body, '/hare')" in wf
+    for kind in ("opened", "synchronize", "reopened", "ready_for_review"):
+        assert kind in wf, f"pull_request no longer fires on {kind}"
 
 
 def test_the_rabbit_marks_hares_own_surfaces() -> None:
@@ -634,9 +671,8 @@ def test_hop_budget_fits_inside_the_job_timeout() -> None:
 def _workflow_env(name: str) -> str:
     """The literal a HARE_*_MODEL line pins, or "" when it is absent or an expression."""
     import re
-    from pathlib import Path
 
-    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
+    wf = _hare_workflow()
     m = re.search(rf"^\s*{name}:\s*(.+?)\s*$", wf, re.MULTILINE)
     if not m:  # no override at all, so the Python default is what runs
         return ""
@@ -907,6 +943,25 @@ def test_workflow_model_overrides_do_not_undo_the_python_defaults() -> None:
         assert pinned == default, f"{env_name} pins {pinned!r} but the default is {default!r}"
 
 
+def test_the_nous_and_openrouter_slugs_are_written_in_both_places() -> None:
+    """The chain is pinned twice, in hare_r1.py and in the workflow env, and CI
+    runs the workflow one. A slug added to one file and not the other is a hop
+    that only exists on a laptop, or a model that no longer runs on a PR; both
+    look the same from inside the script, which is why this exists.
+
+    Order is compared too: the chain's order is the contract (docs/hare-next.md),
+    so a reordered list is drift even when the slugs match.
+    """
+    for env_name, default in (
+        ("HARE_NOUS_MODEL", hare_r1.HARE_NOUS_DEFAULT),
+        ("HARE_NOUS_EXTRA_MODEL", hare_r1.HARE_NOUS_EXTRA_DEFAULT),
+        ("HARE_OR_MODEL", hare_r1.HARE_OR_DEFAULT),
+    ):
+        pinned = _workflow_env(env_name)
+        assert pinned, f"{env_name} is not pinned in hare.yml, so the two places can drift unseen"
+        assert pinned.split(",") == default.split(","), f"{env_name} pins {pinned!r}, the default is {default!r}"
+
+
 def test_provider_chain_is_the_fixed_order() -> None:
     keys = {"groq": "g", "gemini": "m", "nous": "n", "openrouter": "o", "zen": "z"}
     models = {"groq": ["g1"], "gemini": ["m1"], "nous": ["n1", "n2"], "openrouter": ["o1"], "zen": ["z1"]}
@@ -1107,6 +1162,70 @@ def test_the_nag_names_the_cause_instead_of_calling_every_hop_busy() -> None:
     assert "1 of 1 hops is rate limited" in throttled
     assert "usually temporary" in throttled
     assert "did not answer" in hare_r1.needed_body("zen:c: LLM empty choices https://z/v1 c")
+
+
+def _dead_chain(monkeypatch, posted, nags=()):
+    """`_hare_once` where every hop answers nothing, and the nag is captured."""
+    pr = {"head": {"sha": "abc", "repo": {"full_name": "o/r"}}, "base": {"sha": "b0", "repo": {"full_name": "o/r"}},
+          "title": "t", "body": "b", "state": "open", "draft": False, "user": {"login": "someone"}}
+
+    def api(method, path, token, data=None, accept=None):
+        if accept:
+            return "diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -0,0 +1 @@\n+x = 1\n"
+        if method == "GET" and path == "/repos/o/r/pulls/7":
+            return pr
+        if path.startswith("/repos/o/r/issues/7/comments"):
+            return list(nags)
+        if "/contents/" in path:
+            raise RuntimeError("404")
+        return [] if method == "GET" else {}
+
+    def dead(*_a, **_k):
+        raise RuntimeError("LLM empty content")
+
+    def nag(owner, repo, n, token, why, headline=""):
+        posted.append((why, headline))
+
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setattr(hare_r1, "QUIET_S", 0)
+    monkeypatch.setattr(hare_r1, "github_api", api)
+    monkeypatch.setattr(hare_r1, "github_list", lambda *a, **k: [])
+    monkeypatch.setattr(hare_r1, "chat_complete", dead)
+    monkeypatch.setattr(hare_r1, "post_needed", nag)
+    hare_r1._hare_once("o", "r", 7, "t", "abc", "", "k", "", "", "", [], [], [], ["m1"], [])
+
+
+def test_a_dead_chain_says_in_one_line_that_nothing_was_reviewed(monkeypatch) -> None:
+    """A PR with no Hare comment on it reads as a reviewed one. R1e keeps quiet
+    after the first nag, so the pass that has nothing to say has to say it."""
+    posted: list[tuple[str, str]] = []
+    _dead_chain(monkeypatch, posted)
+    assert len(posted) == 1
+    why, headline = posted[0]
+    assert headline == hare_r1.NO_ANSWER == "Hare: no model answered, not reviewed."
+    assert "m1" in why  # the dead hop is still named for whoever fixes the pin
+    body = hare_r1.needed_body(why, hare_r1.NO_ANSWER)
+    assert body.startswith(hare_r1.NEEDED)  # R1e's post-once matcher still finds it
+    lead = body.split("\n\n")[1]
+    assert lead.startswith(hare_r1.NO_ANSWER + " ")
+    # The cause line stays beside the short line, not behind the fold: "no model
+    # answered" alone says the run failed, the cause says which pin to change.
+    assert lead == f"{hare_r1.NO_ANSWER} {hare_r1.cause_line([why])}"
+    assert "did not answer" in body and "answered nothing" in body
+    assert "/hare" in body
+    # A pass that failed for another reason must not claim no model answered.
+    delivery = hare_r1.needed_body("review delivery failed: 500")
+    assert delivery.split("\n\n")[1].startswith("🐰 Could not finish this pass.")
+    assert hare_r1.NO_ANSWER not in delivery
+
+
+def test_the_no_answer_line_is_posted_once_not_on_every_push(monkeypatch) -> None:
+    """R1e still holds: one line, not one per commit. The next push reads the
+    line that is already there and stays quiet until a review lands."""
+    posted: list[tuple[str, str]] = []
+    up = [{"body": hare_r1.NEEDED, "created_at": "2026-10-10T00:00:00Z"}]
+    _dead_chain(monkeypatch, posted, nags=up)
+    assert posted == []
 
 
 def test_a_dead_pin_is_named_rather_than_called_busy() -> None:

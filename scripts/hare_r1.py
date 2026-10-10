@@ -1047,6 +1047,18 @@ def how_to_answer() -> str:
     ])
 
 
+def _finding_block(f: dict[str, Any]) -> str:
+    """One `#### 🔴 real · path:line` block: what is wrong there, and the fix."""
+    sev = "real" if f.get("sev") == "real" else "skip"
+    mark = "🔴" if sev == "real" else "🟡"
+    loc = f"{f.get('path')}:{f.get('line')}" if f.get("line") is not None else str(f.get("path") or "-")
+    issue = _no_em(str(f.get("issue") or "").strip() or "see bubble")
+    fix = _fix_line(str(f.get("fix") or ""), str(f.get("change") or ""), sev)
+    if f.get("_checked"):
+        fix += " One-click fix in the bubble."
+    return f"#### {mark} {sev} · `{loc}`\n\n**Issue:** {_plain(issue)}\n\n{fix}"
+
+
 def render_comment(
     model: str,
     effort: str,
@@ -1072,18 +1084,23 @@ def render_comment(
     it: local Hare always said whether a PR looked good to ship and why, and
     the owner wants that back (2026-10-04). Hare is still not the merge
     button; the word is a call, the reasons are the point.
+
+    Findings: the real ones are the note. The skips go in one fold under them,
+    because a page of nits reads like a page of problems and buries the one
+    line that holds the merge. The fold keeps the rows verbatim, so
+    `parse_old_findings` (the next push's Since section) and the ledger still
+    see every skip.
     """
     said = _no_em(_plain(summary)) or "(model did not say what changed)"
-    blocks: list[str] = []
-    for f in findings:
-        sev = "real" if f.get("sev") == "real" else "skip"
-        mark = "🔴" if sev == "real" else "🟡"
-        loc = f"{f.get('path')}:{f.get('line')}" if f.get("line") is not None else str(f.get("path") or "-")
-        issue = _no_em(str(f.get("issue") or "").strip() or "see bubble")
-        fix = _fix_line(str(f.get("fix") or ""), str(f.get("change") or ""), sev)
-        if f.get("_checked"):
-            fix += " One-click fix in the bubble."
-        blocks.append(f"#### {mark} {sev} · `{loc}`\n\n**Issue:** {_plain(issue)}\n\n{fix}")
+    reals = [f for f in findings if f.get("sev") == "real"]
+    skips = [f for f in findings if f.get("sev") != "real"]
+    blocks: list[str] = [_finding_block(f) for f in reals]
+    if skips:
+        blocks.append(
+            f"<details>\n<summary>🟡 {len(skips)} skip finding{'' if len(skips) == 1 else 's'}</summary>\n\n"
+            + "\n\n".join(_finding_block(f) for f in skips)
+            + "\n\n</details>"
+        )
     if not blocks:
         blocks.append("No line findings.")
     run_lines: list[str] = []
@@ -1938,15 +1955,29 @@ def cause_line(parts: list[str]) -> str:
     return lead
 
 
-def needed_body(why: str) -> str:
-    """Graceful nag that names the cause. Raw errors stay behind a fold."""
+# The line a dead chain leaves behind. A PR with no Hare comment on it reads
+# as a reviewed one, and R1e keeps quiet after the first nag, so the one pass
+# that has nothing to say says it in words instead of saying nothing.
+NO_ANSWER = "Hare: no model answered, not reviewed."
+
+
+def needed_body(why: str, headline: str = "") -> str:
+    """Graceful nag that names the cause. Raw errors stay behind a fold.
+
+    `headline` leads the note when the caller knows more than "a pass failed".
+    The no-answer path passes NO_ANSWER, which is added to the cause line and
+    not swapped for it: "no model answered" on its own says the run failed,
+    the cause beside it says which pin to go and change. A delivery failure has
+    its own cause and keeps the default line, which must not claim no model
+    answered.
+    """
     parts = [x.strip() for x in why.split(" | ") if x.strip()] or [why.strip()]
     hops = "\n".join(f"- {_short_fail(x)}" for x in parts)
     cause = cause_line(parts)
+    lead = f"{headline} {cause}" if headline else f"🐰 Could not finish this pass. {cause} This is not a review."
     return _no_em(
         f"{NEEDED}\n\n"
-        f"🐰 Could not finish this pass. {cause} "
-        "This is not a review.\n\n"
+        f"{lead}\n\n"
         "Reply **`/hare`** to retry. Or Actions → hare → Run workflow "
         "(optional OpenRouter model override).\n\n"
         "<details>\n<summary>What failed</summary>\n\n"
@@ -2035,10 +2066,10 @@ def asked_line(info: dict[str, Any], ask: str, deep: bool) -> str:
     return f"> Asked by {who}{link}: {what}"
 
 
-def post_needed(owner: str, repo: str, n: int, token: str, why: str) -> None:
+def post_needed(owner: str, repo: str, n: int, token: str, why: str, headline: str = "") -> None:
     if ACK.get("id"):  # answer the command in place, not with a second comment
         try:
-            github_api("PATCH", f"{ACK['where']}/{ACK['id']}", ACK["token"], {"body": needed_body(why)})
+            github_api("PATCH", f"{ACK['where']}/{ACK['id']}", ACK["token"], {"body": needed_body(why, headline)})
             ACK.clear()
             return
         except Exception:
@@ -2047,7 +2078,7 @@ def post_needed(owner: str, repo: str, n: int, token: str, why: str) -> None:
         "POST",
         f"/repos/{owner}/{repo}/issues/{n}/comments",
         token,
-        {"body": needed_body(why)},
+        {"body": needed_body(why, headline)},
     )
 
 
@@ -2722,7 +2753,7 @@ def _hare_once(
         if needed_posted_since(talk if isinstance(talk, list) else [], notes):
             print("hare: hops still dead; the needed note is already up")  # R1e: posts once, then stops
             return 0
-        post_needed(owner, repo, n, token, " | ".join(errs) or last_err)
+        post_needed(owner, repo, n, token, " | ".join(errs) or last_err, NO_ANSWER)
         return 0
 
     findings = normalize_findings(list(parsed.get("findings") or []) if isinstance(parsed.get("findings"), list) else [])
