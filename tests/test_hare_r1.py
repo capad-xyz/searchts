@@ -586,13 +586,20 @@ def test_dead_hop_posts_once_until_a_review_lands() -> None:
     assert hare_r1.needed_posted_since([new_nag], []) is True
 
 
-def test_workflow_hears_at_hare_only_from_people_with_write_access() -> None:
-    from pathlib import Path
+def _hare_workflow() -> str:
+    """The doorbell itself. Several things are pinned in two places, and the
+    workflow is the one GitHub runs."""
+    return (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
 
-    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
+
+def test_workflow_hears_at_hare_only_from_people_with_write_access() -> None:
+    wf = _hare_workflow()
     assert "'@hare'" in wf
     assert "author_association" in wf and "COLLABORATOR" in wf
     assert "HARE_ASK:" in wf
+    assert "issue_comment:" in wf and "contains(github.event.comment.body, '/hare')" in wf
+    for kind in ("opened", "synchronize", "reopened", "ready_for_review"):
+        assert kind in wf, f"pull_request no longer fires on {kind}"
 
 
 def test_the_rabbit_marks_hares_own_surfaces() -> None:
@@ -664,9 +671,8 @@ def test_hop_budget_fits_inside_the_job_timeout() -> None:
 def _workflow_env(name: str) -> str:
     """The literal a HARE_*_MODEL line pins, or "" when it is absent or an expression."""
     import re
-    from pathlib import Path
 
-    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
+    wf = _hare_workflow()
     m = re.search(rf"^\s*{name}:\s*(.+?)\s*$", wf, re.MULTILINE)
     if not m:  # no override at all, so the Python default is what runs
         return ""
@@ -935,6 +941,25 @@ def test_workflow_model_overrides_do_not_undo_the_python_defaults() -> None:
         if not pinned:  # absent or an expression, so it defers to the default
             continue
         assert pinned == default, f"{env_name} pins {pinned!r} but the default is {default!r}"
+
+
+def test_the_nous_and_openrouter_slugs_are_written_in_both_places() -> None:
+    """The chain is pinned twice, in hare_r1.py and in the workflow env, and CI
+    runs the workflow one. A slug added to one file and not the other is a hop
+    that only exists on a laptop, or a model that no longer runs on a PR; both
+    look the same from inside the script, which is why this exists.
+
+    Order is compared too: the chain's order is the contract (docs/hare-next.md),
+    so a reordered list is drift even when the slugs match.
+    """
+    for env_name, default in (
+        ("HARE_NOUS_MODEL", hare_r1.HARE_NOUS_DEFAULT),
+        ("HARE_NOUS_EXTRA_MODEL", hare_r1.HARE_NOUS_EXTRA_DEFAULT),
+        ("HARE_OR_MODEL", hare_r1.HARE_OR_DEFAULT),
+    ):
+        pinned = _workflow_env(env_name)
+        assert pinned, f"{env_name} is not pinned in hare.yml, so the two places can drift unseen"
+        assert pinned.split(",") == default.split(","), f"{env_name} pins {pinned!r}, the default is {default!r}"
 
 
 def test_provider_chain_is_the_fixed_order() -> None:
