@@ -2390,7 +2390,7 @@ def build_provider_chain(
 
     A missing key drops that provider entirely rather than falling through to
     the next one with the wrong credential. The order is the contract
-    (PLAN-HARE.md), so this stays a pure function and a test pins the order.
+    (docs/hare-next.md), so this stays a pure function and a test pins the order.
     """
     bases = {
         "groq": GROQ_BASE,

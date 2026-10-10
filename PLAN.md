@@ -4,7 +4,7 @@
 **Identity:** free, open-source, keyless web layer for agents — won by reliability and being easy to reach for, not by feature count.  
 **Status:** Decisions locked (see §0). Work ordered P0 → P1∥P2 → P3 → P4 → Later.
 
-**Parked work:** If we skip something on purpose and it is still worth doing, it gets a PLAN id (`P*` / `F*` / `U*` / `N*`) and a **revisit** (week / trigger). Chat is not the record. If it is not worth doing, put it in **N** (never) instead of “we’ll remember.” Hare ids (`R*`, HareBot, Laya) go in [`PLAN-HARE.md`](PLAN-HARE.md), not here. **Roles:** [`NAMES.md`](NAMES.md).
+**Parked work:** If we skip something on purpose and it is still worth doing, it gets a PLAN id (`P*` / `F*` / `U*` / `N*`) and a **revisit** (week / trigger). Chat is not the record. If it is not worth doing, put it in **N** (never) instead of “we’ll remember.” Hare ids (`R*`, HareBot, Laya) go in [`docs/hare-next.md`](docs/hare-next.md), not here. **Roles:** [`NAMES.md`](NAMES.md).
 
 **Hard non-goals:** plugin/connector framework, paid-proxy defaults, hosted SaaS before **F18**, keyed backends as defaults, channel-based `read_url` routing, a public URL for the free CLI (**N2**; localhost HTTP is **F9**; a paid hosted `read` is **F18**), MCP resources/prompts before tools are trusted.
 
@@ -231,11 +231,11 @@ Keep returning `"Error: …"` strings from tool bodies so hosts surface failures
 
 ## 4. Footnote — unverified tracks & future plans
 
-*Not committed to a sprint. Do not schedule until the matching measurement or P0–P3 pressure says so. Every skip that is still worth doing lives here with a revisit; “not this week” without an id is a bug.* Hare's record is [`PLAN-HARE.md`](PLAN-HARE.md), not this file.
+*Not committed to a sprint. Do not schedule until the matching measurement or P0–P3 pressure says so. Every skip that is still worth doing lives here with a revisit; “not this week” without an id is a bug.* Hare's record is [`docs/hare-next.md`](docs/hare-next.md), not this file.
 
 ### Later nudge — Laya
 
-Not a searchts slice. The note is in [`PLAN-HARE.md`](PLAN-HARE.md).
+Not a searchts slice. The note is in [`docs/hare-next.md`](docs/hare-next.md).
 
 ### U — Unverified tracks
 
@@ -249,7 +249,7 @@ Not a searchts slice. The note is in [`PLAN-HARE.md`](PLAN-HARE.md).
 
 ### R — Review
 
-Hare is not this plan. The operating record (R1, R1c, cadence, the model list, HareBot, Laya) is [`PLAN-HARE.md`](PLAN-HARE.md). Do not add Hare notes here. Build notes go in [`docs/freeze-log.md`](docs/freeze-log.md).
+Hare is not this plan. The operating record (R1, R1c, cadence, the model list, HareBot, Laya) is [`docs/hare-next.md`](docs/hare-next.md). Do not add Hare notes here. Build notes go in [`docs/freeze-log.md`](docs/freeze-log.md).
 
 ### F — Future (ROADMAP-aligned, after core is solid)
 
@@ -343,7 +343,7 @@ Hare is not this plan. The operating record (R1, R1c, cadence, the model list, H
   - **Revisit, not now:** domain memory learns which domains to leave unpinned (today `reddit.com` is hardcoded). Nested comment trees only for pages that declare a discussion in JSON-LD (flat comments are already kept). `.json`-style endpoints for other platforms (Discourse) one file each in the known-host ring, on demand. Never guess endpoints on unknown sites.
   - Stays Reddit-only: the `shreddit-post` and `shreddit-comment` selectors, score and flair, the old-to-www permalink rewrite, `?after=` cursors.
 - [ ] **F14** Opt-in Solari (cloud Playwright) **only when local `[browser]`/patchright is missing**. `SOLARI_API_KEY`. Never default (**N3**). 2026-09-02 cookbook: Reddit/LinkedIn still walls. Artifact: https://github.com/capad-xyz/solari-cookbook/tree/main/examples/agent-read . **Article is live.** **Revisit:** if Harry replies, or keep-gate = would pay Starter to skip patchright (not Reddit green).
-- [ ] **F15** Hare as its own product. Not a searchts slice. The record is [`PLAN-HARE.md`](PLAN-HARE.md).
+- [ ] **F15** Hare as its own product. Not a searchts slice. The record is [`docs/hare-next.md`](docs/hare-next.md).
 - [ ] **F16** Disposable remote workspace: GitHub Actions (or similar) as a **harness box** (shell, git, network) without shipping an agent. Different product from Hare and from searchts. **Revisit:** after F15 is a real question, not a side quest.
 - [ ] **F18** Paid searchts. **Hosted `read` first.** The free CLI stays free and keyless. Walls are a second product and stay **N1** until a wall pass is real. **Not this week. No price in this file.** **Revisit:** when the free tool is something you would hand a stranger and it does what it claims (install, a real page, fail-loud where it cannot). Then design the hosted shape. Innovate on top of a product that already works. Not **F15**.
 
@@ -383,7 +383,7 @@ A plan says what is true now and what is next. A log says what already happened.
 | You are writing | File |
 |---|---|
 | A searchts decision, a checklist item, parked work with a revisit | [`PLAN.md`](PLAN.md) |
-| Hare's behavior, the model list, cadence, what Hare should do next | [`PLAN-HARE.md`](PLAN-HARE.md) |
+| Hare's behavior, the model list, cadence, what Hare should do next | [`docs/hare-next.md`](docs/hare-next.md) |
 | What merged, a build note, a dated "we did X" | [`docs/freeze-log.md`](docs/freeze-log.md), under searchts or Hare |
 | What a user sees in a release | [`CHANGELOG.md`](CHANGELOG.md) |
 

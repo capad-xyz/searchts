@@ -4,7 +4,7 @@ Standing rules for anyone **changing** this repo (Cursor, Codex, Claude, Grok, c
 
 This is **not** a skill. Skills (`SKILL.md`) are how to *use* searchts (`read_url`). This file is how to *change* it.
 
-- Product / order of work: [`PLAN.md`](PLAN.md) for searchts, [`PLAN-HARE.md`](PLAN-HARE.md) for Hare
+- Product / order of work: [`PLAN.md`](PLAN.md) for searchts, [`docs/hare-next.md`](docs/hare-next.md) for Hare
 - What already shipped: [`docs/freeze-log.md`](docs/freeze-log.md). Not the plan.
 - Commands and Python conventions: [`CLAUDE.md`](CLAUDE.md)
 - Who is who: [`NAMES.md`](NAMES.md)
@@ -16,7 +16,7 @@ A plan says what is true now and what is next. A log says what already happened.
 | You are writing | File |
 |---|---|
 | A searchts decision, a checklist item, parked work with a revisit | [`PLAN.md`](PLAN.md) |
-| Hare's behavior, the model list, cadence, what Hare should do next | [`PLAN-HARE.md`](PLAN-HARE.md) |
+| Hare's behavior, the model list, cadence, what Hare should do next | [`docs/hare-next.md`](docs/hare-next.md) |
 | What merged, a build note, a dated "we did X" | [`docs/freeze-log.md`](docs/freeze-log.md) |
 | What a user sees in a release | [`CHANGELOG.md`](CHANGELOG.md) |
 
@@ -54,7 +54,7 @@ gh pr comment <n> --body '/hare'
 
 If a Review with `<!-- searchts-r1-review -->` already exists on this SHA, the Action no-ops. Push a commit to re-review. `/hare` still retries after a `searchts-r1-needed` nag (no Review yet).
 
-**Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: OpenRouter then Nous then Groq then Gemini then Zen (#258: slow hops first, the fast ones are fallbacks) (fixed list in `scripts/hare_r1.py`, chain in PLAN-HARE.md: Nemotron Lightning / Gemma, then Laguna / LongCat, then GPT-OSS, then Gemini 3.1 Flash-Lite / 3.5 Flash, then Zen free; Inkling left 2026-10-05, Space Bunny left OpenRouter and Nous the same day; thinking is off by default and `/hare deep` turns it on one notch; Gemini is the fallback, not the default). Before the hop, the codebase graph (`scripts/hare_graph.py`) adds uses of names and files the diff changes, from the trusted base checkout, text only: code, then workflows and config, then docs, capped per hop (Groq 4k, Gemini 40k, the rest 20k). The note says how much of that graph the model saw. Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs get the nag, never a model hop, including when `/hare` or `@hare` runs the job with secrets.
+**Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: OpenRouter then Nous then Groq then Gemini then Zen (#258: slow hops first, the fast ones are fallbacks) (fixed list in `scripts/hare_r1.py`, chain in docs/hare-next.md: Nemotron Lightning / Gemma, then Laguna / LongCat, then GPT-OSS, then Gemini 3.1 Flash-Lite / 3.5 Flash, then Zen free; Inkling left 2026-10-05, Space Bunny left OpenRouter and Nous the same day; thinking is off by default and `/hare deep` turns it on one notch; Gemini is the fallback, not the default). Before the hop, the codebase graph (`scripts/hare_graph.py`) adds uses of names and files the diff changes, from the trusted base checkout, text only: code, then workflows and config, then docs, capped per hop (Groq 4k, Gemini 40k, the rest 20k). The note says how much of that graph the model saw. Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs get the nag, never a model hop, including when `/hare` or `@hare` runs the job with secrets.
 
 Hare posts **one GitHub Review** (v2, the shape locked on Hare Bot #221). Author is the bot. Local chat is not enough.
 
