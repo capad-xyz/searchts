@@ -6,10 +6,9 @@ credential is used. The security-critical assertion in this file is that a
 password never survives ``redact`` -- a value chosen to be loud is used so a
 leak is unmistakable, and every redact() case asserts that value is absent.
 
-``cookies_may_travel`` is intentionally not listed in ``searchts.egress.__all__``,
-but it is a module-level function and is imported here by name anyway: the cookie
-fence is the whole reason this module exists, and a non-recursive import is
-hermetic.
+``cookies_may_travel`` is listed in ``searchts.egress.__all__`` and is imported
+here by name: the cookie fence is the whole reason this module exists, and a
+non-recursive import is hermetic.
 """
 
 from __future__ import annotations
@@ -228,6 +227,7 @@ def test_is_local_endpoint_accepts_local(host):
         "example.com",
         "proxy.corp",
         "host.example",
+        "",  # an empty host cannot earn local trust; the answer fails closed
     ],
 )
 def test_is_local_endpoint_rejects_remote(host):

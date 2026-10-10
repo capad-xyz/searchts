@@ -98,7 +98,10 @@ def is_local_endpoint(host: str) -> bool:
     and not something the far side gets to assert.
     """
     h = (host or "").strip().strip("[]").lower()
-    if h in ("localhost", "localhost.localdomain", ""):
+    # An empty host is not local. normalize_proxy already refuses one, so this
+    # only comes up for a hand-built ProxySpec -- and the answer there has to
+    # fail closed, because this function is the cookie trust boundary.
+    if h in ("localhost", "localhost.localdomain"):
         return True
     # A bare hostname is not an address; treat it as remote. Only a literal
     # loopback/private address earns local trust.
