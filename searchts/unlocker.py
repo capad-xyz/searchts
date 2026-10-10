@@ -562,9 +562,17 @@ def _drop_stale_challenge_headers(headers: Dict[str, str], html: str) -> Dict[st
 #: Path segments that mean "this URL IS the login page", whatever the site calls
 #: the page. Matched as whole segments, so an article at ``/login-tips`` or
 #: ``/signin-guide`` is untouched and only the exact segment counts.
+#:
+#: Every entry here is a word that appears in NO other page's URL: they all
+#: name the act of authenticating. Bare ``auth`` and ``session`` were here and
+#: were removed for the opposite reason -- they are ordinary nouns on the rest
+#: of the web, and a wall check that fires on ``/docs/auth`` or
+#: ``/session/2024/notes`` refuses a real article as a login page, which is a
+#: wrong answer rather than a safe one. A site that puts its login at a bare
+#: ``/auth`` is not worth breaking every documentation URL over.
 _LOGIN_SEGMENTS = frozenset({
-    "login", "login.php", "signin", "sign-in", "signin.php", "log-in",
-    "account/login", "accounts/login", "session", "auth",
+    "login", "login.php", "signin", "signin.php", "sign-in", "log-in",
+    "logout", "signout", "sign-out",
 })
 
 

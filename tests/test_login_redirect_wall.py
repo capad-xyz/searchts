@@ -23,7 +23,7 @@ language, whether or not anyone has written its copy down.
 import pytest
 
 from searchts import unlocker
-from searchts.unlocker import is_login_url, looks_blocked
+from searchts.unlocker import _LOGIN_SEGMENTS, is_login_url, looks_blocked
 
 # The exact extract searchts returned for Reddit's login page, captured from a
 # live `searchts read` run. Kept verbatim (modulo the URLs) because the bug is a
@@ -76,6 +76,35 @@ class TestIsLoginUrl:
     ])
     def test_does_not_fire_on_content(self, url):
         assert is_login_url(url) is False
+
+    @pytest.mark.parametrize("url", [
+        # Hare's finding on the first cut of this rule. `auth` and `session`
+        # were in the segment set, and both are ordinary nouns on the rest of
+        # the web: every URL below is a real page that this rule refused as a
+        # login wall. A wrong answer, not a safe one -- the whole point of the
+        # check is that /login means login, not that a suspicious word appeared.
+        "https://example.com/docs/auth",
+        "https://example.com/blog/auth/2024",
+        "https://example.com/session/2024/notes",
+        "https://example.com/podcast/session/12",
+        "https://example.com/lecture/authentication-tokens",
+        "https://example.com/papers/auth-2024.pdf",
+    ])
+    def test_ordinary_nouns_are_never_a_login_wall(self, url):
+        assert is_login_url(url) is False, (
+            "a documentation or content URL must not be refused as a login page"
+        )
+
+    def test_every_segment_in_the_set_names_the_act_of_authenticating(self):
+        """The rule that keeps the set honest as it grows.
+
+        A word joins this set only if no other page on the web would use it as a
+        path segment of its own. That is why bare `auth` and `session` are out
+        even though some sites really do put their login at `/auth`.
+        """
+        ordinary = {"auth", "session", "user", "account", "token", "key",
+                    "profile", "settings", "oauth"}
+        assert not (_LOGIN_SEGMENTS & ordinary)
 
     def test_a_malformed_url_is_not_a_login_url(self):
         # urlparse raises ValueError on some shapes; a wall check must not be
