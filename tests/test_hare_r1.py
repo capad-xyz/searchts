@@ -228,6 +228,36 @@ def test_missing_summary_is_visible() -> None:
     assert "(model did not say what changed)" in body
 
 
+def test_the_note_shows_real_findings_and_folds_the_nits() -> None:
+    """A page of nits reads like a page of problems and buries the one line
+    that holds the merge. The skips keep their rows, so the next push's Since
+    section and the ledger still see every one of them."""
+    f = hare_r1.normalize_findings(
+        [
+            {"sev": "real", "path": "a.py", "line": 3, "issue": "Breaks the read.", "fix": "later", "change": "Guard it."},
+            {"sev": "skip", "path": "b.py", "line": 4, "issue": "Rename it.", "fix": "yes", "change": "Name it z."},
+            {"sev": "skip", "path": "c.py", "line": None, "issue": "Doc nit."},
+        ]
+    )
+    body = hare_r1.render_comment("nous:x", "low", "hold", f, "ok", [], "S.", "abc1234")
+    assert body.index("#### 🔴 real · `a.py:3`") < body.index("<summary>🟡 2 skip findings</summary>")
+    assert "#### 🟡 skip · `b.py:4`" in body and "Rename it." in body  # folded, not dropped
+    assert "Doc nit." in body and "#### 🟡 skip · `c.py`" in body
+    assert [o["sev"] for o in hare_r1.parse_old_findings(body)] == ["real", "skip", "skip"]
+    # The fold carries the fix lines too, so a one-click fix is still announced.
+    assert "**Fix:** yes. Name it z." in body
+    # Real findings only decide the note; the skips do not enter the Verdict.
+    assert "**Verdict:** Hold (CI green, 1 real finding)." in body
+    # A note with nothing real still shows the nits rather than claiming none.
+    only_nits = hare_r1.render_comment("nous:x", "low", "ship", f[1:], "ok", [], "S.", "abc1234")
+    assert "No line findings." not in only_nits
+    assert "<summary>🟡 2 skip findings</summary>" in only_nits
+    assert "<summary>🟡 1 skip finding</summary>" in hare_r1.render_comment(
+        "nous:x", "low", "ship", f[1:2], "ok", [], "S.", "abc1234"
+    )
+    assert "No line findings." in hare_r1.render_comment("nous:x", "low", "ship", [], "ok", [], "S.", "abc1234")
+
+
 def test_prompt_requires_a_summary_and_skip_rows() -> None:
     assert "summary is required" in hare_r1.SYSTEM
     assert "Do not return an empty findings list" in hare_r1.SYSTEM

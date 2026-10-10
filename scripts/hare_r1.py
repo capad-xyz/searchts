@@ -1047,6 +1047,18 @@ def how_to_answer() -> str:
     ])
 
 
+def _finding_block(f: dict[str, Any]) -> str:
+    """One `#### 🔴 real · path:line` block: what is wrong there, and the fix."""
+    sev = "real" if f.get("sev") == "real" else "skip"
+    mark = "🔴" if sev == "real" else "🟡"
+    loc = f"{f.get('path')}:{f.get('line')}" if f.get("line") is not None else str(f.get("path") or "-")
+    issue = _no_em(str(f.get("issue") or "").strip() or "see bubble")
+    fix = _fix_line(str(f.get("fix") or ""), str(f.get("change") or ""), sev)
+    if f.get("_checked"):
+        fix += " One-click fix in the bubble."
+    return f"#### {mark} {sev} · `{loc}`\n\n**Issue:** {_plain(issue)}\n\n{fix}"
+
+
 def render_comment(
     model: str,
     effort: str,
@@ -1072,18 +1084,23 @@ def render_comment(
     it: local Hare always said whether a PR looked good to ship and why, and
     the owner wants that back (2026-10-04). Hare is still not the merge
     button; the word is a call, the reasons are the point.
+
+    Findings: the real ones are the note. The skips go in one fold under them,
+    because a page of nits reads like a page of problems and buries the one
+    line that holds the merge. The fold keeps the rows verbatim, so
+    `parse_old_findings` (the next push's Since section) and the ledger still
+    see every skip.
     """
     said = _no_em(_plain(summary)) or "(model did not say what changed)"
-    blocks: list[str] = []
-    for f in findings:
-        sev = "real" if f.get("sev") == "real" else "skip"
-        mark = "🔴" if sev == "real" else "🟡"
-        loc = f"{f.get('path')}:{f.get('line')}" if f.get("line") is not None else str(f.get("path") or "-")
-        issue = _no_em(str(f.get("issue") or "").strip() or "see bubble")
-        fix = _fix_line(str(f.get("fix") or ""), str(f.get("change") or ""), sev)
-        if f.get("_checked"):
-            fix += " One-click fix in the bubble."
-        blocks.append(f"#### {mark} {sev} · `{loc}`\n\n**Issue:** {_plain(issue)}\n\n{fix}")
+    reals = [f for f in findings if f.get("sev") == "real"]
+    skips = [f for f in findings if f.get("sev") != "real"]
+    blocks: list[str] = [_finding_block(f) for f in reals]
+    if skips:
+        blocks.append(
+            f"<details>\n<summary>🟡 {len(skips)} skip finding{'' if len(skips) == 1 else 's'}</summary>\n\n"
+            + "\n\n".join(_finding_block(f) for f in skips)
+            + "\n\n</details>"
+        )
     if not blocks:
         blocks.append("No line findings.")
     run_lines: list[str] = []
