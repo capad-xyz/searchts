@@ -467,6 +467,18 @@ def read_cookie_file(path: str, site: str) -> CookieSource:
 
     try:
         data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise CookieReadError(
+            f"no cookie file at {path!r}. Point --cookies at a JSON file of "
+            f"cookies for this site, or drop the flag and use "
+            f"--cdp-port / --cookies-from-browser instead."
+        ) from None
+    except IsADirectoryError:
+        raise CookieReadError(f"{path!r} is a directory, not a cookie file.") from None
+    except PermissionError:
+        raise CookieReadError(
+            f"not allowed to read the cookie file {path!r}."
+        ) from None
     except (OSError, ValueError) as e:
         raise CookieReadError(
             f"could not read cookie file {path!r} ({type(e).__name__})"
@@ -526,9 +538,32 @@ def resolve_cookies(
     and a second surface cannot grow a second, laxer one.
 
     Raises :class:`CookieReadError` with one sentence a user can act on.
+
+    The three sources are mutually exclusive and saying so beats picking one:
+    ``--cookies f --cookies-from-browser firefox`` used to read the file, ignore
+    the browser, and print a line about the file, so the person asking for a
+    Firefox read got a file's cookies and no word about it. One precedence rule
+    (``cdp_port`` > ``cookies`` > ``cookies_from_browser``) is kept for
+    programmatic callers that cannot ask, but a caller that passed more than one
+    is told.
     """
     if not cookies and not cookies_from_browser and cdp_port in (None, ""):
         return None
+    asked = [
+        # The flag spelling, not the parameter name: the same sentence reaches an
+        # agent over MCP, and one list has to be readable to both.
+        flag for flag, value in (
+            ("--cdp-port", cdp_port), ("--cookies", cookies),
+            ("--cookies-from-browser", cookies_from_browser),
+        ) if value not in (None, "")
+    ]
+    if len(asked) > 1:
+        raise CookieReadError(
+            f"asked for cookies {len(asked)} ways ({', '.join(asked)}). One read "
+            f"uses one source: --cdp-port for a debugger port you opened, "
+            f"--cookies for a file, --cookies-from-browser for a "
+            f"Firefox-family profile."
+        )
     if cdp_port not in (None, ""):
         # Imported here: cdp_profile imports this module, so a top-level import
         # would be a cycle.

@@ -511,13 +511,55 @@ def _read_one_site(browser_obj: Any, site: str, host: str, source: CookieSource)
     )
 
 
-def _connect(pw: Any, endpoint: str) -> Any:
+def _connect(pw: Any, endpoint: str, port: Optional[int] = None) -> Any:
     try:
         return pw.chromium.connect_over_cdp(endpoint)
     except Exception as e:  # noqa: BLE001 - client error, reported as one line
-        raise CookieReadError(
-            f"could not connect to the debugger at {endpoint} ({type(e).__name__})"
-        ) from None
+        raise CookieReadError(_connect_reason(e, endpoint, port)) from None
+
+
+def _connect_reason(exc: BaseException, endpoint: str, port: Optional[int]) -> str:
+    """What to say when the CDP handshake failed, in the order it is likely.
+
+    The raw client message for the common case is
+    ``BrowserType.connect_over_cdp: connect ECONNREFUSED 127.0.0.1:9222`` and
+    the wrapper used to reduce that to ``(Error)`` -- a class name, with the
+    one fact that matters dropped. The overwhelmingly usual reason is that the
+    port is closed because the browser was started without
+    ``--remote-debugging-port``, so that is said first, with the command that
+    fixes it. The reason is only asserted when a socket probe agrees, so a
+    refusal is never guessed.
+
+    The client's own message is NOT echoed. A CDP client quotes the request it
+    made when it fails, and this module's rule is that nothing a client says
+    about a failed handshake reaches a user: only the exception *type* is
+    trusted. The two sentences below are fixed text plus that type name.
+    """
+    where = f"on {endpoint}"
+    if port is not None and not _port_open(port):
+        return (
+            f"nothing is listening on port {port}, so there is no debugger to "
+            f"read. Start your browser yourself with "
+            f"--remote-debugging-port={port} (and --user-data-dir pointing at a "
+            f"profile that is not your default one: Chrome 136+ ignores the flag "
+            f"on the default profile), then read again. searchts never opens "
+            f"this port for you."
+        )
+    return (
+        f"something is listening {where} but the debugger handshake failed "
+        f"({type(exc).__name__}). Is it a browser started with "
+        f"--remote-debugging-port, and is that port the one you passed?"
+    )
+
+
+def _port_open(port: int, timeout: float = 0.5) -> bool:
+    """Is something accepting connections on this machine's port right now?"""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            return s.connect_ex(("127.0.0.1", int(port))) == 0
+    except OSError:
+        return False
 
 
 # ── public: searchts opens the port, with consent ────────────────────────────
@@ -584,7 +626,7 @@ def cdp_read_site(
         try:
             pw = _playwright(playwright_module)
             try:
-                connected = _connect(pw, f"http://127.0.0.1:{port}")
+                connected = _connect(pw, f"http://127.0.0.1:{port}", port)
                 try:
                     return _read_one_site(
                         connected,
@@ -694,7 +736,7 @@ def connect_existing_cdp(
     target_host = _host_of(site)
     pw = _playwright(playwright_module)
     try:
-        connected = _connect(pw, endpoint_url(host, number))
+        connected = _connect(pw, endpoint_url(host, number), number)
         try:
             return _read_one_site(
                 connected, site, target_host, CookieSource(site=site, via="cdp port")

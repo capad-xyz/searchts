@@ -291,13 +291,18 @@ class TestScratchProfileIsDeleted:
         )
         assert source.count == 2, "the two example.com cookies come back"
 
-    def test_deleted_when_the_cdp_client_fails(self, tmp_path):
+    def test_deleted_when_the_cdp_client_fails(self, tmp_path, monkeypatch):
         log = new_log()
         pw = FakePlaywrightModule(log, connect_raises=True)
+        # Pinned: whether 9222 happens to be open on the machine running the
+        # suite must not decide which of the two connect sentences this test
+        # sees. The wording is covered on its own in
+        # TestTheConnectionErrorIsActionable.
+        monkeypatch.setattr(cdp_profile, "_port_open", lambda port, **kw: True)
         with pytest.raises(CookieReadError) as e:
             run_read(tmp_path, log=log, pw=pw)
 
-        assert "could not connect" in str(e.value)
+        assert "debugger" in str(e.value)
         assert not os.path.exists(log["scratch"][0]), "a failed read leaves nothing either"
 
     def test_deleted_when_the_browser_will_not_start(self, tmp_path):
@@ -605,8 +610,14 @@ class TestOneHostOnly:
 
 class TestNoCookieValueLeaks:
     def test_a_failing_connect_does_not_echo_the_failure_text(self, tmp_path, monkeypatch):
-        """The client's own message can quote a header; only the type is trusted."""
+        """The client's own message can quote a header; only the type is trusted.
+
+        Pinned to the open-port branch, which is the one that could ever be
+        tempted to quote the client: a closed port is answered from fixed text
+        and needs no message from the client at all.
+        """
         log = new_log()
+        monkeypatch.setattr(cdp_profile, "_port_open", lambda port, **kw: True)
 
         class Poisoned(FakePlaywrightModule):
             def sync_playwright(self):
@@ -623,7 +634,7 @@ class TestNoCookieValueLeaks:
         with pytest.raises(CookieReadError) as e:
             run_read(tmp_path, log=log, pw=Poisoned(log))
         assert SID not in str(e.value)
-        assert "connect" in str(e.value).lower()
+        assert "debugger" in str(e.value).lower()
 
     def test_a_failing_cookie_call_does_not_echo_the_failure_text(self, tmp_path):
         log = new_log()
@@ -786,3 +797,93 @@ class TestReadSiteCookies:
         )
         cdp_profile.read_site_cookies("https://a.example/")
         assert seen["b"] == ""
+
+
+class TestTheConnectionErrorIsActionable:
+    """What the user is told when the handshake fails.
+
+    Live: `--cdp-port 9222` with no browser on that port printed
+    "could not connect to the debugger at http://127.0.0.1:9222 (Error)". The
+    `(Error)` is the exception class name, and the one fact that matters -- that
+    nothing is listening, which is the overwhelmingly usual cause, because the
+    user forgot `--remote-debugging-port` -- was thrown away. A user who cannot
+    tell "no browser" from "wrong port" from "browser refusing" has no next
+    step at all.
+    """
+
+    def test_a_closed_port_says_nothing_is_listening(self, monkeypatch):
+        monkeypatch.setattr(cdp_profile, "_port_open", lambda port, **kw: False)
+        reason = cdp_profile._connect_reason(
+            RuntimeError("connect ECONNREFUSED 127.0.0.1:9222"), "http://127.0.0.1:9222", 9222
+        )
+        assert "nothing is listening on port 9222" in reason
+        assert "--remote-debugging-port=9222" in reason, "must give the command that fixes it"
+
+    def test_an_open_port_reports_the_client_message_instead(self, monkeypatch):
+        # Something IS there and still refused: guessing "not listening" would
+        # send the user to restart a browser that is already running.
+        monkeypatch.setattr(cdp_profile, "_port_open", lambda port, **kw: True)
+        reason = cdp_profile._connect_reason(
+            RuntimeError(
+                "BrowserType.connect_over_cdp: connect ECONNREFUSED 127.0.0.1:9222"
+            ),
+            "http://127.0.0.1:9222", 9222,
+        )
+        assert "the debugger handshake failed" in reason
+        assert "nothing is listening" not in reason, (
+            "something IS there; telling the user to restart the browser sends "
+            "them in circles"
+        )
+        assert "--remote-debugging-port" in reason
+        # The client's free text is never echoed: it can quote the request it
+        # made, and this module's rule is that a failed handshake says only the
+        # exception type. Asserted here as well as in the leak tests, because
+        # this function is where the temptation lives.
+        assert "BrowserType.connect_over_cdp" not in reason
+        assert "ECONNREFUSED" not in reason
+        assert "RuntimeError" in reason, "the type is the one thing trusted"
+
+    def test_an_empty_client_message_still_produces_a_sentence(self, monkeypatch):
+        monkeypatch.setattr(cdp_profile, "_port_open", lambda port, **kw: True)
+        reason = cdp_profile._connect_reason(RuntimeError(), "http://127.0.0.1:9222", 9222)
+        assert reason.strip(), "never an empty error line"
+        assert "handshake failed" in reason
+
+    def test_a_client_message_quoting_a_cookie_still_never_leaks(self, monkeypatch):
+        """The regression this guards: the message is not echoed, ever."""
+        monkeypatch.setattr(cdp_profile, "_port_open", lambda port, **kw: True)
+        reason = cdp_profile._connect_reason(
+            RuntimeError(f"handshake failed; request had Cookie: sid={SID}"),
+            "http://127.0.0.1:9222", 9222,
+        )
+        assert SID not in reason
+
+    def test_connect_reports_through_the_wrapper(self, monkeypatch):
+        """A failed connect is a CookieReadError with the sentence, not a class name."""
+        monkeypatch.setattr(cdp_profile, "_port_open", lambda port, **kw: False)
+
+        class FakeChromium:
+            def connect_over_cdp(self, endpoint):
+                raise RuntimeError("connect ECONNREFUSED")
+
+        pw = types.SimpleNamespace(chromium=FakeChromium())
+        with pytest.raises(CookieReadError) as e:
+            cdp_profile._connect(pw, "http://127.0.0.1:9222", 9222)
+        assert "nothing is listening on port 9222" in str(e.value)
+
+    def test_a_real_closed_port_is_detected(self):
+        # Bound then released, so nothing is listening on it: a real probe, no stub.
+        import socket as s
+
+        with s.socket(s.AF_INET, s.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            free = sock.getsockname()[1]
+        assert cdp_profile._port_open(free) is False
+
+    def test_a_real_open_port_is_detected(self):
+        import socket as s
+
+        with s.socket(s.AF_INET, s.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            sock.listen(1)
+            assert cdp_profile._port_open(sock.getsockname()[1]) is True

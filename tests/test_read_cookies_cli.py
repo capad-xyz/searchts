@@ -148,3 +148,51 @@ def test_resolve_cookies_never_names_a_value(tmp_path):
     records = resolve_cookies("https://site.test/a", cookies=str(jar))
     assert [c.name for c in records] == ["sid"]
     assert "LIVE-TOKEN-VALUE" not in repr(records[0].name)
+
+
+def test_a_cookie_file_that_is_not_there_says_what_to_pass_instead(tmp_path):
+    """Live: `--cookies /no/such/file` printed "(FileNotFoundError)".
+
+    An exception class name is not an answer. The two flags that would have
+    worked are named, because the person who mistyped the path is one flag away
+    from a working read and has no way to guess that.
+    """
+    from searchts.session_cookies import CookieReadError, resolve_cookies
+
+    with pytest.raises(CookieReadError) as e:
+        resolve_cookies("https://site.test/a", cookies=str(tmp_path / "nope.json"))
+    message = str(e.value)
+    assert "FileNotFoundError" not in message
+    assert "--cdp-port" in message and "--cookies-from-browser" in message
+
+
+def test_two_cookie_sources_is_refused_rather_than_silently_resolved(tmp_path):
+    """Live: `--cookies f --cookies-from-browser chrome` read the file.
+
+    The file won, the browser was ignored, and the line printed said the file.
+    Someone asking for a Firefox read got a file's cookies and no word about it.
+    """
+    from searchts.session_cookies import CookieReadError, resolve_cookies
+
+    jar = tmp_path / "jar.json"
+    jar.write_text(json.dumps({"cookies": [
+        {"name": "sid", "value": "v", "domain": ".site.test"},
+    ]}), encoding="utf-8")
+
+    with pytest.raises(CookieReadError) as e:
+        resolve_cookies(
+            "https://site.test/a", cookies=str(jar), cookies_from_browser="firefox"
+        )
+    message = str(e.value)
+    assert "2 ways" in message
+    assert "--cookies-from-browser" in message and "--cookies" in message
+
+
+def test_cdp_port_plus_a_file_is_refused_too():
+    from searchts.session_cookies import CookieReadError, resolve_cookies
+
+    with pytest.raises(CookieReadError) as e:
+        resolve_cookies(
+            "https://site.test/a", cookies="/tmp/x.json", cdp_port="9222"
+        )
+    assert "--cdp-port" in str(e.value) and "--cookies" in str(e.value)
