@@ -2788,6 +2788,7 @@ def build_provider_chain(
     deep: bool = False,
     caps: Caps | None = None,
     catalog: dict[str, dict[str, Any]] | None = None,
+    level: str = "",
 ) -> list[tuple[str, str, str, str, dict[str, Any]]]:
     """The fixed hop list, in order, as (name, base, key, model, request options).
 
@@ -2800,6 +2801,9 @@ def build_provider_chain(
     gateway can take one. A model with no published dial is not sent a level it
     might reject, and `caps.reasoning_budget` of 0 means "no budget", not "no
     thinking". `catalog` is the provider /models data when the caller has it.
+
+    `level` overrides the reasoning level for every hop, which is what the eval's
+    off/on/max modes use; empty means each model's own strongest level.
     """
     caps = caps or CAPS
     bases = {
@@ -2809,14 +2813,15 @@ def build_provider_chain(
         "openrouter": OR_BASE,
         "zen": ZEN_BASE,
     }
-    level = (DEEP_LEVEL if deep else None) or {
-        p: PROVIDER_FALLBACK_LEVEL.get(p, "high") for p in bases
-    }
-    if deep:
-        level = dict(DEEP_LEVEL)
+    if level in REASONING_WORDS:  # an explicit level, including "none" for off
+        wanted = {p: level for p in bases}
+    elif deep:
+        wanted = dict(DEEP_LEVEL)
     elif HARE_REASONING in REASONING_WORDS:
         # The owner's cap on the quiet pass overrides the per-model ladder.
-        level = {p: HARE_REASONING for p in bases}
+        wanted = {p: HARE_REASONING for p in bases}
+    else:
+        wanted = {p: PROVIDER_FALLBACK_LEVEL.get(p, "high") for p in bases}
     chain: list[tuple[str, str, str, str, dict[str, Any]]] = []
     # Order is the owner's call, not the ledger's: the ledger's notes mostly
     # predate the fixes that landed on 2026-10-04, so it cannot rank hops yet.
@@ -2834,7 +2839,7 @@ def build_provider_chain(
         if not key:
             continue
         for model in models.get(name, []):
-            opts = reasoning_options(name, model, level.get(name, "high"), caps.reasoning_budget, catalog)
+            opts = reasoning_options(name, model, wanted.get(name, "high"), caps.reasoning_budget, catalog)
             chain.append((name, bases[name], key, model, opts))
     return chain
 

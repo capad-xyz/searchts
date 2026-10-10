@@ -2654,4 +2654,4 @@ def test_the_workflow_exposes_every_cap_with_a_default_and_an_override() -> None
         assert re.search(rf"{env_name}:\s*\$\{{\{{\s*github\.event\.inputs\.", wf), f"{env_name} has no dispatch override"
     for name in ("budget", "wall", "attempts"):
         assert re.search(rf"^\s*{name}:\s*$", wf, re.MULTILINE), f"no workflow_dispatch input {name}"
-        assert re.search(rf"description:.*0 = uncapped", wf), "an input must say what 0 means"
+        assert re.search(r"description:.*0 = uncapped", wf), "an input must say what 0 means"

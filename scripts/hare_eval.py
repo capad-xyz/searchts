@@ -2,6 +2,13 @@
 """Hare's eval: old PRs with known answers, run through each provider with
 thinking off and on. Posts nothing anywhere.
 
+Modes are `off`, `on` and `max`. `off` turns reasoning off, `on` and `max` ask
+each model for the strongest effort level it publishes, with the reasoning
+budget bounded; `max` is the production setting and `on` is the same request
+without the bound, which is the pair that separates "reasoning hurts" from
+"reasoning with no bound eats the budget". Every run keeps its raw answer under
+`--raw-dir` so a row in the report can be checked against what the model said.
+
 Each review is built the way hare_r1 builds one: SYSTEM, build_user, the PR's
 diff at the commit that was reviewed, AGENTS.md at that commit and HARE.md at
 its merge base, with no ledger, so lessons learned later cannot leak in. Each
@@ -59,6 +66,11 @@ CHECKS_TXT = (
     "Verdict lines. Do not judge CI or tell anyone to wait for it."
 )
 LINE_SLACK = 25
+# `off` is the only mode that asks a model not to reason. `on` and `max` both
+# ask for the model's own strongest published level; `max` additionally carries
+# the reasoning budget, so the pair measures the bound rather than reasoning.
+MODES = ("off", "on", "max")
+MODE_LEVEL = {"off": "none", "on": "high", "max": ""}
 
 
 def first_model(provider: str) -> str:
@@ -210,13 +222,25 @@ def run(
     deadline_s: float = 0,
     clock: Callable[[], float] = time.time,
     graphs: list[str] | None = None,
+    caps: hare_r1.Caps | None = None,
+    catalog: dict[str, dict[str, Any]] | None = None,
+    raw_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     """deadline_s > 0 stops starting new calls after that many seconds, so the
-    report is still written before the job's own timeout kills everything."""
+    report is still written before the job's own timeout kills everything.
+
+    `caps` and `catalog` are the same objects production passes, so a mode here
+    sends the same request body a live hop would. `raw_dir` writes every answer
+    and every error to disk, because a number in a report that cannot be checked
+    against what the model actually said is a claim, not a measurement.
+    """
     graphs = graphs or ["off"]
+    caps = caps or hare_r1.Caps()
     rows: list[dict[str, Any]] = []
     started = clock()
     spent: set[str] = set()
+    if raw_dir is not None:
+        raw_dir.mkdir(parents=True, exist_ok=True)
     for case in cases:
         if deadline_s and clock() - started > deadline_s:
             rows.append({"case": "deadline", "pr": 0, "provider": "-", "model": "-", "mode": "-",
@@ -231,12 +255,15 @@ def run(
             chain = hare_r1.build_provider_chain(
                 {p: keys.get(p, "") if p in providers else "" for p in PROVIDERS},
                 {p: [first_model(p)] if p in providers else [] for p in PROVIDERS},
-                deep=mode == "on",
+                caps=caps,
+                catalog=catalog,
+                level=MODE_LEVEL.get(mode, ""),
             )
             for name, base, key, model, opts in chain:
-                for _ in range(max(1, repeat)):
+                for attempt in range(max(1, repeat)):
                     hare_r1.LAST_USAGE.clear()
-                    t0, err, parsed = time.time(), "", None
+                    hare_r1.CAP_EVENTS.clear()
+                    t0, err, parsed, raw = time.time(), "", None, ""
                     try:
                         if name in spent:
                             raise QuotaGone("skipped: this provider's daily quota ran out earlier in the run")
@@ -249,9 +276,14 @@ def run(
                     except QuotaGone as e:
                         spent.add(name)
                         err = f"daily quota: {str(e)[:150]}"
+                    except hare_r1.RateLimited as e:
+                        err = f"rate limited: {str(e)[:150]}"
+                        spent.add(name)
                     except Exception as e:
                         err = str(e)[:160]
                     usage = dict(hare_r1.LAST_USAGE)
+                    if raw_dir is not None:
+                        _write_raw(raw_dir, case, name, model, mode, graph, attempt, opts, raw, err, usage)
                     fs = findings_of(parsed)
                     rows.append(
                         {
@@ -267,12 +299,53 @@ def run(
                             "prompt_tokens": int(usage.get("prompt_tokens") or 0),
                             "answer_tokens": int(usage.get("completion_tokens") or 0),
                             "reasoning_tokens": int((usage.get("completion_tokens_details") or {}).get("reasoning_tokens") or 0),
+                            "request_options": opts,
+                            "caps_fired": list(hare_r1.CAP_EVENTS),
                             **score(case, fs),
                             "raw_findings": fs,
                         }
                     )
                     pause(4)
     return rows
+
+
+def _write_raw(
+    raw_dir: Path,
+    case: dict[str, Any],
+    provider: str,
+    model: str,
+    mode: str,
+    graph: str,
+    attempt: int,
+    opts: dict[str, Any],
+    raw: str,
+    err: str,
+    usage: dict[str, Any],
+) -> None:
+    """One file per run: what was asked, what came back, and what it cost.
+
+    The report's numbers are claims until a reader can open the answer that
+    produced them. Nothing here is a secret: no key, no header, just the request
+    options and the model's own words.
+    """
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{case['id']}__{provider}__{model}__{mode}__g{graph}__{attempt}")
+    body = {
+        "case": case["id"],
+        "pr": case["pr"],
+        "provider": provider,
+        "model": model,
+        "mode": mode,
+        "graph": graph,
+        "attempt": attempt,
+        "request_options": opts,
+        "error": err,
+        "usage": usage,
+        "answer": raw,
+    }
+    try:
+        (raw_dir / f"{name}.json").write_text(json.dumps(body, indent=1), encoding="utf-8")
+    except OSError as e:  # a proof that cannot be checked is worth saying out loud
+        print(f"hare eval: could not write {name}: {str(e)[:100]}")
 
 
 def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -302,6 +375,7 @@ def summarize(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "false_reals": sum(int(r.get("false_reals") or 0) for r in ok),
                 "median_s": statistics.median(secs) if secs else None,
                 "median_reasoning": statistics.median(reasoning) if reasoning else None,
+                "caps_fired": [e for r in rs for e in (r.get("caps_fired") or [])],
             }
         )
     return out
@@ -321,13 +395,19 @@ def render(rows: list[dict[str, Any]], cases: list[dict[str, Any]], built: str) 
         "Catches count over answered runs only; a run with no answer (rate limit, quota, too large, timeout) is listed "
         "under Errors, not counted as a miss.",
         "",
-        "| Provider | Model | Thinking | Graph | Answered | Caught as real | Caught at all | Reals on clean PRs (check by hand) | Median s | Median reasoning tokens |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "Thinking modes: `off` asks the model not to reason, `max` asks each model for the "
+        "strongest effort level it publishes with the thinking budget bounded, and `on` is the "
+        "same request with no bound. Every answer is written under the raw directory the run "
+        "names, so a row here can be checked against what the model actually said.",
+        "",
+        "| Provider | Model | Thinking | Graph | Answered | Caught as real | Caught at all | Reals on clean PRs (check by hand) | Median s | Median reasoning tokens | Caps that fired |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for s in summarize(rows):
+        fired = ", ".join(sorted(set(s["caps_fired"]))) or "-"
         lines.append(
             f"| {s['provider']} | `{s['model']}` | {s['mode']} | {s['graph']} | {s['answered']} of {s['runs']} | {s['caught_real']} of {s['expected']} "
-            f"| {s['caught_any']} of {s['expected']} | {s['false_reals']} | {cell(s['median_s'])} | {cell(s['median_reasoning'])} |"
+            f"| {s['caught_any']} of {s['expected']} | {s['false_reals']} | {cell(s['median_s'])} | {cell(s['median_reasoning'])} | {fired} |"
         )
     combos = sorted({(r["provider"], r["mode"], r.get("graph", "off")) for r in rows if r.get("provider") not in (None, "-")})
     lines += ["", "## Per expected issue", "", "real = caught as a real finding, skip = caught only as a skip, miss = not caught, err = no answer.", ""]
@@ -357,11 +437,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--cases", default="docs/hare-eval-cases.json")
     ap.add_argument("--only", default="", help="case ids, comma separated; empty runs all")
     ap.add_argument("--providers", default="openrouter,nous,groq,gemini")
-    ap.add_argument("--modes", default="off,on")
+    ap.add_argument("--modes", default="off,max", help="thinking modes: off, on, max")
     ap.add_argument("--repeat", type=int, default=1)
     ap.add_argument("--out", default="docs")
     ap.add_argument("--graphs", default="on", help="the codebase graph: off, on, or off,on to compare")
     ap.add_argument("--deadline-min", type=float, default=240, help="stop starting calls after this many minutes (the job allows 300)")
+    ap.add_argument("--raw-dir", default="", help="write every answer and error here, one file per run")
+    ap.add_argument("--budget", type=int, default=0, help="reasoning token budget per call; 0 keeps the production default")
+    ap.add_argument("--no-catalog", action="store_true", help="skip the /models lookups and use the pinned effort table")
     args = ap.parse_args(argv)
     token = os.environ.get("GITHUB_TOKEN", "")
     owner, _, repo = os.environ.get("GITHUB_REPOSITORY", "capad-xyz/searchts").partition("/")
@@ -370,16 +453,27 @@ def main(argv: list[str] | None = None) -> int:
     if only:
         cases = [c for c in cases if c["id"] in only]
     providers = [p.strip() for p in args.providers.split(",") if p.strip() in PROVIDERS]
-    modes = [m.strip() for m in args.modes.split(",") if m.strip() in ("off", "on")]
+    modes = [m.strip() for m in args.modes.split(",") if m.strip() in MODES]
     keys = {p: os.environ.get(KEY_ENV[p], "") for p in PROVIDERS}
     missing = [p for p in providers if not keys.get(p)]
     if missing:
         print(f"hare eval: no key for {', '.join(missing)}; those providers are skipped")
+    caps = hare_r1.Caps.from_env()
+    if args.budget > 0:
+        caps = caps.override({"reasoning_budget": args.budget})
+    catalog: dict[str, dict[str, Any]] = {}
+    if not args.no_catalog:
+        for provider, base in (("nous", hare_r1.NOUS_BASE), ("openrouter", hare_r1.OR_BASE)):
+            for slug, entry in hare_r1.fetch_reasoning_catalog(base).items():
+                catalog.setdefault(slug, entry)
     rows = run(cases, providers, modes, keys, token, owner, repo, repeat=args.repeat, deadline_s=args.deadline_min * 60,
-               graphs=[g.strip() for g in args.graphs.split(",") if g.strip() in ("off", "on")] or ["on"])
+               graphs=[g.strip() for g in args.graphs.split(",") if g.strip() in ("off", "on")] or ["on"],
+               caps=caps, catalog=catalog,
+               raw_dir=Path(args.raw_dir) if args.raw_dir else None)
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     out = Path(args.out)
-    (out / f"hare-eval-{day}.json").write_text(json.dumps({"built": day, "rows": rows}, indent=1), encoding="utf-8")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / f"hare-eval-{day}.json").write_text(json.dumps({"built": day, "rows": rows}, encoding="utf-8"), encoding="utf-8")
     (out / f"hare-eval-{day}.md").write_text(render(rows, cases, day), encoding="utf-8")
     print(f"hare eval: {len(rows)} runs -> {out}/hare-eval-{day}.md")
     return 0

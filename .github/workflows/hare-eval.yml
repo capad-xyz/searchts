@@ -26,6 +26,18 @@ on:
         description: "Runs per cell"
         required: false
         default: "1"
+      cases_file:
+        description: "Answer key to score against (empty uses docs/hare-eval-cases.json)"
+        required: false
+        default: ""
+      raw_dir:
+        description: "Write every answer and error here (empty writes none)"
+        required: false
+        default: ""
+      budget:
+        description: "Reasoning token budget per call (empty keeps the production default)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -62,14 +74,39 @@ jobs:
           MODES: ${{ inputs.modes }}
           GRAPHS: ${{ inputs.graphs }}
           REPEAT: ${{ inputs.repeat }}
+          CASES_FILE: ${{ inputs.cases_file }}
+          RAW_DIR: ${{ inputs.raw_dir }}
+          BUDGET: ${{ inputs.budget }}
         run: |
-          python scripts/hare_eval.py --only "$CASES" --providers "$PROVIDERS" --modes "$MODES" --graphs "$GRAPHS" --repeat "$REPEAT" --out docs
+          # An answer key and a raw directory are optional: the eval has always
+          # run against docs/hare-eval-cases.json without saving anything, and a
+          # proof run needs both. The flags are omitted rather than passed empty
+          # so the defaults stay the defaults.
+          args=(--only "$CASES" --providers "$PROVIDERS" --modes "$MODES" --graphs "$GRAPHS" --repeat "$REPEAT" --out docs)
+          if [ -n "$CASES_FILE" ]; then args+=(--cases "$CASES_FILE"); fi
+          if [ -n "$RAW_DIR" ]; then args+=(--raw-dir "$RAW_DIR"); fi
+          if [ -n "$BUDGET" ]; then args+=(--budget "$BUDGET"); fi
+          python scripts/hare_eval.py "${args[@]}"
+          if [ -n "$RAW_DIR" ]; then
+            # The raw answers are the evidence. Upload them so a reader can
+            # check a row without re-running, and commit them when asked.
+            tar czf "/tmp/raw-outputs.tgz" "$RAW_DIR"
+            echo "raw outputs: $(find "$RAW_DIR" -name '*.json' | wc -l) files"
+          fi
           day="$(date -u +%Y-%m-%d)"
           cp "docs/hare-eval-$day.md" "/tmp/hare-eval-$day.md"
           cp "docs/hare-eval-$day.json" "/tmp/hare-eval-$day.json"
+      - name: Upload the raw answers
+        if: always() && inputs.raw_dir != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: hare-eval-raw-${{ github.run_id }}
+          path: ${{ inputs.raw_dir }}
+          retention-days: 90
       - name: Open a PR with the report
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RAW_DIR: ${{ inputs.raw_dir }}
         run: |
           day="$(date -u +%Y-%m-%d)"
           branch="chore/hare-eval-$day-${{ github.run_id }}"
@@ -85,7 +122,11 @@ jobs:
           git checkout -f -B "$branch" origin/main
           cp "/tmp/hare-eval-$day.md" "docs/hare-eval-$day.md"
           cp "/tmp/hare-eval-$day.json" "docs/hare-eval-$day.json"
-          git add "docs/hare-eval-$day.md" "docs/hare-eval-$day.json"
+          if [ -n "$RAW_DIR" ] && [ -f "/tmp/raw-outputs.tgz" ]; then
+            mkdir -p "$(dirname "$RAW_DIR")"
+            tar xzf "/tmp/raw-outputs.tgz"
+          fi
+          git add -A "docs/hare-eval-$day.md" "docs/hare-eval-$day.json" ${RAW_DIR:+"$RAW_DIR"}
           git commit -m "chore(hare): eval $day"
           git push -f origin "$branch"
           summary="$(awk '/^\| Provider/{p=1} /^## Per expected issue/{p=0} p' "docs/hare-eval-$day.md")"
