@@ -8,9 +8,11 @@ Append a new row under the right heading. Do not append it to either plan.
 
 | You are writing | File |
 |---|---|
-| A searchts decision, a checklist item, parked work with a revisit | [`PLAN.md`](../PLAN.md) |
+| Work that is not done yet | [`PLAN.md`](../PLAN.md) |
+| A box that already shipped | [`docs/plan-shipped.md`](plan-shipped.md). Do not add. |
 | Hare's behavior, the model list, cadence, what Hare should do next | [`docs/hare-next.md`](hare-next.md) |
 | What merged, a build note, a dated "we did X" | this file |
+| A post | [`docs/comms.md`](comms.md) |
 | What a user sees in a release | [`CHANGELOG.md`](../CHANGELOG.md) |
 
 ## searchts
