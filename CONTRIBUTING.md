@@ -105,8 +105,13 @@ Do not hide the tool. Do not claim a review the model did not run. Do not omit t
 
 ## What we merge (and what we don't)
 
-searchts has a deliberately narrow identity: a **keyless, free, open-source** web layer for AI
+searchts has a deliberately narrow identity: a **keyless, free, open-source** package for AI
 agents. That focus is the whole point, so we're intentionally selective about what we take on.
+
+The free package stays keyless. Clearing a DataDome script on the stealth rung, including one
+simple click, is in scope. A puzzle that needs a person still stops. "We don't bundle a proxy"
+is not "DataDome is impossible" and not "a hosted read is forbidden." A hosted exit is PLAN
+**F18**, not a default of this package.
 
 **We're glad to merge:**
 

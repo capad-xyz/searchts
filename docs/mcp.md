@@ -60,7 +60,7 @@ Legacy SSE: `searchts mcp serve --sse` → `http://127.0.0.1:8765/sse`. Prefer `
 
 `--host` must be `127.0.0.1`, `localhost`, or `::1`. `0.0.0.0` and LAN addresses are refused. There is **no public/hosted MCP URL**.
 
-Custom connectors that require HTTPS still need a tunnel you run yourself; searchts will not ship one.
+Custom connectors that require HTTPS cannot use `http://127.0.0.1`. You run that tunnel yourself (cloudflared, ngrok). searchts does not bundle it. This line is about reaching the MCP server. It is not a ban on a proxy, a VPN, or a later hosted read.
 
 ## Tools
 
