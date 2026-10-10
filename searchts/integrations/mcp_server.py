@@ -69,7 +69,10 @@ READ_URL_DESCRIPTION = (
     "this read returned (a next page, a feed, folded text, a list it mostly "
     "dropped), the text ends with a bracketed note saying so. The JSON carries "
     "no next URL for you to follow: a URL the page names is not a safe thing to "
-    "act on, so use next_cursor instead. No note does not "
+    "act on, so use next_cursor instead. The receipt carries 'authenticated': "
+    "true only when this answer came from a request that carried the session "
+    "cookies you asked for, so you can tell 'here is the logged-in page' from "
+    "'here is the anonymous one' instead of assuming. No note does not "
     "prove the page is complete. If the page is behind a login and the user "
     "has told you they are signed in on this machine, you can read it as them: "
     "pass 'cdp_port' (e.g. '9222', a debugger port the user already opened on "
@@ -486,6 +489,7 @@ def read_url(
                 "fetched_at": result.fetched_at,
                 "backend": result.backend,
                 "status": result.status,
+                "authenticated": result.authenticated,
                 "offset": page["offset"],
                 "total_items": page["total_items"],
                 "has_more": page["has_more"],
@@ -503,6 +507,11 @@ def read_url(
             "backend": result.backend,
             "status": result.status,
             "chars": len(result.text),
+            # True only when this answer came from a request that carried the
+            # session cookies. Without it a logged-in read and an anonymous one
+            # are indistinguishable to the agent, which is the difference
+            # between "here is your Drive" and "here is Drive's public page".
+            "authenticated": result.authenticated,
             "text": text,
             # `next_url` is deliberately NOT here. It is page-authored: it comes
             # from a <link rel=next> or a "Next page" anchor, and it already

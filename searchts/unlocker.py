@@ -191,6 +191,12 @@ class FetchResult:
     #: (kinds: next-page, feed, fold, list, count). The notes are also the last
     #: lines of ``text``.
     more: List[Dict[str, str]] = field(default_factory=list)
+    #: True when this read carried session cookies to the target host. Reported,
+    #: never a value: the point is that an agent can tell a logged-in read from
+    #: an anonymous one, which it otherwise cannot. A read that sent cookies and
+    #: still landed on a login wall sets this False, because the answer it got
+    #: is the anonymous answer.
+    authenticated: bool = False
     #: Page HTML kept only until ``_finalize`` runs detection; never returned.
     page_html: Optional[str] = field(default=None, repr=False, compare=False)
 
@@ -1629,15 +1635,27 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     # carry their conversation in provider-specific data channels that generic
     # HTML extraction can't see (or sees only partially). A dedicated extractor
     # returns the COMPLETE conversation; any failure falls through to the ladder.
+    #
+    # ── does this read answer "as the logged-in user" or "as anyone"? ────────
+    # Only the direct curl rung can carry the jar, so only a curl win is an
+    # authenticated answer. Reported so an agent can tell the two apart; a
+    # boolean, never a value. Measured: with `--cdp-port` on a real login the
+    # receipt was byte-identical to the anonymous one, so "I read your Drive"
+    # and "I read Drive's public page" looked the same to the caller.
+    cookie_rung = "curl_cffi"
+
+    def _with_auth(result: FetchResult) -> FetchResult:
+        result.authenticated = bool(cookie_header) and result.backend == cookie_rung
+        return _finalize(result, scrub, tick=_tick)
+
     try:
         from searchts import share_extractors
         share = share_extractors.extract(url) if share_extractors.matches(url) else None
     except Exception:  # noqa: BLE001 - tier-0 must never break the ladder
         share = None
     if share is not None and share.markdown:
-        return _finalize(
-            FetchResult(f"share:{share.provider}", share.markdown, 200, final_url=url),
-            scrub,
+        return _with_auth(
+            FetchResult(f"share:{share.provider}", share.markdown, 200, final_url=url)
         )
 
     # Tier-0.5: known-host public-API endpoints (e.g. Reddit .json).
@@ -1653,14 +1671,13 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 _tick(
                     f"  known-host:{kh.provider}: ok ({len(kh.markdown)} chars)"
                 )
-                return _finalize(
+                return _with_auth(
                     FetchResult(
                         f"known-host:{kh.provider}",
                         kh.markdown,
                         200,
                         final_url=url,
-                    ),
-                    scrub,
+                    )
                 )
             _tick(f"  known-host:{kh_name}: miss")
     except Exception:  # noqa: BLE001 - ring must never break the ladder
@@ -1824,15 +1841,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 if reddit_hit:
                     label, listing_md = reddit_hit
                     _tick(label)
-                    return _finalize(
+                    return _with_auth(
                         FetchResult(
                             backend,
                             listing_md,
                             status,
                             final_url=final_url or url,
                             headers=headers,
-                        ),
-                        scrub,
+                        )
                     )
                 text = html_to_text(body, url)
 
@@ -1866,7 +1882,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     remember(domain, backend)
                 _tick(f"  {backend}: ok ({len(text)} chars{', whole page' if whole else ''})")
                 # clean win, stop here — sanitize untrusted content before return
-                return _finalize(
+                return _with_auth(
                     FetchResult(
                         backend,
                         text,
@@ -1874,9 +1890,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         final_url=final_url or url,
                         headers=headers,
                         page_html=None if backend == "Jina Reader" else body,
-                    ),
-                    scrub,
-                    tick=_tick,
+                    )
                 )
             # Real but thin (e.g. JS-rendered or genuinely short): keep as a
             # fallback and escalate in case a richer backend renders more.
@@ -1987,7 +2001,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     page_html=None if listing_hit else html,
                 )
                 if listing_hit or len(text) >= min_chars:
-                    return _finalize(human, scrub, tick=_tick)
+                    return _with_auth(human)
                 best = human
                 attempts.append(("human-browser", f"thin-{len(text)}b"))
                 _tick(f"  human-browser: thin-{len(text)}b")
@@ -2004,7 +2018,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 _tick(f"  human-browser: {why}")
 
     if allow_thin and best is not None:
-        return _finalize(best, scrub, tick=_tick)
+        return _with_auth(best)
 
     raise UnlockerError(url, attempts, _cookie_login_hint(cookie_header, attempts))
 

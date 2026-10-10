@@ -1727,6 +1727,11 @@ def _cmd_read(args):
             "backend": result.backend,
             "status": result.status,
             "chars": len(result.text),
+            # True only when this answer came from a request that carried the
+            # session cookies. Without it, a logged-in read and an anonymous one
+            # produce byte-identical receipts and the caller cannot say which
+            # one it just got.
+            "authenticated": result.authenticated,
             "text": result.text,
             "next_url": result.next_url,
             "more": result.more,
@@ -1738,8 +1743,10 @@ def _cmd_read(args):
         print(json.dumps(payload, ensure_ascii=False))
     else:
         # Status to stderr so stdout stays a clean, pipeable content stream.
-        print(f"[{result.backend}] status={result.status} chars={len(result.text)}",
-              file=sys.stderr)
+        status = f"[{result.backend}] status={result.status} chars={len(result.text)}"
+        if result.authenticated:
+            status += " (logged in)"
+        print(status, file=sys.stderr)
         print(result.text)
         for extra in pages[1:]:
             print(f"\n# {extra.final_url}\n\n{extra.text}")

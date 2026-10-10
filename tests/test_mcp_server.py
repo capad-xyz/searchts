@@ -865,3 +865,43 @@ class TestReadUrlCarriesTheOptIns:
             assert token in READ_URL_DESCRIPTION, (
                 f"{token} exists but no agent reading the schema would know"
             )
+
+
+def test_the_receipt_says_whether_the_read_was_authenticated(monkeypatch):
+    """An agent must be able to tell 'your Drive' from 'Drive's public page'.
+
+    Live: with `--cdp-port` against a real login the MCP receipt was identical
+    to the anonymous one, so an agent reporting the contents of a logged-in
+    account had nothing in the receipt that said the login was in play.
+    """
+    import searchts.unlocker as unlocker_mod
+    from searchts.integrations import mcp_server
+
+    page = "Ordinary page prose about invoices and receipts. " * 12
+
+    def _fake(url, max_pages, **kwargs):
+        got_cookies = bool(kwargs.get("cookies"))
+        return [unlocker_mod.FetchResult(
+            "curl_cffi", page, 200, final_url=url,
+            fetched_at="2026-10-10T00:00:00Z", authenticated=got_cookies,
+        )]
+
+    monkeypatch.setattr(unlocker_mod, "read_pages", _fake)
+    assert json.loads(mcp_server.read_url("https://x.test/a"))["authenticated"] is False
+
+
+def test_the_cursor_envelope_says_it_too(monkeypatch):
+    import searchts.unlocker as unlocker_mod
+    from searchts.integrations import mcp_server
+
+    page = "\n\n".join(f"Item {i} body text here" for i in range(6))
+
+    def _fake(url, max_pages, **kwargs):
+        return [unlocker_mod.FetchResult(
+            "curl_cffi", page, 200, final_url=url,
+            fetched_at="2026-10-10T00:00:00Z", authenticated=True,
+        )]
+
+    monkeypatch.setattr(unlocker_mod, "read_pages", _fake)
+    out = json.loads(mcp_server.read_url("https://x.test/a", page_items=2))
+    assert out["authenticated"] is True

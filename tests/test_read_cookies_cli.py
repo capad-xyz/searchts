@@ -196,3 +196,40 @@ def test_cdp_port_plus_a_file_is_refused_too():
             "https://site.test/a", cookies="/tmp/x.json", cdp_port="9222"
         )
     assert "--cdp-port" in str(e.value) and "--cookies" in str(e.value)
+
+
+def test_the_json_receipt_says_whether_the_read_was_authenticated(monkeypatch, capsys):
+    """Live: `--json` output was identical with and without cookies.
+
+    So a script reading the receipt could not tell "this is your account's page"
+    from "this is the public page", and would report one as the other.
+    """
+    import json
+
+    def _fetch(url, **kwargs):
+        return FetchResult("curl_cffi", "body", 200,
+                           authenticated=bool(kwargs.get("cookies")))
+
+    monkeypatch.setattr("searchts.unlocker.fetch", _fetch)
+    monkeypatch.setattr(
+        "searchts.session_cookies.resolve_cookies",
+        lambda site, **kw: [CookieRecord("sid", "v", ".example.com")],
+    )
+    _run(monkeypatch, ["read", "https://example.com/a", "--cookies", "x.json", "--json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["authenticated"] is True
+
+
+def test_the_plain_status_line_marks_a_logged_in_read(monkeypatch, capsys):
+    def _fetch(url, **kwargs):
+        return FetchResult("curl_cffi", "body", 200, authenticated=True)
+
+    monkeypatch.setattr("searchts.unlocker.fetch", _fetch)
+    monkeypatch.setattr(
+        "searchts.session_cookies.resolve_cookies",
+        lambda site, **kw: [CookieRecord("sid", "v", ".example.com")],
+    )
+    _run(monkeypatch, ["read", "https://example.com/a", "--cookies", "x.json"])
+
+    assert "logged in" in capsys.readouterr().err

@@ -72,6 +72,10 @@ def _stub(monkeypatch, warnings=None):
     r.next_url = NEXT
     r.more = [m.as_dict() for m in found]
     r.page_html = None
+    # F27: the envelope reports whether the read was authenticated. A stub that
+    # omits it fails with an AttributeError here, which is the point: the field
+    # is part of the receipt every caller now depends on.
+    r.authenticated = False
 
     monkeypatch.setattr(unlocker, "fetch", lambda url, **kw: r)
     monkeypatch.setattr(unlocker, "read_pages", lambda url, p=None, **kw: [r])

@@ -522,3 +522,64 @@ def test_a_cookie_read_that_fails_some_other_way_gets_no_login_hint(ladder, monk
         unlocker.fetch("https://site.test/account", cookies=[LOGIN], use_memory=False)
 
     assert exc.value.hint == "", "a 403 is not a login wall; do not editorialize"
+
+
+# ── can the caller tell a logged-in answer from an anonymous one? ───────────
+
+
+def test_a_cookie_win_is_reported_as_authenticated(ladder):
+    """Live: the receipt was byte-identical with and without cookies.
+
+    An agent told "here is your Drive" and an agent told "here is Drive's public
+    page" produced the same JSON, so the caller had no way to know which one it
+    had just been handed. The flag is the difference.
+    """
+    ladder.state["curl"] = (200, PAGE)
+
+    result = ladder.walk("https://site.test/account", cookies=[LOGIN])
+
+    assert result.authenticated is True
+    assert SECRET not in repr(result.__dict__), "a boolean, never a value"
+
+
+def test_an_anonymous_read_is_reported_as_not_authenticated(ladder):
+    ladder.state["curl"] = (200, PAGE)
+
+    result = ladder.walk("https://site.test/account")
+
+    assert result.authenticated is False
+
+
+def test_the_authenticated_flag_agrees_with_the_scoping(ladder):
+    """A jar scoped to nothing means an anonymous read, and the flag must say so.
+
+    The test above already pins that wrong-site cookies are not an error. This
+    one pins that they are also not a login: the flag is derived from the same
+    scoped header that goes on the wire, so it cannot claim more than was sent.
+    """
+    ladder.state["curl"] = (200, PAGE)
+
+    result = ladder.walk("https://other.test/account", cookies=[LOGIN])
+
+    assert ladder.call("curl").cookie_header() is None, "nothing should have been sent"
+    assert result.authenticated is False
+
+
+def test_a_rung_that_cannot_carry_cookies_is_never_authenticated(ladder):
+    """The fence, stated as a fact about the receipt.
+
+    A browser win carries no jar, so claiming the answer is the logged-in one
+    would be a lie -- and it is the likeliest way this flag goes wrong later,
+    because Jina or the browser could be made to take cookies by a refactor
+    that nobody notices is a leak and an over-claim at the same time.
+    """
+    ladder.state["curl"] = (403, "blocked")
+    ladder.state["jina"] = (200, PAGE)
+
+    result = ladder.walk("https://site.test/account", cookies=[LOGIN], backends=["curl_cffi", "Jina Reader"])
+
+    assert result.backend == "Jina Reader"
+    assert result.authenticated is False, (
+        "the Jina rung never carried the jar, so it cannot answer as the user"
+    )
+    assert ladder.call("jina").haystack().find(SECRET) == -1, "and it must not have it either"
