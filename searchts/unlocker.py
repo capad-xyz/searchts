@@ -14,11 +14,11 @@ not a bot-wall challenge page:
                         undetected Chromium via patchright; launched only when
                         the lighter rungs fail).
 
-This runs from the user's own IP at personal volume, which sidesteps the
-residential-proxy pools that commercial unlockers (Bright Data, Browserbase)
-charge for. It is therefore personal-grade, not a scale tool. Interactive
-CAPTCHA / Turnstile (e.g. DataDome) is the honest ceiling and needs tier-2 or
-a human in the loop.
+This runs from the user's own IP at personal volume. It does not bundle the
+residential-proxy pools that commercial unlockers charge for. A DataDome
+device-check is a script the stealth rung is supposed to finish, including one
+simple click. A puzzle that asks a person to recognize images still needs a
+human. A block that is only the address is a separate layer, not this ceiling.
 """
 
 from __future__ import annotations
@@ -1105,10 +1105,11 @@ def _fetch_stealth(
     when this backend is reached, then torn down immediately, so it costs memory
     only on the hard pages that tier-1 could not crack (keeps a 16GB box happy).
 
-    Auto-resolves non-interactive JS / Cloudflare "managed" challenges by letting
-    the page execute and polling until the challenge markup clears. Interactive
-    CAPTCHA (DataDome, Turnstile click-to-verify) is the honest ceiling and will
-    still come back as a challenge page.
+    Lets the page execute and polls until a script challenge clears. A simple
+    click (continue, a checkbox, a press-and-hold that is one action) belongs
+    on this rung and is not a reason to stop. This function does not take that
+    click yet. A puzzle that asks a person to recognize images still comes
+    back as a challenge page.
 
     Safe under MCP/FastMCP: see ``_call_sync_browser``.
     """
@@ -1184,8 +1185,9 @@ def _fetch_stealth_impl(
 def _fetch_human(url: str, timeout: int = 180) -> Tuple[Optional[int], str, str]:
     """Human-in-the-loop fallback: open a HEADFUL browser and let the user solve it.
 
-    Last resort for interactive CAPTCHA / Turnstile (DataDome et al.) that no
-    automated rung can clear. Launches a visible (headless=False) patchright
+    Last resort for a puzzle no automated rung could clear (an image grid, a
+    login the user has to finish by hand). A DataDome script and a single click
+    belong on the stealth rung, not here. Launches a visible (headless=False) patchright
     Chromium, prints an instruction to stderr, then polls the page content until
     ``looks_blocked`` clears or `timeout` seconds elapse, and returns
     (status, html, final_url). Raises RuntimeError if patchright is unavailable so the
