@@ -1938,15 +1938,26 @@ def cause_line(parts: list[str]) -> str:
     return lead
 
 
-def needed_body(why: str) -> str:
-    """Graceful nag that names the cause. Raw errors stay behind a fold."""
+# The line a dead chain leaves behind. A PR with no Hare comment on it reads
+# as a reviewed one, and R1e keeps quiet after the first nag, so the one pass
+# that has nothing to say says it in words instead of saying nothing.
+NO_ANSWER = "Hare: no model answered, not reviewed."
+
+
+def needed_body(why: str, headline: str = "") -> str:
+    """Graceful nag that names the cause. Raw errors stay behind a fold.
+
+    `headline` leads the note when the caller knows more than "a pass failed".
+    The no-answer path passes NO_ANSWER; a delivery failure has its own cause
+    and keeps the default line, which must not claim no model answered.
+    """
     parts = [x.strip() for x in why.split(" | ") if x.strip()] or [why.strip()]
     hops = "\n".join(f"- {_short_fail(x)}" for x in parts)
     cause = cause_line(parts)
+    lead = headline or f"🐰 Could not finish this pass. {cause} This is not a review."
     return _no_em(
         f"{NEEDED}\n\n"
-        f"🐰 Could not finish this pass. {cause} "
-        "This is not a review.\n\n"
+        f"{lead}\n\n"
         "Reply **`/hare`** to retry. Or Actions → hare → Run workflow "
         "(optional OpenRouter model override).\n\n"
         "<details>\n<summary>What failed</summary>\n\n"
@@ -2035,10 +2046,10 @@ def asked_line(info: dict[str, Any], ask: str, deep: bool) -> str:
     return f"> Asked by {who}{link}: {what}"
 
 
-def post_needed(owner: str, repo: str, n: int, token: str, why: str) -> None:
+def post_needed(owner: str, repo: str, n: int, token: str, why: str, headline: str = "") -> None:
     if ACK.get("id"):  # answer the command in place, not with a second comment
         try:
-            github_api("PATCH", f"{ACK['where']}/{ACK['id']}", ACK["token"], {"body": needed_body(why)})
+            github_api("PATCH", f"{ACK['where']}/{ACK['id']}", ACK["token"], {"body": needed_body(why, headline)})
             ACK.clear()
             return
         except Exception:
@@ -2047,7 +2058,7 @@ def post_needed(owner: str, repo: str, n: int, token: str, why: str) -> None:
         "POST",
         f"/repos/{owner}/{repo}/issues/{n}/comments",
         token,
-        {"body": needed_body(why)},
+        {"body": needed_body(why, headline)},
     )
 
 
@@ -2722,7 +2733,7 @@ def _hare_once(
         if needed_posted_since(talk if isinstance(talk, list) else [], notes):
             print("hare: hops still dead; the needed note is already up")  # R1e: posts once, then stops
             return 0
-        post_needed(owner, repo, n, token, " | ".join(errs) or last_err)
+        post_needed(owner, repo, n, token, " | ".join(errs) or last_err, NO_ANSWER)
         return 0
 
     findings = normalize_findings(list(parsed.get("findings") or []) if isinstance(parsed.get("findings"), list) else [])

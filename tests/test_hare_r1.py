@@ -1109,6 +1109,65 @@ def test_the_nag_names_the_cause_instead_of_calling_every_hop_busy() -> None:
     assert "did not answer" in hare_r1.needed_body("zen:c: LLM empty choices https://z/v1 c")
 
 
+def _dead_chain(monkeypatch, posted, nags=()):
+    """`_hare_once` where every hop answers nothing, and the nag is captured."""
+    pr = {"head": {"sha": "abc", "repo": {"full_name": "o/r"}}, "base": {"sha": "b0", "repo": {"full_name": "o/r"}},
+          "title": "t", "body": "b", "state": "open", "draft": False, "user": {"login": "someone"}}
+
+    def api(method, path, token, data=None, accept=None):
+        if accept:
+            return "diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -0,0 +1 @@\n+x = 1\n"
+        if method == "GET" and path == "/repos/o/r/pulls/7":
+            return pr
+        if path.startswith("/repos/o/r/issues/7/comments"):
+            return list(nags)
+        if "/contents/" in path:
+            raise RuntimeError("404")
+        return [] if method == "GET" else {}
+
+    def dead(*_a, **_k):
+        raise RuntimeError("LLM empty content")
+
+    def nag(owner, repo, n, token, why, headline=""):
+        posted.append((why, headline))
+
+    monkeypatch.setenv("GITHUB_EVENT_NAME", "pull_request")
+    monkeypatch.setattr(hare_r1, "QUIET_S", 0)
+    monkeypatch.setattr(hare_r1, "github_api", api)
+    monkeypatch.setattr(hare_r1, "github_list", lambda *a, **k: [])
+    monkeypatch.setattr(hare_r1, "chat_complete", dead)
+    monkeypatch.setattr(hare_r1, "post_needed", nag)
+    hare_r1._hare_once("o", "r", 7, "t", "abc", "", "k", "", "", "", [], [], [], ["m1"], [])
+
+
+def test_a_dead_chain_says_in_one_line_that_nothing_was_reviewed(monkeypatch) -> None:
+    """A PR with no Hare comment on it reads as a reviewed one. R1e keeps quiet
+    after the first nag, so the pass that has nothing to say has to say it."""
+    posted: list[tuple[str, str]] = []
+    _dead_chain(monkeypatch, posted)
+    assert len(posted) == 1
+    why, headline = posted[0]
+    assert headline == hare_r1.NO_ANSWER == "Hare: no model answered, not reviewed."
+    assert "m1" in why  # the dead hop is still named for whoever fixes the pin
+    body = hare_r1.needed_body(why, hare_r1.NO_ANSWER)
+    assert body.startswith(hare_r1.NEEDED)
+    assert body.split("\n\n")[1] == hare_r1.NO_ANSWER  # the short line leads
+    assert "/hare" in body and "answered nothing" in body  # the cause still follows
+    # A pass that failed for another reason must not claim no model answered.
+    delivery = hare_r1.needed_body("review delivery failed: 500")
+    assert delivery.split("\n\n")[1].startswith("🐰 Could not finish this pass.")
+    assert hare_r1.NO_ANSWER not in delivery
+
+
+def test_the_no_answer_line_is_posted_once_not_on_every_push(monkeypatch) -> None:
+    """R1e still holds: one line, not one per commit. The next push reads the
+    line that is already there and stays quiet until a review lands."""
+    posted: list[tuple[str, str]] = []
+    up = [{"body": hare_r1.NEEDED, "created_at": "2026-10-10T00:00:00Z"}]
+    _dead_chain(monkeypatch, posted, nags=up)
+    assert posted == []
+
+
 def test_a_dead_pin_is_named_rather_than_called_busy() -> None:
     # The real failure on 2026-10-06: two Gemini slugs gone from the catalog,
     # three hops reserved for fallbacks that were themselves dead. "busy or
