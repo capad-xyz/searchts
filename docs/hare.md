@@ -7,7 +7,7 @@ Hare reviews this repo's pull requests with free models on the owner's own keys.
    and the sign is removed when it lands. Re-run on Hare's check also reviews
    again, and the note says who pressed it.
    The Action `hare / r1` runs `scripts/hare_r1.py` from main. A fixed list of
-   free model hops (PLAN R1c) is tried in order; the first that answers writes
+   free model hops (see docs/hare-next.md) are tried in order; the first that answers writes
    the review. If none answers, Hare posts a needed comment instead.
 2. Hare reads AGENTS.md, [HARE.md](../HARE.md), and what the ledger knows about the files in
    the diff. It also builds a codebase graph (`scripts/hare_graph.py`): names and
