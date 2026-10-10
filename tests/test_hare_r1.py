@@ -2655,3 +2655,40 @@ def test_the_workflow_exposes_every_cap_with_a_default_and_an_override() -> None
     for name in ("budget", "wall", "attempts"):
         assert re.search(rf"^\s*{name}:\s*$", wf, re.MULTILINE), f"no workflow_dispatch input {name}"
         assert re.search(r"description:.*0 = uncapped", wf), "an input must say what 0 means"
+
+
+# ── the proof table ───────────────────────────────────────────────────────────
+
+
+def _raw_run(**over) -> dict:
+    base = {
+        "case": "245-proof", "pr": 245, "provider": "openrouter",
+        "model": "nvidia/nemotron-3-ultra-550b-a55b:free", "mode": "off", "graph": "on",
+        "attempt": 0, "request_options": {"reasoning": {"enabled": False}},
+        "error": "", "usage": {"completion_tokens_details": {"reasoning_tokens": 0}},
+        "stream": {}, "answer": '{"summary": "s", "findings": []}',
+    }
+    base.update(over)
+    return base
+
+
+def test_the_proof_table_is_built_from_the_raw_runs(tmp_path) -> None:
+    """The table the PR quotes is derived from the stored answers, not typed over
+    them, so a reader can re-run it and get the same numbers."""
+    import hare_proof
+
+    (tmp_path / "a.json").write_text(json.dumps(_raw_run()), encoding="utf-8")
+    (tmp_path / "b.json").write_text(
+        json.dumps(_raw_run(mode="effort", error="LLM empty content (stream: 9000 reasoning chunks)",
+                            usage={}, answer="")), encoding="utf-8")
+    (tmp_path / "broken.json").write_text("{not json", encoding="utf-8")
+    runs = hare_proof.load(tmp_path)
+    assert len(runs) == 2, "one unreadable file must not hide the others"
+    rows = hare_proof.summarize(runs)
+    off = next(r for r in rows if r["mode"] == "off")
+    assert off["answered"] == 1 and off["runs"] == 1 and off["reasoning_tokens"] == 0
+    effort = next(r for r in rows if r["mode"] == "effort")
+    assert effort["answered"] == 0
+    assert "9000 reasoning chunks" in effort["why"], "the stream evidence has to reach the table"
+    out = hare_proof.render(runs, {})
+    assert "| off | 1 of 1 |" in out and "Runs that returned nothing" in out

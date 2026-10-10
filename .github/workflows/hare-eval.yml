@@ -42,6 +42,10 @@ on:
         description: "provider:slug pairs to use instead of each provider's first pin"
         required: false
         default: ""
+      timeout_s:
+        description: "Ceiling on one call, seconds (empty uses 300)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -82,6 +86,7 @@ jobs:
           RAW_DIR: ${{ inputs.raw_dir }}
           BUDGET: ${{ inputs.budget }}
           MODELS: ${{ inputs.models }}
+          TIMEOUT_S: ${{ inputs.timeout_s }}
         run: |
           # An answer key and a raw directory are optional: the eval has always
           # run against docs/hare-eval-cases.json without saving anything, and a
@@ -94,6 +99,7 @@ jobs:
           if [ -n "$MODELS" ]; then
             while IFS= read -r m; do [ -n "$m" ] && args+=(--model "$m"); done < <(printf '%s' "$MODELS" | tr ',' '\n')
           fi
+          if [ -n "$TIMEOUT_S" ]; then export HARE_EVAL_TIMEOUT_S="$TIMEOUT_S"; fi
           python scripts/hare_eval.py "${args[@]}"
           if [ -n "$RAW_DIR" ]; then
             # The raw answers are the evidence. Upload them so a reader can

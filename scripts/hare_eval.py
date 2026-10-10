@@ -191,6 +191,11 @@ def score(case: dict[str, Any], fs: list[dict[str, Any]]) -> dict[str, Any]:
 RATE = re.compile(r"\b429\b|rate.?limit|too many requests", re.I)
 DAILY = re.compile(r"per.?day|daily|PerDay|\bRPD\b|\bTPD\b", re.I)
 WAITS = (20, 60)
+# One call's ceiling. A reasoning hop that is going to think for ten minutes has
+# to be told so on purpose, not by accident: a run that mixes modes cannot
+# afford the slow shape at the production 600 s, or the whole matrix is gated on
+# the slowest cell. Overridable so a proof run can say what it allowed.
+CALL_TIMEOUT_S = int(os.environ.get("HARE_EVAL_TIMEOUT_S", "300"))
 
 
 class QuotaGone(RuntimeError):
@@ -201,7 +206,7 @@ def _ask(call: Callable[..., str], pause: Callable[[float], None], base: str, ke
          messages: list[dict[str, Any]], opts: dict[str, Any]) -> str:
     for attempt in range(len(WAITS) + 1):
         try:
-            return call(base, key, model, messages, opts, timeout=300)
+            return call(base, key, model, messages, opts, timeout=CALL_TIMEOUT_S)
         except Exception as e:
             text = str(e)
             if DAILY.search(text):
