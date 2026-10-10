@@ -1,0 +1,26 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "budget",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "max_tokens": 12000,
+   "exclude": true
+  }
+ },
+ "error": "LLM empty content https://openrouter.ai/api/v1 nvidia/nemotron-3-ultra-550b-a55b:free (finish_reason=?, max_tokens=32000, stream: 0 reasoning chunks, 0 answer chunks, usage_reported=False)",
+ "usage": {},
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 0,
+  "answer_chars": 0,
+  "finish_reason": "",
+  "cut": "",
+  "usage_reported": false
+ },
+ "answer": ""
+}

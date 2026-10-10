@@ -1,0 +1,47 @@
+{
+ "case": "245-proof",
+ "pr": 245,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 8261,
+  "completion_tokens": 544,
+  "total_tokens": 8805,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 176,
+  "answer_chars": 2154,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "{\n  \"effort\": \"low\",\n  \"summary\": \"Three small armor plates for Hare's wrap-up. Quiet. Useful.\\n1. **repair_json** now uses the escape walk to detect open strings instead of raw quote counting.\\n2. **wrap_up** keeps the partial when a restart carries fewer findings.\\n3. **_short_fail** extracts the actual timeout tier from the error message.\",\n  \"aim\": \"Fix three Hare Bot findings from #244 and #243 so the review wrap-up stops losing findings on restarts, stops miscounting escaped quotes, and reports the right timeout tier.\",\n  \"case\": \"The changes are surgical and each has a dedicated test that passes. The escape-walk fix eliminates a class of false quote appends. The restart guard prevents an 800-token scratchpad from overwriting a larger kept review. The timeout regex is a pure read from the error string. No callers change; the public surface is untouched. Safe to ship.\",\n  \"findings\": [\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 590,\n      \"issue\": \"The docstring for _walk still says it returns a tuple of two items but now returns three.\",\n      \"short\": \"Docstring out of sync with new return signature.\",\n      \"fix\": \"yes\",\n      \"change\": \"Update the docstring to mention the third boolean return value.\",\n      \"original\": \"    \\\"\\\"\\\"Bracket stack after `text`, the index just past the last seam, and\\n    whether a string is still open at the end.\",\n      \"suggestion\": \"    \\\"\\\"\\\"Bracket stack after `text`, the index just past the last seam, and\\n    whether a string is still open at the end.\\n    Returns (stack, seam_index, in_string).\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"tests/test_hare_r1.py\",\n      \"line\": 1045,\n      \"issue\": \"The test name mentions 'counts strings by the escape walk' but the assertion only checks the issue text and finding count, not that the escape walk was actually used.\",\n      \"short\": \"Test name promises more than it verifies.\",\n      \"fix\": \"later\",\n      \"change\": \"Either rename the test to match what it asserts, or add an assertion that the raw quote count would have been wrong.\",\n      \"original\": \"\",\n      \"suggestion\": \"\"\n    }\n  ]\n}"
+}
