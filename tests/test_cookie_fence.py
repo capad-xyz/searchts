@@ -441,3 +441,84 @@ def test_the_host_is_derived_from_the_normalized_url(ladder, url):
     assert ladder.call("curl").cookie_header() == f"{COOKIE_NAME}={SECRET}", (
         f"lost the cookie for {url!r}"
     )
+
+
+# ── what a failed cookie read says ───────────────────────────────────────────
+
+#: Reddit's login page, verbatim from a live run. 36 words, which is why the
+#: wall classifier needed the redirect URL rather than more vocabulary.
+LOGIN_PAGE = (
+    "By continuing, you agree to our User Agreement and acknowledge that you "
+    "understand the Privacy Policy. Continue with Phone Number Continue with "
+    "Google New to Reddit? Sign Up"
+)
+LOGIN_FINAL = "https://site.test/login/?dest=https%3A%2F%2Fsite.test%2Faccount"
+
+
+def _login_everywhere(ladder, monkeypatch):
+    """Every rung answers with a login page at a /login URL."""
+
+    def _reply(rung, url):
+        return 200, LOGIN_PAGE, LOGIN_FINAL, {}
+
+    stubs = {
+        "curl": "_fetch_curl_cffi", "jina": "_fetch_jina", "stealth": "_fetch_stealth",
+    }
+    for name, attr in stubs.items():
+        def _stub(*args, _n=name, **kwargs):
+            return _reply(_n, args[0])
+        monkeypatch.setattr(unlocker, attr, _stub)
+
+
+def test_a_cookie_read_that_still_hits_a_login_wall_says_so(ladder, monkeypatch):
+    """The three rungs are each right; none of them says what to do.
+
+    Measured live: with cookies for ``site.test`` sent, every rung answered with
+    the login page, and the report was three lines reading "login-wall" -- which
+    leaves the caller choosing between an expired session, the wrong profile, and
+    the fact that only the direct request carries cookies at all. That last one
+    is invisible from the report and is the common case.
+    """
+    _login_everywhere(ladder, monkeypatch)
+
+    with pytest.raises(unlocker.UnlockerError) as exc:
+        unlocker.fetch("https://site.test/account", cookies=[LOGIN], use_memory=False)
+
+    assert exc.value.hint, "a cookie read that hit a login wall must explain itself"
+    assert "expired" in exc.value.hint or "profile" in exc.value.hint
+
+
+def test_the_hint_never_carries_a_cookie_value(ladder, monkeypatch):
+    _login_everywhere(ladder, monkeypatch)
+
+    with pytest.raises(unlocker.UnlockerError) as exc:
+        unlocker.fetch("https://site.test/account", cookies=[LOGIN], use_memory=False)
+
+    assert SECRET not in str(exc.value)
+    assert SECRET not in exc.value.hint
+
+
+def test_an_anonymous_read_gets_no_hint(ladder, monkeypatch):
+    """A hint on every failure would be noise, and would be wrong here."""
+    _login_everywhere(ladder, monkeypatch)
+
+    with pytest.raises(unlocker.UnlockerError) as exc:
+        unlocker.fetch("https://site.test/account", use_memory=False)
+
+    assert exc.value.hint == ""
+    assert str(exc.value) == (
+        "all backends failed for https://site.test/account -> "
+        + "; ".join(f"{b}: {w}" for b, w in exc.value.attempts)
+    ), "an anonymous read's message must not change shape"
+
+
+def test_a_cookie_read_that_fails_some_other_way_gets_no_login_hint(ladder, monkeypatch):
+    """The hint is about a login page, not about cookies having been used."""
+    ladder.state["curl"] = (403, "Forbidden")
+    ladder.state["jina"] = (403, "Forbidden")
+    ladder.state["stealth"] = (403, "Forbidden")
+
+    with pytest.raises(unlocker.UnlockerError) as exc:
+        unlocker.fetch("https://site.test/account", cookies=[LOGIN], use_memory=False)
+
+    assert exc.value.hint == "", "a 403 is not a login wall; do not editorialize"

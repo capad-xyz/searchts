@@ -485,12 +485,34 @@ def test_for_site_without_a_browser_says_what_to_pass(tmp_home):
 
 
 def test_for_site_refuses_chromium_and_names_the_alternative(tmp_home):
-    """Chromium cookies are behind App-Bound Encryption; say so, do not try."""
+    """A Chromium browser is refused off disk, and the message says what works.
+
+    The *reason* is platform-specific and the old test hard-coded the Windows
+    one. App-Bound Encryption is a Windows-only wrapper (Chrome 127+); on macOS
+    and Linux the key lives in the system keyring instead, so a message naming
+    App-Bound Encryption there was simply false. What is true everywhere, and
+    what the caller can act on, is the last sentence: open a debugger port.
+    """
+    import os
+
     with pytest.raises(CookieReadError) as exc:
         for_site("https://www.amazon.com", browser="chrome")
     message = str(exc.value)
-    assert "App-Bound Encryption" in message
-    assert "--cdp-port" in message
+    assert "--cdp-port" in message, "must name the path that does work"
+    assert "keyring" in message or "App-Bound Encryption" in message, (
+        "must say why the values are unreadable on this platform"
+    )
+    if os.name != "nt":
+        assert "App-Bound Encryption" not in message, (
+            "App-Bound Encryption is Windows-only; saying it here is a lie"
+        )
+
+
+def test_chromium_locked_message_does_not_name_a_cookie_value():
+    from searchts.session_cookies import chromium_locked_message
+
+    message = chromium_locked_message("chrome")
+    assert "--cdp-port" in message and "9222" in message
 
 
 def test_describe_never_prints_a_cookie_value(tmp_home):

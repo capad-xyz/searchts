@@ -1706,6 +1706,12 @@ def _cmd_read(args):
         print(f"Failed to read {e.url}", file=sys.stderr)
         for backend, why in e.attempts:
             print(f"  {backend}: {ux.tidy_reason(why)}", file=sys.stderr)
+        # One extra line, only when fetch had something useful to add. The
+        # per-backend reasons above are each true; none of them says what to do
+        # next, and a read that carried cookies is exactly the case where that
+        # is the whole question.
+        if e.hint:
+            print(f"  hint: {e.hint}", file=sys.stderr)
         sys.exit(1)
 
     # Surface prompt-injection findings to stderr so stdout stays clean content.
@@ -1768,95 +1774,43 @@ def _read_command_proxy(args):
 
 
 def _read_command_cookies(args):
-    """Resolve opt-in cookies for one read, reporting only safe provenance."""
-    from searchts.session_cookies import CookieReadError
+    """Resolve opt-in cookies for one read, reporting only safe provenance.
 
-    requested = getattr(args, "cookies", None) or getattr(args, "cookies_from_browser", None)
-    cdp_port = getattr(args, "cdp_port", None)
-    if not requested and not cdp_port:
-        return None
+    A thin wrapper: the rules live in ``session_cookies.resolve_cookies`` so
+    the MCP tool resolves the same jar, with the same scoping and the same
+    messages. What is added here is the CLI's own behaviour around it -- report
+    where the cookies came from without naming a value, and exit non-zero when
+    there is nothing to send.
+    """
+    from searchts.session_cookies import CookieReadError, resolve_cookies
 
     try:
-        if cdp_port:
-            # Validate before importing/connecting to any CDP client. The
-            # connection helper validates too, but this keeps rejection local.
-            from searchts.cdp_profile import connect_existing_cdp, parse_endpoint
-
-            parse_endpoint(cdp_port)
-            source = connect_existing_cdp(cdp_port, args.url)
-        elif getattr(args, "cookies", None):
-            source = _read_cookie_file(args.cookies, args.url)
-        else:
-            from searchts.session_cookies import for_site
-
-            source = for_site(args.url, args.cookies_from_browser)
+        records = resolve_cookies(
+            args.url,
+            cookies=getattr(args, "cookies", None) or "",
+            cookies_from_browser=getattr(args, "cookies_from_browser", None) or "",
+            cdp_port=getattr(args, "cdp_port", None),
+        )
     except CookieReadError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)
     except Exception as e:  # CDP clients can expose non-CookieReadError failures.
         print(f"could not read cookies: {e}", file=sys.stderr)
         sys.exit(1)
-
-    if not source.cookies:
-        print("no cookies were found for this site", file=sys.stderr)
-        sys.exit(1)
-    if not getattr(source, "count", 0):
-        source.count = len(source.cookies)
-    print(f"cookies: {source.describe()}", file=sys.stderr)
-    return source.cookies
+    if not records:
+        return None
+    print(f"cookies: {_cookie_provenance(args, len(records))}", file=sys.stderr)
+    return records
 
 
-def _read_cookie_file(path, site):
-    """Read a searchts-owned JSON cookie file and scope it to ``site``."""
-    from pathlib import Path
-    from urllib.parse import urlparse
-
-    from searchts.session_cookies import (
-        CookieReadError,
-        CookieRecord,
-        CookieSource,
-        filter_for_host,
-    )
-
-    try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        raise CookieReadError(f"could not read cookie file {path!r} ({type(e).__name__})") from None
-
-    host = (urlparse(site if "://" in site else "https://" + site).hostname or "").lower()
-    raw = data
-    if isinstance(data, dict) and isinstance(data.get("cookies"), list):
-        raw = data["cookies"]
-    elif isinstance(data, dict):
-        entry = data.get(host)
-        if isinstance(entry, dict):
-            raw = entry.get("cookies", [])
-        elif isinstance(entry, list):
-            raw = entry
-        else:
-            raw = []
-    if not isinstance(raw, list):
-        raw = []
-
-    records = []
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        name = item.get("name", item.get("n", ""))
-        value = item.get("value", item.get("v", ""))
-        domain = item.get("domain", item.get("d", host))
-        if not name or not domain:
-            continue
-        records.append(CookieRecord(
-            str(name), str(value), str(domain), str(item.get("path", item.get("p", "/"))),
-            bool(item.get("secure", item.get("s", False))),
-            bool(item.get("http_only", item.get("h", False))),
-        ))
-    scoped = filter_for_host(records, host)
-    if not scoped:
-        raise CookieReadError(f"no cookies for {host} in {path!r}")
-    return CookieSource(site=site, cookies=scoped, via="file", count=len(scoped),
-                        names=sorted({c.name for c in scoped}))
+def _cookie_provenance(args, count):
+    """One line saying where the cookies came from. Never a value."""
+    cdp_port = getattr(args, "cdp_port", None)
+    if cdp_port:
+        return f"cdp port -> {count} cookies for {args.url}"
+    if getattr(args, "cookies", None):
+        return f"file {args.cookies} -> {count} cookies for {args.url}"
+    return f"browser ({args.cookies_from_browser}) -> {count} cookies for {args.url}"
 
 
 def _cmd_get(args):

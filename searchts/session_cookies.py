@@ -22,7 +22,7 @@ import glob
 import os
 import sqlite3
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote, urlparse
 
 # ── browsers ────────────────────────────────────────────────────────────────
@@ -401,7 +401,7 @@ def for_site(site: str, browser: str = "") -> CookieSource:
     """Best local source for `site`: the owned store, else a local browser.
 
     Chromium-derived browsers are refused here, with the reason, because their
-    cookies are behind App-Bound Encryption. The debugger-port path in
+    cookie values are not readable off disk. The debugger-port path in
     cdp_profile.py is the way to read those, and it opens a port only after the
     user says so.
     """
@@ -415,8 +415,135 @@ def for_site(site: str, browser: str = "") -> CookieSource:
         )
     fam = family_of(browser)
     if fam == "chromium":
-        raise CookieReadError(
-            f"{browser}'s cookies are locked (App-Bound Encryption). "
-            "Use --cdp-port <port> to read them through a debugger you open."
-        )
+        raise CookieReadError(chromium_locked_message(browser))
     return read_firefox_family(browser, site)
+
+
+def chromium_locked_message(browser: str) -> str:
+    """Why a Chromium browser cannot be read off disk, and what does work.
+
+    Split by platform because the blanket "App-Bound Encryption" was a lie on
+    two of the three: that wrapper is Windows-only since Chrome 127. On macOS
+    and Linux the values are encrypted with a key from the system keyring, which
+    a headless read cannot obtain without a prompt appearing on the user's
+    screen. Either way the answer for the caller is the same and is the only
+    part worth acting on, so it is the last sentence in both.
+    """
+    if os.name == "nt":
+        why = (
+            "Chrome wraps that key in App-Bound Encryption, which refuses to "
+            "hand it to another program, so running as administrator does not "
+            "help"
+        )
+    else:
+        why = (
+            "its cookie values are encrypted with a key that lives in the "
+            "system keyring, and a keyring is not something a read can open "
+            "quietly on your screen"
+        )
+    return (
+        f"{browser}'s cookies are locked: {why}. "
+        f"Read them through a debugger port you open instead: start "
+        f"{browser} with --remote-debugging-port=9222 and pass --cdp-port 9222 "
+        f"to read. Firefox-derived browsers (Zen, Firefox, LibreWolf) have no "
+        f"such lock and can be read directly."
+    )
+
+
+# ── one resolver, so the CLI and the MCP tool cannot drift apart ──────────────
+
+
+def read_cookie_file(path: str, site: str) -> CookieSource:
+    """Read a searchts-owned JSON cookie file, scoped to `site`.
+
+    Accepts the shapes searchts itself writes and the ones a person types: a
+    bare list, ``{"cookies": [...]}``, or the owned store's
+    ``{"host": {"cookies": [...]}}``. Short keys (``n``/``v``/``d``) are the
+    owned store's own; long ones (``name``/``value``/``domain``) are what every
+    cookie exporter on earth writes.
+    """
+    import json
+    from pathlib import Path
+
+    try:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        raise CookieReadError(
+            f"could not read cookie file {path!r} ({type(e).__name__})"
+        ) from None
+
+    host = (urlparse(site if "://" in site else "https://" + site).hostname or "").lower()
+    raw: object = data
+    if isinstance(data, dict) and isinstance(data.get("cookies"), list):
+        raw = data["cookies"]
+    elif isinstance(data, dict):
+        entry = data.get(host)
+        if isinstance(entry, dict):
+            raw = entry.get("cookies", [])
+        elif isinstance(entry, list):
+            raw = entry
+        else:
+            raw = []
+    if not isinstance(raw, list):
+        raw = []
+
+    records = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        name = item.get("name", item.get("n", ""))
+        value = item.get("value", item.get("v", ""))
+        domain = item.get("domain", item.get("d", host))
+        if not name or not domain:
+            continue
+        records.append(CookieRecord(
+            str(name), str(value), str(domain), str(item.get("path", item.get("p", "/"))),
+            bool(item.get("secure", item.get("s", False))),
+            bool(item.get("http_only", item.get("h", False))),
+        ))
+    scoped = filter_for_host(records, host)
+    if not scoped:
+        raise CookieReadError(
+            f"no cookies for {host} in {path!r}. Cookies are host-scoped: a "
+            f"file holding only other sites' cookies reads as nothing here."
+        )
+    return CookieSource(site=site, cookies=scoped, via="file", count=len(scoped),
+                        names=sorted({c.name for c in scoped}))
+
+
+def resolve_cookies(
+    site: str,
+    *,
+    cookies: str = "",
+    cookies_from_browser: str = "",
+    cdp_port: object = None,
+) -> Optional[List[CookieRecord]]:
+    """Resolve one read's opt-in cookies. Returns None when none were asked for.
+
+    The single entry point for every caller: the CLI flags, the MCP tool's
+    arguments, and anything that drives ``unlocker.fetch`` from a library all
+    come through here, so the scoping rules and the messages live in one place
+    and a second surface cannot grow a second, laxer one.
+
+    Raises :class:`CookieReadError` with one sentence a user can act on.
+    """
+    if not cookies and not cookies_from_browser and cdp_port in (None, ""):
+        return None
+    if cdp_port not in (None, ""):
+        # Imported here: cdp_profile imports this module, so a top-level import
+        # would be a cycle.
+        from searchts.cdp_profile import connect_existing_cdp, parse_endpoint
+
+        # Validate before importing/connecting to any CDP client. The connection
+        # helper validates too; this keeps the rejection local.
+        parse_endpoint(cdp_port)
+        source = connect_existing_cdp(cdp_port, site)
+    elif cookies:
+        source = read_cookie_file(cookies, site)
+    else:
+        source = for_site(site, cookies_from_browser)
+    if not source.cookies:
+        raise CookieReadError("no cookies were found for this site")
+    if not source.count:
+        source.count = len(source.cookies)
+    return source.cookies
