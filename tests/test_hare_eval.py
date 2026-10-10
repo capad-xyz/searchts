@@ -212,9 +212,16 @@ def test_every_mode_the_workflow_offers_is_a_mode_the_eval_runs() -> None:
         assert name in hare_eval.MODES, f"the description offers {name!r}, which is not a mode"
 
 
-def test_a_mode_the_eval_does_not_know_is_named_not_dropped_silently(capsys) -> None:
+def test_a_mode_the_eval_does_not_know_is_named_not_dropped_silently(capsys, tmp_path) -> None:
     """A dropped mode is how `off,on` measured only `off` and said nothing."""
     assert "on" not in hare_eval.MODES  # the mode that started this
-    hare_eval.main(["--modes", "off,on", "--providers", "", "--cases", "docs/hare-proof-cases.json"])
+    # --out goes to tmp_path: main() writes docs/hare-eval-<date>.{json,md} and
+    # a test has no business dropping a report into the repo's docs/.
+    hare_eval.main([
+        "--modes", "off,on",
+        "--providers", "",
+        "--cases", "docs/hare-proof-cases.json",
+        "--out", str(tmp_path),
+    ])
     out = capsys.readouterr().out
     assert "on" in out and "not a mode" in out

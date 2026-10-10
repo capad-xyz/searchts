@@ -25,7 +25,7 @@ on:
         # mode when effort and budget became separate shapes (#359).
         description: "Reasoning modes: off, effort, budget, max (comma separated)"
         required: false
-        default: "off,on"
+        default: "off,max"
       repeat:
         description: "Runs per cell"
         required: false
