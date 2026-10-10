@@ -2,6 +2,14 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.14.1](https://github.com/capad-xyz/searchts/compare/v0.14.0...v0.14.1) (2026-10-10)
+
+
+### Fixed
+
+* **hare:** the note leads with real findings, and a dead chain says so ([61efb8b](https://github.com/capad-xyz/searchts/commit/61efb8b3133d19089fac2725330b0f3ee633d8af))
+* **hare:** the note leads with real findings, and a dead chain says so ([#357](https://github.com/capad-xyz/searchts/issues/357)) ([61efb8b](https://github.com/capad-xyz/searchts/commit/61efb8b3133d19089fac2725330b0f3ee633d8af))
+
 ## [0.14.0](https://github.com/capad-xyz/searchts/compare/v0.13.1...v0.14.0) (2026-10-09)
 
 
