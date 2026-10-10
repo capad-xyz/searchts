@@ -1,34 +1,19 @@
 # Roadmap
 
-searchts is *"the free, open-source, keyless web layer for agents"* — won by being reliable and
-easy for an agent to reach for, not by having the most features. This roadmap reflects that focus.
-It's a direction, not a promise; issues and PRs are welcome (see [CONTRIBUTING.md](CONTRIBUTING.md),
-especially [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont)).
+Direction, not the task list.
+
+The open work is [`PLAN.md`](PLAN.md). What already shipped is [`docs/plan-shipped.md`](docs/plan-shipped.md). Posts are [`docs/comms.md`](docs/comms.md). The day-by-day log is [`docs/freeze-log.md`](docs/freeze-log.md). Hare is [`docs/hare-next.md`](docs/hare-next.md).
+
+searchts reads a page for an agent and says when it did not. The install on a machine stays something you can run without an account. A hosted fetch, the URL a remote connector points at, is **F18** in [`PLAN.md`](PLAN.md). It is not a tunnel shipped inside pip.
 
 ## Now
 
-- **Agent legibility** — sharper MCP tool descriptions, an [MCP reference](docs/mcp.md), and
-  claiming the Glama listing, so agents (and MCP directories) can find and adopt searchts.
-- **Contribution flywheel** — issue/PR templates, this roadmap, and good-first-issues, so the
-  project is easy to contribute to.
-
-## Next
-
-- **Public unlocker benchmark** — a reproducible set of bot-walled pages searchts measures itself
-  against, published as a scorecard. It doubles as a regression canary (we find out the day an
-  anti-bot vendor breaks us) and as a great first contribution: *add a site.*
-- **Reliability** — evidence-driven fixes to whatever the benchmark exposes (block-detection gaps,
-  timeout tuning).
+The reader. [`PLAN.md`](PLAN.md) lists it: more of a page than the first screen, scroll, expand, the same fidelity on a site we do not special-case, and a scorecard row that has to contain the real page.
 
 ## Later
 
-- **Persistent stealth profile** — reuse a warmed browser profile across stealth-tier reads.
-- **PDF & document reading** — first-class handling for PDF/document URLs.
-- **Result caching** — optional content cache for repeat reads of the same URL.
-- **Sitemap / small multi-page crawl** — read a handful of related pages in one call.
+A PDF URL, a cache for a URL fetched in a loop, a bounded sitemap crawl. Each one has a trigger on its box in [`PLAN.md`](PLAN.md). Listing it here does not start it.
 
 ## Not planned
 
-- Paid-proxy pools and keyed commercial unlockers as defaults of the free package. A hosted
-  read is a separate product ([PLAN.md](PLAN.md) **F18**), not a default here, and not a standing
-  "never". See [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont).
+The **N** list in [`PLAN.md`](PLAN.md). A paid proxy is not the default of `pip install`. A hosted read is **F18**, not a default of this package, and not a standing "never." See [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont).

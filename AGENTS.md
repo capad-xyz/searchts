@@ -20,6 +20,7 @@ A plan says what is true now and what is next. A log says what already happened.
 | Hare's behavior, the model list, cadence, what Hare should do next | [`docs/hare-next.md`](docs/hare-next.md) |
 | What merged, a build note, a dated "we did X" | [`docs/freeze-log.md`](docs/freeze-log.md) |
 | A post | [`docs/comms.md`](docs/comms.md) |
+| Direction, not the task list | [`ROADMAP.md`](ROADMAP.md) |
 | What a user sees in a release | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ## Identity

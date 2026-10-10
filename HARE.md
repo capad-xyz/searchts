@@ -19,7 +19,7 @@ to a 3 or higher; the next run drops the line.
 - **Doctor only reads.** Do not suggest wiring config keys that nothing uses.
 - **Honest over clever.** searchts is a keyless reader: prefer saying plainly that a page could not be read over a feature that guesses.
 - **CI scripts may log with `print`.** P4.6 (progress on stderr, never stdout) protects searchts's CLI and MCP output. Scripts under `scripts/` and `.github/` write to the Actions log, where stdout is only a log, and they do not import searchts. A `print` there is not a finding. (#233, #268)
-- **What counts as real here.** On top of the general list in Hare's prompt: progress or ticks on stdout (P4.6: stdout is the CLI's and the MCP server's output), anything that breaks the MCP protocol, and a diff that misses PLAN.md's stated intent for the item it names.
+- **What counts as real here.** On top of the general list in Hare's prompt: progress or ticks on stdout (P4.6: stdout is the CLI's and the MCP server's output), anything that breaks the MCP protocol, and a diff that misses the intent named for that item in [`PLAN.md`](PLAN.md) (searchts) or [`docs/hare-next.md`](docs/hare-next.md) (Hare).
 - **Line length is the formatter's, not a finding.** The limit is `line-length = 100` in pyproject.toml, not 80, and ruff does not enforce it (E501 is off), so do not flag a long line. A line that is hard to read because of what it does is a finding about what it does.
 
 <!-- hare-ledger:rules -->

@@ -58,7 +58,7 @@ searchts mcp serve --http
 
 Legacy SSE: `searchts mcp serve --sse` → `http://127.0.0.1:8765/sse`. Prefer `--http`.
 
-`--host` must be `127.0.0.1`, `localhost`, or `::1`. `0.0.0.0` and LAN addresses are refused. There is **no public/hosted MCP URL**.
+`--host` must be `127.0.0.1`, `localhost`, or `::1`. `0.0.0.0` and LAN addresses are refused. There is **no public/hosted MCP URL** on this package ([PLAN.md](../PLAN.md) **N2**). A hosted read is **F18**, not this command.
 
 Custom connectors that require HTTPS cannot use `http://127.0.0.1`. You run that tunnel yourself (cloudflared, ngrok). searchts does not bundle it. This line is about reaching the MCP server. It is not a ban on a proxy, a VPN, or a later hosted read.
 

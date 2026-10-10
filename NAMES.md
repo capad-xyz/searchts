@@ -15,7 +15,7 @@ When in doubt, this file wins over chat. Roles, not vendors.
 | **Hourly matcher** | ChatGPT (or similar) job that scans `searchts-r1-needed` | The GitHub Action. R1c is PR events only |
 | **R1c Action** | Pipeline: gather → one LLM JSON → post a Review. Not a harness | ocx / a coding agent in CI |
 
-**PLAN ids** live in [`PLAN.md`](PLAN.md): `P*` work, `F*` later, `U*` unverified, `N*` never, `R*` review (Hare).
+Open searchts ids (`P*`, `F*`, `U*`, `N*`) live in [`PLAN.md`](PLAN.md). A box that already shipped is in [`docs/plan-shipped.md`](docs/plan-shipped.md). Hare ids (`R*`, HareBot, Laya) live in [`docs/hare-next.md`](docs/hare-next.md).
 
 | Id | One line |
 |---|---|
@@ -23,8 +23,8 @@ When in doubt, this file wins over chat. Roles, not vendors.
 | **R1b** | `searchts-hare[bot]` badge. Done |
 | **R1c** | Action doorbell on PR / `/hare`. Pipeline, not harness. Deep-only (full SHA) |
 | **R1d** | Same run: new Review + resolve threads whose finding is gone. #141 hole |
-| **F15** | Hare as a product. Quick vs deep / mention doorbell live here, not in R1c |
+| **F15** | Hare as a product. The record is [`docs/hare-next.md`](docs/hare-next.md), not PLAN.md |
 | **F16** | Disposable remote harness box. Not Hare. Not searchts |
-| **F18** | Paid searchts. Hosted `read` first. Walls stay N1 until a pass is real |
+| **F18** | Paid searchts. A hosted `read`: a URL we run and a key. Not a default of the local CLI. [`PLAN.md`](PLAN.md) |
 
 **Local spawn:** `gh pr comment <n> --body '/hare'`. The Action is the bot. Do not paste a review as yourself. Do not mint the App token on the laptop.

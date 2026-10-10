@@ -218,7 +218,7 @@ through those CLIs.
 
 ## Roadmap
 
-See [ROADMAP.md](https://github.com/capad-xyz/searchts/blob/main/ROADMAP.md) for where searchts is headed — and what's deliberately out of scope.
+The open work is [PLAN.md](PLAN.md). [ROADMAP.md](ROADMAP.md) is the direction, not the task list. What already shipped is [docs/plan-shipped.md](docs/plan-shipped.md).
 
 ## Credits
 
