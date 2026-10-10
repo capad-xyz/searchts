@@ -38,6 +38,10 @@ on:
         description: "Reasoning token budget per call (empty keeps the production default)"
         required: false
         default: ""
+      models:
+        description: "provider:slug pairs to use instead of each provider's first pin"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -77,6 +81,7 @@ jobs:
           CASES_FILE: ${{ inputs.cases_file }}
           RAW_DIR: ${{ inputs.raw_dir }}
           BUDGET: ${{ inputs.budget }}
+          MODELS: ${{ inputs.models }}
         run: |
           # An answer key and a raw directory are optional: the eval has always
           # run against docs/hare-eval-cases.json without saving anything, and a
@@ -86,6 +91,9 @@ jobs:
           if [ -n "$CASES_FILE" ]; then args+=(--cases "$CASES_FILE"); fi
           if [ -n "$RAW_DIR" ]; then args+=(--raw-dir "$RAW_DIR"); fi
           if [ -n "$BUDGET" ]; then args+=(--budget "$BUDGET"); fi
+          if [ -n "$MODELS" ]; then
+            while IFS= read -r m; do [ -n "$m" ] && args+=(--model "$m"); done < <(printf '%s' "$MODELS" | tr ',' '\n')
+          fi
           python scripts/hare_eval.py "${args[@]}"
           if [ -n "$RAW_DIR" ]; then
             # The raw answers are the evidence. Upload them so a reader can

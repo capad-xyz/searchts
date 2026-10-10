@@ -317,6 +317,7 @@ def reasoning_options(
     level: str,
     budget: int = 0,
     catalog: dict[str, dict[str, Any]] | None = None,
+    shape: str = "auto",
 ) -> dict[str, Any]:
     """The request body one hop carries for its provider's real reasoning field.
 
@@ -326,24 +327,36 @@ def reasoning_options(
     strongest level it accepts. `level` "none" turns reasoning off where the
     provider allows it and is a no-op where it does not, because Gemini 3 cannot
     be asked to stop thinking.
+
+    `shape` picks between the two bounded shapes: `auto` is production (a token
+    budget where the model takes one, an effort otherwise), `effort` is always
+    an effort and `budget` is always a token cap. They are separate because the
+    docs are silent on what happens if both are sent, and the proof run measured
+    them separately for exactly that reason.
     """
-    shape = REASONING_SHAPE.get(provider, "none")
-    if shape == "none":
+    field = REASONING_SHAPE.get(provider, "none")
+    if field == "none":
         return {}
     efforts = model_efforts(provider, model, catalog)
     if level == "none":
         # off. Gemini 3 has no thinking-off, so its hop carries nothing and
         # keeps whatever the gateway gives it.
-        return {"reasoning_effort": "none"} if shape == "top" and provider == "groq" else (
-            {"reasoning": {"enabled": False}} if shape == "nested" else {}
+        return {"reasoning_effort": "none"} if field == "top" and provider == "groq" else (
+            {"reasoning": {"enabled": False}} if field == "nested" else {}
         )
-    if shape == "top":
+    if field == "top":
         # Groq takes low|medium|high for gpt-oss; anything else is a 400.
         return {"reasoning_effort": clamp_effort(level, efforts)}
-    if budget > 0 and efforts_support_budget(provider, model, catalog):
-        # effort and max_tokens together are undefined in the docs, so one only.
+    if field == "nested":
+        budgetable = budget > 0 and efforts_support_budget(provider, model, catalog)
+        if shape == "effort" or (shape == "auto" and not budgetable):
+            return {"reasoning": {"effort": clamp_effort(level, efforts), "exclude": True}}
+        if shape == "budget" and not budgetable:
+            # Asked for a cap the model cannot take: fall back to the effort
+            # rather than send a field that is ignored at best and a 400 at worst.
+            return {"reasoning": {"effort": clamp_effort(level, efforts), "exclude": True}}
         return {"reasoning": {"max_tokens": budget, "exclude": True}}
-    return {"reasoning": {"effort": clamp_effort(level, efforts), "exclude": True}}
+    return {}
 
 # Fixed list, not a router. Read against the live catalogs 2026-10-06:
 # OpenRouter /api/v1/models (pricing 0/0), Groq docs/models, Zen by probe.
@@ -1463,6 +1476,10 @@ SALVAGE: dict[str, Any] = {}
 # What the last call did at the limit: {"cut": bool, "kept": findings kept,
 # "continued": bool, "why": "seam"|"think"|"length"}. The fold prints it.
 LAST_CUT: dict[str, Any] = {}
+#: What the last stream actually carried. An empty answer with no usage is
+#: indistinguishable from a model that thought and was cut off unless the
+#: script keeps the count of reasoning deltas it saw, so it does.
+LAST_STREAM: dict[str, Any] = {}
 
 
 def _walk(text: str) -> tuple[list[str], int, bool]:
@@ -1583,6 +1600,17 @@ def _sse(req: urllib.request.Request, timeout: int, max_tokens: int) -> tuple[st
             # arrived so the hop loop can salvage the findings it finished.
             SALVAGE["text"] = "".join(content)
             raise
+    LAST_STREAM.clear()
+    LAST_STREAM.update(
+        {
+            "reasoning_chunks": think_chunks,
+            "answer_chunks": answer_chunks,
+            "answer_chars": chars,
+            "finish_reason": finish,
+            "cut": cut,
+            "usage_reported": bool(usage),
+        }
+    )
     if cut and not usage:
         # The usage chunk comes last and the cut came first: the meter stands in.
         usage = {"completion_tokens": max(answer_chunks, chars // 4) + think_chunks, "estimated": True}
@@ -1829,6 +1857,7 @@ def chat_complete(
     req.add_header("HTTP-Referer", "https://github.com/capad-xyz/searchts")
     req.add_header("X-Title", "searchts-hare")
     LAST_CUT.clear()
+    LAST_STREAM.clear()
     try:
         content, finish, usage, cut = _call(req, body, timeout)
     except urllib.error.HTTPError as e:
@@ -1860,6 +1889,16 @@ def chat_complete(
         detail = f"finish_reason={finish or '?'}, max_tokens={LLM_MAX_TOKENS}"
         if spent is not None:
             detail += f", reasoning_tokens={spent}"
+        # Say what the stream carried. "empty content" alone reads as a dead
+        # model; a stream that delivered thousands of reasoning deltas and no
+        # answer is a model that thought past the budget, which is a different
+        # fault with a different fix.
+        if LAST_STREAM:
+            detail += (
+                f", stream: {LAST_STREAM.get('reasoning_chunks', 0)} reasoning chunks,"
+                f" {LAST_STREAM.get('answer_chunks', 0)} answer chunks,"
+                f" usage_reported={LAST_STREAM.get('usage_reported')}"
+            )
         raise RuntimeError(f"LLM empty content {base} {model} ({detail})")
     content = str(content)
     if cut == "seam" or cut == "length" or finish == "length":
@@ -2789,6 +2828,7 @@ def build_provider_chain(
     caps: Caps | None = None,
     catalog: dict[str, dict[str, Any]] | None = None,
     level: str = "",
+    shape: str = "auto",
 ) -> list[tuple[str, str, str, str, dict[str, Any]]]:
     """The fixed hop list, in order, as (name, base, key, model, request options).
 
@@ -2803,7 +2843,8 @@ def build_provider_chain(
     thinking". `catalog` is the provider /models data when the caller has it.
 
     `level` overrides the reasoning level for every hop, which is what the eval's
-    off/on/max modes use; empty means each model's own strongest level.
+    off/effort/budget/max modes use; empty means each model's own strongest level.
+    `shape` picks the bounded shape: `auto` (production), `effort` or `budget`.
     """
     caps = caps or CAPS
     bases = {
@@ -2839,7 +2880,7 @@ def build_provider_chain(
         if not key:
             continue
         for model in models.get(name, []):
-            opts = reasoning_options(name, model, wanted.get(name, "high"), caps.reasoning_budget, catalog)
+            opts = reasoning_options(name, model, wanted.get(name, "high"), caps.reasoning_budget, catalog, shape)
             chain.append((name, bases[name], key, model, opts))
     return chain
 

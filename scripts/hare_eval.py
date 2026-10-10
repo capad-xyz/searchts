@@ -69,8 +69,13 @@ LINE_SLACK = 25
 # `off` is the only mode that asks a model not to reason. `on` and `max` both
 # ask for the model's own strongest published level; `max` additionally carries
 # the reasoning budget, so the pair measures the bound rather than reasoning.
-MODES = ("off", "on", "max")
-MODE_LEVEL = {"off": "none", "on": "high", "max": ""}
+MODES = ("off", "effort", "budget", "max")
+# `off` asks a model not to reason. `effort` and `budget` are the two bounded
+# shapes, measured apart because the docs are silent on sending both and the
+# first proof run found the token budget returning nothing. `max` is production:
+# each model's own strongest published level, with the budget where it takes one.
+MODE_LEVEL = {"off": "none", "effort": "high", "budget": "high", "max": ""}
+MODE_SHAPE = {"off": "auto", "effort": "effort", "budget": "budget", "max": "auto"}
 
 
 def first_model(provider: str) -> str:
@@ -225,6 +230,7 @@ def run(
     caps: hare_r1.Caps | None = None,
     catalog: dict[str, dict[str, Any]] | None = None,
     raw_dir: Path | None = None,
+    models: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """deadline_s > 0 stops starting new calls after that many seconds, so the
     report is still written before the job's own timeout kills everything.
@@ -236,6 +242,11 @@ def run(
     """
     graphs = graphs or ["off"]
     caps = caps or hare_r1.Caps()
+    # `models` picks the exact slug per provider. Without it the eval takes each
+    # provider's first pin, which is one dead pin away from an empty column:
+    # a run where the head of a chain 400s everywhere proves nothing about the
+    # other hops behind it.
+    picked = {p: (models or {}).get(p) or first_model(p) for p in PROVIDERS}
     rows: list[dict[str, Any]] = []
     started = clock()
     spent: set[str] = set()
@@ -254,10 +265,11 @@ def run(
         for mode, graph in [(m, g) for m in modes for g in graphs]:
             chain = hare_r1.build_provider_chain(
                 {p: keys.get(p, "") if p in providers else "" for p in PROVIDERS},
-                {p: [first_model(p)] if p in providers else [] for p in PROVIDERS},
+                {p: [picked[p]] if p in providers else [] for p in PROVIDERS},
                 caps=caps,
                 catalog=catalog,
                 level=MODE_LEVEL.get(mode, ""),
+                shape=MODE_SHAPE.get(mode, "auto"),
             )
             for name, base, key, model, opts in chain:
                 for attempt in range(max(1, repeat)):
@@ -280,10 +292,11 @@ def run(
                         err = f"rate limited: {str(e)[:150]}"
                         spent.add(name)
                     except Exception as e:
-                        err = str(e)[:160]
+                        err = str(e)[:600]
                     usage = dict(hare_r1.LAST_USAGE)
                     if raw_dir is not None:
-                        _write_raw(raw_dir, case, name, model, mode, graph, attempt, opts, raw, err, usage)
+                        _write_raw(raw_dir, case, name, model, mode, graph, attempt, opts, raw, err, usage,
+                                   dict(hare_r1.LAST_STREAM))
                     fs = findings_of(parsed)
                     rows.append(
                         {
@@ -321,6 +334,7 @@ def _write_raw(
     raw: str,
     err: str,
     usage: dict[str, Any],
+    stream: dict[str, Any] | None = None,
 ) -> None:
     """One file per run: what was asked, what came back, and what it cost.
 
@@ -340,6 +354,7 @@ def _write_raw(
         "request_options": opts,
         "error": err,
         "usage": usage,
+        "stream": stream or {},
         "answer": raw,
     }
     try:
@@ -445,6 +460,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--raw-dir", default="", help="write every answer and error here, one file per run")
     ap.add_argument("--budget", type=int, default=0, help="reasoning token budget per call; 0 keeps the production default")
     ap.add_argument("--no-catalog", action="store_true", help="skip the /models lookups and use the pinned effort table")
+    ap.add_argument("--model", action="append", default=[], help="provider:slug to use instead of that provider's first pin")
     args = ap.parse_args(argv)
     token = os.environ.get("GITHUB_TOKEN", "")
     owner, _, repo = os.environ.get("GITHUB_REPOSITORY", "capad-xyz/searchts").partition("/")
@@ -469,7 +485,9 @@ def main(argv: list[str] | None = None) -> int:
     rows = run(cases, providers, modes, keys, token, owner, repo, repeat=args.repeat, deadline_s=args.deadline_min * 60,
                graphs=[g.strip() for g in args.graphs.split(",") if g.strip() in ("off", "on")] or ["on"],
                caps=caps, catalog=catalog,
-               raw_dir=Path(args.raw_dir) if args.raw_dir else None)
+               raw_dir=Path(args.raw_dir) if args.raw_dir else None,
+               models={m.split(":", 1)[0].strip(): m.split(":", 1)[1].strip()
+                       for m in args.model if ":" in m})
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
