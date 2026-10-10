@@ -1,0 +1,29 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "nous",
+ "model": "poolside/laguna-s-2.1:free",
+ "mode": "budget",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "effort": "high",
+   "exclude": true
+  }
+ },
+ "error": "LLM empty content https://inference-api.nousresearch.com/v1 poolside/laguna-s-2.1:free (finish_reason=length, max_tokens=32000, stream: 0 reasoning chunks, 0 answer chunks, usage_reported=False)",
+ "usage": {
+  "completion_tokens": 0,
+  "estimated": true
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 0,
+  "answer_chars": 0,
+  "finish_reason": "length",
+  "cut": "length",
+  "usage_reported": false
+ },
+ "answer": ""
+}

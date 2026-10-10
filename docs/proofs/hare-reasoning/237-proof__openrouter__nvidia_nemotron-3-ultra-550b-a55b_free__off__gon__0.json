@@ -1,0 +1,47 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 17521,
+  "completion_tokens": 1787,
+  "total_tokens": 19308,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 545,
+  "answer_chars": 6795,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "{\n  \"effort\": \"high\",\n  \"summary\": \"Hare gets a brain transplant: reasoning off by default, a local runner, and a JSON parser that survives quoted braces.\\n1. **Reasoning knobs** Nous, Groq, Zen now send `effort=none`; Gemini keeps `reasoning_effort=low`; OpenRouter keeps `effort=low`. Measured 6/6 thinking-on runs returned empty; 6/7 thinking-off runs answered in 9\u201363 s.\\n2. **JSON extraction** `json_objects` matches braces with string awareness, searches from the end, and recovers reviews wrapped in or preceded by stray braces.\\n3. **Local runner** `scripts/hare_local.py` drives the same hop chain from a terminal, dry-run by default.\\n4. **Timeouts** job 20\u219230 min, LLM call 60\u2192180 s, hop budget 360\u2192600 s, max tokens 8000\u219232000. All env-overridable.\\n5. **Error messages** `_short_fail` and `needed_body` now distinguish budget exhaustion from other empty-content failures.\",\n  \"aim\": \"Make the Hare review hop actually return a review instead of spending the entire token budget on reasoning and returning empty content.\",\n  \"case\": \"The measurement doc proves thinking-on cannot work on this hop at any budget the model accepts; thinking-off produces a review quickly. The JSON parser fix addresses a real data-loss bug seen on PR 222. The local runner is a pure dev tool. Timeout increases are backstops, not the fix. This diff is safe to ship: it only changes provider request shapes and adds a new script; no runtime behavior changes for callers.\",\n  \"findings\": [\n    {\n      \"sev\": \"real\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 228,\n      \"issue\": \"The new `json_objects` function treats any `{` outside a string as a potential object start, but it does not handle single-quoted strings. A stray `{` inside a single-quoted JSON-like snippet in prose could still trigger a false parse attempt.\",\n      \"short\": \"json_objects ignores single-quoted strings, may mis-scan prose with single quotes.\",\n      \"fix\": \"later\",\n      \"change\": \"Extend the string-state machine to track single quotes as well as double quotes, or document that only double-quoted strings are protected.\",\n      \"original\": \"        while j < n:\\n            ch = text[j]\\n            if esc:\\n                esc = False\\n            elif ch == \\\"\\\\\\\\\\\":\\n                esc = True\\n            elif ch == '\\\"':\\n                instr = not instr\\n            elif not instr:\\n                if ch == \\\"{\\\":\\n                    depth += 1\\n                elif ch == \\\"}\\\":\\n                    depth -= 1\\n                    if depth == 0:\\n                        closed = True\\n                        break\\n            j += 1\",\n      \"suggestion\": \"        while j < n:\\n            ch = text[j]\\n            if esc:\\n                esc = False\\n            elif ch == \\\"\\\\\\\\\\\":\\n                esc = True\\n            elif ch == '\\\"' or ch == \\\"'\\\":\\n                instr = not instr\\n            elif not instr:\\n                if ch == \\\"{\\\":\\n                    depth += 1\\n                elif ch == \\\"}\\\":\\n                    depth -= 1\\n                    if depth == 0:\\n                        closed = True\\n                        break\\n            j += 1\"\n    },\n    {\n      \"sev\": \"real\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 874,\n      \"issue\": \"`PROVIDER_REQUEST_OPTIONS` is defined after `build_provider_chain` but the function's docstring says callers must read it from there. A caller that imports the module and calls `build_provider_chain` before the module finishes executing (unlikely but possible in tests) would see an empty dict.\",\n      \"short\": \"PROVIDER_REQUEST_OPTIONS defined after the function that documents it as the single source.\",\n      \"fix\": \"yes\",\n      \"change\": \"Move the PROVIDER_REQUEST_OPTIONS definition above build_provider_chain.\",\n      \"original\": \"PROVIDER_REQUEST_OPTIONS: dict[str, dict[str, Any]] = {\\n    \\\"groq\\\": {\\\"reasoning\\\": GROQ_REASONING},\\n    \\\"gemini\\\": GEMINI_REASONING,\\n    \\\"nous\\\": {\\\"reasoning\\\": NOUS_REASONING},\\n    \\\"openrouter\\\": {\\\"reasoning\\\": OR_REASONING},\\n    \\\"zen\\\": {\\\"reasoning\\\": ZEN_REASONING},\\n}\\n\\n\\ndef build_provider_chain(\",\n      \"suggestion\": \"PROVIDER_REQUEST_OPTIONS: dict[str, dict[str, Any]] = {\\n    \\\"groq\\\": {\\\"reasoning\\\": GROQ_REASONING},\\n    \\\"gemini\\\": GEMINI_REASONING,\\n    \\\"nous\\\": {\\\"reasoning\\\": NOUS_REASONING},\\n    \\\"openrouter\\\": {\\\"reasoning\\\": OR_REASONING},\\n    \\\"zen\\\": {\\\"reasoning\\\": ZEN_REASONING},\\n}\\n\\n\\ndef build_provider_chain(\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_local.py\",\n      \"line\": 1,\n      \"issue\": \"The shebang line uses `python3` which may not exist on all systems (e.g., Windows without py launcher). The script is invoked via `python scripts/hare_local.py` in the docs, so the shebang is decorative.\",\n      \"short\": \"Shebang assumes python3 in PATH; not portable to Windows.\",\n      \"fix\": \"yes\",\n      \"change\": \"Change shebang to `#!/usr/bin/env python3` for better portability.\",\n      \"original\": \"#!/usr/bin/env python3\",\n      \"suggestion\": \"#!/usr/bin/env python3\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"docs/hare-thinking-ab.md\",\n      \"line\": 1,\n      \"issue\": \"The document title says \\\"thinking off vs thinking on\\\" but the body consistently uses \\\"reasoning\\\" terminology. The PR description and code use \\\"reasoning effort\\\". Consistency would help readers.\",\n      \"short\": \"Doc title uses 'thinking' while code and body use 'reasoning'.\",\n      \"fix\": \"yes\",\n      \"change\": \"Rename the document and title to use 'reasoning' consistently.\",\n      \"original\": \"# Hare: thinking off vs thinking on, measured\",\n      \"suggestion\": \"# Hare: reasoning off vs reasoning on, measured\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 541,\n      \"issue\": \"The `chat_complete` function now catches `TimeoutError` and re-raises with a custom message, but `urllib.request.urlopen` with a timeout raises `urllib.error.URLError` (wrapping `socket.timeout`), not `TimeoutError` directly. The catch may never trigger.\",\n      \"short\": \"TimeoutError catch may not match urllib's actual exception type.\",\n      \"fix\": \"later\",\n      \"change\": \"Catch `urllib.error.URLError` and inspect `isinstance(e.reason, socket.timeout)` or catch `socket.timeout` directly.\",\n      \"original\": \"    except TimeoutError as e:\\n        raise RuntimeError(\\n            f\\\"LLM timeout after {LLM_TIMEOUT_SEC}s {base} {model} (raise HARE_LLM_TIMEOUT_S)\\\"\\n        ) from e\",\n      \"suggestion\": \"    except urllib.error.URLError as e:\\n        if isinstance(e.reason, TimeoutError):\\n            raise RuntimeError(\\n                f\\\"LLM timeout after {LLM_TIMEOUT_SEC}s {base} {model} (raise HARE_LLM_TIMEOUT_S)\\\"\\n            ) from e\\n        raise\"\n    }\n  ]\n}"
+}

@@ -1,0 +1,30 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "effort",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "effort": "high",
+   "exclude": true
+  }
+ },
+ "error": "",
+ "usage": {
+  "completion_tokens": 596,
+  "estimated": true,
+  "prompt_tokens": 18145
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 153,
+  "answer_chars": 2239,
+  "finish_reason": "",
+  "cut": "length",
+  "usage_reported": false
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"Hare learns to answer: effort=none stops the reasoning binge, JSON parser survives quoted braces, local runner added for fast loops.\\n\\n1. **Provider knobs** effort=none for Nous/Groq/Zen, low for Gemini, low for OpenRouter\\n2. **JSON extraction** brace-matching parser replaces find/rfind, searches from end\\n3. **Error reporting** finish_reason and reasoning_tokens in empty-content errors\\n4. **Local runner** scripts/hare_local.py for dry runs from terminal\\n5. **Timeouts** LLM 180s, hop budget 600s, job 30min with documented math\",\"aim\":\"Make the Hare review hop return a review instead of spending the entire token budget on reasoning and returning empty content.\",\"case\":\"The measurement (docs/hare-thinking-ab.md) shows thinking on returns empty content 6/6 times at 32000 tokens; thinking off returns reviews 6/7 times in 9-63s with 0 reasoning tokens. The fix wires effort=none for the three providers that were reasoning themselves to death, fixes the JSON parser that was discarding reviews when prose quoted a `${{ secrets }}` brace, and adds a local runner so the loop can be driven from a terminal. The quality of thinking-off reviews is explicitly not settled (3/29 bot overlap), but viability is: off answers, on does not. Ship the viability fix; the next experiment is effort=low.\",\"findings\":[{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":547,\"issue\":\"The fence regex in extract_json changed from non-greedy (.*?) to greedy (.*) which could match across multiple fenced blocks, but the fallback to json_objects handles it correctly.\",\"short\":\"Fence regex turned greedy; mitigated by json_objects fallback.\",\"fix\":\"later\",\"change\":\"Revert to non-greedy .*? in the fence pattern for clarity, though current behavior is safe.\",\"original\":\"    fence = re.search(r\\\"```(?:json)?\\\\s*(\\\\{.*\\\\})\\\\s*```\\\", text, re.S)\",\"suggestion\":\"    fence = re.search(r\\\"```(?:json)?\\\\s*(\\\\{.*?\\\\})\\\\s*```\\\", text, re.S)\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":400,\"issue\":\"json_objects increments i by 1 on parse failure instead of jumping past the closing brace; correct for recovery but theoretically slower on pathological input with many balanced-but-invalid braces.\",\"short\":\"i+=1 on parse,\"fix\":\"no\",\"change\":\"\"}]}]}"
+}

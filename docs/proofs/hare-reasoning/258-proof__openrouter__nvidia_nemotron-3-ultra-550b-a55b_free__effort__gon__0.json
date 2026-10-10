@@ -1,0 +1,48 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "effort",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "effort": "high",
+   "exclude": true
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 10343,
+  "completion_tokens": 1913,
+  "total_tokens": 12256,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 1543,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 97,
+  "answer_chars": 1214,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "{\"effort\":\"low\",\"summary\":\"Chain reorder: slow models first, fast ones as fallbacks. Quiet. Sensible.\\n\\n1. **provider chain** order flipped in code, PLAN, and tests.\",\"aim\":\"Move OpenRouter and Nous to the front of the Hare reviewer chain; demote Groq and Gemini to fallbacks because the owner has seen the fast ones miss things the slower ones caught.\",\"case\":\"The diff is self-consistent: code, PLAN, and tests all reflect the new order. No behavior change beyond the hop sequence. The only drift is AGENTS.md still documenting the old order \u2014 a doc nit, not a blocker. Safe to ship.\",\"findings\":[{\"sev\":\"skip\",\"path\":\"AGENTS.md\",\"line\":45,\"issue\":\"AGENTS.md still documents the old provider order (Groq \u2192 OpenRouter \u2192 Nous \u2192 Gemini \u2192 Zen) in the Trigger section, but the code and PLAN now use OpenRouter \u2192 Nous \u2192 Groq \u2192 Gemini \u2192 Zen.\",\"short\":\"AGENTS.md docs the old chain order\",\"fix\":\"later\",\"change\":\"Update the Brain line in AGENTS.md to match the new order.\",\"original\":\"Brain: Groq then OpenRouter then Nous then Gemini then Zen (fixed list in `scripts/hare_r1.py`, chain in PL\",\"suggestion\":\"Brain: OpenRouter then Nous then Groq then Gemini then Zen (fixed list in `scripts/hare_r1.py`, chain in PL\"}]}"
+}
