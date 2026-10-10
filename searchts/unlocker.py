@@ -199,10 +199,17 @@ class FetchResult:
 class UnlockerError(Exception):
     url: str
     attempts: List[Tuple[str, str]] = field(default_factory=list)
+    #: One extra sentence that changes what the caller should do next, appended
+    #: to the message. Set when the ladder's reasons are all true but none of
+    #: them says the useful thing: a read that carried cookies and still got a
+    #: login page has one cause and one next step, and three copies of
+    #: "login-wall" do not say either.
+    hint: str = ""
 
     def __str__(self) -> str:
         rungs = "; ".join(f"{b}: {why}" for b, why in self.attempts)
-        return f"all backends failed for {self.url} -> {rungs}"
+        base = f"all backends failed for {self.url} -> {rungs}"
+        return f"{base} ({self.hint})" if self.hint else base
 
 
 _BLOCKED_SCHEMES = (
@@ -546,20 +553,61 @@ def _drop_stale_challenge_headers(headers: Dict[str, str], html: str) -> Dict[st
     return out
 
 
+#: Path segments that mean "this URL IS the login page", whatever the site calls
+#: the page. Matched as whole segments, so an article at ``/login-tips`` or
+#: ``/signin-guide`` is untouched and only the exact segment counts.
+_LOGIN_SEGMENTS = frozenset({
+    "login", "login.php", "signin", "sign-in", "signin.php", "log-in",
+    "account/login", "accounts/login", "session", "auth",
+})
+
+
+def is_login_url(url: Optional[str]) -> bool:
+    """True when `url` addresses a login page rather than the page asked for.
+
+    The text classifiers need words and a denominator, so a short auth shell
+    slips between them: reddit's `/settings/account/` redirects to
+    ``/login/?dest=...`` and extracts to 36 words naming two of the three
+    things a login shell names, which is under the breadth bar. The redirect
+    target is the stronger fact and it needs no vocabulary: a page whose own
+    canonical URL is ``/login`` is a login page on every site, in every
+    language, whether or not anyone has written its copy down here.
+    """
+    if not url:
+        return False
+    try:
+        path = urllib.parse.urlparse(url).path
+    except ValueError:
+        return False
+    path = path.lower().strip("/")
+    if not path:
+        return False
+    segments = [s for s in path.split("/") if s]
+    if not segments:
+        return False
+    # Any segment that is exactly a login word. `path in _LOGIN_SEGMENTS` would
+    # miss Reddit, which redirects to /login/ with a trailing slash and is
+    # caught here by the same rule as /login.
+    return any(seg in _LOGIN_SEGMENTS for seg in segments)
+
+
 def looks_blocked(
     status: Optional[int],
     text: str,
     headers: Optional[Mapping[str, str]] = None,
     *,
     login_wall: bool = False,
+    final_url: Optional[str] = None,
 ) -> Optional[str]:
     """Return a short reason if the response is a hard block/challenge page, else None.
 
     HTTP errors (including vendor codes like 999), known challenge phrases, and
     explicit challenge headers count as blocked. Login-wall phrases are scored
     only when ``login_wall=True`` (extracted text / Jina markdown) so a real
-    page with a sign-in modal in the raw HTML is not rejected. Thin-but-real
-    pages are not a block; ``fetch`` escalates, then fails unless ``allow_thin``.
+    page with a sign-in modal in the raw HTML is not rejected. ``final_url``
+    adds the redirect fact: a read that landed on ``/login`` is a login wall
+    whatever its text happens to score. Thin-but-real pages are not a block;
+    ``fetch`` escalates, then fails unless ``allow_thin``.
     """
     if status is None:
         return "no-response"
@@ -571,13 +619,13 @@ def looks_blocked(
         # Explicit block stamps (not "Server: AkamaiGHost" — that hosts real pages).
         if str(headers.get("x-datadome-ch") or "").lower() in ("blocked", "challenge"):
             return "challenge"
-        if str(headers.get("x-akamai-session-info") or "").lower().find("challenge") >= 0:
+        if str(headers.get("x-akamai-session-info") or "").find("challenge") >= 0:
             return "challenge"
     head = (text or "")[:8192].lower()
     for phrase in _BLOCK_PHRASES:
         if phrase in head:
             return "challenge"
-    if login_wall and _looks_login_wall(text):
+    if login_wall and (_looks_login_wall(text) or is_login_url(final_url)):
         return "login-wall"
     if _looks_cookie_wall(text):
         return "cookie-wall"
@@ -1571,7 +1619,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 f"refusing to send cookies through {redact(proxy)}: a proxy "
                 f"operator can read the Cookie header, which is a live login. "
                 f"Use a proxy on this machine, run the read without cookies, or "
-                f"pass proxy_trusted=True to accept it."
+                f"pass --proxy-trusted (proxy_trusted=True) to accept it."
             ))])
         proxy_curl = curl_proxy_url(proxy_spec)
         proxy_browser = playwright_proxy(proxy_spec)
@@ -1790,7 +1838,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
 
             text = text or ""
             # Login-wall on the extract only (raw HTML often has a sign-in modal).
-            extract_reason = looks_blocked(200, text, login_wall=True)
+            # `final_url` rides along: a redirect onto /login is the wall, even
+            # when the shell that renders there is too short to be scored.
+            extract_reason = looks_blocked(200, text, login_wall=True,
+                                           final_url=final_url)
             if extract_reason:
                 attempts.append((backend, extract_reason))
                 _tick(f"  {backend}: {extract_reason}")
@@ -1920,7 +1971,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 except Exception as e:  # noqa: BLE001 - fail loud, not a traceback
                     text = ""
                     human_error = human_error or f"extract failed ({type(e).__name__}: {e})"
-            wall = looks_blocked(200, text, login_wall=True) if text else None
+            wall = looks_blocked(200, text, login_wall=True, final_url=final_url) if text else None
             if (
                 text
                 and wall is None
@@ -1955,7 +2006,34 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     if allow_thin and best is not None:
         return _finalize(best, scrub, tick=_tick)
 
-    raise UnlockerError(url, attempts)
+    raise UnlockerError(url, attempts, _cookie_login_hint(cookie_header, attempts))
+
+
+def _cookie_login_hint(
+    cookie_header: str, attempts: List[Tuple[str, str]]
+) -> str:
+    """The one sentence a cookie read needs when it still lands on a login page.
+
+    Cookies were scoped to this host and attached to the direct request, and the
+    site answered with its login page anyway. Every rung then reports
+    "login-wall" and the caller is left guessing which of the three causes it
+    is: the session expired, the cookies went to the wrong profile, or the
+    browser rung simply cannot carry them (the fence). That last one is the
+    common case and it is invisible from the report, so it is named here
+    rather than left to be discovered from a third failed read.
+
+    Empty unless cookies were actually sent, so an anonymous read is unchanged.
+    """
+    if not cookie_header:
+        return ""
+    if not any("login-wall" in why for _, why in attempts):
+        return ""
+    return (
+        "cookies were sent for this host and the site still returned a login "
+        "page: the session is probably expired, or these cookies belong to a "
+        "different profile. Only the direct request carries them, so the "
+        "browser and reader rungs can never satisfy a logged-in read."
+    )
 
 
 _MAX_PAGES = 5
