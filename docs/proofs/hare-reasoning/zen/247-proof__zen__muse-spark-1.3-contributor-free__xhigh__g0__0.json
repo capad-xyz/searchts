@@ -1,0 +1,33 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "xhigh",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "xhigh",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 61.5,
+ "steps": 7,
+ "answer_part": "text",
+ "reasoning_chars": 1259,
+ "usage": {
+  "prompt_tokens": 33263,
+  "completion_tokens": 1593,
+  "completion_tokens_details": {
+   "reasoning_tokens": 6984
+  }
+ },
+ "answer": "Reading the owner's Hare rules to calibrate this review.Found the rules file. Pulling its contents now.Spotted a possible stale doc reference. Verifying the diff lines before filing.The local checkout looks newer than this diff, so I'm checking the chain definition directly.{\"effort\": \"low\", \"summary\": \"Gemini gets bumped to the fallback couch. \ud83d\udecb\ufe0f\\n\\n1. **chain order** Groq stays first, OpenRouter and Nous jump ahead of Gemini with Zen last.\\n2. **tests** order pin and hop-loop options pin updated to the new sequence.\", \"aim\": \"Put OpenRouter qwen ahead of Gemini Flash-Lite so Groq misses land on a stronger reviewer.\", \"case\": \"The reorder and its tests move in lockstep, but the contract doc still teaches the old Brain order, so the doc update needs to land with the code.\", \"findings\": [{\"sev\": \"real\", \"path\": \"scripts/hare_r1.py\", \"line\": 1356, \"issue\": \"The loop now runs groq, openrouter, nous, gemini, zen, but the AGENTS.md Trigger Brain line still says groq then gemini then nous then openrouter then zen. The body checklist punts the R1c line to the next fold, so the contract contradicts the code until that fold lands.\", \"short\": \"Chain order changed but AGENTS.md Brain line still teaches old Groq Gemini Nous OpenRouter sequence for agents\", \"fix\": \"later\", \"change\": \"Update the AGENTS.md Brain line and the PLAN R1c chain line to the new order in this PR.\"}, {\"sev\": \"skip\", \"path\": \"tests/test_hare_r1.py\", \"line\": 643, \"issue\": \"The comment says OpenRouter qwen leads, then Nous, then Gemini, but the assert below keeps Groq first. A reader copying the order from the comment gets it backwards.\", \"short\": \"Comment says OpenRouter leads but Groq stays first in assert below, flipping the actual order for readers\", \"fix\": \"yes\", \"change\": \"Name Groq first in the test comment to match the assert.\", \"original\": \"    # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is\\n    # fast and misses things. OpenRouter's qwen leads, then Nous, then Gemini.\", \"suggestion\": \"    # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is\\n    # fast and misses things. Groq stays first, then OpenRouter's qwen, then Nous.\"}]}"
+}

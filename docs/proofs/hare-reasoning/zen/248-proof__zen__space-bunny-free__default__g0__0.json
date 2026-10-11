@@ -1,0 +1,33 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 568.5,
+ "steps": 10,
+ "answer_part": "text",
+ "reasoning_chars": 65681,
+ "usage": {
+  "prompt_tokens": 41022,
+  "completion_tokens": 2241,
+  "completion_tokens_details": {
+   "reasoning_tokens": 17431
+  }
+ },
+ "answer": "```json\n{\n  \"effort\": \"medium\",\n  \"summary\": \"A notebook of its own for Hare, filled by the weekly ledger run. Good shape; two rough edges.\\n\\n1. **learned rules** a new HARE.md: header, an owner list, and the marked block rebuilt from `/hare score 1..5` by `hare_ledger.py --rules`\\n2. **prompt** `hare_r1.py` fetches HARE.md from the base branch and hands it to the model as the owner's rules\\n3. **docs** the same marked block lands in AGENTS.md, where no run will ever rewrite it\\n4. **workflow** `hare-ledger.yml` writes, stages and PRs HARE.md alongside the ledger\",\n  \"aim\": \"Move what Hare learns out of AGENTS.md into a file of its own, which the weekly ledger rewrites and every note reads.\",\n  \"case\": \"The mechanics are sound: the block surgery keeps the owner's own lines, the tests actually exercise replace-not-duplicate, and the fetch is pinned to the base branch so a PR cannot smuggle rules in. What holds it is the trust path: comment text from any login that can comment becomes an instruction line served to every later review, and the AGENTS.md copy promises a weekly rewrite that no run will ever make.\",\n  \"findings\": [\n    {\n      \"sev\": \"real\",\n      \"path\": \"AGENTS.md\",\n      \"line\": 26,\n      \"issue\": \"The block added here says each ledger run rewrites it, but the workflow now writes HARE.md, so `hare_ledger.py` never opens AGENTS.md. This copy is frozen from its first commit and every agent reads a promise the code does not keep.\",\n      \"short\": \"The block promises weekly rewrites, but the ledger writes HARE.md, so this AGENTS.md copy is dead from commit one.\",\n      \"fix\": \"later\",\n      \"change\": \"Drop the block from AGENTS.md, or replace its prose with a one-line pointer to HARE.md.\"\n    },\n    {\n      \"sev\": \"real\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 908,\n      \"issue\": \"Every `/hare score 1 <why>` comment, from any login that can comment on a public repo, is filed verbatim as a rule line and injected here under the heading \\\"the owner's rules for Hare on this repo\\\". Comment text was evidence; this PR makes it instructions that persist on main.\",\n      \"short\": \"Any commenter can file a rule line through `/hare score 1`; write access is never checked before it becomes instructions.\",\n      \"fix\": \"later\",\n      \"change\": \"In `proposed_rules`, keep only scores whose `by` has write, maintain or owner association (the login is already captured), and mark the filed lines as filed from comments.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_ledger.py\",\n      \"line\": null,\n      \"issue\": \"`apply_rules` only replaces the block when both markers are present, so a HARE.md whose end marker was lost or hand-deleted gets a second block appended under the first, and the file the model reads then carries two rules blocks that grow on every run.\",\n      \"short\": \"A missing end marker makes apply_rules append a second rules block instead of replacing the one already there.\",\n      \"fix\": \"later\",\n      \"change\": \"Key the replacement off RULES_START alone and, when RULES_END is gone, replace through the end of the file.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": null,\n      \"issue\": \"A bare `except Exception: hare_md = \\\"\\\"` swallows every failure (no HARE.md on base yet, a bad ref, a rate limit), so the note comes out identical to the pre-R2c note and nothing says the rules never arrived. The AGENTS.md fetch right above it says \\\"(AGENTS.md unread)\\\" out loud.\",\n      \"short\": \"Every HARE.md fetch failure becomes an empty string, so a missing file looks like a normal review.\",\n      \"fix\": \"later\",\n      \"change\": \"Surface \\\"(HARE.md unread)\\\" on that path the way the AGENTS.md fetch does, so a silent empty shows up in the run log.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_ledger.py\",\n      \"line\": null,\n      \"issue\": \"`HARE_MD_HEAD` is a second copy of the HARE.md this PR commits. The two will drift, and the fresh-file path silently reinstates the old prose the owner may have edited away.\",\n      \"short\": \"HARE_MD_HEAD is a second copy of the committed HARE.md header; the two will drift apart over time.\",\n      \"fix\": \"later\",\n      \"change\": \"Make the committed file the only copy, and have the empty-file path write just the block plus a one-line title.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_ledger.py\",\n      \"line\": null,\n      \"issue\": \"The new main path calls `proposed_rules(ledger)` twice, once to write and once only to print `len()`. Cheap, but it is the same list and it reads like two sources of truth.\",\n      \"short\": \"main calls proposed_rules twice: once to write the file, once just to print len().\",\n      \"fix\": \"later\",\n      \"change\": \"Compute the rules once into a local and reuse it for both the write and the print.\"\n    }\n  ]\n}\n```"
+}
