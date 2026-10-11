@@ -130,3 +130,29 @@ def test_the_docstring_says_what_the_timeout_does_not_bound():
     doc = inspect.getdoc(sb.signin_window) or ""
     assert "sign in" in doc
     assert "unbounded" in doc
+
+
+# ── a fourth finding: missing trailing newlines ────────────────────────────
+#
+# ruff selects E, F, I on this repo and W292 is not among them, so CI does not
+# catch a file that ends mid-line; the review bot did. Flipping W292 on in
+# pyproject would fail on six files that predate this branch, so the check
+# lives here instead, scoped to the files this work added.
+
+
+@pytest.mark.parametrize(
+    "relpath",
+    [
+        "searchts/signin_browser.py",
+        "searchts/login_store.py",
+        "tests/test_signin_browser.py",
+        "tests/test_login_store.py",
+        "tests/test_login_cli.py",
+    ],
+)
+def test_the_files_this_change_added_end_with_a_newline(relpath):
+    root = Path(__file__).resolve().parents[1]
+    raw = (root / relpath).read_bytes()
+    assert raw, f"{relpath} is empty"
+    assert raw.endswith(b"\n"), f"{relpath} has no trailing newline"
+    assert not raw.endswith(b"\n\n"), f"{relpath} ends with a blank line"
