@@ -100,13 +100,18 @@ def signin_window(
     site: str,
     *,
     browser: str = "chrome",
-    timeout_s: float = 300.0,
+    timeout_s: float = 20.0,
 ) -> Iterator[tuple]:
     """Open `site` in a browser searchts owns; yield ``(profile, port)``.
 
     The window stays open until the block exits, which is what gives the user
     time to sign in. 127.0.0.1 only: the debugger port hands over every login in
     this profile, so binding anything wider would put it on the network.
+
+    ``timeout_s`` bounds how long to wait for the debugger port to answer, not
+    how long the user has to sign in -- that is unbounded and is the user's to
+    take. Naming the two apart matters, because a single "timeout" on this
+    function used to read as though the sign-in itself could be cut short.
 
     The profile is *not* deleted here. The caller reads the cookies out of it
     and then removes it, because a sign-in that failed has nothing worth
@@ -127,10 +132,10 @@ def signin_window(
     try:
         executable = browser_executable(browser)
         launched = _launch_browser(executable, port, profile)
-        if not _wait_for_debugger(port, 20.0):
+        if not _wait_for_debugger(port, timeout_s):
             raise CookieReadError(
-                f"the sign-in browser did not start. Close any {browser} window "
-                f"and try again."
+                f"the sign-in browser did not start within {timeout_s:.0f}s. "
+                f"Close any {browser} window and try again."
             )
         print(
             f"A {browser} window opened on {host}. Sign in there. This window is "
@@ -148,21 +153,19 @@ def signin(
     site: str,
     *,
     browser: str = "chrome",
-    persist: bool = True,
-    timeout_s: float = 300.0,
 ) -> CookieSource:
     """Sign in once for `site` and return its cookies, ready for one read.
 
-    ``persist`` is decided by the caller, not here: keeping is the user's yes
-    and lives in :func:`searchts.login_store.keep`. This function only produces
-    the values, and removes the profile it made.
+    Whether anything is *kept* is decided by the caller, not here: keeping is
+    the user's yes and lives in :func:`searchts.login_store.keep`. This
+    function only produces the values, and removes the profile it made.
     """
     from searchts.login_store import host_of
 
     host = host_of(site)
     url = site if "://" in site else "https://" + site
 
-    with signin_window(site, browser=browser, timeout_s=timeout_s) as (profile, port):
+    with signin_window(site, browser=browser) as (profile, port):
         records = _read_after_signin(port, url, host)
     # The profile has served its purpose either way. A profile left behind is a
     # login on disk that nobody agreed to keep.
