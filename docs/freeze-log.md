@@ -116,6 +116,7 @@ Append a new row under the right heading. Do not append it to either plan.
 | 2026-10-03 | #227, #225, #228, #229 merged. **F25** ticked. Both Show HN gates are clear; **0.13.1** is a `fix:` release-please tag off #228, so the gate is really "0.13.1 on PyPI". README now says why searchts exists (#229) and six docs stopped calling example.com thin. |
 | 2026-10-10 | Hare's record moved to [`hare-next.md`](hare-next.md). This file is the diary. [`PLAN.md`](../PLAN.md) is only the open searchts work. |
 | 2026-10-10 | DataDome is not the ceiling. A device-check, including one simple click, is the stealth rung. An image puzzle still stops. The address is a separate layer: no bought IP in that PR. **N1** is "not a default of the free CLI", not "never an exit" (**F18**). `docs/mcp.md` tunnel line is HTTPS-to-loopback only. |
+| 2026-10-12 | **F27** logged-in `read` recorded from #350. Not built. Copy when a login exists; sign in once when it does not. One keep question. Kill does not touch the real browser unless asked. No vendor. The rules live in [`PLAN.md`](../PLAN.md). |
 
 ## Hare
 
