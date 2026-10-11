@@ -1,0 +1,33 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "low",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "low",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 41.7,
+ "steps": 2,
+ "answer_part": "text",
+ "reasoning_chars": 403,
+ "usage": {
+  "prompt_tokens": 29223,
+  "completion_tokens": 834,
+  "completion_tokens_details": {
+   "reasoning_tokens": 1454
+  }
+ },
+ "answer": "Burrowing into the diff to sniff out what holds and what is just nit.{\"effort\":\"medium\",\"summary\":\"A thinking-knob rescue mission for the review hop, plus the tools to prove it. Chewy and honest.\\n1. **docs** measured thinking-on vs thinking-off on the same PRs in `docs/hare-thinking-ab.md`\\n2. **fix** wired `effort=none` through `PROVIDER_REQUEST_OPTIONS`, hardened `extract_json` with string-aware `json_objects`, and sharpened empty-content and nag messages in `scripts/hare_r1.py`\\n3. **tool** added a dry-run-by-default local runner in `scripts/hare_local.py`\\n4. **tests** pinned the new timeouts, budgets, parser recovery, and per-hop options\",\"aim\":\"Make the free review hop actually answer instead of thinking its whole token budget away.\",\"case\":\"The measurement writeup is candid about weak quality overlap, the parser fix targets a real discarded-review payload, and `effort=none` matches the observed zero reasoning tokens. The local runner has a key-lookup gap for one provider that should be closed before it becomes the debugging loop everyone reaches for.\",\"findings\":[{\"sev\":\"real\",\"path\":\"scripts/hare_local.py\",\"line\":102,\"issue\":\"The default hop loop calls the auth-store lookup with \\\"openrouter\\\", but the alias map only knows \\\"or\\\", so the stored OpenRouter key is never found and that hop is silently skipped.\",\"short\":\"Auth-store lookup uses openrouter but alias map only knows or, hop skipped\",\"fix\":\"later\",\"change\":\"Add an \\\"openrouter\\\" entry to PROVIDER_ALIASES or normalize the name before the auth-store lookup, for both the explicit and default paths.\"},{\"sev\":\"skip\",\"path\":\"docs/hare-thinking-ab.md\",\"line\":93,\"issue\":\"The new doc, the new runner, and the test file all land without a trailing newline, which adds noise to future diffs.\",\"short\":\"Three new files land without trailing newline, adds diff noise\",\"fix\":\"later\",\"change\":\"End each new file with a newline.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":793,\"issue\":\"The manual-run test asserts on the literal source string for the event check, so any refactor of that line fails the test without changing behavior.\",\"short\":\"Test pins exact source text for event check, breaks on refactor\",\"fix\":\"later\",\"change\":\"Assert the observable ask behavior for pull_request versus other events instead of the source string.\"}]}"
+}

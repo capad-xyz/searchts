@@ -1,0 +1,33 @@
+{
+ "case": "tiny-prompt",
+ "pr": 0,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "minimal",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "minimal",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 10.5,
+ "steps": 1,
+ "answer_part": "text",
+ "reasoning_chars": 153,
+ "usage": {
+  "prompt_tokens": 11132,
+  "completion_tokens": 93,
+  "completion_tokens_details": {
+   "reasoning_tokens": 492
+  }
+ },
+ "answer": "{\"findings\":[{\"line\":2,\"severity\":\"bug\",\"why\":\"breaks when n>len(items): items[-n:] clamps to all items but items[len-n:] becomes a negative mid-slice returning only a suffix\"}]}"
+}

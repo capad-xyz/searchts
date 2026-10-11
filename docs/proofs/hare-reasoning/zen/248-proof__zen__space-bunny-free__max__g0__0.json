@@ -1,0 +1,33 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "max",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "max",
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 93.1,
+ "steps": 5,
+ "answer_part": "text",
+ "reasoning_chars": 52212,
+ "usage": {
+  "prompt_tokens": 10202,
+  "completion_tokens": 1835,
+  "completion_tokens_details": {
+   "reasoning_tokens": 13665
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"The bot finally gets a memory file. Four little files teach it what it missed. \ud83d\udc30\\n\\n1. **HARE.md** new: owner's own rules plus a marked block the ledger rewrites.\\n2. **Ledger** turns every low score with a reason into a rule line, newest first, deduped, and writes the block back into that file.\\n3. **Action** fetches HARE.md from the base branch next to AGENTS.md and hands it to the model as the owner's rules.\\n4. **Workflow** points the ledger at HARE.md and carries it in the weekly PR.\\n5. **AGENTS.md** grows the same marked block, plus tests for scores to rules, block replaced not duplicated, owner lines survive, HARE.md reaching the prompt.\",\"aim\":\"Move Hare's learned rules out of AGENTS.md into a HARE.md the ledger run owns, so a low score with a reason becomes a line the next note reads.\",\"case\":\"The plumbing is right, the tests can actually fail, and the base-ref fetch is the correct place to read from. Two things want a look first: the block this PR adds to AGENTS.md is now written by nobody (the workflow moved `--rules` to HARE.md, so that copy freezes at \\\"none yet\\\" while its own sentence says the ledger rewrites it), and any GitHub user can get their words into a file the prompt calls the owner's rules. Both are small edits before the file becomes the memory.\",\"findings\":[{\"sev\":\"real\",\"path\":\"scripts/hare_ledger.py\",\"line\":190,\"issue\":\"The rule line is the raw comment text plus a score, with no newline flattening and no marker scrubbing: a multi-line `/hare score 2` reason breaks the bullet list, and a reason containing `<!-- /hare-ledger:rules -->` makes the next `apply_rules` replace up to that first end marker and mangle the file. The commenter's login is dropped too, so the block header's \\\"what the owner said Hare missed\\\" is unearned for anyone who can comment.\",\"short\":\"Raw comment text becomes a rule line: no newline flatten, no marker scrub, and the author's login is dropped.\",\"fix\":\"later\",\"change\":\"Flatten `sc[\\\"text\\\"]` to one line, strip the marker strings from it, and carry the login onto the line so a rule can be traced.\"},{\"sev\":\"real\",\"path\":\"AGENTS.md\",\"line\":25,\"issue\":\"This block is added to AGENTS.md while the workflow now runs `--rules HARE.md`, so nothing rewrites this copy again; it sits at \\\"none yet\\\" forever, in the file every agent reads, telling them \\\"each ledger run rewrites this block\\\" after the run no longer touches it.\",\"short\":\"AGENTS.md keeps a generated block the ledger no longer writes, and its text claims the run rewrites it.\",\"fix\":\"later\",\"change\":\"Delete the block from AGENTS.md (lines 25 to 30); HARE.md owns the marked block now, so the contract file points at it instead of carrying a dead copy.\"},{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":908,\"issue\":\"HARE.md is pasted into the user message verbatim under the heading \\\"the owner's rules for Hare on this repo\\\", above the diff. Combined with a score comment coming from any commenter, that is a commenter's sentence arriving as an instruction; AGENTS.md's evidence-only rule covers PR text, not a file the Action fetched as instructions.\",\"short\":\"Fetched HARE.md enters the prompt as owner instructions with no author check, so a commenter's score reason reads as a rule.\",\"fix\":\"later\",\"change\":\"Label the block as owner-maintained content read from the base ref, and drop rule lines whose author is not the owner before they reach the prompt.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_ledger.py\",\"line\":296,\"issue\":\"`proposed_rules(ledger)` runs twice in `main`, once for the rewrite and once for the count, so the whole ledger scan is walked again for a number it already had.\",\"short\":\"`proposed_rules(ledger)` is computed twice in main; bind it once.\",\"fix\":\"yes\",\"change\":\"Bind the rules once and reuse them for the write and the count.\",\"original\":\"    if args.rules:\\n        before = Path(args.rules).read_text(encoding=\\\"utf-8\\\") if Path(args.rules).exists() else \\\"\\\"\\n        after = apply_rules(before, proposed_rules(ledger))\\n        if after != before:\\n            Path(args.rules).write_text(after, encoding=\\\"utf-8\\\")\\n            print(f\\\"hare ledger: {len(proposed_rules(ledger))} rule(s) written to {args.rules}\\\")\",\"suggestion\":\"    if args.rules:\\n        rules = proposed_rules(ledger)\\n        before = Path(args.rules).read_text(encoding=\\\"utf-8\\\") if Path(args.rules).exists() else \\\"\\\"\\n        after = apply_rules(before, rules)\\n        if after != before:\\n            Path(args.rules).write_text(after, encoding=\\\"utf-8\\\")\\n            print(f\\\"hare ledger: {len(rules)} rule(s) written to {args.rules}\\\")\"},{\"sev\":\"skip\",\"path\":\"HARE.md\",\"line\":9,\"issue\":\"HARE.md tells the owner that resolving the score comment makes the next run drop the rule; the ledger reads comments straight from the API and only consults `isResolved` on review threads, so a resolved comment still files a rule until it is deleted or the score is raised.\",\"short\":\"Resolving a score comment does not retire its rule; only deleting it or raising the score does.\",\"fix\":\"later\",\"change\":\"Say \\\"delete or edit the score comment\\\", and make the same edit in `HARE_MD_HEAD` in hare_ledger.py, which carries a copy of this paragraph.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_ledger.py\",\"line\":191,\"issue\":\"`proposed_rules` has no cap, so the block grows one line per distinct low-score reason forever, and the prompt only takes the first 8,000 chars of HARE.md; past that the tail is silently dropped and the file becomes a wall nobody prunes.\",\"short\":\"The rule list is uncapped while the prompt takes 8k of HARE.md, so the tail goes dark.\",\"fix\":\"later\",\"change\":\"Cap the list (newest N is enough) and say the cap in the block text so a dropped line reads as a rule of the house.\"}]}"
+}

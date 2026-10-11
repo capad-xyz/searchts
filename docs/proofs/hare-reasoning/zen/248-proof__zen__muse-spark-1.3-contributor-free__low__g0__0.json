@@ -1,0 +1,33 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "low",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "low",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 23.8,
+ "steps": 1,
+ "answer_part": "text",
+ "reasoning_chars": 267,
+ "usage": {
+  "prompt_tokens": 17765,
+  "completion_tokens": 558,
+  "completion_tokens_details": {
+   "reasoning_tokens": 1908
+  }
+ },
+ "answer": "{\"effort\": \"medium\", \"summary\": \"Bunny learns to remember. Cute and slightly haunted.\\n1. **Ledger rules** low scores with a reason become lines in HARE.md, newest first, deduped\\n2. **Prompt wiring** Hare fetches HARE.md from base and reads it before every note\\n3. **Workflow** weekly ledger PR carries HARE.md along\", \"aim\": \"Give Hare its own memory file so low scores become rules without rewriting AGENTS.md.\", \"case\": \"Sweet shape, but the diff plants a block in AGENTS.md that nothing ever rewrites and the workflow check misses a brand new HARE.md, so the first memory would never ship.\", \"findings\": [{\"sev\": \"real\", \"path\": \"AGENTS.md\", \"line\": 25, \"issue\": \"AGENTS.md says each ledger run rewrites this block, but hare_ledger.py only writes the file passed via --rules, now HARE.md. The AGENTS.md copy will go stale on the next run.\", \"short\": \"AGENTS.md rules block promises weekly rewrites that the script never performs there.\", \"fix\": \"later\", \"change\": \"Remove the block from AGENTS.md or point the ledger at both files so the claim stays true.\"}, {\"sev\": \"real\", \"path\": \".github/workflows/hare-ledger.yml\", \"line\": 30, \"issue\": \"git diff --quiet ignores untracked files, so when HARE.md does not exist yet the script creates it and the job still reports ledger unchanged with no PR.\", \"short\": \"Untracked HARE.md is invisible to git diff check, first rules file opens no PR.\", \"fix\": \"later\", \"change\": \"Check git status porcelain for HARE.md too, or track the file before diffing.\"}, {\"sev\": \"skip\", \"path\": \"scripts/hare_ledger.py\", \"line\": 215, \"issue\": \"apply_rules only replaces when both markers exist; a file with only the start marker gets a second block appended instead of repaired.\", \"short\": \"Half present rules markers append a duplicate block instead of repairing it.\", \"fix\": \"later\", \"change\": \"Handle a lone start or end marker as a replace, not an append.\"}]}"
+}

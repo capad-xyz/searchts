@@ -1,0 +1,33 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "medium",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "medium",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 29.5,
+ "steps": 4,
+ "answer_part": "text",
+ "reasoning_chars": 533,
+ "usage": {
+  "prompt_tokens": 32585,
+  "completion_tokens": 724,
+  "completion_tokens_details": {
+   "reasoning_tokens": 2818
+  }
+ },
+ "answer": "Bunny nose twitching, checking the hop order and sniffing for rulebook gotchas.Caught a whiff of stale docs; digging up every old copy of the chain order.{\"effort\":\"low\",\"summary\":\"Gemini rides the bench while qwen takes the second chair. \ud83d\udc3e\\n\\n1. **chain order** `build_provider_chain` walks Groq, OpenRouter, Nous, Gemini, Zen with an owner-call comment.\\n2. **tests** fixed-order and hop-loop asserts move to the new tuple and per-hop options.\",\"aim\":\"Demote Gemini from default second hop to fallback behind OpenRouter and Nous while keeping Groq first.\",\"case\":\"The tuple swap and both test updates move in lockstep so the runtime does what the body says, but the R1c Brain line still names the old order and the body defers the PLAN update, so the changed rule ships with a stale copy.\",\"findings\":[{\"sev\":\"real\",\"path\":\"AGENTS.md\",\"line\":null,\"issue\":\"The R1c Brain line still reads Groq then Gemini then Nous then OpenRouter then Zen while the code now runs Groq then OpenRouter then Nous then Gemini then Zen, and the body leaves the PLAN R1c chain line for a later fold, so the contract contradicts the code.\",\"short\":\"R1c Brain line names Gemini second while code runs OpenRouter second, and PLAN update is deferred to a later fold\",\"fix\":\"later\",\"change\":\"Update the R1c Brain order in AGENTS.md and the PLAN chain line to Groq, OpenRouter, Nous, Gemini, Zen in this PR.\"}]}"
+}

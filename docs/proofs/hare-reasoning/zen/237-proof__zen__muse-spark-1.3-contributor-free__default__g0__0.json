@@ -1,0 +1,33 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 120.2,
+ "steps": 3,
+ "answer_part": "text",
+ "reasoning_chars": 1051,
+ "usage": {
+  "prompt_tokens": 29229,
+  "completion_tokens": 1083,
+  "completion_tokens_details": {
+   "reasoning_tokens": 14383
+  }
+ },
+ "answer": "Witty bot booting up \u2014 reading the diff to sniff out real bugs versus nits.{\"effort\": \"medium\", \"summary\": \"Brain freeze thawed: the hop finally answers instead of thinking itself silent. \ud83d\udc39\u26a1\\n1. **reasoning** pins effort none for nous, groq and zen, plus wider timeouts and budgets behind env knobs.\\n2. **parser** swaps the fragile slice for brace-aware scanning that favors the trailing review object.\\n3. **runner** adds hare_local.py dry-run loop with hop_override and broader HARE_ASK handling.\\n4. **docs** measures thinking on vs off and bumps the job timeout from 20 to 30.\", \"aim\": \"Make the reasoning hop return a review and keep the parser from discarding a valid answer.\", \"case\": \"The timeout and parser changes match the measured empty-answer failure, yet the new safety net checks names and file text instead of behavior, leaving the fix without a test that can catch a regression.\", \"findings\": [{\"sev\": \"real\", \"path\": \"tests/test_hare_r1.py\", \"line\": 781, \"issue\": \"The test reads hare_r1 source text for the HARE_ASK branch instead of executing _hare_once, so a broken ask path would still pass. HARE.md counts source-grepping tests as real.\", \"short\": \"Greps source for HARE_ASK branch instead of running the function, so broken ask handling stays green unnoticed.\", \"fix\": \"later\", \"change\": \"Call _hare_once with faked network and clock to cover manual-run ask handling.\"}, {\"sev\": \"real\", \"path\": \"tests/test_hare_r1.py\", \"line\": 788, \"issue\": \"The test only asserts hop_override exists in co_varnames and REASONING_BY_PROVIDER keys match, never that an override order reaches the hop loop. An ignored parameter would still pass.\", \"short\": \"Asserts param name exists without exercising override order, so ignored plumbing stays green.\", \"fix\": \"later\", \"change\": \"Invoke the chain with an override and assert the requested order is used.\"}, {\"sev\": \"skip\", \"path\": \"scripts/hare_local.py\", \"line\": 79, \"issue\": \"Explicit --model mapping only knows nous, zen and openrouter, so groq and gemini specs fail even though the chain supports them. Help text bakes in the same trio.\", \"short\": \"Local --model rejects groq and gemini while the Action chain supports them, drifting from prod behavior.\", \"fix\": \"later\", \"change\": \"Add groq and gemini bases to the local resolver or state the free-keys limit in help.\"}]}"
+}

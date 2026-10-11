@@ -1,0 +1,33 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "medium",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "medium",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 42.9,
+ "steps": 2,
+ "answer_part": "text",
+ "reasoning_chars": 803,
+ "usage": {
+  "prompt_tokens": 22468,
+  "completion_tokens": 786,
+  "completion_tokens_details": {
+   "reasoning_tokens": 4212
+  }
+ },
+ "answer": "Hare review queued, reading the diff for the ledger split.{\"effort\":\"medium\",\"summary\":\"Hare gets its own notebook instead of scribbling in the contract. \ud83d\udcd3\\n1. **memory** new HARE.md with owner rules plus a ledger-rewritten low-score block\\n2. **plumbing** ledger script writes the block to HARE.md and Hare feeds HARE.md into the prompt\\n3. **workflow** ledger job carries HARE.md into its weekly PR\\n4. **tests** coverage for rule filing, block replacement, and prompt wiring\",\"aim\":\"Move Hare's learned low-score rules out of AGENTS.md into HARE.md and feed that file to every review.\",\"case\":\"The split is sound and the plumbing is fail-open, but the diff keeps a copy of the rewritten block in AGENTS.md that the weekly run never updates, so the contract rots on day one. Drop that copy and this ships clean.\",\"findings\":[{\"sev\":\"real\",\"path\":\"AGENTS.md\",\"line\":null,\"issue\":\"The Why says a bot rewriting a block inside AGENTS.md is the wrong shape, yet the diff adds that block to AGENTS.md. The ledger run only rewrites HARE.md, so the AGENTS.md copy goes stale immediately.\",\"short\":\"AGENTS.md gains a ledger block the weekly run never rewrites, contradicting the stated split\",\"fix\":\"later\",\"change\":\"Remove the rules block from AGENTS.md and keep HARE.md as the single rewritten source.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_ledger.py\",\"line\":null,\"issue\":\"The rule formatter strips trailing dots then appends a period, so a reason ending in ? or ! becomes ?. or !. with odd punctuation.\",\"short\":\"Rule formatter appends a period after stripping dots, mangling trailing question or bang marks\",\"fix\":\"later\",\"change\":\"Append the period only when the reason lacks terminal punctuation.\"}]}"
+}

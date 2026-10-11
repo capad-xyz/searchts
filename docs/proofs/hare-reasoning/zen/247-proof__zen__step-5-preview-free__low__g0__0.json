@@ -1,0 +1,31 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "step-5-preview-free",
+ "mode": "low",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "low",
+  "published_effort": [
+   "low",
+   "medium",
+   "high"
+  ]
+ },
+ "error": "",
+ "seconds": 240.4,
+ "steps": 6,
+ "answer_part": "text",
+ "reasoning_chars": 33314,
+ "usage": {
+  "prompt_tokens": 29654,
+  "completion_tokens": 1110,
+  "completion_tokens_details": {
+   "reasoning_tokens": 9065
+  }
+ },
+ "answer": "```json\n{\n  \"effort\": \"low\",\n  \"summary\": \"Gemini got moved from second chair to the fallback chair. Quiet little chair swap.\\n\\n1. **chain order** `scripts/hare_r1.py`: the fixed hop tuple becomes groq, openrouter, nous, gemini, zen.\\n2. **test pins** `tests/test_hare_r1.py`: the order, the model/key walk and the per-hop option assertions follow the swap.\",\n  \"aim\": \"Let OpenRouter and Nous answer before Gemini, while Groq still takes the cheap 413 first, so a fast model that misses things stops being the default reviewer.\",\n  \"case\": \"The change is a tuple literal and the two tests that pin the order moved with it, so the hop contract is still enforced. Hold it until the old chain copy in AGENTS.md follows the code, because HARE.md counts a contradiction left in the rules files as real.\",\n  \"findings\": [\n    {\n      \"sev\": \"real\",\n      \"path\": \"AGENTS.md\",\n      \"line\": 60,\n      \"issue\": \"The R1c 'Brain:' line still says the chain is Groq then Gemini then Nous then OpenRouter then Zen, and its model list still says GPT-OSS, then Gemini Flash, then Laguna / LongCat / Space Bunny, then Laguna / Qwen, then Zen free. The code now runs Gemini fourth, so the standing rule every agent reads contradicts the hop order it just landed. HARE.md: a changed rule leaves no old copy behind, a contradiction in the rules is a real finding. The PR body's checklist admits it: '[ ] PLAN R1c chain line follows in the next fold'.\",\n      \"short\": \"AGENTS.md still lists the old chain with Gemini second, so the rules file now contradicts the code.\",\n      \"fix\": \"later\",\n      \"change\": \"Rewrite the Brain line and its model list in AGENTS.md to groq, openrouter, nous, gemini, zen, and the chain line it points at in docs/hare-next.md.\"\n    }\n  ]\n}\n```"
+}

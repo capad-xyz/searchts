@@ -1,0 +1,33 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "xhigh",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "xhigh",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 63.2,
+ "steps": 4,
+ "answer_part": "text",
+ "reasoning_chars": 1281,
+ "usage": {
+  "prompt_tokens": 61597,
+  "completion_tokens": 1828,
+  "completion_tokens_details": {
+   "reasoning_tokens": 16110
+  }
+ },
+ "answer": "Grinding through this Hare fix \u2014 checking the diff for holes.{\"effort\": \"medium\", \"summary\": \"Laguna stops daydreaming and finally answers. Quick zap, with receipts. \u26a1\\n1. **Reasoning** wires effort none into Nous, Groq and Zen hops.\\n2. **Parser** swaps fragile slice for brace matching that survives quoted secrets.\\n3. **Local runner** adds terminal dry run with hop override.\\n4. **Docs and limits** records off versus on measurement and widens timeouts.\", \"aim\": \"Make the review hop answer fast and keep a good answer from being lost in parsing.\", \"case\": \"The off mode numbers plus the quoted brace rescue are convincing. Groq and Zen ride in a shape those gateways ignore and two tests assert by reading code, so silent misses remain.\", \"findings\": [{\"sev\": \"real\", \"path\": \"scripts/hare_r1.py\", \"line\": 977, \"issue\": \"Groq expects top level reasoning_effort and Zen documents no reasoning field, so a nested reasoning object is silently ignored. The hop then keeps spending the full budget thinking, which repeats the failure this branch claims to fix.\", \"short\": \"Nested reasoning is ignored by Groq and Zen, so effort none never lands and thinking eats the budget again\", \"fix\": \"later\", \"change\": \"Send Groq top level reasoning_effort none and Zen nothing, confirmed by a live probe.\"}, {\"sev\": \"real\", \"path\": \"tests/test_hare_r1.py\", \"line\": 788, \"issue\": \"This test asserts the ask branch by grepping file text for event strings instead of running _hare_once. HARE.md names source text reads in tests as a real finding because grep proves nothing about runtime order.\", \"short\": \"Test greps source for the ask branch instead of driving the function, proving nothing about runtime behavior\", \"fix\": \"later\", \"change\": \"Drive _hare_once with faked network for pull_request versus manual events and assert the ask value.\"}, {\"sev\": \"real\", \"path\": \"tests/test_hare_r1.py\", \"line\": 778, \"issue\": \"Checking __code__.co_varnames for hop_override inspects the function instead of calling it. That stubs the unit under test and proves nothing about whether the override order is honored.\", \"short\": \"Test inspects code object for hop_override instead of calling the hop, proving nothing about honored order\", \"fix\": \"later\", \"change\": \"Call build_provider_chain or _hare_once with a hop_override and assert the used order.\"}, {\"sev\": \"real\", \"path\": \"scripts/hare_local.py\", \"line\": 38, \"issue\": \"PROVIDER_ALIASES maps or to openrouter but has no openrouter key, so _from_auth_store for openrouter always returns empty. A stored openrouter key is then never found.\", \"short\": \"Alias map lacks openrouter key, so auth store lookup for that provider always misses and forces needless setup\", \"fix\": \"yes\", \"change\": \"Add openrouter to the alias map.\", \"original\": \"PROVIDER_ALIASES = {\\\"nous\\\": \\\"nous\\\", \\\"zen\\\": \\\"opencode\\\", \\\"opencode\\\": \\\"opencode\\\", \\\"or\\\": \\\"openrouter\\\"}\", \"suggestion\": \"PROVIDER_ALIASES = {\\\"nous\\\": \\\"nous\\\", \\\"zen\\\": \\\"opencode\\\", \\\"opencode\\\": \\\"opencode\\\", \\\"or\\\": \\\"openrouter\\\", \\\"openrouter\\\": \\\"openrouter\\\"}\"}, {\"sev\": \"real\", \"path\": \"scripts/hare_local.py\", \"line\": 82, \"issue\": \"Explicit --model plus the default hop list accept only nous, zen and openrouter. Groq and Gemini hops cannot be reproduced locally even though this branch changes Groq behavior.\", \"short\": \"Local runner omits Groq and Gemini providers, so the changed Groq knob cannot be reproduced from a terminal\", \"fix\": \"later\", \"change\": \"Add Groq and Gemini bases, keys and defaults to both explicit and default hop resolution.\"}, {\"sev\": \"skip\", \"path\": \"scripts/hare_r1.py\", \"line\": 60, \"issue\": \"REASONING_BY_PROVIDER duplicates the inner effort values while PROVIDER_REQUEST_OPTIONS carries what goes on the wire. Nothing in production reads the duplicate, leaving two sources for one knob.\", \"short\": \"Duplicate reasoning map is never read in production, leaving two sources for one knob to drift apart\", \"fix\": \"later\", \"change\": \"Build PROVIDER_REQUEST_OPTIONS from the single map or drop the unused duplicate.\"}, {\"sev\": \"skip\", \"path\": \"scripts/hare_r1.py\", \"line\": 251, \"issue\": \"The fenced JSON match changed from non greedy to greedy, so two fenced blocks merge into one span that fails parsing. The fence path then never wins when it should.\", \"short\": \"Greedy fence match merges two blocks into one unparsable span, so the fast fence path never wins\", \"fix\": \"later\", \"change\": \"Restore non greedy matching or match the last fenced object.\"}]}"
+}

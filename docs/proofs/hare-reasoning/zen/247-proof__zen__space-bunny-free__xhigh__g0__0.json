@@ -1,0 +1,33 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "xhigh",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "xhigh",
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 73.1,
+ "steps": 19,
+ "answer_part": "text",
+ "reasoning_chars": 29265,
+ "usage": {
+  "prompt_tokens": 40804,
+  "completion_tokens": 2413,
+  "completion_tokens_details": {
+   "reasoning_tokens": 7597
+  }
+ },
+ "answer": "{\"effort\":\"low\",\"summary\":\"One hop shuffled. Groq keeps the hat, Flash-Lite moves to the bench. \ud83d\udc07\\n\\n1. **chain** `build_provider_chain` walks groq, openrouter, nous, gemini, zen, with the reason and the date in a comment.\\n2. **tests** the fixed-order test and the hop-loop test move with it, options and all.\\n\\nIntent: put the free OpenRouter qwen hop ahead of the fast Gemini hops so a reviewer that finds things is tried before one that misses them.\\n\\nThe reorder itself is clean: the options dict was already per provider, the two tests that pin the order and the per-hop request shape were updated together, and running them here at this SHA passes (4 passed, chain plus options plus hop loop). The one thing that would want to move with it is the prose, and that is the finding below.\",\"findings\":[{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":1356,\"issue\":\"AGENTS.md (R1c, line 45) still says the brain is Groq then Gemini then Nous then OpenRouter then Zen, and PLAN.md R1c (line 259) still lists Gemini second; the docstring right above this line calls PLAN.md R1c the contract. The code now says the opposite, and agents read both files.\",\"short\":\"Code moves Gemini to fourth; AGENTS.md and PLAN.md R1c still publish Gemini second.\",\"fix\":\"later\",\"change\":\"Update the R1c chain line in AGENTS.md and PLAN.md to groq, openrouter, nous, gemini, zen, or say in this comment which doc the order now lives in.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":691,\"issue\":\"The hop-loop assertion stops at Nous, so it reads the same whether Gemini sits after Nous or has left the chain; only the fixed-order test above would catch a Gemini move. Harmless here, but this test looks like it pins more than it does.\",\"short\":\"Hop-loop test stops at Nous, so it cannot catch a Gemini position change.\",\"fix\":\"no\",\"change\":\"\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":644,\"issue\":\"The comment credits OpenRouter's qwen, a fact that lives in HARE_OR_DEFAULT. The test only knows the placeholder o1, so the comment is a second copy of the catalog that will drift the day the pin changes.\",\"short\":\"Comment names qwen, a catalog fact this placeholder-only test does not pin.\",\"fix\":\"later\",\"change\":\"Say the provider order rather than the slug, or let the catalog comment above HARE_OR_DEFAULT be the one place that names qwen.\"}]}"
+}

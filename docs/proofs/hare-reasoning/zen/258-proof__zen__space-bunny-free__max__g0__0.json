@@ -1,0 +1,33 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "max",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "max",
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 121.9,
+ "steps": 15,
+ "answer_part": "text",
+ "reasoning_chars": 52960,
+ "usage": {
+  "prompt_tokens": 29582,
+  "completion_tokens": 3233,
+  "completion_tokens_details": {
+   "reasoning_tokens": 13295
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"One tuple moved, three tests moved with it, and the PLAN bullet rewritten to match. Small diff, and it lands where it says it does \ud83d\udc30\\n\\n1. **chain order** `build_provider_chain` walks OpenRouter \u2192 Nous \u2192 Groq \u2192 Gemini \u2192 Zen now, and the comment above it now says the owner's call, not the ledger's.\\n2. **PLAN** the R1c failover bullet is rewritten to the same order, which is the first time that line matches the catalog for Space Bunny.\\n3. **tests** the fixed-order, no-key and per-hop-options tests follow; `tests/test_hare_r1.py` runs 83 passed on this tree.\",\"aim\":\"Put the slow hops where the owner trusts them, demote the seconds-fast ones to fallback, and correct the reasoning that said the ledger had already picked the order.\",\"case\":\"The tuple, the PLAN line and the three assertions all say the same order, the asserts fail on the old tuple, and the local run is 83 passed, so the code move is safe to land on its own. The loose end is everything around it: AGENTS.md:45 still tells every agent the brain is Groq first, the catalog comment in the same file still says Groq stays first, and the hop loop shares one budget, so a slow-dead pair in front can now spend it and the fallbacks this diff promotes never get a turn at all.\",\"findings\":[{\"sev\":\"real\",\"path\":\"AGENTS.md\",\"line\":45,\"issue\":\"The Trigger paragraph still says Brain: Groq then OpenRouter then Nous then Gemini then Zen and lists GPT-OSS first, so the contract every agent signs now names the order this diff removed. Nothing outside PLAN repeats it, which makes this the last stale copy.\",\"short\":\"AGENTS.md still says the brain is Groq first; this diff moved it behind OpenRouter and Nous.\",\"fix\":\"later\",\"change\":\"Update AGENTS.md:45 to OpenRouter, Nous, Groq, Gemini, Zen and drop the GPT-OSS-first chain list. That line is not in this diff, so it needs its own commit.\"},{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":1366,\"issue\":\"The hop loop checks one shared hop budget before each hop and breaks, with no slice held back. Groq used to be first and always got a turn; behind two 300 s calls it can now be skipped entirely, so the fallback this diff promotes may never run and the run lands on a needed note.\",\"short\":\"No budget reserve for the fast hops: two slow-dead calls can spend it and skip Groq and Gemini.\",\"fix\":\"later\",\"change\":\"Hold back a slice of HARE_HOP_BUDGET_S for Groq and Gemini in the hop loop, or say in the comment that they only run when the slow hops answer fast. The loop is not in this diff, so no one-click patch.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":1366,\"issue\":\"The catalog comment at scripts/hare_r1.py:111 still says Groq gpt-oss-120b stays first because a 413 is instant, while the comment above this line says Groq goes after Nous. Same file, two orders, 1,250 lines apart.\",\"short\":\"The catalog comment at line 111 still says Groq stays first; this diff puts it third.\",\"fix\":\"later\",\"change\":\"Rewrite the catalog comment at scripts/hare_r1.py:111 so it describes Groq as a fallback hop, not the first one.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":646,\"issue\":\"The comment two lines above still reads OpenRouter's qwen leads, then Nous, then Gemini and skips the Groq slot, so this test now carries two comments about the same order and the older one is wrong.\",\"short\":\"Two comments explain the order here; the older one skips the Groq slot entirely.\",\"fix\":\"later\",\"change\":\"Delete the two older comment lines above this one and keep the new one. Those lines are not in this diff, so no one-click patch.\"},{\"sev\":\"skip\",\"path\":\"PLAN.md\",\"line\":261,\"issue\":\"Space Bunny is last on Nous, not dropped says the Nous position came from a measurement, while the rewritten bullet above puts it first on Nous. The code already had it first since #255, so this diff surfaces the old contradiction rather than creating it, but it rewrote the line that bullet points at.\",\"short\":\"The next bullet says Space Bunny is last on Nous; the rewritten bullet puts it first.\",\"fix\":\"later\",\"change\":\"Update or retire PLAN.md:261 in a follow-up. Not in this diff and already stale before it.\"},{\"sev\":\"skip\",\"path\":\"PLAN.md\",\"line\":259,\"issue\":\"The rewrite drops the operational facts that lived on this line: the fail list (429 / 5xx / timeout / empty / no JSON / thinking cut), call 300 s and hop budget 600 s with their HARE_* names, the 40 minute job backstop, the skip list and the zero-retention note. Some of it survives in script comments, but PLAN R1c is where the contract is read.\",\"short\":\"The R1c rewrite drops the fail list, the budget numbers and the skip list.\",\"fix\":\"later\",\"change\":\"Keep the fail list, the HARE_* budget numbers and the skip list on the bullet, or say where they moved.\"}]}"
+}

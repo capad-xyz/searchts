@@ -1,0 +1,31 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "step-5-preview-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "low",
+   "medium",
+   "high"
+  ]
+ },
+ "error": "",
+ "seconds": 504.1,
+ "steps": 22,
+ "answer_part": "text",
+ "reasoning_chars": 64810,
+ "usage": {
+  "prompt_tokens": 58823,
+  "completion_tokens": 3408,
+  "completion_tokens_details": {
+   "reasoning_tokens": 17363
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"Flash-Lite lost the front row: Gemini now waits behind OpenRouter and Nous. \ud83e\ude91\\n1. **chain** `build_provider_chain` walks groq, openrouter, nous, gemini, zen, with the why in a new comment.\\n2. **tests** the two chain tests pin the new order, and OpenRouter's hop carries its own request options.\",\"aim\":\"Stop a fast, forgetful Gemini 3.1 Flash-Lite answer from being the default on every diff Groq cannot take, by seating qwen and Nous ahead of it.\",\"case\":\"The code half is sound: the real `build_provider_chain` returns exactly the hop order, models and request options the two updated tests assert, and nothing in the code, the workflow or the suite assumed Gemini was second. It is one doc fold short of finished, because the old order is still written down in three places agents read, including the module docstring this diff edits, and HARE.md's no-old-copy rule makes that a real row rather than a nit.\",\"findings\":[{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":null,\"issue\":\"Line 2 still reads `review a PR via Groq, Gemini, Nous, then OpenRouter`, the exact order this diff removes, and it is the first line anyone opening the file sees; Zen is missing from it too.\",\"short\":\"Module docstring still names the old order, Groq, Gemini, Nous, then OpenRouter, and drops Zen.\",\"fix\":\"later\",\"change\":\"Rewrite the docstring on line 2 to Groq, OpenRouter, Nous, Gemini, Zen with Zen named, or drop the chain from it.\"},{\"sev\":\"real\",\"path\":\"AGENTS.md\",\"line\":null,\"issue\":\"AGENTS.md:45 still says `Brain: Groq then Gemini then Nous then OpenRouter then Zen` and lists the hops under it, so the file every agent signs now contradicts `scripts/hare_r1.py`; HARE.md's owner rule is that a changed rule leaves no old copy behind.\",\"short\":\"AGENTS.md's Brain line still lists Groq, Gemini, Nous, OpenRouter, Zen, the order the code no longer has.\",\"fix\":\"later\",\"change\":\"Update the Brain line and its hop list in AGENTS.md:45 to the new order.\"},{\"sev\":\"real\",\"path\":\"PLAN.md\",\"line\":null,\"issue\":\"PLAN.md:259 still walks Groq, Gemini, Nous, OpenRouter, and `build_provider_chain`'s own docstring calls the order `the contract (PLAN.md R1c)`, so the code points at a plan line that now disagrees with it. The PR body's checklist leaves that box unticked for a later fold.\",\"short\":\"PLAN.md's failover line still seats Gemini second and Nous ahead of OpenRouter; the code cites it as the contract.\",\"fix\":\"later\",\"change\":\"Fold the new order into PLAN.md:259 in this PR instead of the next one.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":691,\"issue\":\"The hop loop is typed out again here instead of calling the real one, so this copy has no hop-budget break and no dead-hop tally: the asserts are right for today's chain, but a change to the real loop's budget or logging would not move this test.\",\"short\":\"The test re-types the hop loop instead of running it, so the real loop's budget and dead-hop logging stay uncovered.\",\"fix\":\"later\",\"change\":\"Pull the loop out of `_hare_once` into a function, or call `_hare_once`, so this test drives the real one.\"}]}"
+}

@@ -1,0 +1,31 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "zen",
+ "model": "step-5-preview-free",
+ "mode": "low",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "low",
+  "published_effort": [
+   "low",
+   "medium",
+   "high"
+  ]
+ },
+ "error": "timeout after 900s",
+ "seconds": 900.1,
+ "steps": 0,
+ "answer_part": "",
+ "reasoning_chars": 0,
+ "usage": {
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "completion_tokens_details": {
+   "reasoning_tokens": 0
+  }
+ },
+ "answer": ""
+}

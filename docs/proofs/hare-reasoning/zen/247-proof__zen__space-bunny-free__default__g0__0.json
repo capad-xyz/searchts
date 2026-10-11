@@ -1,0 +1,33 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 82.8,
+ "steps": 16,
+ "answer_part": "text",
+ "reasoning_chars": 37151,
+ "usage": {
+  "prompt_tokens": 39357,
+  "completion_tokens": 2480,
+  "completion_tokens_details": {
+   "reasoning_tokens": 9943
+  }
+ },
+ "answer": "{\n  \"effort\": \"low\",\n  \"summary\": \"Hop queue reshuffle, one tuple deep. Quiet little shuffle, big effect on which brain answers first.\\n\\n1. **chain** Gemini drops from slot two to slot four, behind OpenRouter and Nous; Groq still opens.\\n2. **tests** the order test and the hop-loop options test follow the new queue, model lists and request options included.\",\n  \"aim\": \"Make Gemini the fallback instead of the default reviewer, so OpenRouter and Nous get first refusal on every diff Groq cannot take.\",\n  \"case\": \"The code change is one tuple in a pure function, and both tests genuinely pin it: reverting the order turns the order test red, so this is not a rename dressed as a behavior change. What sits next to it is not clean: AGENTS.md still spells out the old order as the contract this function points at, and the hop loop shares one wall-clock budget, so the fallback Gemini can now be the hop that never runs.\",\n  \"findings\": [\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 1356,\n      \"issue\": \"The hop loop breaks once the shared wall-clock budget is spent, and HARE_OR_DEFAULT pins five OpenRouter models, so up to six hops now sit in front of the hop this PR calls the fallback. Gemini is the most likely hop to be cut by the budget rather than reached.\",\n      \"short\": \"Budget is wall-clock and shared: five OpenRouter pins now sit in front of Gemini, so the fallback can be the hop that never runs.\",\n      \"fix\": \"later\",\n      \"change\": \"Say the budget trade-off in the comment above the loop, or note that Gemini answers only when the OpenRouter prefix stays cheap.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"tests/test_hare_r1.py\",\n      \"line\": 644,\n      \"issue\": \"The new comment says OpenRouter's qwen leads, but the chain this PR builds starts with Groq and the test models are g1, o1, n1. The next reader gets a queue that does not match the assert under it.\",\n      \"short\": \"Comment says OpenRouter's qwen leads; Groq leads and the test hops are g1, o1, n1.\",\n      \"fix\": \"yes\",\n      \"change\": \"Say Groq still leads, then OpenRouter, Nous, Gemini.\",\n      \"original\": \"    # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is\\n    # fast and misses things. OpenRouter's qwen leads, then Nous, then Gemini.\",\n      \"suggestion\": \"    # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is\\n    # fast and misses things. Groq still leads, then OpenRouter, Nous, Gemini.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"AGENTS.md\",\n      \"line\": null,\n      \"issue\": \"The R1c line still reads \\\"Brain: Groq then Gemini then Nous then OpenRouter then Zen\\\", and the docstring in build_provider_chain calls that order the contract. The code and the doc now disagree, and the PR body leaves the doc line as an open box.\",\n      \"short\": \"AGENTS.md R1c still names the old order as the contract this function points at; the code moved without it.\",\n      \"fix\": \"later\",\n      \"change\": \"Update the AGENTS.md R1c brain line to Groq then OpenRouter then Nous then Gemini then Zen in this PR rather than a later fold.\"\n    }\n  ]\n}"
+}

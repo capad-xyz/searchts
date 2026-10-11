@@ -1,0 +1,27 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "zen",
+ "model": "mimo-v2.6-flash-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": []
+ },
+ "error": "",
+ "seconds": 302.8,
+ "steps": 16,
+ "answer_part": "text",
+ "reasoning_chars": 62824,
+ "usage": {
+  "prompt_tokens": 79447,
+  "completion_tokens": 2870,
+  "completion_tokens_details": {
+   "reasoning_tokens": 17304
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"Slow models grab the wheel, the speedsters ride in the back. \ud83d\udc22\\n\\n1. **Chain** the hop loop becomes openrouter, nous, groq, gemini, zen, with the owner's why in a fresh comment.\\n2. **PLAN** the failover bullet is rewritten to the new order, plus the note that the ledger cannot rank hops yet.\\n3. **Tests** the fixed-order, no-key and per-hop options tests follow the new queue.\",\"aim\":\"Seat the slower reviewers first on the owner's call so a seconds-fast answer cannot win the review, with Groq and Gemini demoted to fallback duty.\",\"case\":\"The tuple, the PLAN line and every named assertion move together, and tests/test_hare_r1.py runs 83 green at this head, so the reorder does exactly what it says. What should land with it: the fast fallbacks now sit behind two slow hops inside a shared 600 s budget that breaks the loop, so the costs-nothing claim does not hold, and two rule lines still publish the old order.\",\"findings\":[{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":1364,\"issue\":\"The comment (and the body) sell Groq's demotion as free because a 413 is instant, but the hop loop breaks once the shared 600 s wall-clock budget is spent and one call may take 300 s: a hung OpenRouter or Nous pair ends the run with a searchts-r1-needed nag while Groq and Gemini, the fallbacks this diff installs, are never tried.\",\"short\":\"Two hung slow hops spend the 600 s budget, so Groq and Gemini can be the fallbacks that never run.\",\"fix\":\"later\",\"change\":\"Reserve a slice of the hop budget for a fast fallback (or skip a slow hop when under a minute is left) and drop the costs-nothing line until that exists.\"},{\"sev\":\"real\",\"path\":\"AGENTS.md\",\"line\":45,\"issue\":\"The Trigger R1c line still reads Brain: Groq then OpenRouter then Nous then Gemini then Zen, the order this diff removes, so the contract file every agent reads contradicts the code it just shipped.\",\"short\":\"AGENTS.md still names Groq first in the Brain line while this diff runs OpenRouter and Nous first.\",\"fix\":\"later\",\"change\":\"Rewrite the Brain order on AGENTS.md:45 to OpenRouter then Nous then Groq then Gemini then Zen; that line is not in this diff.\"},{\"sev\":\"real\",\"path\":\"PLAN.md\",\"line\":261,\"issue\":\"The bullet two lines under the rewritten failover line still says Space Bunny is last on Nous, while the line this PR wrote puts stealth/space-bunny-alpha first on Nous; the same file now argues with itself.\",\"short\":\"PLAN still calls Space Bunny last on Nous, two lines below the new line that puts it first on Nous.\",\"fix\":\"later\",\"change\":\"Rewrite the bullet to say Space Bunny is first on Nous for its last free day, matching the failover line and HARE_NOUS_DEFAULT.\"},{\"sev\":\"skip\",\"path\":\"PLAN.md\",\"line\":259,\"issue\":\"The rewrite keeps the order and the rationale but drops what the old line also carried: the fail definition (429 / 5xx / timeout / empty / no JSON / thinking cut), the exhausted-to-nag rule, the call, hop and token caps with HARE_LLM_TIMEOUT_S, HARE_HOP_BUDGET_S, HARE_MAX_TOKENS, HARE_BIG_*, the job timeout backstop, No LLM in the router, the 2026-10-03 live notes and the Zen zero-retention line; only HARE_MAX_TOKENS is named elsewhere in PLAN.\",\"short\":\"New failover line drops the fail definition, the timeout caps with their env names, and the zero-retention note.\",\"fix\":\"later\",\"change\":\"Append the fail definition, the cap sentence with its env names and the zero-retention note to the bullet rather than replacing the line.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":645,\"issue\":\"The comment directly above the new order line still walks OpenRouter's qwen leads, then Nous, then Gemini, skipping the Groq slot the new order inserts, so two stacked comments tell the story differently.\",\"short\":\"Order-test comment still says Nous then Gemini, skipping the Groq slot the new line just added.\",\"fix\":\"later\",\"change\":\"Delete the older two-line comment and keep the new one, which has the full order.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":111,\"issue\":\"The catalog comment still says Groq gpt-oss-120b stays first, but this diff puts Groq third in the chain; the line is not touched here.\",\"short\":\"Catalog comment still says Groq stays first, three hops behind where this diff puts it.\",\"fix\":\"later\",\"change\":\"Change stays first to stays as the fast fallback after Nous.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":2,\"issue\":\"The module docstring still says review a PR via Groq, Gemini, Nous, then OpenRouter, an order this diff also replaces, and it never names Zen.\",\"short\":\"Module docstring still names Groq, Gemini, Nous, then OpenRouter as the chain.\",\"fix\":\"later\",\"change\":\"Rewrite the docstring to OpenRouter, Nous, Groq, Gemini, Zen, or drop the order from it.\"}]}"
+}

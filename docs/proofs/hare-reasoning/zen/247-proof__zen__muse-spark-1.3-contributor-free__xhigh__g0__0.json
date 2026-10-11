@@ -1,0 +1,33 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "xhigh",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "xhigh",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 40.1,
+ "steps": 11,
+ "answer_part": "text",
+ "reasoning_chars": 841,
+ "usage": {
+  "prompt_tokens": 38124,
+  "completion_tokens": 2000,
+  "completion_tokens_details": {
+   "reasoning_tokens": 6021
+  }
+ },
+ "answer": "Hare review queued: chain-order tweak under the microscope.Found the repo map. Now pulling the owner rules to judge this diff.Core evidence gathered. Now digging for any leftover docstrings or stale references.{\"effort\": \"low\", \"summary\": \"Gemini heads to the fallback bench. Slower eyes get first look.\\n1. **chain** Groq stays first, OpenRouter and Nous move ahead of Gemini in build_provider_chain.\\n2. **tests** order and per-provider options assertions follow the new hop sequence.\", \"aim\": \"Move Gemini behind OpenRouter and Nous so slower hops review first.\", \"case\": \"The reorder and its tests line up and match the stated owner call, yet the contract lines elsewhere still promise the old order, leaving two truths in the repo.\", \"findings\": [{\"sev\": \"real\", \"path\": \"AGENTS.md\", \"line\": null, \"issue\": \"The code now runs Groq, OpenRouter, Nous, Gemini, Zen, but the Trigger R1c line in AGENTS.md and the failover line in PLAN.md still list Groq then Gemini then Nous then OpenRouter then Zen. Agents reading those lines get the old failover.\", \"short\": \"Code reorders to Groq OpenRouter Nous Gemini Zen while AGENTS and PLAN still list the old order.\", \"fix\": \"later\", \"change\": \"Update the Trigger R1c line and the PLAN failover line to the new order in this PR.\"}]}"
+}

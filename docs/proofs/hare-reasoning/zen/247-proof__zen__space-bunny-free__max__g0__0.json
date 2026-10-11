@@ -1,0 +1,33 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "max",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "max",
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 73.7,
+ "steps": 9,
+ "answer_part": "text",
+ "reasoning_chars": 43346,
+ "usage": {
+  "prompt_tokens": 33841,
+  "completion_tokens": 2071,
+  "completion_tokens_details": {
+   "reasoning_tokens": 11261
+  }
+ },
+ "answer": "{\n  \"effort\": \"low\",\n  \"summary\": \"A one-tuple shuffle in the review brain. Groq keeps the front seat, Gemini takes the bench.\\n\\n1. **chain order** `build_provider_chain` walks Groq \u2192 OpenRouter \u2192 Nous \u2192 Gemini \u2192 Zen, with the owner's reason spelled out in a comment.\\n2. **tests** both order assertions move with it: provider names, keys, and the per-hop reasoning options for the new second hop.\",\n  \"aim\": \"Demote Gemini from second hop to fallback so OpenRouter's qwen and Nous review before it, keeping Groq first because a 413 on a big prompt costs under a second.\",\n  \"case\": \"The code change is a pure tuple swap and both order tests travel with it, so the chain keeps its shape and the function's own contract comment still points at a doc that now lies. What would need to land with it is the documented order: AGENTS.md's Brain line and PLAN.md's R1c failover line still name Gemini second, and the PR's own checklist leaves that box unchecked for a later fold. Fold the order in, or name the PR that carries it.\",\n  \"findings\": [\n    {\n      \"sev\": \"real\",\n      \"path\": \"AGENTS.md\",\n      \"line\": null,\n      \"issue\": \"The R1 trigger line still reads \\\"Brain: Groq then Gemini then Nous then OpenRouter then Zen ... GPT-OSS, then Gemini Flash, ...\\\" so every agent reading the contract is told Gemini is the second hop while the code now runs OpenRouter there. HARE.md's learned rule (#269) makes a stale copy of a changed rule real, and agents are exactly who reads that line.\",\n      \"short\": \"AGENTS.md trigger still names Gemini second; the code now runs OpenRouter there.\",\n      \"fix\": \"later\",\n      \"change\": \"Update the Brain order in the AGENTS.md R1 trigger line to Groq \u2192 OpenRouter \u2192 Nous \u2192 Gemini \u2192 Zen in this PR, or name the PR that will.\"\n    },\n    {\n      \"sev\": \"real\",\n      \"path\": \"PLAN.md\",\n      \"line\": null,\n      \"issue\": \"The R1c bullet \\\"Failover (fixed list, not a router)\\\" still lists Gemini right after Groq, and `build_provider_chain` names that line as the order contract. The PR body checks this as \\\"follows in the next fold\\\", which leaves the contract the function points at contradicting the function.\",\n      \"short\": \"PLAN.md R1c failover line still lists Gemini second; the code points at it as the contract.\",\n      \"fix\": \"later\",\n      \"change\": \"Fold the new provider order into the PLAN.md R1c failover line in this PR, or say which PR does it.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 1356,\n      \"issue\": \"\\\"Groq stays first: it 413s on a big prompt in under a second, so it costs nothing\\\" only holds when Groq refuses the prompt. On a diff Groq can take it answers and the OpenRouter and Nous hops this PR promotes never run, which is the same miss the PR says Gemini makes.\",\n      \"short\": \"Groq-first means the promoted hops only run when Groq 413s; \\\"costs nothing\\\" is too broad.\",\n      \"fix\": \"later\",\n      \"change\": \"Say in the comment that the cheap413 is the only case where Groq-first is free, so a reader does not read it as Groq never answering.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"tests/test_hare_r1.py\",\n      \"line\": 643,\n      \"issue\": \"The test comment repeats the source comment's date and rationale verbatim and names qwen, while the fixture model here is the synthetic `o1`. The test pins order, not a slug.\",\n      \"short\": \"Test comment copies the source comment and names qwen; the fixture is o1.\",\n      \"fix\": \"yes\",\n      \"change\": \"Replace the two copied comment lines with one line naming the order this test pins.\",\n      \"original\": \"    # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is\\n    # fast and misses things. OpenRouter's qwen leads, then Nous, then Gemini.\",\n      \"suggestion\": \"    # The fixed order: OpenRouter before Nous, Gemini after both.\"\n    }\n  ]\n}"
+}

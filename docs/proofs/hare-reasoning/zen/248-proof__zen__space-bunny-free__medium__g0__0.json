@@ -1,0 +1,33 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "medium",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "medium",
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 20.5,
+ "steps": 2,
+ "answer_part": "text",
+ "reasoning_chars": 7509,
+ "usage": {
+  "prompt_tokens": 21751,
+  "completion_tokens": 920,
+  "completion_tokens_details": {
+   "reasoning_tokens": 1940
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"Low scores get a home of their own. HARE.md joins the family, ledger writes it, Hare reads it before every note. \ud83d\udc30\\n\\n1. **new file** `HARE.md` with the owner's hand rules plus a marked block the ledger run rewrites.\\n2. **ledger** `proposed_rules` / `apply_rules`, `--rules HARE.md`, and the workflow git-adds and diffs it.\\n3. **prompt** `hare_r1.py` fetches HARE.md from the base SHA and hands it to the model.\\n4. **AGENTS.md** gains the same marked block as the seed it used to be.\\n\\nIntent: a score of 2 or less with a reason becomes a rule Hare reads next time, and the install when Hare ships is \\\"add a HARE.md\\\".\\n\\ncase: The mechanism is sound and the tests bite: dedupe, newest first, owner lines survive, the file reaches the prompt ahead of the diff. What does not hold is AGENTS.md, which now carries a block that claims every ledger run rewrites it while the workflow writes HARE.md instead, so the copy in AGENTS.md freezes on \\\"none yet\\\" forever and two agents read different lessons; deleting it or pointing it at HARE.md is the last edit before this lands.\",\"findings\":[{\"sev\":\"real\",\"path\":\"AGENTS.md\",\"line\":25,\"issue\":\"The block says \\\"Each ledger run rewrites this block\\\", but hare-ledger.yml now runs `--rules HARE.md` and never touches AGENTS.md, so this copy stays on \\\"(none yet)\\\" forever and two agents read different lessons.\",\"short\":\"This block claims the ledger run rewrites it, but the workflow writes HARE.md, so it goes stale and duplicates the rules.\",\"fix\":\"yes\",\"change\":\"Drop the block from AGENTS.md and point at HARE.md, the file that is actually rewritten.\",\"original\":\"<!-- hare-ledger:rules -->\\n**What the owner said Hare missed (from the ledger, PLAN R2c).** Each line is the reason behind a low score, filed by `scripts/hare_ledger.py` from `/hare score`. Hare reads these as rules for the next note. Each ledger run rewrites this block, so to retire a line, edit or delete the score comment it came from.\\n\\n- (none yet: a `/hare score 1..5 <why>` of 2 or less with a reason lands here)\\n<!-- /hare-ledger:rules -->\",\"suggestion\":\"What the owner said Hare missed lives in [`HARE.md`](HARE.md) (PLAN R2c): every `/hare score 1..5 <why>` of 2 or less with a reason becomes a line there, and `scripts/hare_ledger.py` rewrites that block on the weekly run. To retire a line, edit or delete the score comment it came from.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_ledger.py\",\"line\":296,\"issue\":\"The print calls `proposed_rules(ledger)` a second time after `apply_rules` already did, re-sorting and re-walking every score comment for a count.\",\"short\":\"The count line recomputes proposed_rules; bind it once next to `after` and reuse it.\",\"fix\":\"later\",\"change\":\"Bind `rules = proposed_rules(ledger)` before `apply_rules` and use `len(rules)` in the print.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_ledger.py\",\"line\":197,\"issue\":\"Score reasons are written into the block verbatim, so a reason that happens to contain `<!-- /hare-ledger:rules -->` (or a stray blank line) would break the markers the next run splits on.\",\"short\":\"Reason text goes into the block raw; a reason holding an end marker would break the block.\",\"fix\":\"later\",\"change\":\"Strip any `hare-ledger:rules` markers and collapse blank lines in each reason before writing the block.\"}]}"
+}

@@ -1,0 +1,33 @@
+{
+ "case": "245-proof",
+ "pr": 245,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "medium",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "medium",
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 47.5,
+ "steps": 7,
+ "answer_part": "text",
+ "reasoning_chars": 17556,
+ "usage": {
+  "prompt_tokens": 10697,
+  "completion_tokens": 1048,
+  "completion_tokens_details": {
+   "reasoning_tokens": 4596
+  }
+ },
+ "answer": "```json\n{\"effort\":\"medium\",\"summary\":\"Three small repairs to the cut-answer machinery. No behavior change to the reader, only to what survives a token cut.\\n\\n1. **`_walk`** now reports whether a string is still open, and `repair_json` asks it instead of counting raw quotes (an escaped quote in a closed finding used to corrupt the text and could lose the kept findings).\\n2. **wrap-up restart** only wins when it holds more findings than the repaired partial, so an 800-token restart cannot replace30 kept rows.\\n3. **`_short_fail`** reads the seconds out of the timeout error, so a 600s tier stop no longer reports `LLM_TIMEOUT_SEC`.\\n\\naim: fix Hare Bot's two real findings on #244 and its skip on #243 in scripts/hare_r1.py, so a cut answer is repaired by the escape walk and a restart cannot shrink the review.\\n\\ncase: all three changes are tight and each has a test that drives the real function with only the network faked; the walk fix is strictly more correct than the quote count, and the restart guard falls back to `repair_json(partial)` when the restart loses, so nothing is thrown away. The one gap is the restart detector itself: a restart the model wraps in a fence or a preface does not start with `{`, so it gets stitched onto the partial, fails to parse, and the continuation is dropped; that path is fail-safe, so it costs a call rather than a review.\", \"findings\": [{\"sev\": \"skip\", \"path\": \"scripts/hare_r1.py\", \"line\": 840, \"issue\": \"The restart is detected by `tail.lstrip().startswith(\\\"{\\\")`, so a restart the model fences (```json) or prefixes with a sentence is treated as a continuation, stitched onto the partial, and dropped when it fails to parse.\", \"short\": \"Fenced or prefaced restart is not detected as a restart, so its findings are discarded; parse the tail instead of sniffing its first character.\", \"fix\": \"later\", \"change\": \"Detect a restart by `extract_json(tail)` returning an object with a `findings` key, not by the tail starting with `{`.\"}, {\"sev\": \"skip\", \"path\": \"tests/test_hare_r1.py\", \"line\": 1055, \"issue\": \"The restart test only proves the losing branch. Nothing covers a restart that genuinely holds more findings, so an always-lose rule would pass this suite.\", \"short\": \"Only the losing restart branch is tested; the branch where a bigger restart legitimately wins has no test.\", \"fix\": \"later\", \"change\": \"Add a case where the continuation restarts with more findings than the partial kept and assert the restart wins.\"}]}\n```"
+}

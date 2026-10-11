@@ -1,0 +1,33 @@
+{
+ "case": "245-proof",
+ "pr": 245,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "max",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "max",
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 164.5,
+ "steps": 32,
+ "answer_part": "text",
+ "reasoning_chars": 80455,
+ "usage": {
+  "prompt_tokens": 43855,
+  "completion_tokens": 9440,
+  "completion_tokens_details": {
+   "reasoning_tokens": 20698
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"Three bandages on the wrap-up. Two stick, one has a hole in it. \ud83e\udd55\\n\\n1. **Strings** `_walk` now reports an open string, so `repair_json` appends a quote only when one is really open.\\n2. **Restart** a continuation wins only when it carries more findings than the cut already kept.\\n3. **Timeout line** `_short_fail` reads the seconds out of the error, so the 600 s tier stops claiming 60 s.\",\"aim\":\"Make the note at the token limit honest: repair the cut answer instead of guessing from raw quotes, stop a model restart from throwing away the findings the cut kept, and name the timeout that actually fired.\",\"case\":\"The escape walk and the timeout line are right, cheap, and the rest of the file agrees with them. The restart guard is the one to fix first: it decides by the tail's first character while `extract_json` prefers a fenced block, so a fenced or prefaced restart still replaces the kept findings, and the new repair test passes on the old code because two escaped quotes leave the raw count even.\",\"findings\":[{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":840,\"issue\":\"The restart test is `tail.lstrip().startswith(\\\"{\\\")`, but `extract_json` prefers a fenced block, so a restart that arrives fenced in ```json or after one sentence takes the concatenate branch and its one finding replaces the eight the cut kept. That is the shrink this PR sets out to stop, still happening.\",\"short\":\"Restart detection is a brace-prefix test, so a fenced or prefaced restart still overwrites the findings the cut kept.\",\"fix\":\"yes\",\"change\":\"Decide restart by parsing the tail with `extract_json` and asking whether it carries findings, not by its first character.\",\"original\":\"            if tail.lstrip().startswith(\\\"{\\\"):\\n                # A restart, not a continuation. An 800-token restart cannot hold\\n                # the findings the cut kept, so it only wins if it holds more.\\n                restart = extract_json(tail)\\n                kept_obj = extract_json(repair_json(partial)) or {}\\n                if restart and len(restart.get(\\\"findings\\\") or []) > len(kept_obj.get(\\\"findings\\\") or []):\\n                    stitched = tail\\n            else:\",\"suggestion\":\"            restart = extract_json(tail)\\n            if restart is not None and \\\"findings\\\" in restart:\\n                # A restart, not a continuation, fenced, prefaced or bare. It\\n                # only wins when it holds more findings than the cut kept.\\n                kept_obj = extract_json(repair_json(partial)) or {}\\n                if len(restart.get(\\\"findings\\\") or []) > len(kept_obj.get(\\\"findings\\\") or []):\\n                    stitched = tail\\n            else:\"},{\"sev\":\"real\",\"path\":\"tests/test_hare_r1.py\",\"line\":1036,\"issue\":\"The cut holds two escaped quotes, so after the seam cut the raw `\\\"` count stays even and the pre-fix `repair_json` returns the identical string: this test passes before the fix and proves nothing. One escaped quote is what makes the count odd.\",\"short\":\"Two escaped quotes keep the old raw count even, so this test passes on the pre-fix code.\",\"fix\":\"yes\",\"change\":\"Put one escaped quote in the closed finding, and assert the text it truncates to.\",\"original\":\"    cut = '{\\\"summary\\\":\\\"S.\\\",\\\"findings\\\":[{\\\"sev\\\":\\\"skip\\\",\\\"path\\\":\\\"a.py\\\",\\\"line\\\":1,\\\"issue\\\":\\\"says \\\\\\\\\\\"hi\\\\\\\\\\\"\\\",\\\"short\\\":\\\"s\\\",\\\"fix\\\":\\\"later\\\",\\\"change\\\":\\\"c\\\"},{\\\"sev\\\":\\\"re'\\n    fixed = json.loads(hare_r1.repair_json(cut))\\n    assert fixed[\\\"findings\\\"][0][\\\"issue\\\"] == 'says \\\"hi\\\"' and len(fixed[\\\"findings\\\"]) == 1\",\"suggestion\":\"    cut = '{\\\"summary\\\":\\\"S.\\\",\\\"findings\\\":[{\\\"sev\\\":\\\"skip\\\",\\\"path\\\":\\\"a.py\\\",\\\"line\\\":1,\\\"issue\\\":\\\"says \\\\\\\\\\\"hi\\\",\\\"short\\\":\\\"s\\\",\\\"fix\\\":\\\"later\\\",\\\"change\\\":\\\"c\\\"},{\\\"sev\\\":\\\"re'\\n    fixed = json.loads(hare_r1.repair_json(cut))\\n    assert fixed[\\\"findings\\\"][0][\\\"issue\\\"] == 'says \\\"hi' and len(fixed[\\\"findings\\\"]) == 1\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":603,\"issue\":\"`stack` and `open_str` from this walk are both overwritten by the second walk before anything reads them, so only the seam is used here.\",\"short\":\"Two names bound here are overwritten by the next walk and never read; only the seam matters.\",\"fix\":\"yes\",\"change\":\"Take just the seam from the first walk.\",\"original\":\"    stack, seam, open_str = _walk(text)\",\"suggestion\":\"    seam = _walk(text)[1]\"}]}"
+}

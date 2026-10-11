@@ -1,0 +1,33 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 57.5,
+ "steps": 7,
+ "answer_part": "text",
+ "reasoning_chars": 1034,
+ "usage": {
+  "prompt_tokens": 44825,
+  "completion_tokens": 1307,
+  "completion_tokens_details": {
+   "reasoning_tokens": 5613
+  }
+ },
+ "answer": "Reordering the model hop to demote Gemini \u2014 pulling its scorecard to judge the switch.iusSpotted a possible stale-doc snag with the new order \u2014 now verifying where the old chain is still written.{\"effort\": \"low\", \"summary\": \"Gemini rides the bench while qwen gets first refusal. Small shuffle, sharp teeth. \ud83d\udc39\\n\\n1. **chain order** `build_provider_chain` walks Groq, OpenRouter, Nous, Gemini, Zen with an owner-call comment.\\n2. **tests** fixed-order and hop-loop asserts move to the new tuple and per-hop options.\", \"aim\": \"Demote Gemini from default second hop to fallback behind OpenRouter and Nous while keeping Groq first.\", \"case\": \"The tuple swap and both order tests move in lockstep so the runtime change is sound, but the R1c Brain line agents read still names Gemini second, so the docs contradict the code until that line moves too.\", \"findings\": [{\"sev\": \"real\", \"path\": \"AGENTS.md\", \"line\": null, \"issue\": \"The R1c Brain line still reads Groq then Gemini then Nous then OpenRouter then Zen while the code now runs Groq then OpenRouter then Nous then Gemini then Zen, so the contract every agent signs contradicts the new order. The PR checklist leaves the PLAN R1c chain line for a later fold, confirming the stale copy ships with this diff.\", \"short\": \"AGENTS.md still names Gemini second while the code now runs OpenRouter there, contradicting the contract every agent signs\", \"fix\": \"later\", \"change\": \"Update the R1c Brain order in AGENTS.md and the PLAN chain line to Groq, OpenRouter, Nous, Gemini, Zen.\"}]}"
+}

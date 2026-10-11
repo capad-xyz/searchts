@@ -55,6 +55,25 @@ reproducing its finding as `real` is the same mistake again.
 bounded shapes measured apart: a gateway takes `effort` **or** `max_tokens`, not
 both, and a run that cannot tell them apart proves nothing.
 
+## The Zen runs (`zen/`)
+
+[`zen/`](zen) is the same five cases against the Zen free models, driven through
+the OpenCode client by `scripts/zen_eval.py` because four of those five refuse a
+direct HTTP call. Their `mode` is `default` or a published level
+(`low`, `medium`, `high`, `xhigh`, `max`); `default` is the no-variant arm, which
+is the model's own behaviour and not a disabled state. Their `usage` carries the
+same `completion_tokens_details.reasoning_tokens` the scorer reads, plus
+`answer_part`, which says whether the answer arrived as a `text` part or a
+`reasoning` one.
+
+[`zen-table.md`](zen-table.md) is the one-row-per-model-and-level view, built
+from those files:
+
+```bash
+python scripts/hare_proof.py docs/proofs/hare-reasoning/zen --by-model \
+    --out docs/proofs/hare-reasoning/zen-table.md
+```
+
 A run with no `answer` is not a miss. It is a rate limit, a quota, a dead pin or
 a timeout, and it is reported as an error rather than scored.
 

@@ -1,0 +1,31 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "zen",
+ "model": "step-5-preview-free",
+ "mode": "low",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "low",
+  "published_effort": [
+   "low",
+   "medium",
+   "high"
+  ]
+ },
+ "error": "",
+ "seconds": 362.8,
+ "steps": 9,
+ "answer_part": "text",
+ "reasoning_chars": 40781,
+ "usage": {
+  "prompt_tokens": 35109,
+  "completion_tokens": 1780,
+  "completion_tokens_details": {
+   "reasoning_tokens": 10943
+  }
+ },
+ "answer": "{\n  \"effort\": \"low\",\n  \"summary\": \"Groq and Gemini get benched; the slow hops bat first. \ud83d\udc22\\n1. **chain order** openrouter leads, Groq drops behind Nous, Gemini after Groq.\\n2. **PLAN** the failover bullet is rewritten for the new order, and quietly loses three sentences of spec.\\n3. **tests** three tests follow the new order, including the per-hop options.\",\n  \"aim\": \"Bat the slower, more careful hops first so a fast hop cannot win the review by answering in seconds.\",\n  \"case\": \"The reorder is one tuple and every touched assertion matches it exactly, so the code is safe to ship. What should change first is the PLAN bullet, which drops fail conditions, timeout caps, env var names and the zero-retention note that live nowhere else in the repo at this commit.\",\n  \"findings\": [\n    {\n      \"sev\": \"real\",\n      \"path\": \"PLAN.md\",\n      \"line\": 259,\n      \"issue\": \"The rewritten bullet keeps the model list and the rationale but drops the rest of the old sentence: Fail = 429 / 5xx / timeout / empty / no JSON / thinking cut, the exhausted to `searchts-r1-needed` nag, the 300 s call / 600 s hop budget / 32,000-token caps with the `HARE_LLM_TIMEOUT_S`, `HARE_HOP_BUDGET_S`, `HARE_MAX_TOKENS`, `HARE_BIG_*` names, the `timeout-minutes: 40` backstop, `No LLM in the router`, the 2026-10-03 live notes (Groq 413, gemini 404, Zen 403 by policy), the skip list (`openrouter/free`, Lyria, Muse contributor-free), `Only :free Nous ids` and the Zen zero-retention line. `HARE_HOP_BUDGET_S` is documented nowhere else at this commit, and the PR claims one change: chain order.\",\n      \"short\": \"The failover bullet keeps the new order but silently drops the fail conditions, the timeout caps and env names, and the zero-retention note, documented nowhere else.\",\n      \"fix\": \"later\",\n      \"change\": \"Restore the dropped sentences at the end of the bullet: the fail conditions, the exhausted nag, the caps with their env var names, the job backstop, `No LLM in the router`, the live 2026-10-03 notes, the skip list, `Only :free Nous ids` and `Zen space-bunny-free is zero-retention`.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"tests/test_hare_r1.py\",\n      \"line\": 646,\n      \"issue\": \"The new comment line says the same thing as the two stale lines above it, which still read `OpenRouter's qwen leads, then Nous, then Gemini`. Gemini is not third any more, it sits after Groq, so the old wording is a leftover from an earlier order.\",\n      \"short\": \"Stale duplicate comment: the two lines above still describe qwen leads, then Nous, then Gemini, and they repeat this new line.\",\n      \"fix\": \"later\",\n      \"change\": \"Delete the two comment lines above this one (644 and 645); they are not part of this PR and still read `qwen, then Nous, then Gemini`.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 1359,\n      \"issue\": \"Seven comment lines for a one-tuple reorder, and the reasons in them (owner's call, the fast hops miss what a slower reviewer caught, the ledger cannot rank hops yet) are the PLAN.md:259 bullet word for word. Not wrong, just heavy.\",\n      \"short\": \"Seven comment lines restate the PLAN bullet; two naming the order would do. Not wrong, just heavy.\",\n      \"fix\": \"later\",\n      \"change\": \"Keep the two lines that name the order (slow hops first, Groq and Gemini as fallbacks) and let PLAN.md carry the rest of the reasoning.\"\n    }\n  ]\n}"
+}

@@ -1,0 +1,33 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "xhigh",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "xhigh",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 195.1,
+ "steps": 11,
+ "answer_part": "text",
+ "reasoning_chars": 1735,
+ "usage": {
+  "prompt_tokens": 43903,
+  "completion_tokens": 2597,
+  "completion_tokens_details": {
+   "reasoning_tokens": 9755
+  }
+ },
+ "answer": "Reordering the slow hops first: checking the chain against the docs.The new order checks out at the provider level; now digging for doc drift and stale references.Found the stale spec lines the reorder left behind; pinning exact locations for the report.{\"effort\":\"low\",\"summary\":\"Tortoise strategy: slow reviewers first, speedsters as backup. Docs still nibbling the old crumbs.\\n1. **chain** OpenRouter then Nous then Groq then Gemini then Zen in `build_provider_chain`.\\n2. **docs** PLAN failover line rewritten for the new order plus the ledger caveat.\\n3. **tests** fixed-order, no-key, and per-hop options tests follow the new hops.\",\"aim\":\"Put patient reviewers first and relegate the fast but missy hops to fallback duty.\",\"case\":\"The reorder matches the stated reason and the tests track it, but the surrounding spec still advertises the old lineup, so the docs lie until synced.\",\"findings\":[{\"sev\":\"real\",\"path\":\"AGENTS.md\",\"line\":null,\"issue\":\"AGENTS.md trigger line still says Groq then OpenRouter then Nous with the old slug chain, which contradicts the new provider order in code.\",\"short\":\"AGENTS.md trigger still lists Groq first with old slugs, contradicting the new OpenRouter-first chain in code and PLAN failover line\",\"fix\":\"later\",\"change\":\"Update the Brain line to OpenRouter then Nous then Groq then Gemini then Zen with current slugs.\"},{\"sev\":\"real\",\"path\":\"PLAN.md\",\"line\":259,\"issue\":\"The new failover line puts Space Bunny first on Nous and second on OpenRouter, while the very next bullet still says Space Bunny is last on Nous.\",\"short\":\"New failover line moves Space Bunny first on Nous, but next bullet still calls it last there, a direct contradiction\",\"fix\":\"later\",\"change\":\"Rewrite the Space Bunny bullet to the last-free-day wording matching the new order.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":null,\"issue\":\"The catalog comments above the defaults still say Groq stays first and space-bunny-alpha is last on Nous, both false after this reorder.\",\"short\":\"Groq stays-first and Nous space-bunny-last comments are stale after moving Groq behind slower hops and flipping Space Bunny to first\",\"fix\":\"later\",\"change\":\"Refresh both comments to describe Groq as fallback and Space Bunny first on Nous.\"}]}"
+}

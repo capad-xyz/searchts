@@ -1,0 +1,33 @@
+{
+ "case": "245-proof",
+ "pr": 245,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 103.8,
+ "steps": 23,
+ "answer_part": "text",
+ "reasoning_chars": 41451,
+ "usage": {
+  "prompt_tokens": 25741,
+  "completion_tokens": 4077,
+  "completion_tokens_details": {
+   "reasoning_tokens": 10331
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"Three patches to the wrap-up, plus a timeout line that stops guessing which tier waited.\\n\\n1. **escape walk** `_walk` now returns whether a string is still open, so `repair_json` stops counting raw quotes.\\n2. **restart guard** a continuation that starts with `{` wins only when it carries more findings than the partial kept.\\n3. **short line** the timeout note reads the seconds out of the error instead of printing the default tier.\",\"aim\":\"Close the two real findings Hare posted on #244 and the skip from #243: repair a cut answer by walking escapes, stop a short restart from shrinking a posted review, and name the tier that actually timed out.\",\"case\":\"The escape-walk repair and the timeout number are straight fixes, and each new test fails on the old code, which is the good kind of armor. The restart guard only catches a tail that literally starts with `{`: probed on this code, a fenced or prefaced restart takes the else branch, the two texts get stitched, and `extract_json` hands back the restart, so three kept findings become one and the string no longer parses. That is the exact shrink this diff promises to stop, so the guard needs to detect a restart by parse before the wrap-up is safe.\",\"findings\":[{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":840,\"issue\":\"The gate only sees a tail that literally starts with `{`. A restart wrapped in a fence or a line of prose takes the else branch, `partial + tail` gets stitched, and extract_json returns the restart: probed on this code, the three kept findings become one (line 99) and the result no longer parses with json.loads. That is the shrink the title and comment promise to stop.\",\"short\":\"a fenced or prefaced restart still takes the else branch, so the kept findings are dropped and the posted object is the restart\",\"fix\":\"later\",\"change\":\"Detect a restart by parsing (extract_json(tail) carrying findings) instead of a bare `{`, and add the fenced tail to the restart test.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":846,\"issue\":\"When the restart loses, stitched stays empty, so LAST_CUT continued is False and the fold prints \\\"closed by the script\\\" even though a continuation call ran and its tokens were added to LAST_USAGE. The new test asserts that misreport as the expected shape.\",\"short\":\"a lost restart leaves continued false, so the fold says the script closed it when a continuation call did run\",\"fix\":\"later\",\"change\":\"Record that a tail arrived, not that the tail won, before LAST_CUT is set.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":966,\"issue\":\"The pattern only matches whole seconds, so any other spelling falls back to LLM_TIMEOUT_SEC: \\\"timeout after 120.5s\\\" reports \\\"no answer within 300s\\\", the same wrong number this line was patched to remove.\",\"short\":\"a non-integer or missing tier silently falls back to 300s, the exact wrong number this line was patched to remove\",\"fix\":\"later\",\"change\":\"Match the seconds the writer actually puts in the message and say the tier is unknown when there is no number.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":1055,\"issue\":\"len(data[\\\"findings\\\"]) > 1 is loose: a repair that kept2 of the 8 streamed findings still passes, so the test proves only that the restart lost, not that the kept findings survived.\",\"short\":\"greater than 1 passes even when the repair threw away most of the eight streamed findings\",\"fix\":\"later\",\"change\":\"Assert the exact kept lines from the partial instead of a lower bound on the count.\"}]}"
+}

@@ -2767,4 +2767,52 @@ def test_the_proof_table_is_built_from_the_raw_runs(tmp_path) -> None:
     assert effort["answered"] == 0
     assert "9000 reasoning chunks" in effort["why"], "the stream evidence has to reach the table"
     out = hare_proof.render(runs, {})
-    assert "| off | 1 of 1 |" in out and "Runs that returned nothing" in out
+    assert "| off | 1 of 1 |" in out and "Cells that returned nothing" in out
+
+
+def test_the_by_model_view_keeps_the_wrong_finding_off_the_caught_column(tmp_path) -> None:
+    """#258 is the case that separates a better reviewer from a more confident one:
+    reproducing its finding as `real` is the same mistake again, so it gets its own
+    column and never counts as caught."""
+    import hare_proof
+
+    right = _raw_run(mode="max", seconds=90.0,
+                     usage={"completion_tokens_details": {"reasoning_tokens": 1200}},
+                     answer=json.dumps({"summary": "s", "findings": [
+                         {"sev": "real", "path": "scripts/hare_r1.py", "line": 842,
+                          "issue": "`stitched` is never assigned when the restart is not longer, so the read raises UnboundLocalError"}]}))
+    wrong = _raw_run(case="258-proof", pr=258, mode="max", seconds=30.0,
+                     usage={"completion_tokens_details": {"reasoning_tokens": 300}},
+                     answer=json.dumps({"summary": "s", "findings": [
+                         {"sev": "real", "path": "tests/test_hare_r1.py", "line": 100,
+                          "issue": "the test asserts three calls but the chain order fires four hops before g1 answers"}]}))
+    empty = _raw_run(case="237-proof", pr=237, mode="max", seconds=10.0,
+                     usage={"completion_tokens_details": {"reasoning_tokens": 10}},
+                     answer='{"summary": "s", "findings": []}')
+    for run in (right, wrong, empty):
+        (tmp_path / f"{run['case']}-{run['attempt']}.json").write_text(json.dumps(run), encoding="utf-8")
+
+    runs = hare_proof.load(tmp_path)
+    scores = hare_proof.score_by_model(runs, tmp_path, Path(__file__).resolve().parents[1] / "docs" / "hare-proof-cases.json")
+    row = scores[("openrouter", right["model"], "max")]
+    assert (row["answered"], row["empty"], row["caught_real"], row["expected_real"], row["wrong"]) == (3, 1, 1, 2, 1)
+    assert row["median_reasoning"] == 300 and row["median_s"] == 30.0
+    out = hare_proof.render_by_model(runs, scores)
+    assert "| `nvidia/nemotron-3-ultra-550b-a55b:free` | max | 3 of 3 | 1 | 1 | 2 | 1 | 2 | 300 | 30 |" in out
+
+
+def test_the_markdown_file_is_written_by_the_script_not_by_hand(tmp_path) -> None:
+    """The Zen table in docs/ is produced by running this, so a reader can rebuild
+    it. That only holds if the writer path is the one under test."""
+    import hare_proof
+
+    (tmp_path / "a.json").write_text(json.dumps(_raw_run(mode="max", seconds=120.0)), encoding="utf-8")
+    out = tmp_path / "table.md"
+    rc = hare_proof.main([str(tmp_path), "--by-model", "--cases",
+                          str(Path(__file__).resolve().parents[1] / "docs" / "hare-proof-cases.json"),
+                          "--out", str(out)])
+    body = out.read_text(encoding="utf-8")
+    assert rc == 0 and body.startswith("# Zen reasoning proof")
+    assert "python scripts/hare_proof.py" in body, "the file has to say how to rebuild itself"
+    assert "| `nvidia/nemotron-3-ultra-550b-a55b:free` | max | 1 of 1 |" in body
+    assert "## Per case" in body and "120 |" in body
