@@ -143,6 +143,7 @@ def test_a_run_writes_what_the_table_reads_and_the_table_prints_it(tmp_path, mon
     looks: `usage.completion_tokens_details.reasoning_tokens`. Written anywhere else
     the column reads zero for a run that spent 512 reasoning tokens."""
     asked: list = []
+    monkeypatch.setenv("GITHUB_TOKEN", "t")  # the prompts are rebuilt from the API
     monkeypatch.setattr(zen_eval, "ask", _fake_ask(asked))
     monkeypatch.setattr(zen_eval.time, "sleep", lambda s: None)
     monkeypatch.setattr(zen_eval.time, "time", _Clock())
@@ -166,6 +167,7 @@ def test_a_run_writes_what_the_table_reads_and_the_table_prints_it(tmp_path, mon
 def test_a_mode_no_zen_model_publishes_is_named_not_dropped(tmp_path, monkeypatch, capsys) -> None:
     """`off,on` measured only `off` once because the unknown name vanished without a
     word. An unknown level has to be printed and the rest still run."""
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
     monkeypatch.setattr(zen_eval, "ask", _fake_ask([]))
     monkeypatch.setattr(zen_eval.time, "sleep", lambda s: None)
     monkeypatch.setattr(hare_eval, "build_case", lambda *a, **k: {
@@ -183,6 +185,18 @@ def test_a_model_this_harness_does_not_measure_says_why(tmp_path, monkeypatch, c
     out = capsys.readouterr().out
     assert "longcat-2.5-preview-free is not run" in out and "toggle" in out
     assert not list(tmp_path.glob("*.json"))
+
+
+def test_no_token_says_so_and_measures_nothing(monkeypatch, tmp_path, capsys) -> None:
+    """The review prompts are rebuilt from the GitHub API. A run without a token
+    cannot rebuild them, and it has to say that rather than quietly write nothing."""
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.setattr(zen_eval.subprocess, "run",
+                        lambda cmd, **k: subprocess.CompletedProcess(cmd, 1, "", ""))
+    assert zen_eval.main(["--cases", _cases_file(tmp_path), "--raw-dir", str(tmp_path),
+                          "--models", BUNNY, "--modes", "default"]) == 1
+    assert "no GitHub token" in capsys.readouterr().out
+    assert not list(tmp_path.glob("*__zen__*.json"))
 
 
 def test_a_rate_limited_call_is_retried_once_because_it_is_not_a_result(tmp_path, monkeypatch) -> None:
