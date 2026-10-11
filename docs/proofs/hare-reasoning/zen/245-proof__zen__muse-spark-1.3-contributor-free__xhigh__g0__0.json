@@ -17,17 +17,17 @@
    "xhigh"
   ]
  },
- "error": "",
- "seconds": 140.6,
- "steps": 14,
- "answer_part": "text",
- "reasoning_chars": 2417,
+ "error": "timeout after 900s",
+ "seconds": 10938.7,
+ "steps": 0,
+ "answer_part": "",
+ "reasoning_chars": 0,
  "usage": {
-  "prompt_tokens": 43425,
-  "completion_tokens": 2769,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
   "completion_tokens_details": {
-   "reasoning_tokens": 16062
+   "reasoning_tokens": 0
   }
  },
- "answer": "Witty review brewing, checking whether the restart guard and escape logic hold.Spotted a gap where fenced restarts could slip through, now digging into the details.Core repair logic checks out, now finalizing the verdict.{\"effort\": \"low\", \"summary\": \"Three stitches to keep a cut review whole. Neat work, one loose thread. \ud83e\uddf5\\n1. **repair** uses the escape walk instead of raw quote counting\\n2. **restart** only wins when it holds more findings\\n3. **timeout** names the tier that timed out\", \"aim\": \"Keep a cut review from shrinking by fixing string repair, restart choice, and timeout wording.\", \"case\": \"The escape-walk repair and the losing-restart guard behave, but a fenced restart still takes the concat path and can shrink the posted review, so that check needs broadening first.\", \"findings\": [{\"sev\": \"real\", \"path\": \"scripts/hare_r1.py\", \"line\": 840, \"issue\": \"The restart check looks only for tails starting with `{`. A fenced or prefaced restart goes to the concat branch and the stitched text can shrink to the small restart.\", \"short\": \"Fenced or prefaced restart misses the startswith brace check, takes the concat path, and shrinks the posted review\", \"fix\": \"later\", \"change\": \"Detect a restart through extract_json findings instead of startswith brace.\"}, {\"sev\": \"skip\", \"path\": \"scripts/hare_r1.py\", \"line\": 845, \"issue\": \"Only the losing restart is tested. No test shows a restart with more findings winning, so that branch could break silently.\", \"short\": \"Winning restart branch has no test, only the losing restart case is exercised in the suite\", \"fix\": \"later\", \"change\": \"Add a test where the restart holds more findings and wins.\"}]}"
+ "answer": ""
 }
