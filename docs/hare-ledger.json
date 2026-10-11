@@ -1,40 +1,4716 @@
 {
- "built": "2026-10-04",
+ "built": "2026-10-11",
  "repo": "capad-xyz/searchts",
  "summary": {
-  "prs": 120,
-  "notes": 93,
-  "real": 6,
-  "skip": 33,
+  "prs": 214,
+  "notes": 293,
+  "real": 41,
+  "skip": 181,
   "real_fates": {
-   "fixed": 1,
-   "wrong": 1,
-   "wontfix": 1,
+   "wrong": 6,
+   "still applies": 2,
+   "open": 17,
+   "fixed": 11,
+   "wontfix": 2,
    "resolved": 2,
    "dropped": 1
   },
-  "real_fixed_or_resolved": 3,
+  "real_fixed_or_resolved": 13,
   "hops": {
+   "nous:poolside/laguna-s-2.1:free": 106,
+   "nous:meituan/longcat-2.5-preview:free": 39,
    "groq:openai/gpt-oss-120b": 15,
-   "openrouter:qwen/qwen3.8-27b:free": 16,
-   "openrouter:qwen/qwen3.8-27b:free · deep": 1,
-   "openrouter:stealth/space-bunny-alpha": 2,
    "groq:openai/gpt-oss-120b · deep": 1,
-   "nous:poolside/laguna-s-2.1:free": 4,
-   "gemini:gemini-3.1-flash-lite": 3,
+   "openrouter:qwen/qwen3.8-27b:free": 59,
+   "openrouter:nvidia/nemotron-3.5-lightning:free": 8,
+   "nous:inclusionai/ling-3.0-flash-sante:free": 1,
+   "gemini:gemini-3.1-flash-lite": 4,
+   "openrouter:nex-agi/nex-n2.5-pro:free": 24,
+   "openrouter:qwen/qwen3.8-27b:free · deep": 3,
+   "nous:meituan/longcat-2.5-preview:free · deep": 1,
+   "openrouter:stealth/space-bunny-alpha": 7,
+   "openrouter:poolside/laguna-s-2.1:free": 18,
    "gemini:gemini-3.1-flash-lite · deep": 1,
    "gemini:gemini-3.5-flash": 1,
-   "nous:meituan/longcat-2.5-preview:free": 2,
-   "openrouter:poolside/laguna-s-2.1:free": 18,
-   "nous:stealth/space-bunny-alpha": 2,
-   "openrouter:nex-agi/nex-n2.5-pro:free": 24
+   "nous:stealth/space-bunny-alpha": 2
   },
-  "scores": 0,
-  "score_avg": null,
-  "cut_notes": 1,
-  "needed": 138
+  "scores": 45,
+  "score_avg": 3.67,
+  "cut_notes": 23,
+  "needed": 147
  },
  "entries": [
+  {
+   "pr": 359,
+   "title": "feat(hare): reasoning on, bounded by four caps, measured on five PRs",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-10T20:26:20Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5480697705",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "high",
+     "cost": "113,203 prompt + 32,714 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 515 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 3
+    },
+    {
+     "at": "2026-10-10T20:31:11Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5480710499",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "9,814 prompt + 1,013 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 19 s",
+     "cut": "",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-10T20:32:57Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5480715172",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "7,082 prompt + 535 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 11 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-10T20:47:46Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5480753883",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "7,340 prompt + 334 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 7 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-10T21:13:24Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5480822907",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,175 prompt + 653 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 19 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-10T23:15:39Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5481154023",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "high",
+     "cost": "116,087 prompt + 32,337 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 545 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-10T23:17:51Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5481159145",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "116,291 prompt + 32,576 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 601 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-10T23:49:19Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5481232163",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "18,160 prompt + 1,118 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 25 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-11T00:59:48Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5481413319",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "about 41,788 prompt + 17,362 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 312 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-11T03:41:02Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5481759568",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "38,071 prompt + 552 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 12 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-11T03:49:52Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5481779807",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "108,041 prompt + 32,800 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 532 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-11T03:52:43Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/359#pullrequestreview-5481785460",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "7,139 prompt + 324 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 8 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_r1.py:63",
+     "sev": "real",
+     "issue": "The previous note flagged that test_hare_r1.py:63 asserts LLM_TIMEOUT_SEC == 300, but the PR changes the default to 600. This diff does not touch test_hare_r1.py or hare_r1.py, so that finding is still applies.",
+     "fate": "wrong",
+     "first": "2026-10-10T20:26:20Z",
+     "why": "The assertion is already 600, not 300: tests/test_hare_r1.py:65 reads assert hare_r1.LLM_TIMEOUT_SEC == 600, which is the new default in hare_r1.py:65 (HARE_LLM_TIMEOUT_S default \"600\"). CI test is gr"
+    },
+    {
+     "loc": ".github/workflows/hare-eval.yml:38",
+     "sev": "real",
+     "issue": "The modes input default is 'off,on' and description says 'off, on, or off,on', but the code's MODES tuple is ('off', 'effort', 'budget', 'max'). 'on' is not a valid mode and gets silently filtered out, so the eval only runs 'off' instead of 'off,max' as intended.",
+     "fate": "still applies",
+     "first": "2026-10-10T20:26:20Z"
+    },
+    {
+     "loc": "scripts/hare_eval.py:12",
+     "sev": "skip",
+     "issue": "The docstring says modes are 'off', 'on', 'max' but the code defines MODES = ('off', 'effort', 'budget', 'max'). The docstring should match the code.",
+     "fate": "fixed",
+     "first": "2026-10-10T20:26:20Z"
+    },
+    {
+     "loc": ".github/workflows/hare-eval.yml:30",
+     "sev": "real",
+     "issue": "The modes input default is still `off,on`, but `on` is not in hare_eval.MODES. The new test `test_every_mode_the_workflow_offers_is_a_mode_the_eval_runs` asserts every name in the default is a valid mode, so it will fail. The default should be `off,max` to run both modes as intended.",
+     "fate": "open",
+     "first": "2026-10-10T20:31:11Z"
+    },
+    {
+     "loc": "tests/test_hare_eval.py:215",
+     "sev": "skip",
+     "issue": "The docstring still says 'A dropped mode is how `off,on` measured only `off`', which is now the test's premise rather than the bug being demonstrated.",
+     "fate": "open",
+     "first": "2026-10-10T20:32:57Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py:3335",
+     "sev": "skip",
+     "issue": "The added comment block has several lines well over 100 characters. HARE.md says line length is the formatter's (E501 off, limit 100), so this is not a real finding, but the comment is dense.",
+     "fate": "open",
+     "first": "2026-10-10T21:13:24Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py",
+     "sev": "real",
+     "issue": "The PR body and docs describe changes to scripts/hare_r1.py (Caps class, per-provider reasoning fields, retry logic, chain reordering, LLM_TIMEOUT_SEC 300->600, HOP_BUDGET_S 600->1800) but the diff does not include any changes to that file. The workflow sets env vars (HARE_REASONING_BUDGET, HARE_REVIEW_WALL_CLOCK_S, HARE_MAX_ATTEMPTS, HARE_RATE_BACKOFF_S, HARE_RATE_MAX_BACKOFF_S) that the base script does not read, so the caps are dead config. The docs describe timeout changes not reflected in the base script.",
+     "fate": "open",
+     "first": "2026-10-10T23:15:39Z"
+    },
+    {
+     "loc": "docs/proofs/hare-reasoning/237-proof__nous__poolside_laguna-s-2.1_free__off__gon__0.json:29",
+     "sev": "skip",
+     "issue": "The new proof JSON files lack a trailing newline (\\ No newline at end of file). Minor style nit on generated evidence files.",
+     "fate": "open",
+     "first": "2026-10-10T23:17:51Z"
+    },
+    {
+     "loc": "scripts/zen_eval.py:163",
+     "sev": "skip",
+     "issue": "The file has no trailing newline at end of file, as shown by the \\ No newline at end of file marker in the diff.",
+     "fate": "fixed",
+     "first": "2026-10-10T23:49:19Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py:203",
+     "sev": "real",
+     "issue": "The PR body claims this PR turns on reasoning, adds four caps, changes the cost line, retries without reasoning on error, and reorders hops. The diff only changes comments in the PROVIDER_SHAPES block. None of the claimed logic changes are present.",
+     "fate": "open",
+     "first": "2026-10-11T00:59:48Z"
+    },
+    {
+     "loc": "scripts/zen_eval.py:1",
+     "sev": "skip",
+     "issue": "The file now ends with a trailing newline, resolving the prior skip finding about no newline at end of file.",
+     "fate": "open",
+     "first": "2026-10-11T00:59:48Z"
+    },
+    {
+     "loc": "docs/hare-next.md:45",
+     "sev": "real",
+     "issue": "The PR body claims this PR turns on reasoning, adds four caps, changes the cost line, retries without reasoning on error, and reorders hops. The diff only adds documentation and proof data. None of the claimed logic changes are present in any source file.",
+     "fate": "open",
+     "first": "2026-10-11T03:41:02Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 358,
+   "title": "chore(hare): eval 2026-10-10",
+   "state": "closed",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-10T23:11:16Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/358#pullrequestreview-5481143504",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "35,568 prompt + 201 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 5 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "docs/hare-eval-2026-10-10.json:1",
+     "sev": "skip",
+     "issue": "The JSON file has no trailing newline, matching the pattern of the other proof files in this PR.",
+     "fate": "dropped",
+     "first": "2026-10-10T23:11:16Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 349,
+   "title": "feat(cookies): read a logged-in page with your own session, host-fenced",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T15:49:13Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/349#pullrequestreview-5459330037",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "high",
+     "cost": "107,931 prompt + 32,366 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 461 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-08T16:31:38Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/349#pullrequestreview-5459843136",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "about 40,086 prompt + 17,765 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 321 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 4
+    },
+    {
+     "at": "2026-10-10T12:40:37Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/349#pullrequestreview-5478968361",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "about 68,366 prompt + 30,621 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 612 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-10T16:17:25Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/349#pullrequestreview-5479821801",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "17,193 prompt + 983 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 25 s",
+     "cut": "",
+     "findings": 5
+    },
+    {
+     "at": "2026-10-10T16:22:17Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/349#pullrequestreview-5479839486",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "13,410 prompt + 650 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 19 s",
+     "cut": "",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-10T16:25:21Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/349#pullrequestreview-5479848234",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "6,634 prompt + 612 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 15 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-10T18:38:22Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/349#pullrequestreview-5480334215",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "high",
+     "cost": "33,930 prompt + 985 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 31 s",
+     "cut": "",
+     "findings": 6
+    },
+    {
+     "at": "2026-10-10T18:44:06Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/349#pullrequestreview-5480351105",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "14,309 prompt + 927 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 27 s",
+     "cut": "",
+     "findings": 4
+    },
+    {
+     "at": "2026-10-10T18:48:06Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/349#pullrequestreview-5480364907",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,676 prompt + 1,520 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 27 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/unlocker.py",
+     "sev": "real",
+     "issue": "The CLI passes cookies=cookies to unlocker.read_items and unlocker.read_pages, but the diff does not show those functions being modified to accept or forward the cookies parameter to fetch. If they do not accept it, _cmd_read raises TypeError on every --cookies/--cookies-from-browser/--cdp-port read.",
+     "fate": "still applies",
+     "first": "2026-10-08T15:49:13Z"
+    },
+    {
+     "loc": "RUNBOOK.md:498",
+     "sev": "skip",
+     "issue": "RUNBOOK.md still says cookie_extract.py 'tries rookiepy first and falls back to browser_cookie3', but the diff removes rookiepy entirely. Doc contradicts the new code.",
+     "fate": "still applies",
+     "first": "2026-10-08T15:49:13Z"
+    },
+    {
+     "loc": "searchts/cli.py:1690",
+     "sev": "real",
+     "issue": "The CLI passes proxy=proxy and proxy_trusted=... to unlocker.read_items and unlocker.read_pages, but the diff does not show those functions being modified to accept these parameters. If they do not accept them, _cmd_read raises TypeError on every --proxy read.",
+     "fate": "open",
+     "first": "2026-10-08T16:31:38Z"
+    },
+    {
+     "loc": "searchts/cli.py:1696",
+     "sev": "real",
+     "issue": "Same issue as the read_items call: read_pages is called with proxy=proxy and proxy_trusted=... but the diff does not show read_pages being modified to accept these parameters.",
+     "fate": "open",
+     "first": "2026-10-08T16:31:38Z"
+    },
+    {
+     "loc": "tests/test_egress.py:14",
+     "sev": "skip",
+     "issue": "The module docstring says cookies_may_travel is 'intentionally not listed in __all__', but it IS listed in __all__. The test test_cookies_may_travel_is_public_api asserts it is in __all__ and would pass. The docstring is wrong.",
+     "fate": "open",
+     "first": "2026-10-08T16:31:38Z"
+    },
+    {
+     "loc": "searchts/egress.py:226",
+     "sev": "skip",
+     "issue": "The file has no trailing newline (\\ No newline at end of file), unlike the rest of the codebase.",
+     "fate": "open",
+     "first": "2026-10-08T16:31:38Z"
+    },
+    {
+     "loc": "tests/test_refusal_vs_vendor_wall.py:89",
+     "sev": "real",
+     "issue": "The test claims a reader that returns the wrong type comes back as \"\", but TypeError has no `.read` attribute, so it exercises the no-reader branch instead. The isinstance(str) guard is never covered and the comment overstates what is tested.",
+     "fate": "fixed",
+     "first": "2026-10-10T16:17:25Z"
+    },
+    {
+     "loc": "searchts/unlocker.py:1112",
+     "sev": "real",
+     "issue": "`_raised_body` calls `exc.read()` with no way to distinguish a short body from a truncated one, and `getattr(exc, \"read\", None)` on a plain exception returns nothing, so the docstring's \"no reader\" case and the \"wrong type\" case collapse into the same branch. The bound is right, but the total guarantee is softer than the comment claims for a reader that returns a str longer than the cap without raising.",
+     "fate": "fixed",
+     "first": "2026-10-10T16:17:25Z"
+    },
+    {
+     "loc": "searchts/device_check.py:40",
+     "sev": "skip",
+     "issue": "`human_required` was dropped from `__all__` with no other hunk touching it. If any caller does `from searchts.device_check import *`, that name is now missing from the public surface.",
+     "fate": "still applies",
+     "first": "2026-10-10T16:17:25Z"
+    },
+    {
+     "loc": "tests/test_egress.py:9",
+     "sev": "skip",
+     "issue": "The docstring now says `cookies_may_travel` is listed in `__all__`, but the diff does not show `__all__` being edited in `egress.py`. If it was not, the doc contradicts the module.",
+     "fate": "still applies",
+     "first": "2026-10-10T16:17:25Z"
+    },
+    {
+     "loc": "COOKIE_SECURITY_REVIEW.md:25",
+     "sev": "skip",
+     "issue": "Gate 6 now says `::ffff:127.0.0.1` is rejected as a non-loopback name. That is fail-closed and safe, but it is a behavior change for a user who legitimately passes that literal to `--cdp-port`.",
+     "fate": "still applies",
+     "first": "2026-10-10T16:17:25Z"
+    },
+    {
+     "loc": "tests/test_refusal_vs_vendor_wall.py:80",
+     "sev": "skip",
+     "issue": "The `_Raised` stand-in is a test double for the exception, which is fine, but it is only a stand-in: a real `HTTPError` whose `read` returns a `str` instead of bytes is not covered, and that is the branch the trim exists for.",
+     "fate": "open",
+     "first": "2026-10-10T16:22:17Z"
+    },
+    {
+     "loc": "tests/test_refusal_vs_vendor_wall.py:121",
+     "sev": "skip",
+     "issue": "The last assertion re-derives the expected length from `u._VENDOR_WALL_SCAN` instead of naming it, so a rename of the constant keeps the test green while silently changing what is pinned.",
+     "fate": "open",
+     "first": "2026-10-10T16:22:17Z"
+    },
+    {
+     "loc": "searchts/integrations/mcp_server.py:148",
+     "sev": "real",
+     "issue": "The new `authenticated` key is added to the MCP receipt with no version bump or note that the schema changed. A consumer that validates the receipt against a fixed shape, or a test that asserts the exact key set, breaks on a patch release.",
+     "fate": "fixed",
+     "first": "2026-10-10T18:38:22Z"
+    },
+    {
+     "loc": "searchts/unlocker.py:559",
+     "sev": "real",
+     "issue": "`_LOGIN_SEGMENTS` includes `auth` and `session` as whole segments, which will fire on real content URLs such as `/authors/2024` or `/session-notes`. The test suite pins the safe cases but not these two.",
+     "fate": "fixed",
+     "first": "2026-10-10T18:38:22Z"
+    },
+    {
+     "loc": "searchts/cdp_profile.py:423",
+     "sev": "skip",
+     "issue": "`_started` is a good fix, but the docstring says the un-entered manager has no `.chromium` and no `.stop()`, which is only true for the sync API. The async API returns a different shape entirely, and the function is named as if it covers both.",
+     "fate": "still applies",
+     "first": "2026-10-10T18:38:22Z"
+    },
+    {
+     "loc": "searchts/session_cookies.py:401",
+     "sev": "skip",
+     "issue": "`chromium_locked_message` is called with a browser name that may be empty or a family alias, and the message interpolates it verbatim. An empty name produces a sentence starting with `'s cookies are locked`.",
+     "fate": "fixed",
+     "first": "2026-10-10T18:38:22Z"
+    },
+    {
+     "loc": "tests/test_login_redirect_wall.py:1",
+     "sev": "skip",
+     "issue": "The file has no trailing newline, which will trip a linter or formatter on the next run.",
+     "fate": "fixed",
+     "first": "2026-10-10T18:38:22Z"
+    },
+    {
+     "loc": "searchts/unlocker.py:191",
+     "sev": "skip",
+     "issue": "`authenticated` is documented as set only when the winning rung is the direct curl request, but `_with_auth` is also called on the share-extractor and known-host rungs, which never carry cookies. The flag is correct, the comment is slightly wider than the code.",
+     "fate": "still applies",
+     "first": "2026-10-10T18:38:22Z"
+    },
+    {
+     "loc": "searchts/unlocker.py:565",
+     "sev": "real",
+     "issue": "Removing `auth` and `session` flips a real miss into a silent pass: a site that puts its login at a bare `/auth` or `/session` is no longer recognized as a wall, so the read returns the login shell as content. The comment calls that site not worth it, but the new test asserts the trade as a rule, so the miss is now load-bearing and undocumented where a reader would look.",
+     "fate": "open",
+     "first": "2026-10-10T18:44:06Z"
+    },
+    {
+     "loc": "tests/test_login_redirect_wall.py:100",
+     "sev": "skip",
+     "issue": "The honesty test asserts only that the set avoids a hand-picked list of ordinary nouns. A future entry like `logout` is fine, but `log` or `key` would also pass, so the guard is weaker than its docstring claims.",
+     "fate": "open",
+     "first": "2026-10-10T18:44:06Z"
+    },
+    {
+     "loc": "tests/test_session_cookies.py:526",
+     "sev": "skip",
+     "issue": "The loop passes `None` for `browser`, but the signature is `browser: str`. The code tolerates it via `or \"\"`, so the test is exercising a call the type says cannot happen.",
+     "fate": "open",
+     "first": "2026-10-10T18:44:06Z"
+    },
+    {
+     "loc": "tests/test_mcp_server.py:910",
+     "sev": "skip",
+     "issue": "The shape test re-declares the key list inline, so a rename passes here and fails only if some other test notices. It pins the contract, which is the point, but it does not fail on a misspelling of the expected set itself.",
+     "fate": "open",
+     "first": "2026-10-10T18:44:06Z"
+    },
+    {
+     "loc": "tests/test_login_redirect_wall.py:104",
+     "sev": "skip",
+     "issue": "The new `test_the_accepted_miss_is_stated_where_a_reader_looks` test uses `inspect.getsource(unlocker)` and string splitting to verify documentation exists. This is a real test of real code, but it is brittle to formatting changes in the comment block (e.g., if the comment moves more than 2000 chars away from the constant).",
+     "fate": "open",
+     "first": "2026-10-10T18:48:06Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 361,
+   "title": "chore(main): release 0.14.1",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-10T23:03:14Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/361#pullrequestreview-5481123868",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "9,906 prompt + 392 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 9 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 357,
+   "title": "fix(hare): the note leads with real findings, and a dead chain says so",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-10T16:04:20Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/357#pullrequestreview-5479757557",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "17,798 prompt + 2,125 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 35 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-10T16:05:47Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/357#pullrequestreview-5479766679",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "12,558 prompt + 453 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 11 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-10T16:11:47Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/357#pullrequestreview-5479801527",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "about 34,525 prompt + 16,927 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 313 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_r1.py:943",
+     "sev": "skip",
+     "issue": "The pin test compares the literal workflow line for HARE_OR_MODEL against the Python default, but the workflow value is a GitHub expression (`${{ github.event.inputs.or_model || '...' }}`). If HARE_OR_DEFAULT is the bare slug list, the split-on-comma comparison would fail.",
+     "fate": "open",
+     "first": "2026-10-10T16:04:20Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 351,
+   "title": "hare: try Step 5 Preview on Nous for the free week",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T22:23:04Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/351#pullrequestreview-5463577644",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "14,201 prompt + 674 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 18 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-10T15:16:38Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/351#pullrequestreview-5479545395",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "15,195 prompt + 5,916 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 114 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-10T15:21:20Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/351#pullrequestreview-5479565102",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "5,861 prompt + 188 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 10 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:163",
+     "sev": "skip",
+     "issue": "The HARE_NOUS_DEFAULT tuple now starts with a string on its own line with a trailing comma, slightly inconsistent with the surrounding two-line style.",
+     "fate": "open",
+     "first": "2026-10-08T22:23:04Z"
+    },
+    {
+     "loc": "docs/hare-next.md:535",
+     "sev": "skip",
+     "issue": "The old pointer `hare_r1.py:162` was already stale before this PR; this diff fixes it to `HARE_OR_DEFAULT`.",
+     "fate": "fixed",
+     "first": "2026-10-10T15:16:38Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 353,
+   "title": "test(hare): the second pin on the Nous chain head, which #351 missed",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-10T10:15:32Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/353#pullrequestreview-5478588042",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "7,669 prompt + 523 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 10 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_r1.py:1572",
+     "sev": "skip",
+     "issue": "The comment says 'Dropping it means editing BOTH assertions' but the test only checks the first element of the Nous chain. If the head changes, the second assertion (endswith) would also need updating, but that is not enforced here.",
+     "fate": "open",
+     "first": "2026-10-10T10:15:32Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 356,
+   "title": "docs: PLAN.md is only the open work",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-10T11:39:34Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/356#pullrequestreview-5478806996",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "32,530 prompt + 249 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 7 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-10T11:41:36Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/356#pullrequestreview-5478811725",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "23,096 prompt + 342 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 7 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-10T11:42:40Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/356#pullrequestreview-5478814166",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "6,459 prompt + 702 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 13 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "AGENTS.md:17",
+     "sev": "skip",
+     "issue": "The new row 'A box that already shipped, kept so the id is not lost' points to docs/plan-shipped.md, but the PLAN.md rewrite still contains many checked boxes ([x]) inline. That is the intended split (open boxes here, shipped ids there), so this is a consistency note, not a bug.",
+     "fate": "open",
+     "first": "2026-10-10T11:39:34Z"
+    },
+    {
+     "loc": "searchts/cli.py:1386",
+     "sev": "skip",
+     "issue": "The configure message drops the PLAN.md F7 reference, which is consistent with the PR's move of Hare ids out of PLAN.md, but it also removes a useful pointer for readers who want the transcribe cookie rationale.",
+     "fate": "open",
+     "first": "2026-10-10T11:41:36Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 355,
+   "title": "docs: keep Hare out of the searchts plan",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-10T11:30:59Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/355#pullrequestreview-5478786544",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "29,210 prompt + 480 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 12 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-10T11:33:30Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/355#pullrequestreview-5478792948",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "33,609 prompt + 1,077 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 23 s",
+     "cut": "",
+     "findings": 3
+    },
+    {
+     "at": "2026-10-10T11:35:04Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/355#pullrequestreview-5478796558",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "39,116 prompt + 262 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 12 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "docs/freeze-log.md:114",
+     "sev": "real",
+     "issue": "The 2026-10-10 freeze-log row says Hare's record is in PLAN-HARE.md, but this PR renames that file to docs/hare-next.md and deletes PLAN-HARE.md. The row is now a stale pointer that contradicts the move.",
+     "fate": "open",
+     "first": "2026-10-10T11:33:30Z"
+    },
+    {
+     "loc": "docs/hare-next.md:3",
+     "sev": "real",
+     "issue": "The new header says 'This file is docs/hare-next.md' but the file is named docs/hare-next.md, so the sentence is self-referential and confusing. It should say what the file is, not echo its own path.",
+     "fate": "open",
+     "first": "2026-10-10T11:33:30Z"
+    },
+    {
+     "loc": "docs/freeze-log.md:10",
+     "sev": "skip",
+     "issue": "The 2026-10-10 row is a run-on sentence that is hard to read, but it is a historical log entry and not worth rewriting.",
+     "fate": "open",
+     "first": "2026-10-10T11:33:30Z"
+    },
+    {
+     "loc": "docs/hare-next.md:1",
+     "sev": "skip",
+     "issue": "The rename from PLAN-HARE.md to docs/hare-next.md is a git rename, but the file still contains the old header text 'This file is docs/hare-next.md' which is correct. No issue here.",
+     "fate": "open",
+     "first": "2026-10-10T11:35:04Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 354,
+   "title": "docs: DataDome is not the ceiling",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-10T11:27:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/354#pullrequestreview-5478779433",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "16,604 prompt + 514 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 14 s",
+     "cut": "",
+     "findings": 4
+    }
+   ],
+   "findings": [
+    {
+     "loc": "AGENTS.md:13",
+     "sev": "skip",
+     "issue": "The new Identity line is long and wraps awkwardly, but line length is the formatter's call (E501 is off), so this is a style nit only.",
+     "fate": "open",
+     "first": "2026-10-10T11:27:49Z"
+    },
+    {
+     "loc": "AGENTS.md:23",
+     "sev": "skip",
+     "issue": "The expanded N1/N2/F7 sentence is dense and repeats 'not a default' twice, but it is accurate to the owner's rules and not a contradiction.",
+     "fate": "open",
+     "first": "2026-10-10T11:27:49Z"
+    },
+    {
+     "loc": "docs/mcp.md:63",
+     "sev": "skip",
+     "issue": "The new tunnel line is long and repeats 'not a ban' twice, but it correctly narrows the scope to HTTPS-to-loopback and is not a stale copy.",
+     "fate": "open",
+     "first": "2026-10-10T11:27:49Z"
+    },
+    {
+     "loc": "searchts/unlocker.py:1110",
+     "sev": "skip",
+     "issue": "The _fetch_stealth docstring now says 'This function does not take that click yet', which is honest and matches the code, but the line is long.",
+     "fate": "open",
+     "first": "2026-10-10T11:27:49Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 232,
+   "title": "chore(main): release 0.14.0",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-03T16:45:19Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5401711247",
+     "hop": "groq:openai/gpt-oss-120b",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-03T23:01:30Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5403316547",
+     "hop": "groq:openai/gpt-oss-120b · deep",
+     "effort": "low",
+     "cost": "4,526 prompt + 1,118 answer + 784 reasoning tokens on `groq:openai/gpt-oss-120b · deep`, 3 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-04T00:25:04Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5403584643",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "5,111 prompt + 1,167 answer + 1,091 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 20 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-04T18:53:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5407673327",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,171 prompt + 1,278 answer + 1,152 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 9 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-04T18:58:35Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5407686968",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,436 prompt + 2,190 answer + 1,908 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 12 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T02:25:33Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5409460619",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,760 prompt + 1,886 answer + 1,617 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 14 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T23:41:27Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5422020250",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "9,918 prompt + 361 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 7 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T23:49:08Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5422078361",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "10,100 prompt + 663 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 18 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-06T00:18:40Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5422295271",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "10,450 prompt + 674 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 14 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-06T00:32:51Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5422398160",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "10,652 prompt + 653 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 14 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-06T01:50:19Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5422890376",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "11,064 prompt + 779 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 16 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-06T01:58:02Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5422928785",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "11,953 prompt + 428 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 9 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-06T17:31:42Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5432277102",
+     "hop": "openrouter:nvidia/nemotron-3.5-lightning:free",
+     "effort": "low",
+     "cost": "12,603 prompt + 4,535 answer + 4,116 reasoning tokens on `openrouter:nvidia/nemotron-3.5-lightning:free`, 169 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-07T17:39:08Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5446065155",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "12,855 prompt + 598 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 15 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-07T17:55:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5446251480",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "12,950 prompt + 631 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 16 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-07T18:49:16Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5446846911",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,043 prompt + 537 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 19 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-07T22:10:08Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5448988598",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,114 prompt + 494 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 14 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-07T23:29:50Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5449643570",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,224 prompt + 592 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 11 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T00:10:23Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5449890573",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,223 prompt + 400 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 10 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T00:36:21Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5450055007",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,320 prompt + 333 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 7 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T01:33:46Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5450373876",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,423 prompt + 217 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 5 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T01:44:48Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5450441843",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,520 prompt + 287 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 12 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T02:01:15Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5450538998",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,613 prompt + 594 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 15 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T02:19:53Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5450638526",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,717 prompt + 422 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 10 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T02:41:55Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5450759126",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,804 prompt + 936 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 17 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T02:54:34Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5450824965",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,885 prompt + 539 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 18 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-08T03:44:48Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5451078446",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,955 prompt + 370 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 11 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-08T08:52:56Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5454096249",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "14,051 prompt + 1,041 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 21 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T09:50:21Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5454733592",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "14,139 prompt + 453 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 9 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T10:04:02Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5454908593",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "14,244 prompt + 395 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 15 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md",
+     "sev": "skip",
+     "issue": "Extra blank lines around the new version heading make the changelog look untidy.",
+     "fate": "open",
+     "first": "2026-10-03T16:45:19Z"
+    },
+    {
+     "loc": "CHANGELOG.md:6",
+     "sev": "skip",
+     "issue": "Double blank line after the 0.14.0 heading before ### Added, same untidiness noted in #232.",
+     "fate": "open",
+     "first": "2026-10-04T18:58:35Z"
+    },
+    {
+     "loc": "CHANGELOG.md:8",
+     "sev": "skip",
+     "issue": "There is a double blank line after the 0.14.0 heading before the first ### Added section, which looks untidy.",
+     "fate": "open",
+     "first": "2026-10-05T23:41:27Z"
+    },
+    {
+     "loc": "CHANGELOG.md:4",
+     "sev": "skip",
+     "issue": "Double blank line after the 0.14.0 heading, same untidy spacing flagged as #232 on the previous release.",
+     "fate": "open",
+     "first": "2026-10-06T01:58:02Z"
+    },
+    {
+     "loc": "CHANGELOG.md:5",
+     "sev": "skip",
+     "issue": "Double blank line after the 0.14.0 heading before ### Added, same untidy spacing noted in #232.",
+     "fate": "open",
+     "first": "2026-10-07T17:39:08Z"
+    },
+    {
+     "loc": "pyproject.toml:5",
+     "sev": "skip",
+     "issue": "The project description was rewritten in this release PR, but the PR body and CHANGELOG only mention the F25 fix. The new description copy is undocumented scope.",
+     "fate": "open",
+     "first": "2026-10-07T23:29:50Z"
+    }
+   ],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 350,
+   "title": "docs: record logged-in read as F27",
+   "state": "open",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T16:59:12Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/350#pullrequestreview-5460159638",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "9,998 prompt + 321 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 12 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "PLAN.md:290",
+     "sev": "skip",
+     "issue": "The F27 block is one very long line, the same shape already flagged twice on this file.",
+     "fate": "open",
+     "first": "2026-10-08T16:59:12Z"
+    },
+    {
+     "loc": "ROADMAP.md:29",
+     "sev": "skip",
+     "issue": "The reworded Not planned line is a single long line that wraps awkwardly in the rendered list.",
+     "fate": "open",
+     "first": "2026-10-08T16:59:12Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 348,
+   "title": "feat(ux): the zero-arg first run should say what to do first",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T09:58:15Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/348#pullrequestreview-5454832578",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "6,819 prompt + 845 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 21 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_first_run.py:49",
+     "sev": "skip",
+     "issue": "The test name says 'when a command is given' but only checks the 'version' subcommand, which is a thin wrapper. A real command like 'read' would be a stronger assertion.",
+     "fate": "open",
+     "first": "2026-10-08T09:58:15Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 347,
+   "title": "feat(ux): a typo is not a wall",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T09:44:28Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/347#pullrequestreview-5454665825",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "15,312 prompt + 910 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 27 s",
+     "cut": "",
+     "findings": 4
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/ux.py:1",
+     "sev": "skip",
+     "issue": "The module docstring says `transcribe`, `get` and `grab` take the same kind of argument and deserve the same treatment, but this diff only wires `check_url` into `_cmd_read`. The promise is left for a later PR.",
+     "fate": "open",
+     "first": "2026-10-08T09:44:28Z"
+    },
+    {
+     "loc": "searchts/ux.py:60",
+     "sev": "skip",
+     "issue": "`check_url` returns `None` for a bare word with a path (`example/page`) because `urlsplit` puts the whole thing in `path` and the first segment contains a slash, so `_BARE_LABEL` does not match. The test at `tests/test_ux.py:44` asserts `is not None`, which passes, but the message is the generic DNS failure rather than the typo hint.",
+     "fate": "open",
+     "first": "2026-10-08T09:44:28Z"
+    },
+    {
+     "loc": "searchts/ux.py:88",
+     "sev": "skip",
+     "issue": "The `file://` branch returns a message that names no site to fetch, but the test at `tests/test_ux.py:62` asserts `\"https:///\" not in msg`. The current message does not contain that string, so the test passes, but the assertion is checking for a string the code never produces rather than pinning the actual output.",
+     "fate": "open",
+     "first": "2026-10-08T09:44:28Z"
+    },
+    {
+     "loc": "searchts/unlocker.py:1590",
+     "sev": "skip",
+     "issue": "The refusal counter now advances on any exception with a `.code` or `.status.code` in the 4xx range, not just `HTTPError`. A backend that raises a custom exception with a `.code` attribute for a non-HTTP reason would be miscounted. The comment says Jina is the common case, but the code is broader.",
+     "fate": "open",
+     "first": "2026-10-08T09:44:28Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 344,
+   "title": "fix(mcp): the page stops naming the agent's next URL, in any form",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T08:47:03Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/344#pullrequestreview-5454026333",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "about 33,343 prompt + 18,516 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 309 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_mcp_next_url.py:12",
+     "sev": "skip",
+     "issue": "The test file uses sys.path.insert(0, str(__import__(\"pathlib\").Path(__file__).resolve().parents[1])) and sys.path.insert(0, \"scripts\") instead of relying on the installed package or conftest. This is unusual but works.",
+     "fate": "open",
+     "first": "2026-10-08T08:47:03Z"
+    },
+    {
+     "loc": "tests/test_mcp_next_url.py:144",
+     "sev": "skip",
+     "issue": "The file has no trailing newline (\\ No newline at end of file).",
+     "fate": "open",
+     "first": "2026-10-08T08:47:03Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 343,
+   "title": "feat(dogfood): a repeatable corpus sweep, so a tuned threshold can be noticed rotting",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T03:30:35Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/343#pullrequestreview-5451008928",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "about 28,551 prompt + 18,173 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 308 s",
+     "cut": "(length) after 4 findings, finished by one continuation call",
+     "findings": 4
+    },
+    {
+     "at": "2026-10-08T03:39:42Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/343#pullrequestreview-5451053545",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "6,344 prompt + 436 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 11 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/dogfood.py:149",
+     "sev": "skip",
+     "issue": "The `timeout_note` parameter on `probe()` is still never read in the body. Dead weight from the previous note, not yet addressed.",
+     "fate": "fixed",
+     "first": "2026-10-08T03:30:35Z"
+    },
+    {
+     "loc": "scripts/dogfood.py:195",
+     "sev": "skip",
+     "issue": "The header status line 'searchts dogfood: N corpora' prints to stdout. It is a status announcement, not a result, and the script imports searchts so P4.6 applies.",
+     "fate": "fixed",
+     "first": "2026-10-08T03:30:35Z"
+    },
+    {
+     "loc": "scripts/dogfood.py:103",
+     "sev": "skip",
+     "issue": "The timeout_note parameter on probe() is never read in the body. It is dead weight.",
+     "fate": "still applies",
+     "first": "2026-10-08T03:30:35Z"
+    },
+    {
+     "loc": "scripts/dogfood.py:92",
+     "sev": "skip",
+     "issue": "The `backend` parameter on `_classify()` is passed by every caller but never read in the body. Also from the previous note, still open.",
+     "fate": "still applies",
+     "first": "2026-10-08T03:30:35Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 342,
+   "title": "fix(graph): a private module constant was invisible to the whole graph",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T02:49:11Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/342#pullrequestreview-5450796180",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "7,270 prompt + 524 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 15 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 341,
+   "title": "fix(hare): replay the hops the fallback reserve held back",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T02:37:10Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/341#pullrequestreview-5450733889",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "about 32,122 prompt + 17,062 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 313 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 340,
+   "title": "feat(unlocker): a fence was never a resource limit",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T02:15:51Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/340#pullrequestreview-5450617090",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "about 31,792 prompt + 17,129 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 316 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/unlocker.py:733",
+     "sev": "skip",
+     "issue": "The _tidy_crude signature uses Optional[str] | None, which is redundant since Optional[str] already includes None.",
+     "fate": "open",
+     "first": "2026-10-08T02:15:51Z"
+    },
+    {
+     "loc": "tests/test_caps.py:114",
+     "sev": "skip",
+     "issue": "The test file has no trailing newline at end of file.",
+     "fate": "open",
+     "first": "2026-10-08T02:15:51Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 339,
+   "title": "feat(mcp): a server-signed cursor so the page stops authoring the next read",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T01:55:45Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/339#pullrequestreview-5450510202",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "16,535 prompt + 764 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 23 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/paging.py:170",
+     "sev": "skip",
+     "issue": "No trailing newline at end of file.",
+     "fate": "open",
+     "first": "2026-10-08T01:55:45Z"
+    },
+    {
+     "loc": "tests/test_paging.py:116",
+     "sev": "skip",
+     "issue": "No trailing newline at end of file.",
+     "fate": "open",
+     "first": "2026-10-08T01:55:45Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 338,
+   "title": "fix(unlocker): a refusal that repeats is a statement about the request, not the TLS",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T01:33:26Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/338#pullrequestreview-5450371831",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "about 33,971 prompt + 18,534 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 313 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-08T01:41:35Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/338#pullrequestreview-5450421512",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "about 31,828 prompt + 18,072 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 309 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/unlocker.py:1310",
+     "sev": "skip",
+     "issue": "The comment references _ESCALATE_UNLESS, a constant not visible in this diff. If it does not exist in the file, the reference is misleading.",
+     "fate": "open",
+     "first": "2026-10-08T01:33:26Z"
+    },
+    {
+     "loc": "PR body",
+     "sev": "skip",
+     "issue": "The PR body only mentions #334 (refusal repeat) but the diff also implements the line-structure gate for #336 (one-line extract vs crude strip). The body should note both issues.",
+     "fate": "open",
+     "first": "2026-10-08T01:33:26Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 337,
+   "title": "fix(extract): size is not structure, so check them separately",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T01:04:00Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/337#pullrequestreview-5450209267",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "12,927 prompt + 341 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 16 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_unlocker.py:158",
+     "sev": "skip",
+     "issue": "The test docstring says it pins the 35% gate, but the assertion checks `_word_recall >= 0.35` which is the existing gate, not the new line-count rule. The test would pass even if the new rule were removed.",
+     "fate": "open",
+     "first": "2026-10-08T01:04:00Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 335,
+   "title": "fix(walls): a locale string in a script is not a consent wall",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-08T00:31:12Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/335#pullrequestreview-5450024580",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "10,177 prompt + 567 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 17 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/walls.py:251",
+     "sev": "skip",
+     "issue": "The classify docstring now says three layers and lists markers, families, breadth, but the code has four: scrub runs first and is the layer that fixed Stripe.",
+     "fate": "open",
+     "first": "2026-10-08T00:31:12Z"
+    },
+    {
+     "loc": "tests/test_walls.py:130",
+     "sev": "skip",
+     "issue": "The Stripe test asserts scrub output has no cookie_description, which is true but does not pin the reason: the prose is what makes the page content, not the absence of the string.",
+     "fate": "open",
+     "first": "2026-10-08T00:31:12Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 332,
+   "title": "refactor(walls): classify by what a page is about, not by which site wrote it",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-07T23:43:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/332#pullrequestreview-5449728398",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "15,200 prompt + 624 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 20 s",
+     "cut": "",
+     "findings": 5
+    },
+    {
+     "at": "2026-10-07T23:57:20Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/332#pullrequestreview-5449810173",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "about 31,310 prompt + 18,843 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 310 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-08T00:00:09Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/332#pullrequestreview-5449826458",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "11,209 prompt + 738 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 37 s",
+     "cut": "",
+     "findings": 3
+    },
+    {
+     "at": "2026-10-08T00:04:55Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/332#pullrequestreview-5449853624",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "17,376 prompt + 888 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 28 s",
+     "cut": "",
+     "findings": 4
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/walls.py:222",
+     "sev": "skip",
+     "issue": "File ends without a trailing newline.",
+     "fate": "open",
+     "first": "2026-10-07T23:43:49Z"
+    },
+    {
+     "loc": "searchts/walls.py:140",
+     "sev": "skip",
+     "issue": "`classify_all` is exported but has no caller in the diff and no test. Dead code until something uses it.",
+     "fate": "open",
+     "first": "2026-10-07T23:43:49Z"
+    },
+    {
+     "loc": "searchts/walls.py:120",
+     "sev": "skip",
+     "issue": "`ANY_WALL` is just an alias for `WALL_NAMES`. Two names for one thing invites confusion.",
+     "fate": "open",
+     "first": "2026-10-07T23:43:49Z"
+    },
+    {
+     "loc": "searchts/walls.py:100",
+     "sev": "skip",
+     "issue": "The `_AUTH` regex includes `to (?:view|read|continue|see) (?:this|the)?` which is very broad and could match ordinary article text.",
+     "fate": "open",
+     "first": "2026-10-07T23:43:49Z"
+    },
+    {
+     "loc": "searchts/walls.py:180",
+     "sev": "skip",
+     "issue": "No direct test file for `walls.py`. The PR body acknowledges this and defers it, but the classifier is the core of the change.",
+     "fate": "open",
+     "first": "2026-10-07T23:43:49Z"
+    },
+    {
+     "loc": "searchts/unlocker.py",
+     "sev": "real",
+     "issue": "`_looks_cookie_wall` is removed by this diff, but L578 still calls it: `if _looks_cookie_wall(text):`. This will raise `NameError` at runtime.",
+     "fate": "open",
+     "first": "2026-10-07T23:57:20Z"
+    },
+    {
+     "loc": "tests/test_walls.py:128",
+     "sev": "skip",
+     "issue": "The comment says repeating \"sign in\" forty times is caught by the density rule, but 40 words is below the auth family's 60-word floor, so it is actually the breadth rule that catches it. The test passes either way, so the claim is unverified.",
+     "fate": "open",
+     "first": "2026-10-08T00:00:09Z"
+    },
+    {
+     "loc": "tests/test_walls.py:100",
+     "sev": "skip",
+     "issue": "The prose test asserts the classifier returns None but never asserts the auth family's score stayed below its threshold, so a regression that raises the ratio without crossing the floor would pass silently.",
+     "fate": "open",
+     "first": "2026-10-08T00:00:09Z"
+    },
+    {
+     "loc": "searchts/walls.py:238",
+     "sev": "skip",
+     "issue": "The breadth rule returns `Wall(fam.name, round(per_100, 2), total)` where `per_100` is computed from a denominator below `min_words`, so the reported density is a number the module's own comment says has no meaning at that length.",
+     "fate": "open",
+     "first": "2026-10-08T00:00:09Z"
+    },
+    {
+     "loc": "searchts/walls.py:170",
+     "sev": "skip",
+     "issue": "The breadth rule fires on any 3 distinct auth terms below the density floor, with no upper bound on total words. A 59-word page that mentions sign in, password, and register in unrelated contexts is a wall.",
+     "fate": "open",
+     "first": "2026-10-08T00:04:55Z"
+    },
+    {
+     "loc": "searchts/walls.py:52",
+     "sev": "skip",
+     "issue": "The ratelimit family has no sample in the corpus, so its 1.5 threshold is a guess. The PR body says as much, but the module docstring claims thresholds come from measured separation, which is not true for this family.",
+     "fate": "open",
+     "first": "2026-10-08T00:04:55Z"
+    },
+    {
+     "loc": "tests/test_walls.py:121",
+     "sev": "skip",
+     "issue": "The menu test asserts `distinct_term_count(menu, ...) == 1` as a proxy for the real claim, which is that `classify(menu) is None`. The proxy is fine but the comment says 'sign in appears once, and once is not breadth,' which is not what the code checks.",
+     "fate": "open",
+     "first": "2026-10-08T00:04:55Z"
+    },
+    {
+     "loc": "searchts/walls.py:200",
+     "sev": "skip",
+     "issue": "`classify_all` reports 0.0 below `min_words` for every family, which means a caller cannot distinguish 'too short to score' from 'scored zero.' The docstring says this is intentional, but the API is ambiguous.",
+     "fate": "open",
+     "first": "2026-10-08T00:04:55Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 331,
+   "title": "fix(extract): a link-list page keeps its links, not its navigation",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-07T22:50:12Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/331#pullrequestreview-5449364610",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "about 28,319 prompt + 15,439 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 312 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 3
+    },
+    {
+     "at": "2026-10-07T22:56:22Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/331#pullrequestreview-5449411613",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "12,441 prompt + 591 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 13 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-07T23:24:13Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/331#pullrequestreview-5449607769",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "12,771 prompt + 222 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 9 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/unlocker.py:637",
+     "sev": "skip",
+     "issue": "Type annotation `Optional[str] | None` is redundant: `Optional[str]` already includes `None`, so `| None` adds nothing.",
+     "fate": "open",
+     "first": "2026-10-07T22:50:12Z"
+    },
+    {
+     "loc": "tests/test_unlocker.py:148",
+     "sev": "skip",
+     "issue": "No test covers the new recall gate. The PR checklist explicitly leaves this unchecked, and the author plans to add it after corpus numbers settle. Existing tests pass but do not exercise the gate path.",
+     "fate": "open",
+     "first": "2026-10-07T22:50:12Z"
+    },
+    {
+     "loc": "searchts/unlocker.py:571",
+     "sev": "skip",
+     "issue": "The density check references `raw`, but the function parameter is `text`. If `raw` is not bound earlier in the function, this is a NameError at runtime.",
+     "fate": "open",
+     "first": "2026-10-07T22:56:22Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 330,
+   "title": "fix(inject): the fence cannot be forged, and marks no longer hide a payload",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-07T21:56:42Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/330#pullrequestreview-5448868273",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "8,552 prompt + 327 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 13 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-07T21:57:02Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/330#pullrequestreview-5448870939",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "8,552 prompt + 387 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 13 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-07T22:05:45Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/330#pullrequestreview-5448944249",
+     "hop": "nous:inclusionai/ling-3.0-flash-sante:free",
+     "effort": "low",
+     "cost": "6,375 prompt + 214 answer + 0 reasoning tokens on `nous:inclusionai/ling-3.0-flash-sante:free`, 2 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_sanitize.py:228",
+     "sev": "skip",
+     "issue": "The parametrized evasion test asserts `>= 1` findings, which is weak. A single finding for any reason passes, even if the specific evasion class is not what triggered it.",
+     "fate": "open",
+     "first": "2026-10-07T21:56:42Z"
+    },
+    {
+     "loc": "tests/test_sanitize.py:227",
+     "sev": "skip",
+     "issue": "File ends without a trailing newline.",
+     "fate": "fixed",
+     "first": "2026-10-07T21:57:02Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "Caught a real defect I introduced, the missing newline at EOF, and named it precisely. Not 5: one pass. But the substance is right, and the two things it did not do matter as much as the one it did. I",
+     "by": "capad-xyz",
+     "at": "2026-10-07T22:09:00Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 329,
+   "title": "docs(plan): what Hare should build next, and what to refuse",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-07T18:50:00Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/329#pullrequestreview-5446854918",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "24,291 prompt + 856 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 24 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-07T18:50:15Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/329#pullrequestreview-5446857950",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "24,291 prompt + 681 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 17 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "PLAN-HARE.md",
+     "sev": "skip",
+     "issue": "The document references specific line numbers in scripts/hare_r1.py and scripts/hare_graph.py (e.g., line 2487, 2319, 221) that should be verified against the actual codebase, but since this is a design doc and not a code change, inaccuracies are minor.",
+     "fate": "open",
+     "first": "2026-10-07T18:50:15Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "Correct read and correct verdict on a docs PR, and it picked the one real weakness: the doc cites line numbers it cannot verify. Not 5 because a plan doc whose citations have drifted is a plan doc tha",
+     "by": "capad-xyz",
+     "at": "2026-10-07T18:53:57Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 324,
+   "title": "fix(read): a page that fails mid-walk keeps the pages already read",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T21:17:39Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/324#pullrequestreview-5434677979",
+     "hop": "openrouter:nvidia/nemotron-3.5-lightning:free",
+     "effort": "low",
+     "cost": "13,430 prompt + 11,269 answer + 11,129 reasoning tokens on `openrouter:nvidia/nemotron-3.5-lightning:free`, 282 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-07T17:24:37Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/324#pullrequestreview-5445881461",
+     "hop": "openrouter:nvidia/nemotron-3.5-lightning:free",
+     "effort": "low",
+     "cost": "about 12,109 prompt + 807 answer + 0 reasoning tokens on `openrouter:nvidia/nemotron-3.5-lightning:free`, 411 s",
+     "cut": "(length) after 0 findings, closed by the script",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-07T17:29:13Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/324#pullrequestreview-5445943275",
+     "hop": "openrouter:nvidia/nemotron-3.5-lightning:free",
+     "effort": "low",
+     "cost": "about 12,109 prompt + 805 answer + 0 reasoning tokens on `openrouter:nvidia/nemotron-3.5-lightning:free`, 595 s",
+     "cut": "(length) after 0 findings, closed by the script",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 2,
+     "text": "Held nothing, so it cost nothing, but it read an incremental diff as the whole PR again and returned prose where the prompt asks for JSON. The 2 is for the same reason as 321's: correct-by-accident is",
+     "by": "capad-xyz",
+     "at": "2026-10-07T18:48:07Z"
+    }
+   ],
+   "needed": 1
+  },
+  {
+   "pr": 326,
+   "title": "ci(hare): pins are probed, not read off a catalog",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-07T18:26:38Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/326#pullrequestreview-5446593130",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "about 37,419 prompt + 16,872 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 314 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 3
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_r1.py:806",
+     "sev": "real",
+     "issue": "`test_the_extra_nous_pin_is_reachable_from_the_review_chain` uses `inspect.getsource(hr.run)` to verify `HARE_NOUS_EXTRA_MODEL` is referenced in `run()`, instead of running `run()` with mocked network. HARE.md: a test that reads source text instead of running the function it covers is a real finding.",
+     "fate": "open",
+     "first": "2026-10-07T18:26:38Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py:170",
+     "sev": "skip",
+     "issue": "The comment lists `apodex/apodex-1.1-mini:free` as a probed pin that answered, but that slug is not in `HARE_OR_DEFAULT` or the workflow `HARE_OR_MODEL` env. The comment overstates what is actually pinned.",
+     "fate": "open",
+     "first": "2026-10-07T18:26:38Z"
+    },
+    {
+     "loc": "tests/test_hare_r1.py:688",
+     "sev": "skip",
+     "issue": "`assert any(\"security\" in _PROBE for _PROBE in [hare_r1._PROBE_ASK])` is a tautology: it wraps the single constant `_PROBE_ASK` in a one-element list and checks membership, which always passes since the constant contains \"security\".",
+     "fate": "open",
+     "first": "2026-10-07T18:26:38Z"
+    }
+   ],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 328,
+   "title": "fix(ssrf): octal and inet_aton short forms are loopback, not DNS names",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-07T18:29:53Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/328#pullrequestreview-5446628775",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "8,174 prompt + 338 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 12 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-07T18:39:27Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/328#pullrequestreview-5446736529",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "8,174 prompt + 2,575 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 43 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_ssrf_ranges.py:22",
+     "sev": "skip",
+     "issue": "The comment for `127.000.000.001` calls it an inet_aton short form, but it is a zero-padded quad, not a short form. The decode is correct; the label is just imprecise.",
+     "fate": "open",
+     "first": "2026-10-07T18:29:53Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 5,
+     "text": "Correct verdict, and it is the first hop answering under the Nous-first chain, so this is the first measured data point that the ordering change does what it was merged for. Not 4 because a comment wi",
+     "by": "capad-xyz",
+     "at": "2026-10-07T18:47:53Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 325,
+   "title": "fix(read): a walk that hits a cap says so, and ordered rows count",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T21:15:31Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/325#pullrequestreview-5434658743",
+     "hop": "openrouter:nvidia/nemotron-3.5-lightning:free",
+     "effort": "low",
+     "cost": "20,449 prompt + 5,549 answer + 5,451 reasoning tokens on `openrouter:nvidia/nemotron-3.5-lightning:free`, 154 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-07T17:31:56Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/325#pullrequestreview-5445979898",
+     "hop": "gemini:gemini-3.1-flash-lite",
+     "effort": "medium",
+     "cost": "17,419 prompt + 209 answer + 0 reasoning tokens on `gemini:gemini-3.1-flash-lite`, 24 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/cli.py:1612",
+     "sev": "skip",
+     "issue": "The warning about mutually exclusive flags is helpful, but could be a bit more concise.",
+     "fate": "open",
+     "first": "2026-10-07T17:31:56Z"
+    }
+   ],
+   "scores": [],
+   "needed": 2
+  },
+  {
+   "pr": 327,
+   "title": "ci(hare): Nous leads the chain",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T21:13:20Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/327#pullrequestreview-5434638946",
+     "hop": "openrouter:nvidia/nemotron-3.5-lightning:free",
+     "effort": "low",
+     "cost": "12,750 prompt + 8,242 answer + 8,136 reasoning tokens on `openrouter:nvidia/nemotron-3.5-lightning:free`, 134 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 322,
+   "title": "fix(hare): the nag names the cause instead of calling every hop busy",
+   "state": "merged",
+   "files": [],
+   "notes": [],
+   "findings": [],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 323,
+   "title": "fix(read): a next page the SSRF guard refuses raises, not a short read",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T19:30:28Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/323#pullrequestreview-5433617589",
+     "hop": "openrouter:nvidia/nemotron-3.5-lightning:free",
+     "effort": "low",
+     "cost": "about 17,314 prompt + 100 answer + 0 reasoning tokens on `openrouter:nvidia/nemotron-3.5-lightning:free`, 356 s",
+     "cut": "(length) after 0 findings, closed by the script",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 321,
+   "title": "feat(read): --items follows the next page until the list is long enough",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T02:01:38Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/321#pullrequestreview-5422946483",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "14,125 prompt + 408 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 13 s",
+     "cut": "",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-06T17:23:14Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/321#pullrequestreview-5432174967",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "5,896 prompt + 576 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 13 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/unlocker.py:1456",
+     "sev": "skip",
+     "issue": "The inline import of guard_mcp_url inside the loop runs on every page hop; it is cheap but a module-level import would be clearer and avoids repeated import lookups.",
+     "fate": "open",
+     "first": "2026-10-06T02:01:38Z"
+    },
+    {
+     "loc": "searchts/unlocker.py:1484",
+     "sev": "skip",
+     "issue": "The browser-install nudge checks '[feed:' in out[0].text, which couples the message to a specific marker string; a dedicated flag on FetchResult would be more robust.",
+     "fate": "open",
+     "first": "2026-10-06T02:01:38Z"
+    },
+    {
+     "loc": "searchts/cli.py:1614",
+     "sev": "real",
+     "issue": "The diff changes progress=progress to progress=True, hardcoding progress display and ignoring the user's --quiet flag. This is unrelated to the PR's stated intent of following next pages for --items. The actual pagination logic (following next_url until N rows) is not present in this diff.",
+     "fate": "wrong",
+     "first": "2026-10-06T17:23:14Z",
+     "why": "there is no --quiet flag in searchts. `grep -rn '\\-\\-quiet' searchts/` returns nothing, so progress=True breaks nothing, and it is what read_pages and fetch already pass on the two branches below it. "
+    }
+   ],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 38,
+   "title": "feat(site): searchts.capad.fyi landing page + Cloudflare Pages deploy",
+   "state": "closed",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T15:04:27Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/38#pullrequestreview-5292790759",
+     "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 309,
+   "title": "chore(hare): eval 2026-10-06",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T00:33:16Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/309#pullrequestreview-5422401111",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "41,763 prompt + 440 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 11 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 320,
+   "title": "feat(read): a headed side panel is named, and its text stays out",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T02:05:16Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/320#pullrequestreview-5422969699",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "about 27,734 prompt + 15,869 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 309 s",
+     "cut": "(length) after 0 findings, finished by one continuation call",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "PLAN.md:335",
+     "sev": "skip",
+     "issue": "F22b checkbox is marked done in the diff but the PR body only lists F11, F11a, F21c, F21d and F26 as being ticked.",
+     "fate": "open",
+     "first": "2026-10-06T02:05:16Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 319,
+   "title": "fix(hare): an eval report does not wait for CI that cannot start",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T01:55:16Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/319#pullrequestreview-5422914879",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "11,428 prompt + 798 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 14 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:295",
+     "sev": "skip",
+     "issue": "The `any(\"no non-Hare checks yet\" in n for n in notes)` check couples `checks_for_report` to the exact wording of a note from `classify_checks`. If that message changes, the eval report special case silently stops working.",
+     "fate": "open",
+     "first": "2026-10-06T01:55:16Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 318,
+   "title": "fix(hare): a merge from the base is not the pull request",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T01:54:43Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/318#pullrequestreview-5422912037",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "12,077 prompt + 845 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 16 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 317,
+   "title": "ci(hare): qwen free is gone; the eval was all 404s",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T01:56:33Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/317#pullrequestreview-5422921281",
+     "hop": "openrouter:nvidia/nemotron-3.5-lightning:free",
+     "effort": "low",
+     "cost": "13,233 prompt + 5,314 answer + 4,861 reasoning tokens on `openrouter:nvidia/nemotron-3.5-lightning:free`, 129 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 306,
+   "title": "feat(read): a sidebar list does not beat the main column",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T00:17:39Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/306#pullrequestreview-5422287973",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "6,153 prompt + 422 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 13 s",
+     "cut": "",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-06T01:34:54Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/306#pullrequestreview-5422813281",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "19,253 prompt + 1,312 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 42 s",
+     "cut": "",
+     "findings": 7
+    },
+    {
+     "at": "2026-10-06T01:55:22Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/306#pullrequestreview-5422915383",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "10,217 prompt + 999 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 19 s",
+     "cut": "",
+     "findings": 3
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/more.py:30",
+     "sev": "skip",
+     "issue": "The regex uses `(?:^|\\s)` and `(?:\\s|$)` which works, but a word-boundary approach like `\\b` would be more idiomatic for class token matching.",
+     "fate": "wrong",
+     "first": "2026-10-06T00:17:39Z",
+     "why": "do not put \\b back\n/hare fate searchts/more.py:553 wontfix one main is the case this cut handles\n\nConflict with main is resolved. The sidebar test and the Hacker News table-row test both stay. Merge w"
+    },
+    {
+     "loc": "searchts/more.py:553",
+     "sev": "skip",
+     "issue": "`doc.find('.//main')` returns the first `<main>` in document order. A page with multiple `<main>` elements (rare but valid) would only measure the first.",
+     "fate": "moved",
+     "first": "2026-10-06T00:17:39Z"
+    },
+    {
+     "loc": "searchts/more.py:883",
+     "sev": "real",
+     "issue": "The new `titles_present` carve-out skips the coverage check whenever over half the items have a title in the extract and only links were lost. An article page whose text repeats the list's titles, or a list whose items are mostly headings, now gets replaced with no evidence the extract is mostly that list. The old paragraph-coverage gate was the only proof of that.",
+     "fate": "wrong",
+     "first": "2026-10-06T01:34:54Z",
+     "why": "the carve-out is on main. Table rows keep the skip; every other list goes back through coverage. That is #313\n/hare fate searchts/browser_install.py:455 wrong not in this diff. The tests are #311\n/har"
+    },
+    {
+     "loc": "searchts/browser_install.py:455",
+     "sev": "real",
+     "issue": "`uninstall_browser` is new and wired into the CLI, but no test file covers it. `tests/test_browser_install.py` exercises `install_browser` six times and never the uninstall path, so the pipx `uninject` branch, the ephemeral-uvx early return and the Chromium failure path are all unrun.",
+     "fate": "fixed",
+     "first": "2026-10-06T01:34:54Z"
+    },
+    {
+     "loc": "searchts/more.py:556",
+     "sev": "skip",
+     "issue": "`_following_detail_row` rejects a next row twice for roughly the same reason: a `span.titleline` check and a `len(title) >= 25` check both bail when the next row looks like another title row.",
+     "fate": "fixed",
+     "first": "2026-10-06T01:34:54Z"
+    },
+    {
+     "loc": "searchts/more.py:635",
+     "sev": "skip",
+     "issue": "The comment says title-row pairs beat a grab of the detail rows, but the condition only fires when the existing best is itself a `tr`. A card list that lost its links is left alone even when the table rows carry more of the page.",
+     "fate": "still applies",
+     "first": "2026-10-06T01:34:54Z"
+    },
+    {
+     "loc": "searchts/unlocker.py:1195",
+     "sev": "skip",
+     "issue": "`_spend_jina()` is called before `looks_blocked`, so a 403 that the relay would have classified as a plain block still burns the relay for the process. Harmless today, but the flag is set on a status the next line may not treat as a failure.",
+     "fate": "still applies",
+     "first": "2026-10-06T01:34:54Z"
+    },
+    {
+     "loc": "scripts/hare_ledger.py:66",
+     "sev": "skip",
+     "issue": "`is_harebot` keys on the literal `harebot:` appearing anywhere in the body. A human quoting that marker in a score comment would be silently dropped from the ledger.",
+     "fate": "still applies",
+     "first": "2026-10-06T01:34:54Z"
+    },
+    {
+     "loc": ".github/workflows/hare-eval.yml:82",
+     "sev": "skip",
+     "issue": "`git checkout -f -B` discards uncommitted work in the eval workspace. That is the intent here, but it is a destructive flag in a workflow with no comment saying why.",
+     "fate": "still applies",
+     "first": "2026-10-06T01:34:54Z"
+    },
+    {
+     "loc": "searchts/more.py:895",
+     "sev": "real",
+     "issue": "The carve-out now requires `items[0].tag == 'tr'`, but the old paragraph-coverage gate is still the only proof for non-table lists. A card list whose items are mostly headings and whose text repeats the titles still gets replaced with no evidence the extract is mostly that list.",
+     "fate": "open",
+     "first": "2026-10-06T01:55:22Z"
+    },
+    {
+     "loc": "searchts/browser_install.py:470",
+     "sev": "skip",
+     "issue": "The `cmd is None and not chromium` early return fires before the dry-run branch, so a dry-run on an ephemeral env prints the no-packages message instead of the dry-run message.",
+     "fate": "open",
+     "first": "2026-10-06T01:55:22Z"
+    },
+    {
+     "loc": "tests/test_browser_install.py:405",
+     "sev": "skip",
+     "issue": "The test asserts `captured.out == \"\"` but the function uses `_tick` which writes to stderr, so the assertion is checking the wrong stream.",
+     "fate": "open",
+     "first": "2026-10-06T01:55:22Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 3,
+     "text": "Ship on the class-token regex was right. Not 4: the skip tells us to switch back to \\b, and a hyphen is a word boundary, so \\bsidebar matches sidebar-right. That is the bug this PR removed.\n\n/hare fat",
+     "by": "capad-xyz",
+     "at": "2026-10-06T01:33:32Z"
+    },
+    {
+     "score": 2,
+     "text": "Ship on the sidebar regex was already scored. This note holds the PR for the coverage carve-out and uninstall --browser. The carve-out arrived with main (#302). uninstall is #304. Neither is this diff",
+     "by": "capad-xyz",
+     "at": "2026-10-06T01:42:10Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 303,
+   "title": "feat(read): follow the next page, curl only, with a cap",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T23:28:53Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/303#pullrequestreview-5421922019",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "13,862 prompt + 841 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 20 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T23:38:34Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/303#pullrequestreview-5421997294",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "5,641 prompt + 396 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 8 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-06T00:17:32Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/303#pullrequestreview-5422287261",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "11,209 prompt + 440 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 11 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-06T01:34:40Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/303#pullrequestreview-5422812080",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "19,430 prompt + 1,004 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 30 s",
+     "cut": "",
+     "findings": 6
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/cli.py:167",
+     "sev": "real",
+     "issue": "The --scrub argument had its help= line duplicated, giving argparse two help= keyword arguments and raising TypeError at parser construction.",
+     "fate": "fixed",
+     "first": "2026-10-05T23:28:53Z",
+     "why": "one help line on --scrub"
+    },
+    {
+     "loc": "tests/test_cli.py:212",
+     "sev": "skip",
+     "issue": "The new `pages` key in the JSON fixture is never asserted by any test in the diff, so a regression in how `_cmd_read` emits it would not fail.",
+     "fate": "wrong",
+     "first": "2026-10-06T00:17:32Z",
+     "why": "the expected JSON includes pages, so a regression in that key fails the test\n\nConflict with main is resolved. F23g and F23b are both checked. The old F23g sentence that said table rows were still unre"
+    },
+    {
+     "loc": "searchts/browser_install.py:446",
+     "sev": "real",
+     "issue": "`uninstall_browser` is new, user-facing, and has no test. `tests/test_browser_install.py` covers `install_browser` six times and never calls this. A wrong `_req_name` split or a bad pipx branch would ship untested.",
+     "fate": "wrong",
+     "first": "2026-10-06T01:34:40Z",
+     "why": "not in this diff. The tests are #311\n/hare fate searchts/unlocker.py:233 wrong not this diff, and resetting at the start of fetch would delete the flag. The MCP reset is #312\n/hare fate tests/test_cli"
+    },
+    {
+     "loc": "searchts/unlocker.py:233",
+     "sev": "real",
+     "issue": "`_jina_spent` is a module global set on a 403 and never cleared when a fetch succeeds or a new read starts. One 403 permanently drops Jina Reader from the backend order for the life of the process, so later reads lose a working relay.",
+     "fate": "open",
+     "first": "2026-10-06T01:34:40Z"
+    },
+    {
+     "loc": "searchts/more.py:566",
+     "sev": "skip",
+     "issue": "`_following_detail_row` returns None for a next row whose first link text is 25 chars or more, which is a heuristic that will silently drop detail rows on sites with long link text in the subtext.",
+     "fate": "open",
+     "first": "2026-10-06T01:34:40Z"
+    },
+    {
+     "loc": "searchts/more.py:632",
+     "sev": "skip",
+     "issue": "`_table_rows` is called from `_best_list` on every list-shaped page, iterating all tables and running xpath on each. On a page with many tables this is extra work on the hot read path.",
+     "fate": "open",
+     "first": "2026-10-06T01:34:40Z"
+    },
+    {
+     "loc": "scripts/hare_ledger.py:66",
+     "sev": "skip",
+     "issue": "`is_harebot` keys on the literal string `harebot:` in the body. If the bot marker format changes, the filter silently stops working and bot scores re-enter the ledger.",
+     "fate": "open",
+     "first": "2026-10-06T01:34:40Z"
+    },
+    {
+     "loc": ".github/workflows/hare-eval.yml:82",
+     "sev": "skip",
+     "issue": "`git checkout -f -B` discards uncommitted local changes on the eval branch. Intentional for a throwaway eval branch, but worth a comment so the next reader does not copy it into a real workflow.",
+     "fate": "open",
+     "first": "2026-10-06T01:34:40Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "caught the duplicate --scrub help, which crashes argparse at startup, and the one-line fix was right. Not 5: the note did not say the JSON test would still fail.",
+     "by": "capad-xyz",
+     "at": "2026-10-05T23:37:35Z"
+    },
+    {
+     "score": 3,
+     "text": "the double-fetch and the guard move are what the diff does. Not 4: the pages key is already the whole-dict assertion in test_read_command_json, so the skip on tests/test_cli.py:212 is a miss.\n\n/hare f",
+     "by": "capad-xyz",
+     "at": "2026-10-06T01:33:31Z"
+    },
+    {
+     "score": 2,
+     "text": "the double-fetch note was already scored. This note holds the PR for uninstall --browser and the Jina global. Neither file is in this diff. They are on main, from #304 and #305, because the branch mer",
+     "by": "capad-xyz",
+     "at": "2026-10-06T01:42:09Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 316,
+   "title": "fix(hare): a real finding cannot say Fix: no",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T01:49:39Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/316#pullrequestreview-5422887028",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "11,905 prompt + 527 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 14 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 315,
+   "title": "fix(hare): a quoted Hare Bot marker does not drop a score",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T01:42:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/315#pullrequestreview-5422853378",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "8,814 prompt + 243 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 13 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_ledger.py:68",
+     "sev": "skip",
+     "issue": "The docstring now explains the start-of-comment rule, but the function name `is_harebot` still reads as a login check; the body comment says the login is not the check, which is slightly misleading now that the marker position is the check.",
+     "fate": "open",
+     "first": "2026-10-06T01:42:49Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 314,
+   "title": "docs(hare): the eval comment names the real permissions rule",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T01:42:47Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/314#pullrequestreview-5422853215",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "5,396 prompt + 669 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 14 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": ".github/workflows/hare-eval.yml:83",
+     "sev": "skip",
+     "issue": "The comment now says 'workflows: write is a real permissions key', which is accurate, but the surrounding sentence structure is a bit dense and could be split for readability.",
+     "fate": "open",
+     "first": "2026-10-06T01:42:47Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 310,
+   "title": "docs(plan): the F23g line stops saying the work is undone",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T01:42:45Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/310#pullrequestreview-5422853009",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "5,685 prompt + 318 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 9 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "PLAN.md:346",
+     "sev": "skip",
+     "issue": "The line still ends with 'Same as 0.12, not a regression.' which is now orphaned: the sentence it referred to is gone, so the note dangles.",
+     "fate": "open",
+     "first": "2026-10-06T01:42:45Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 312,
+   "title": "fix(read): a Jina 403 does not stick to the MCP server",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T01:42:55Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/312#pullrequestreview-5422853856",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "11,950 prompt + 1,120 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 22 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/integrations/mcp_server.py:318",
+     "sev": "skip",
+     "issue": "The comment says 'One 403 must not disable Jina for every later tool call on this server,' but reset_jina_spend is called before fetch, so it also clears a 403 from the current call's earlier attempt within the same fetch. The comment reads as if it only protects across calls.",
+     "fate": "open",
+     "first": "2026-10-06T01:42:55Z"
+    },
+    {
+     "loc": "tests/test_whole_short_page.py:204",
+     "sev": "skip",
+     "issue": "The test name test_an_mcp_read_does_not_keep_the_jina_403 is slightly misleading: it tests two reads, not one.",
+     "fate": "open",
+     "first": "2026-10-06T01:42:55Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 313,
+   "title": "fix(read): a card list that lost its links still has to be the extract",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T01:42:42Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/313#pullrequestreview-5422852752",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "6,301 prompt + 338 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 8 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-06T01:46:00Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/313#pullrequestreview-5422868944",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "6,186 prompt + 761 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 16 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/more.py:552",
+     "sev": "skip",
+     "issue": "The docstring says 'A username or a comment link can be long' but the old code it replaces also used link length as a gate; the new _is_title_row is the real test now.",
+     "fate": "open",
+     "first": "2026-10-06T01:46:00Z"
+    },
+    {
+     "loc": "tests/test_list_index.py:66",
+     "sev": "skip",
+     "issue": "The test name says 'long byline link' but the byline link is a user?id= link, not a story link; the length is on the username, not the link.",
+     "fate": "open",
+     "first": "2026-10-06T01:46:00Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 311,
+   "title": "test(install): uninstall --browser has a test",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T01:42:39Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/311#pullrequestreview-5422852450",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "6,207 prompt + 481 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 10 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-06T01:45:34Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/311#pullrequestreview-5422866972",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "7,407 prompt + 875 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 15 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/browser_install.py:471",
+     "sev": "skip",
+     "issue": "The old print(\"Dry run complete...\") was on stdout; the PR moves it to _tick (stderr). The test now asserts out.out == \"\" and checks err. This is the right fix and the test locks it in.",
+     "fate": "open",
+     "first": "2026-10-06T01:45:34Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 305,
+   "title": "feat(read): skip Jina for the rest of the run after a 403",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T23:41:01Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/305#pullrequestreview-5422017301",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "10,925 prompt + 393 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 10 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-05T23:44:20Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/305#pullrequestreview-5422042628",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "10,894 prompt + 236 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 7 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-05T23:48:43Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/305#pullrequestreview-5422075490",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "10,686 prompt + 769 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 17 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-06T00:06:18Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/305#pullrequestreview-5422206152",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "11,093 prompt + 634 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 18 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-06T00:19:52Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/305#pullrequestreview-5422303988",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "5,464 prompt + 649 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 14 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-06T00:24:11Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/305#pullrequestreview-5422335931",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "5,266 prompt + 279 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 8 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-06T00:30:06Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/305#pullrequestreview-5422378048",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "11,705 prompt + 1,290 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 26 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/conftest.py:8",
+     "sev": "skip",
+     "issue": "The `import pytest` is moved to the top of the module, but the autouse fixture `reset_jina_spent` still imports `searchts.unlocker` inside the function body. That inner import is fine, but the move itself is purely cosmetic and does not affect correctness.",
+     "fate": "open",
+     "first": "2026-10-06T00:24:11Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "Ship was right on a03dc7c. The flag, the filter, and the reset match the two red assertions from run 37394079827. Not 5: no miss to catch.",
+     "by": "capad-xyz",
+     "at": "2026-10-06T00:31:25Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 307,
+   "title": "fix(hare): force the eval checkout, and say Laguna is first",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T00:02:10Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/307#pullrequestreview-5422176448",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "11,793 prompt + 380 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 11 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-06T00:06:27Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/307#pullrequestreview-5422207114",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "9,939 prompt + 625 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 16 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:149",
+     "sev": "skip",
+     "issue": "The comment line is long (over 100 chars), but HARE.md says line length is the formatter's concern, not a finding, and ruff has E501 off.",
+     "fate": "wontfix",
+     "first": "2026-10-06T00:02:10Z",
+     "why": "line length is not a finding"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "Ship was right. The line-length skip is not a finding under HARE.md.",
+     "by": "capad-xyz",
+     "at": "2026-10-06T00:17:12Z"
+    },
+    {
+     "score": 4,
+     "text": "Ship was right and the skip was a real wording miss. Not 5: it was a comment.",
+     "by": "capad-xyz",
+     "at": "2026-10-06T00:29:50Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 308,
+   "title": "fix(hare): a Hare Bot note cannot enter the ledger",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-06T00:13:09Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/308#pullrequestreview-5422256003",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "9,208 prompt + 496 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 11 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 5,
+     "text": "caught the hole: a Hare Bot note posts as the owner, and the marker is the check. The test pins both the score and the fate.",
+     "by": "capad-xyz",
+     "at": "2026-10-06T00:17:18Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 304,
+   "title": "feat(install): uninstall --browser removes only the browser extra",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T23:39:25Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/304#pullrequestreview-5422005499",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "6,799 prompt + 1,090 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 26 s",
+     "cut": "",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-05T23:44:32Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/304#pullrequestreview-5422044195",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "5,631 prompt + 520 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 15 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/cli.py:192",
+     "sev": "real",
+     "issue": "The --keep-config argument lost its help text. The new --browser and --chromium arguments were inserted between add_argument and its help= parameter, so help=\"Remove skill files only...\" is now attached to --chromium instead of --keep-config.",
+     "fate": "open",
+     "first": "2026-10-05T23:39:25Z"
+    },
+    {
+     "loc": "searchts/browser_install.py:446",
+     "sev": "skip",
+     "issue": "No tests were added for uninstall_browser. The test plan in the PR body mentions a dry run but no test file is in the diff, and tests/test_browser_install.py only covers install_browser.",
+     "fate": "open",
+     "first": "2026-10-05T23:39:25Z"
+    },
+    {
+     "loc": "searchts/cli.py:196",
+     "sev": "skip",
+     "issue": "The --keep-config argument is added after --chromium, which is fine functionally but slightly inconsistent with the logical grouping of browser-related flags.",
+     "fate": "wontfix",
+     "first": "2026-10-05T23:44:32Z",
+     "why": "flag order is not a crash and the help text is the one that was wrong"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "caught the orphaned help line that left --keep-config as a syntax error, and the later skip on flag order was right to leave. Not 5: the first note did not name the IndentationError, only the missing ",
+     "by": "capad-xyz",
+     "at": "2026-10-05T23:47:35Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 302,
+   "title": "feat(read): table lists keep the title, the link, and the row under it",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T23:16:54Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/302#pullrequestreview-5421828360",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "medium",
+     "cost": "8,870 prompt + 287 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 9 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T23:38:29Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/302#pullrequestreview-5421996547",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "5,582 prompt + 286 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 12 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/more.py:548",
+     "sev": "skip",
+     "issue": "The docstring says 'The next row, when it carries the item's details rather than another title.' but the function also returns None when the next row has a titleline span, which is a title, not details.",
+     "fate": "fixed",
+     "first": "2026-10-05T23:16:54Z",
+     "why": "the docstring now says the next row is a detail row, not another title row"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "Ship was right and the docstring skip was a real mismatch, not noise. Not 5: it was a comment, not a behavior miss.",
+     "by": "capad-xyz",
+     "at": "2026-10-05T23:37:32Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 301,
+   "title": "ci(hare): the eval report branches from main",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T22:56:22Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/301#pullrequestreview-5421659155",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "5,602 prompt + 251 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 10 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": ".github/workflows/hare-eval.yml:65",
+     "sev": "skip",
+     "issue": "The `cp` to `/tmp` and back is a workaround for the checkout overwriting the report files. It works but is fragile if the eval step fails before the copy.",
+     "fate": "wontfix",
+     "first": "2026-10-05T22:56:22Z",
+     "why": "a failed eval already stops the step before the copy; GitHub Actions runs with errexit"
+    }
+   ],
+   "scores": [
+    {
+     "score": 3,
+     "text": "Ship was right and the bad permission key was named. The skip was wrong: a failed eval already stops the step before the copy, so the copy is not fragile.",
+     "by": "capad-xyz",
+     "at": "2026-10-05T22:57:50Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 300,
+   "title": "ci(hare): Laguna answers before LongCat",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T22:55:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/300#pullrequestreview-5421654786",
+     "hop": "nous:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "10,882 prompt + 405 answer + 0 reasoning tokens on `nous:poolside/laguna-s-2.1:free`, 10 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 4,
+     "text": "Ship was right: the pin, the default, and both tests were checked against each other. Not 5: there was no miss to catch.",
+     "by": "capad-xyz",
+     "at": "2026-10-05T23:01:03Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 287,
+   "title": "ci(hare): the codebase graph, v1: what the diff changes, where else it is used",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T09:37:02Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/287#pullrequestreview-5412569318",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "12,274 prompt + 10,772 answer + 10,477 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 252 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-05T09:46:00Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/287#pullrequestreview-5412663690",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "9,388 prompt + 18,574 answer + 18,045 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 209 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T10:06:59Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/287#pullrequestreview-5412887664",
+     "hop": "openrouter:qwen/qwen3.8-27b:free · deep",
+     "effort": "medium",
+     "cost": "13,561 prompt + 9,415 answer + 9,101 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free · deep`, 93 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-05T10:56:47Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/287#pullrequestreview-5413422414",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "13,700 prompt + 12,119 answer + 11,763 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 152 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_graph.py:82",
+     "sev": "skip",
+     "issue": "The line `fun loadPageNow(url: String) {` has no `+`/`-` prefix, making it a bare line in the diff string. The visible portion of `changed` only processes lines where `line[:1] in \"+-\"`, so this line would not contribute a name unless there is additional handling outside the shown hunk. If the test passes, that handling exists; if not, the assertion on `loadPageNow` fails.",
+     "fate": "wrong",
+     "first": "2026-10-05T09:46:00Z",
+     "why": "the line is '+fun loadPageNow(...)'; the + prefix is there inside the string"
+    }
+   ],
+   "scores": [
+    {
+     "score": 3,
+     "text": "the first note said Ship on a head with three real issues CodeRabbit found (caps kept walk order, not rank; declarations with modifiers were not read; truncated hunks were skipped); the deep pass on t",
+     "by": "capad-xyz",
+     "at": "2026-10-05T10:09:09Z"
+    }
+   ],
+   "needed": 1
+  },
+  {
+   "pr": 299,
+   "title": "ci(hare): the eval can push its report branch",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T22:30:08Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/299#pullrequestreview-5421423572",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "5,159 prompt + 230 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 7 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T22:47:44Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/299#pullrequestreview-5421585420",
+     "hop": "nous:meituan/longcat-2.5-preview:free · deep",
+     "effort": "low",
+     "cost": "5,156 prompt + 1,138 answer + 1,057 reasoning tokens on `nous:meituan/longcat-2.5-preview:free · deep`, 29 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-05T22:48:47Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/299#pullrequestreview-5421594346",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "5,212 prompt + 223 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 8 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T22:53:32Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/299#pullrequestreview-5421635773",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "5,252 prompt + 190 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 25 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": ".github/workflows/hare-eval.yml:33",
+     "sev": "skip",
+     "issue": "The comment is now accurate and complete. No issue.",
+     "fate": "fixed",
+     "first": "2026-10-05T22:30:08Z",
+     "why": "the comment again says the report branch contains this file, which is why the push is refused"
+    }
+   ],
+   "scores": [
+    {
+     "score": 2,
+     "text": "the same model asked to shorten this comment and then to lengthen it; the cause belongs in the comment, the flip does not",
+     "by": "capad-xyz",
+     "at": "2026-10-05T22:52:01Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 298,
+   "title": "docs(hare): Hare Bot review log for 2026-10-05",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T18:29:24Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/298#pullrequestreview-5418935773",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "6,924 prompt + 299 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 229 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "docs/hare-bot-log-2026-10-05.jsonl:2",
+     "sev": "skip",
+     "issue": "The PR body says JSONL is the shape `scripts/compare_reviewers.py` prefers, but the file has a `meta` object on line 1 and a `review` object on line 2, while the JSON file nests the same data under `meta` and `rows`. A reader keyed on `rows` finds nothing here.",
+     "fate": "open",
+     "first": "2026-10-05T18:29:24Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on a docs log; it says it is not a review and does not touch the ledger",
+     "by": "capad-xyz",
+     "at": "2026-10-05T22:19:29Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 297,
+   "title": "docs(hare): the graph is in the instructions, and Inkling is off the chain",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T17:17:59Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/297#pullrequestreview-5418189375",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "6,122 prompt + 348 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 12 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T22:04:20Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/297#pullrequestreview-5421148332",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "5,416 prompt + 98 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 6 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "docs/hare.md:18",
+     "sev": "skip",
+     "issue": "The new graph paragraph runs into the old sentence without a line break, so the flow from budget to 'Then one review' is one long run-on.",
+     "fate": "fixed",
+     "first": "2026-10-05T17:17:59Z",
+     "why": "the graph step now ends on its own line before the review sentence"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on a docs sync; the one skip was a real run-on and the budgets matched the script",
+     "by": "capad-xyz",
+     "at": "2026-10-05T22:03:29Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 296,
+   "title": "docs(plan): fold 2026-10-05 sixth pass (#286 to #295)",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T11:18:56Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/296#pullrequestreview-5413682702",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "7,080 prompt + 1,295 answer + 1,135 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 31 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on a docs-only fold",
+     "by": "capad-xyz",
+     "at": "2026-10-05T11:19:54Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 295,
+   "title": "ci(hare): the eval prefers its own keys, so a long run does not starve live reviews",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T11:17:04Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/295#pullrequestreview-5413661448",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "5,971 prompt + 1,853 answer + 1,682 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 40 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship; it checked that the test pins the fallback so a later edit cannot drop it",
+     "by": "capad-xyz",
+     "at": "2026-10-05T11:17:24Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 294,
+   "title": "docs(hare): HARE.md is rules only; how Hare works moves to docs/hare.md",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T11:11:07Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/294#pullrequestreview-5413592297",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "13,174 prompt + 3,993 answer + 3,593 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 54 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T11:13:16Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/294#pullrequestreview-5413617394",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,171 prompt + 976 answer + 833 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 13 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "docs/hare.md:12",
+     "sev": "skip",
+     "issue": "Item 2 says \"Hare reads AGENTS.md, this file\" but this file is docs/hare.md, which the intro explicitly says is not sent to the model. A reader gets a contradiction.",
+     "fate": "fixed",
+     "first": "2026-10-05T11:11:07Z",
+     "why": "e9b20ea names HARE.md, and the same pass fixed 'the block below'"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "caught the stale 'this file' in the moved text, the class of slip the no-old-copy rule is about; missed 'the block below' two lines down",
+     "by": "capad-xyz",
+     "at": "2026-10-05T11:15:04Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 293,
+   "title": "ci(hare): the prompt reviews any repo; searchts's own idea of real moves to HARE.md",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T11:06:13Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/293#pullrequestreview-5413536203",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "11,194 prompt + 388 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 12 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:1319",
+     "sev": "skip",
+     "issue": "The new sev real line is long and dense, and the owner's own line-length rule says a line hard to read because of what it does is a finding about what it does.",
+     "fate": "wontfix",
+     "first": "2026-10-05T11:06:13Z",
+     "why": "a prompt line is read whole by the model; the list works as one rule"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship, and it checked that searchts's bar moved to HARE.md rather than vanished",
+     "by": "capad-xyz",
+     "at": "2026-10-05T11:07:44Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 292,
+   "title": "ci(hare): the note says how much of the graph the model saw",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T11:03:48Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/292#pullrequestreview-5413507903",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "11,119 prompt + 2,998 answer + 2,717 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 31 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:2212",
+     "sev": "skip",
+     "issue": "The file count assumes a leading newline before the first ### header in the graph section. If hare_graph.section() ever drops that leading newline, the count is off by one and the note misreports.",
+     "fate": "wontfix",
+     "first": "2026-10-05T11:03:48Z",
+     "why": "section() builds every block as a newline then ###, and the test pins the count"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on a small additive change; it checked the line only appears when the graph was sent",
+     "by": "capad-xyz",
+     "at": "2026-10-05T11:04:35Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 291,
+   "title": "ci(hare): the eval measures the graph: each case gets its own base checkout, graph off or on",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T10:58:51Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/291#pullrequestreview-5413450662",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "11,283 prompt + 398 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 14 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T11:02:37Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/291#pullrequestreview-5413494884",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,295 prompt + 1,185 answer + 969 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 17 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_eval.py:137",
+     "sev": "skip",
+     "issue": "The test monkeypatches `hare_eval.case_root` to return a fake path, so the real worktree creation logic in `case_root` is never exercised. The graph content itself is real (read from tmp_path), but the checkout path is stubbed.",
+     "fate": "fixed",
+     "first": "2026-10-05T10:58:51Z",
+     "why": "abb4a7b adds a test that runs case_root against a real git repo"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship, and its one skip (case_root was faked) was real; the follow-up test runs it against a real repo",
+     "by": "capad-xyz",
+     "at": "2026-10-05T11:03:47Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 290,
+   "title": "ci(hare): Inkling off OpenRouter's list; its free endpoint serves only agentic harnesses",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T10:03:15Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/290#pullrequestreview-5412848346",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "8,549 prompt + 839 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 24 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "PLAN.md:259",
+     "sev": "skip",
+     "issue": "The failover line is now extremely long, well past any reasonable character limit, making it hard to read and maintain.",
+     "fate": "wontfix",
+     "first": "2026-10-05T10:03:15Z",
+     "why": "PLAN's rows are long by convention; the formatter owns line length (HARE.md, #289)"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship; it checked the four files agree and that the chain keeps five providers",
+     "by": "capad-xyz",
+     "at": "2026-10-05T10:05:08Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 289,
+   "title": "docs(hare): line length is the formatter's, not a finding",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T10:02:03Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/289#pullrequestreview-5412835898",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "5,707 prompt + 604 answer + 498 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 15 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on a one-line rule; it checked the rule does not contradict the others",
+     "by": "capad-xyz",
+     "at": "2026-10-05T10:02:20Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 288,
+   "title": "ci(hare): slow hops leave time for the fast fallbacks",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T09:59:58Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/288#pullrequestreview-5412813958",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "7,449 prompt + 7,572 answer + 7,125 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 105 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:2188",
+     "sev": "skip",
+     "issue": "The `errs.append` f-string line is ~113 chars, well past the 80-char limit. Same recurring pattern as the open findings from #255 and #258 on this file.",
+     "fate": "wontfix",
+     "first": "2026-10-05T09:59:58Z",
+     "why": "correcting my earlier fate: the line is over pyproject's 100 (not 80), but E501 is not enforced and the file has many longer lines"
+    },
+    {
+     "loc": "scripts/hare_r1.py:2185",
+     "sev": "skip",
+     "issue": "The `if` condition with the inline `any(...)` generator is ~97 chars. Could extract to a named boolean for readability and to stay under the limit.",
+     "fate": "wrong",
+     "first": "2026-10-05T09:59:58Z",
+     "why": "the repo's limit is ruff's line-length in pyproject.toml, not 80; ruff passes"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on a timing change, and it checked that the reserve applies only with a fallback ahead; the two nits are the recurring line-length one",
+     "by": "capad-xyz",
+     "at": "2026-10-05T10:00:37Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 286,
+   "title": "ci(hare): the eval waits out rate limits, stops on a spent daily quota, and counts no answer as no answer",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T09:27:13Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/286#pullrequestreview-5412463202",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "8,617 prompt + 7,717 answer + 7,240 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 219 s",
+     "cut": "",
+     "findings": 2
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_eval.py:145",
+     "sev": "skip",
+     "issue": "`PerDay` in the DAILY pattern is redundant: `per.?day` with `re.I` already matches \"PerDay\" case-insensitively.",
+     "fate": "wontfix",
+     "first": "2026-10-05T09:27:13Z",
+     "why": "harmless; it names Gemini's spelling for the reader"
+    },
+    {
+     "loc": "scripts/hare_eval.py:166",
+     "sev": "skip",
+     "issue": "`raise RuntimeError(\"unreachable\")` is dead code: every path in the loop either returns or raises. It is a type-checker aid, which is fine, but worth a comment if it stays.",
+     "fate": "wontfix",
+     "first": "2026-10-05T09:27:13Z",
+     "why": "mypy needs a return or raise after the loop"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship; both nits are accurate (PerDay is redundant under re.I, the last raise is unreachable)",
+     "by": "capad-xyz",
+     "at": "2026-10-05T09:27:47Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 285,
+   "title": "docs(plan): fold 2026-10-05 (#269 to #284); R2e has two ways in",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T09:17:35Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/285#pullrequestreview-5412362350",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "7,751 prompt + 1,534 answer + 1,221 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 29 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "PLAN.md:526",
+     "sev": "skip",
+     "issue": "The new 2026-10-05 row is a single very long line (same pattern as the 2026-10-04 rows flagged in #257 and #258). Hard to scan in a diff or editor.",
+     "fate": "open",
+     "first": "2026-10-05T09:17:35Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on a docs-only fold; nothing in it to find",
+     "by": "capad-xyz",
+     "at": "2026-10-05T09:21:32Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 284,
+   "title": "ci(hare): a model that dies mid-answer keeps the findings it finished",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T09:12:10Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/284#pullrequestreview-5412306358",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "10,168 prompt + 10,184 answer + 9,844 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 208 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on an engine change; it checked the repair, the near-line dedupe and the all-die path",
+     "by": "capad-xyz",
+     "at": "2026-10-05T09:13:02Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 283,
+   "title": "ci(hare): Re-run on Hare's check reviews again, and the note says who pressed it",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T09:04:29Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/283#pullrequestreview-5412224938",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "7,460 prompt + 431 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 11 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-05T09:05:26Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/283#pullrequestreview-5412235063",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "7,460 prompt + 347 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 9 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:787",
+     "sev": "skip",
+     "issue": "The new help-fold line exceeds the repo's typical 80-character limit, a style nit already flagged on this file before.",
+     "fate": "wontfix",
+     "first": "2026-10-05T09:04:29Z",
+     "why": "ruff's line limit is the one the repo enforces, and the help strings are long by design"
+    },
+    {
+     "loc": "scripts/hare_r1.py:1565",
+     "sev": "skip",
+     "issue": "`rerun_line` falls back to `GITHUB_ACTOR` when `GITHUB_TRIGGERING_ACTOR` is unset, which for a re-run is the workflow owner, not the person who pressed the button. The fallback text 'a maintainer' already covers the unknown case, so the middle branch can misattribute.",
+     "fate": "open",
+     "first": "2026-10-05T09:05:26Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship twice, and the second pass, asked by /hare, came back with the quote line and the 🐇 removed; only a style nit",
+     "by": "capad-xyz",
+     "at": "2026-10-05T09:05:56Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 282,
+   "title": "ci(hare): a command gets 🐇 or 🐢 at once, and the note quotes the request",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T02:29:57Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/282#pullrequestreview-5409486118",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "10,235 prompt + 8,804 answer + 8,584 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 79 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-05T09:01:30Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/282#pullrequestreview-5412194347",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "low",
+     "cost": "6,325 prompt + 575 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 13 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_r1.py:1533",
+     "sev": "skip",
+     "issue": "The test asserts the group string contains `github.event.comment.user.login` and `github.event_name`, but never checks that the expression is safe on events where `github.event.comment` is undefined (pull_request, workflow_dispatch). A regression that breaks the group on those events would pass this test.",
+     "fate": "wontfix",
+     "first": "2026-10-05T09:01:30Z",
+     "why": "GitHub evaluates the group expression; the test pins its parts, and a live command is the real check"
+    }
+   ],
+   "scores": [
+    {
+     "score": 2,
+     "text": "said Ship while a comment Hare itself posts would start a run in the command's own concurrency group and cancel it; check what every new side effect triggers",
+     "by": "capad-xyz",
+     "at": "2026-10-05T09:02:01Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 281,
+   "title": "ci(hare): an eval that replays old PRs through each provider, thinking off and on",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T02:25:19Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/281#pullrequestreview-5409458525",
+     "hop": "nous:meituan/longcat-2.5-preview:free",
+     "effort": "medium",
+     "cost": "13,135 prompt + 999 answer + 0 reasoning tokens on `nous:meituan/longcat-2.5-preview:free`, 23 s",
+     "cut": "",
+     "findings": 5
+    },
+    {
+     "at": "2026-10-05T02:29:24Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/281#pullrequestreview-5409483907",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,572 prompt + 2,492 answer + 2,228 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 22 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_eval.py:246",
+     "sev": "skip",
+     "issue": "The workflow reads lines 7 to 40 of the report for the PR body, but `render()` emits the table at lines 9 to 13, so the body starts with the blank line and the intro prose and the table lands mid-body.",
+     "fate": "fixed",
+     "first": "2026-10-05T02:25:19Z",
+     "why": "the PR body now starts at the table header"
+    },
+    {
+     "loc": "scripts/hare_eval.py:125",
+     "sev": "skip",
+     "issue": "`matches()` treats a finding with no line as a hit even when the case gives a line, so a finding that says the right words on the right file counts as caught for an issue pinned to a line.",
+     "fate": "still applies",
+     "first": "2026-10-05T02:25:19Z"
+    },
+    {
+     "loc": "scripts/hare_eval.py:160",
+     "sev": "skip",
+     "issue": "`score()` counts every real finding as a false real on a clean case, including reals the model raised on the old PR's own diff, so the false-alarm column is really the real-finding column on clean cases.",
+     "fate": "fixed",
+     "first": "2026-10-05T02:25:19Z",
+     "why": "reals on clean PRs are now labelled for a check by hand, not counted as false"
+    },
+    {
+     "loc": ".github/workflows/hare-eval.yml:62",
+     "sev": "skip",
+     "issue": "The report step force-pushes the branch it just created in this run, which is harmless today but silently clobbers a branch left by an earlier dispatch with the same day and a different run id.",
+     "fate": "still applies",
+     "first": "2026-10-05T02:25:19Z"
+    },
+    {
+     "loc": "scripts/hare_eval.py:287",
+     "sev": "skip",
+     "issue": "The run prints a line to stdout, which is fine for a script under `scripts/` and the Actions log, but the workflow also captures the report with `sed`, so a stray print would land in the PR body.",
+     "fate": "still applies",
+     "first": "2026-10-05T02:25:19Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship; its skips were useful, and two of them were fixed in the next commit",
+     "by": "capad-xyz",
+     "at": "2026-10-05T08:46:17Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 280,
+   "title": "ci(hare): Space Bunny's free period ended; off OpenRouter and Nous",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-05T02:21:14Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/280#pullrequestreview-5409430007",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "9,885 prompt + 1,915 answer + 1,741 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 24 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship; it checked every place that names the chain and noticed Zen's separate slug was left on purpose",
+     "by": "capad-xyz",
+     "at": "2026-10-05T02:24:10Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 279,
+   "title": "docs(hare): CI scripts may log with print; P4.6 is about searchts's own output",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T21:37:54Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/279#pullrequestreview-5408327216",
+     "hop": "openrouter:stealth/space-bunny-alpha",
+     "effort": "low",
+     "cost": "5,378 prompt + 242 answer + 0 reasoning tokens on `openrouter:stealth/space-bunny-alpha`, 5 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 3,
+     "text": "right Ship, but it did not check the claim the rule rests on, that the scripts import nothing from searchts",
+     "by": "capad-xyz",
+     "at": "2026-10-04T21:38:26Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 276,
+   "title": "docs(hare): Hare Bot review log for 2026-10-04",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T18:25:42Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/276#pullrequestreview-5407530250",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "23,888 prompt + 1,319 answer + 1,188 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 16 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on a data-only PR; it checked that the three log formats agree",
+     "by": "capad-xyz",
+     "at": "2026-10-04T19:48:04Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 278,
+   "title": "docs(hare): the owner's rules for Hare, from tonight's misses and the intent of CodeRabbit's rules",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T18:58:55Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/278#pullrequestreview-5407687913",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "5,487 prompt + 1,327 answer + 1,152 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 13 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on a docs change; it checked the new rules against AGENTS.md before passing them",
+     "by": "capad-xyz",
+     "at": "2026-10-04T19:35:16Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 275,
+   "title": "fix(hare): what CodeRabbit found on #269",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T18:21:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/275#pullrequestreview-5407507332",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "9,058 prompt + 9,360 answer + 9,124 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 100 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-04T18:50:14Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/275#pullrequestreview-5407661611",
+     "hop": "openrouter:stealth/space-bunny-alpha",
+     "effort": "medium",
+     "cost": "6,595 prompt + 955 answer + 0 reasoning tokens on `openrouter:stealth/space-bunny-alpha`, 19 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-04T18:54:48Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/275#pullrequestreview-5407676126",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,799 prompt + 6,404 answer + 6,156 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 37 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-04T18:56:20Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/275#pullrequestreview-5407680509",
+     "hop": "openrouter:qwen/qwen3.8-27b:free · deep",
+     "effort": "low",
+     "cost": "9,463 prompt + 8,460 answer + 8,092 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free · deep`, 47 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:1371",
+     "sev": "real",
+     "issue": "`readline(line_cap)` can return partial pieces of a long line, but `_stream_lines` yields each piece as if it were a separate line. With a long line after the 25 retained pieces, the `##[error]` marker can fall out of `_tail_of`, hiding the failure the log reader is meant to surface.",
+     "fate": "fixed",
+     "first": "2026-10-04T18:50:14Z",
+     "why": "a long line now stays one line, cut to 64 KB; the marker could not really fall out, since reading stops right after it, but the point led to a better fix"
+    },
+    {
+     "loc": "tests/test_hare_r1.py:257",
+     "sev": "skip",
+     "issue": "The test asserts the hop-checks-deliver order, then undoes all monkeypatches and separately asserts `read_checks` returns its input. Two distinct concerns in one function; the second assertion would be clearer as its own test.",
+     "fate": "wontfix",
+     "first": "2026-10-04T18:56:20Z",
+     "why": "the second half pins the read_checks failure path the first half relies on; splitting it adds a test without catching more"
+    }
+   ],
+   "scores": [
+    {
+     "score": 3,
+     "text": "missed the unbounded readline that Hare Bot caught; its real finding named the wrong failure but led to a better fix; the deep pass was right and added nothing new",
+     "by": "capad-xyz",
+     "at": "2026-10-04T18:57:18Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 277,
+   "title": "fix(hare): /hare, /hare deep and /hare think run even on a reviewed commit",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T18:50:59Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/277#pullrequestreview-5407663690",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "7,325 prompt + 4,248 answer + 3,997 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 23 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [
+    {
+     "score": 4,
+     "text": "right Ship on a small fix it could check: it named the boundary (only issue_comment carries a command) and saw the test drives the real function",
+     "by": "capad-xyz",
+     "at": "2026-10-04T18:53:28Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 274,
+   "title": "ci(hare): when CI finishes after the note, the note follows it",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T17:45:06Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/274#pullrequestreview-5407391326",
+     "hop": "openrouter:stealth/space-bunny-alpha",
+     "effort": "low",
+     "cost": "9,572 prompt + 721 answer + 0 reasoning tokens on `openrouter:stealth/space-bunny-alpha`, 13 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-04T17:47:45Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/274#pullrequestreview-5407398623",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "7,547 prompt + 3,330 answer + 3,088 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 37 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:708",
+     "sev": "real",
+     "issue": "The reviews request stops at the first 100 results. A PR with more than 100 reviews can leave Hare’s note outside this response, causing the CI refresh to do nothing without an error.",
+     "fate": "fixed",
+     "first": "2026-10-04T17:45:06Z",
+     "why": "github_list now pages every review read"
+    }
+   ],
+   "scores": [
+    {
+     "score": 4,
+     "text": "caught a real bug, the one-page review read that could miss its own note, with a clear fix; Ship after the fix was right",
+     "by": "capad-xyz",
+     "at": "2026-10-04T18:19:50Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 269,
+   "title": "ci(hare): CI read once, right before the note; Wait while it runs; a red job shows what it printed",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T11:53:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/269#pullrequestreview-5405900151",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "16,137 prompt + 5,104 answer + 4,468 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 228 s",
+     "cut": "",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-04T17:42:22Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/269#pullrequestreview-5407383186",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "18,515 prompt + 8,053 answer + 7,639 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 57 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_r1.py:210",
+     "sev": "real",
+     "issue": "Eight tests for unrelated functionality (test_csv_models_splits_and_override, test_short_fail_hides_provider_json, test_needed_body_is_graceful_and_offers_retry, test_deliver_review_posts_pr_review, test_deliver_review_retries_summary_only, test_deliver_review_nags_when_reviews_api_dead, test_already_reviewed_same_sha, test_already_reviewed_ignores_empty_sha) are deleted without replacement. The PR scope is CI read timing; removing coverage for model lists, error formatting, review delivery, and dedup is not part of that.",
+     "fate": "fixed",
+     "first": "2026-10-04T11:53:49Z",
+     "why": "the eight deleted tests were restored in the rebuild"
+    },
+    {
+     "loc": "scripts/hare_r1.py",
+     "sev": "skip",
+     "issue": "In failed_log_tails, the fallback `int(run.get(\"id\") or 0)` uses the check-run ID as a job ID. The jobs API expects a job ID, so this would 404. Harmless (the exception is caught and the job is skipped) but the fallback is misleading.",
+     "fate": "wrong",
+     "first": "2026-10-04T11:53:49Z",
+     "why": "an Actions check run and its job share one id, so the fallback is right"
+    },
+    {
+     "loc": "tests/test_hare_r1.py",
+     "sev": "skip",
+     "issue": "`inspect.getsource` + string matching on `_hare_once` is fragile: a comment mentioning `wait_checks(` in that function would break the test. The invariant it guards (one read, after the hop) is real, but the mechanism is brittle.",
+     "fate": "open",
+     "first": "2026-10-04T17:42:22Z"
+    }
+   ],
+   "scores": [
+    {
+     "score": 5,
+     "text": "",
+     "by": "capad-xyz",
+     "at": "2026-10-04T17:58:07Z"
+    },
+    {
+     "score": 2,
+     "text": "missed an unbounded read of a whole job log and AGENTS.md lines contradicting the diff; called a test that checks source text instead of behaviour a skip, when it is real",
+     "by": "capad-xyz",
+     "at": "2026-10-04T18:19:48Z"
+    }
+   ],
+   "needed": 0
+  },
+  {
+   "pr": 271,
+   "title": "docs(f18): input on paid searchts, and the demand measurement it was missing",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T13:02:58Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/271#pullrequestreview-5406292659",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "13,508 prompt + 2,130 answer + 1,547 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 34 s",
+     "cut": "",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-04T13:14:21Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/271#pullrequestreview-5406351459",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,154 prompt + 1,004 answer + 766 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 11 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": "benchmarks/measure_relay_demand.py:44",
+     "sev": "skip",
+     "issue": "The `url` parameter is declared but never referenced in the function body. It is passed at the call site but does nothing.",
+     "fate": "still applies",
+     "first": "2026-10-04T13:02:58Z"
+    },
+    {
+     "loc": "benchmarks/measure_relay_demand.py:88",
+     "sev": "skip",
+     "issue": "The nested loop over `cases` then `rows` is O(n*m) and the `category` variable is never used. Iterating `rows` directly prints the same output in one pass.",
+     "fate": "still applies",
+     "first": "2026-10-04T13:02:58Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 273,
+   "title": "docs(f18): U8's first suspect is the MCP registry fan-out our own release job starts",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T13:30:56Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/273#pullrequestreview-5406433590",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "5,779 prompt + 1,048 answer + 903 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 112 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 272,
+   "title": "ci(hare): a one-click fix must be the whole fix",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T13:18:56Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/272#pullrequestreview-5406375693",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "7,305 prompt + 7,068 answer + 6,841 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 145 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 270,
+   "title": "docs(plan): fold 2026-10-04 fourth pass",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T12:00:38Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/270#pullrequestreview-5405947197",
+     "hop": "openrouter:stealth/space-bunny-alpha",
+     "effort": "high",
+     "cost": "19,619 prompt + 1,247 answer + 0 reasoning tokens on `openrouter:stealth/space-bunny-alpha`, 20 s",
+     "cut": "",
+     "findings": 3
+    },
+    {
+     "at": "2026-10-04T12:04:05Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/270#pullrequestreview-5405970325",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,276 prompt + 2,444 answer + 2,157 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 62 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_r1.py:210",
+     "sev": "real",
+     "issue": "This replaces established tests for model-chain configuration, provider-error sanitization, needed-review behavior, review delivery, and duplicate-review detection with CI-specific tests. Those regressions would now pass silently.",
+     "fate": "open",
+     "first": "2026-10-04T12:00:38Z"
+    },
+    {
+     "loc": "scripts/hare_r1.py:686",
+     "sev": "real",
+     "issue": "The new CI-refresh path uses print for progress, failures, log-fetch errors, and completion, and adds similar prints in failed_log_tails. P4.6 requires these ticks on stderr, never stdout.",
+     "fate": "open",
+     "first": "2026-10-04T12:00:38Z"
+    },
+    {
+     "loc": ".github/workflows/hare-ci.yml:1",
+     "sev": "real",
+     "issue": "The PR title and body describe a PLAN documentation row, while this adds a new privileged workflow and substantial runtime behavior across hare_r1.py, HARE.md, and tests. That is scope creep from the declared docs-only change.",
+     "fate": "open",
+     "first": "2026-10-04T12:00:38Z"
+    },
+    {
+     "loc": "PLAN.md:525",
+     "sev": "skip",
+     "issue": "Same pattern as the two open findings from #257 and #258: a single table row that runs well past 80 characters, making the file hard to scan in a diff viewer.",
+     "fate": "open",
+     "first": "2026-10-04T12:04:05Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 126,
+   "title": "chore: bump types-requests from 2.32.4.20260107 to 2.33.0.20260906",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T14:59:11Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/126#pullrequestreview-5292723973",
+     "hop": "openrouter:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 125,
+   "title": "chore: bump types-pyyaml from 6.0.12.20260724 to 6.0.12.20260815",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T14:59:48Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/125#pullrequestreview-5292732244",
+     "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 124,
+   "title": "chore: bump yt-dlp from 2026.7.4 to 2026.8.19",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-09-23T14:59:32Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/124#pullrequestreview-5292728645",
+     "hop": "openrouter:poolside/laguna-s-2.1:free",
+     "effort": "low",
+     "cost": "",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 268,
+   "title": "ci(hare): the note reads CI again after the hop, so the Verdict is not always 'CI not done'",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T11:10:10Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/268#pullrequestreview-5405642086",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "5,839 prompt + 3,362 answer + 3,079 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 69 s",
+     "cut": "",
+     "findings": 1
+    },
+    {
+     "at": "2026-10-04T11:14:45Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/268#pullrequestreview-5405655648",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "5,959 prompt + 6,236 answer + 5,893 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 78 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:985",
+     "sev": "real",
+     "issue": "The error diagnostic prints to stdout. P4.6 says operational messages go to stderr, never stdout. If this script is ever piped or run where stdout is captured, the message pollutes the output channel.",
+     "fate": "wrong",
+     "first": "2026-10-04T11:10:10Z",
+     "why": "P4.6 is about progress ticks from the searchts package on stderr; this is one diagnostic line in the Action's own log, where every hare_r1.py message goes to stdout."
+    },
+    {
+     "loc": "scripts/hare_r1.py:1144",
+     "sev": "real",
+     "issue": "The diagnostic print goes to stdout. P4.6 says ticks go to stderr, never stdout, never the MCP protocol.",
+     "fate": "wontfix",
+     "first": "2026-10-04T11:14:45Z",
+     "why": "P4.6 covers searchts's progress ticks; the Action script logs every step with print, this line matches the other ten."
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 267,
+   "title": "ci(hare): every note ends with how to answer Hare, and Hare knows how its note is used",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T11:09:37Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/267#pullrequestreview-5405640687",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "7,354 prompt + 3,070 answer + 2,796 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 90 s",
+     "cut": "",
+     "findings": 0
+    },
+    {
+     "at": "2026-10-04T11:13:47Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/267#pullrequestreview-5405652110",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "7,463 prompt + 3,322 answer + 3,085 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 56 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 266,
+   "title": "ci(hare): one-click fixes: a bubble's suggestion is pinned by its text, may span lines, and must parse",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T11:07:44Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/266#pullrequestreview-5405636192",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "10,368 prompt + 8,767 answer + 8,396 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 193 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "scripts/hare_r1.py:340",
+     "sev": "skip",
+     "issue": "`suggestion_parses` is annotated `-> Any` but always returns a `Callable[[str, int, int, str], bool]`; a precise return type would help readers and narrow mypy's view of the closure.",
+     "fate": "open",
+     "first": "2026-10-04T11:07:44Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 265,
+   "title": "ci(hare): the ledger run needs only GITHUB_TOKEN: it asks Hare by dispatch and merges unless Hare finds a real problem",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T11:03:33Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/265#pullrequestreview-5405624777",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "7,119 prompt + 7,249 answer + 6,825 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 117 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": ".github/workflows/hare-ledger.yml:75",
+     "sev": "skip",
+     "issue": "`gh workflow run hare.yml -f pr_number=\"$n\"` has no error check. If the dispatch fails (missing workflow_dispatch trigger, wrong input name), the script silently falls into the 20-minute wait and merges with no Hare review, and the log only says \"no answer in 20 min\" with no hint that the dispatch itself errored.",
+     "fate": "open",
+     "first": "2026-10-04T11:03:33Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 262,
+   "title": "ci(hare): the weekly ledger run says it is automated, lets Hare review it, and merges when green",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T10:07:59Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/262#pullrequestreview-5405456334",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "medium",
+     "cost": "5,954 prompt + 5,068 answer + 4,664 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 86 s",
+     "cut": "",
+     "findings": 2
+    },
+    {
+     "at": "2026-10-04T10:11:00Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/262#pullrequestreview-5405464546",
+     "hop": "openrouter:stealth/space-bunny-alpha",
+     "effort": "low",
+     "cost": "5,129 prompt + 477 answer + 0 reasoning tokens on `openrouter:stealth/space-bunny-alpha`, 9 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [
+    {
+     "loc": ".github/workflows/hare-ledger.yml:78",
+     "sev": "real",
+     "issue": "If the App-token mint fails, GH_TOKEN falls back to GITHUB_TOKEN, the push triggers no workflows, and `gh pr checks --watch` likely exits 0 with zero checks. The PR then merges with no CI at all, contradicting the comment on line 76 that says a missing App token leaves the PR open.",
+     "fate": "fixed",
+     "first": "2026-10-04T10:07:59Z"
+    },
+    {
+     "loc": ".github/workflows/hare-ledger.yml:63",
+     "sev": "skip",
+     "issue": "`sed -n '5p'` hard-codes line 5 of the ledger as the summary. If the file format shifts by even one line, the PR body gets the wrong text or an empty string.",
+     "fate": "fixed",
+     "first": "2026-10-04T10:07:59Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 264,
+   "title": "ci(hare): the note says Ship or Hold, and the model says why",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T10:09:00Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/264#pullrequestreview-5405458961",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "7,837 prompt + 3,501 answer + 3,211 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 46 s",
+     "cut": "",
+     "findings": 1
+    }
+   ],
+   "findings": [
+    {
+     "loc": "tests/test_hare_r1.py:1101",
+     "sev": "skip",
+     "issue": "Extra space before `.startswith` on the last assert; ruff will not flag it but it is a typo.",
+     "fate": "open",
+     "first": "2026-10-04T10:09:00Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 263,
+   "title": "docs: the Models table's Purpose cell says what work the model did",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T10:07:28Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/263#pullrequestreview-5405454814",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "5,691 prompt + 1,848 answer + 1,788 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 27 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 261,
+   "title": "ci(hare): a finding's fate is the owner's word first; a closed PR drops its open findings",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T09:35:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/261#pullrequestreview-5405305962",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "15,519 prompt + 7,841 answer + 7,651 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 109 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 260,
+   "title": "docs(hare): the spec says the #258 order (Hare Bot's finds on #258)",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-04T09:29:52Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/260#pullrequestreview-5405266196",
+     "hop": "openrouter:qwen/qwen3.8-27b:free",
+     "effort": "low",
+     "cost": "6,868 prompt + 2,747 answer + 2,561 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 38 s",
+     "cut": "",
+     "findings": 0
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
   {
    "pr": 248,
    "title": "ci(hare): low scores with a reason become rules in AGENTS.md",
@@ -140,26 +4816,6 @@
    "needed": 0
   },
   {
-   "pr": 260,
-   "title": "docs(hare): the spec says the #258 order (Hare Bot's finds on #258)",
-   "state": "open",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-04T09:29:52Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/260#pullrequestreview-5405266196",
-     "hop": "openrouter:qwen/qwen3.8-27b:free",
-     "effort": "low",
-     "cost": "6,868 prompt + 2,747 answer + 2,561 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 38 s",
-     "cut": "",
-     "findings": 0
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
    "pr": 259,
    "title": "chore(hare): ledger 2026-10-04",
    "state": "merged",
@@ -259,52 +4915,6 @@
      "issue": "The provider chain order is changed (groq → openrouter → nous → gemini → zen) without a corresponding PLAN entry, violating scope‑control rules.",
      "fate": "resolved",
      "first": "2026-10-03T22:31:56Z"
-    }
-   ],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 232,
-   "title": "chore(main): release 0.14.0",
-   "state": "open",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T16:45:19Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5401711247",
-     "hop": "groq:openai/gpt-oss-120b",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "findings": 1
-    },
-    {
-     "at": "2026-10-03T23:01:30Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5403316547",
-     "hop": "groq:openai/gpt-oss-120b · deep",
-     "effort": "low",
-     "cost": "4,526 prompt + 1,118 answer + 784 reasoning tokens on `groq:openai/gpt-oss-120b · deep`, 3 s",
-     "cut": "",
-     "findings": 1
-    },
-    {
-     "at": "2026-10-04T00:25:04Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/232#pullrequestreview-5403584643",
-     "hop": "openrouter:qwen/qwen3.8-27b:free",
-     "effort": "low",
-     "cost": "5,111 prompt + 1,167 answer + 1,091 reasoning tokens on `openrouter:qwen/qwen3.8-27b:free`, 20 s",
-     "cut": "",
-     "findings": 0
-    }
-   ],
-   "findings": [
-    {
-     "loc": "CHANGELOG.md",
-     "sev": "skip",
-     "issue": "Extra blank lines around the new version heading make the changelog look untidy.",
-     "fate": "open",
-     "first": "2026-10-03T16:45:19Z"
     }
    ],
    "scores": [],
@@ -1043,26 +5653,6 @@
    "needed": 1
   },
   {
-   "pr": 126,
-   "title": "chore: bump types-requests from 2.32.4.20260107 to 2.33.0.20260712",
-   "state": "open",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-09-23T14:59:11Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/126#pullrequestreview-5292723973",
-     "hop": "openrouter:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "findings": 0
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
    "pr": 210,
    "title": "ci: bump actions/create-github-app-token from 2 to 3",
    "state": "merged",
@@ -1140,46 +5730,6 @@
    "findings": [],
    "scores": [],
    "needed": 0
-  },
-  {
-   "pr": 125,
-   "title": "chore: bump types-pyyaml from 6.0.12.20260724 to 6.0.12.20260815",
-   "state": "open",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-09-23T14:59:48Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/125#pullrequestreview-5292732244",
-     "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "findings": 0
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 124,
-   "title": "chore: bump yt-dlp from 2026.7.4 to 2026.8.19",
-   "state": "open",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-09-23T14:59:32Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/124#pullrequestreview-5292728645",
-     "hop": "openrouter:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "findings": 0
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 1
   },
   {
    "pr": 198,
@@ -1886,26 +6436,6 @@
     {
      "at": "2026-09-23T16:29:44Z",
      "url": "https://github.com/capad-xyz/searchts/pull/172#pullrequestreview-5293756175",
-     "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "findings": 0
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 38,
-   "title": "feat(site): searchts.capad.fyi landing page + Cloudflare Pages deploy",
-   "state": "open",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-09-23T15:04:27Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/38#pullrequestreview-5292790759",
      "hop": "openrouter:nex-agi/nex-n2.5-pro:free",
      "effort": "low",
      "cost": "",
