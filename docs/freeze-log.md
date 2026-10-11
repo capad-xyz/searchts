@@ -117,6 +117,7 @@ Append a new row under the right heading. Do not append it to either plan.
 | 2026-10-10 | Hare's record moved to [`hare-next.md`](hare-next.md). This file is the diary. [`PLAN.md`](../PLAN.md) is only the open searchts work. |
 | 2026-10-10 | DataDome is not the ceiling. A device-check, including one simple click, is the stealth rung. An image puzzle still stops. The address is a separate layer: no bought IP in that PR. **N1** is "not a default of the free CLI", not "never an exit" (**F18**). `docs/mcp.md` tunnel line is HTTPS-to-loopback only. |
 | 2026-10-12 | **F27** logged-in `read` recorded from #350. Not built. Copy when a login exists; sign in once when it does not. One keep question. Kill does not touch the real browser unless asked. No vendor. The rules live in [`PLAN.md`](../PLAN.md). |
+| 2026-10-12 | Plans and ideas merge when the docs checks are green, so other agents read them on `main`. An open code PR that touches the same lines waits or stacks. The rule is in [`AGENTS.md`](../AGENTS.md). |
 
 ## Hare
 
