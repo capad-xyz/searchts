@@ -77,12 +77,18 @@ jobs:
        github.event.comment.user.login != 'github-actions[bot]') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    # 90 min, the backstop only. The script bounds a review itself: the hop
-    # budget sizes to the diff (30 min normal, 55 min big) and the wall-clock cap
-    # is 60 min for every review, so a run ends with ~30 min left to read CI and
-    # post. Raised from 40 so the wall-clock cap can actually bind instead of the
-    # job killing the run mid-chain; a normal diff still finishes far sooner.
-    timeout-minutes: 90
+    # 120 min, the backstop only. The script bounds a review itself: the hop
+    # budget sizes to the diff (45 min normal, 55 min big) and the wall-clock
+    # cap is 60 min for every review, so a run ends with ~55 min of this left to
+    # read CI and post. Raised from 90 so checkout, setup-python and a loaded
+    # runner cannot eat the wall clock's margin: the wall clock should be what
+    # ends a review, and the job timeout only catches a run that has stopped
+    # making progress. A run that finishes in 4 minutes costs 4 minutes of
+    # runner time either way, so the headroom is free. GitHub's documented
+    # ceiling is 360 min for a job or step on hosted and self-hosted runners
+    # (docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax),
+    # so 120 is a third of the maximum.
+    timeout-minutes: 120
 
     # Always green: a dead brain posts searchts-r1-needed instead of failing CI.
     continue-on-error: true

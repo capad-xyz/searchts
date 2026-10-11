@@ -2,6 +2,7 @@ import base64
 import io
 import json
 import sys
+import time
 import urllib.error
 from pathlib import Path
 
@@ -61,8 +62,9 @@ def test_a_call_gets_time_to_answer() -> None:
     # 60 s cut off the hops that did answer (2026-10-03), and 300 s cut them off
     # again once each hop was allowed to think: a bounded reasoning hop spends
     # real seconds thinking before it writes anything. The ceiling is a guard
-    # against a hung provider, not a budget.
-    assert hare_r1.LLM_TIMEOUT_SEC == 600
+    # against a hung provider, not a budget. Raised again to 1800 s in #363
+    # because 600 s was under Step 5's reported 13 to 15 min.
+    assert hare_r1.LLM_TIMEOUT_SEC == 1800
     assert hare_r1.LLM_MAX_TOKENS == 32000
 
 
@@ -666,11 +668,139 @@ def test_hop_budget_fits_inside_the_job_timeout() -> None:
     # the wall clock is the review-wide net above it, and the job timeout is the
     # backstop above that. A normal diff must finish inside the wall clock, and
     # a big one plus its wrap-up must still fit the job with room to post.
-    normal = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.HOP_BUDGET_S + hare_r1.LLM_TIMEOUT_SEC + 120
-    big = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.BIG_HOP_BUDGET_S + hare_r1.BIG_LLM_TIMEOUT_SEC + 120
+    #
+    # The hop budget is the whole chain's allowance, not one more call on top of
+    # a call. _walk_chain hands every hop min(call_timeout, budget_left), so the
+    # second hop can only ever see what the first one did not spend, and the
+    # first pass and the HB.3 replay share one `hops_start`. Adding
+    # LLM_TIMEOUT_SEC here (the old assertion) counted a call the budget cannot
+    # fund, which forbade a per-call ceiling at or above the chain budget, and
+    # with it the 600 -> 1800 s raise in #363.
+    normal = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.HOP_BUDGET_S + 120
+    big = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + hare_r1.BIG_HOP_BUDGET_S + 120
     assert normal < hare_r1.CAPS.wall_clock_s, "a normal diff must finish inside the wall clock"
     assert big < minutes * 60, "a big diff plus its wrap-up must fit the job"
     assert hare_r1.CAPS.wall_clock_s < minutes * 60, "the wall clock must leave room to post"
+    # The nesting itself, which is what makes the bound above the right one.
+    assert hare_r1.HOP_BUDGET_S <= hare_r1.CAPS.wall_clock_s, "the chain must fit the wall clock"
+    assert hare_r1.BIG_HOP_BUDGET_S <= hare_r1.CAPS.wall_clock_s, "a big chain must fit the wall clock"
+
+
+def test_a_slow_model_gets_a_call_long_enough_to_finish() -> None:
+    # #363: Step 5 Preview answers in 13 to 15 min (780 to 900 s) with
+    # reasoning on. A per-call ceiling below that cuts the chain's best model
+    # off mid-answer, which is the one outcome the 300 -> 600 -> 1800 s raises
+    # have each existed to prevent. Slowness is not grounds to drop a model:
+    # docs/research/ai-reviewer-timing.md found that every vendor surveyed pays
+    # the latency instead, and that none of them downgrades a model for it.
+    slowest_hop_s = 900  # measured, Step 5 Preview at reasoning on
+    assert hare_r1.LLM_TIMEOUT_SEC >= 2 * slowest_hop_s
+    # ...and the chain budget has to be able to fund that call, or raising the
+    # per-call ceiling is decoration.
+    assert hare_r1.HOP_BUDGET_S >= hare_r1.LLM_TIMEOUT_SEC
+    assert hare_r1.BIG_HOP_BUDGET_S >= hare_r1.BIG_LLM_TIMEOUT_SEC
+
+
+def test_the_big_diff_tier_cannot_be_smaller_than_the_normal_one() -> None:
+    # A 1,000-line diff getting 900 s per call while a 999-line diff got
+    # 1,800 s is backwards: the PRs that need room most were the ones cut off.
+    assert hare_r1.BIG_LLM_TIMEOUT_SEC > hare_r1.LLM_TIMEOUT_SEC
+    assert hare_r1.BIG_HOP_BUDGET_S > hare_r1.HOP_BUDGET_S
+
+
+def test_the_job_timeout_leaves_the_wall_clock_room_to_post() -> None:
+    import re
+    from pathlib import Path
+
+    wf = (Path(__file__).resolve().parents[1] / ".github/workflows/hare.yml").read_text(encoding="utf-8")
+    minutes = int(re.search(r"timeout-minutes:\s*(\d+)", wf).group(1))
+    job_s = minutes * 60
+    # The job timeout is a backstop, not a budget. It must leave the wall clock
+    # room to read CI, validate bubbles and post, and it must stay under GitHub's
+    # documented ceiling of 360 minutes for a job or a step on both hosted and
+    # self-hosted runners.
+    assert hare_r1.CAPS.wall_clock_s * 2 <= job_s, "the job must not kill a review the wall clock would have ended"
+    assert minutes <= 360, "GitHub caps timeout-minutes at 360"
+    # A hop that gets a reasoning-knob retry buys a second call. Both calls are
+    # now bounded by the hop's own deadline, so 2 * the per-call ceiling is a
+    # belt-and-braces bound rather than a reachable one; keep it, because it is
+    # the only assertion here that catches a later per-call raise that the two
+    # above would let through.
+    worst = hare_r1.QUIET_S + hare_r1.CHECK_WAIT_S + 2 * hare_r1.BIG_LLM_TIMEOUT_SEC + 120
+    assert worst < job_s, "even two full big-diff calls must fit the job"
+
+
+class FakeTimeModule:
+    """Just enough of the `time` module for the hop deadline arithmetic."""
+
+    def __init__(self, now):
+        self._now = now
+
+    def time(self) -> float:
+        return self._now()
+
+
+def test_the_reasoning_knob_retry_cannot_buy_the_hop_a_second_full_call() -> None:
+    """#363: the wall clock stopped being the review-wide net.
+
+    A gateway that rejects the reasoning knob costs a second `_call`. That retry
+    used the full per-call timeout again, so one hop could spend 2 *
+    LLM_TIMEOUT_SEC and the wall clock was not above it. `chat_complete` now
+    takes the hop's deadline and clamps the retry to what is left, the same way
+    `_call_hop` already bounded its own reasoning retry.
+    """
+    seen: list[int] = []
+    clock = {"now": 1000.0}
+
+    def fake_time():
+        return clock["now"]
+
+    def fake_urlopen(req, timeout=0):
+        seen.append(timeout)
+        # The first call burns most of the hop, the way a gateway that stalls
+        # for 1,600 s and then 400s on the reasoning knob does.
+        clock["now"] += 1600 if len(seen) == 1 else 1
+        raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {}, io.BytesIO(b"unknown reasoning field"))
+
+    monkey = pytest.MonkeyPatch()
+    try:
+        monkey.setattr(hare_r1, "time", FakeTimeModule(fake_time))
+        monkey.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+        with pytest.raises(Exception):
+            hare_r1.chat_complete(
+                "https://x.test/v1", "k", "m", [], {"reasoning": {"effort": "high"}},
+                timeout=1800, deadline=1000.0 + 1800,
+            )
+    finally:
+        monkey.undo()
+    # The first call keeps the per-call ceiling. The retry gets only the 200 s
+    # the hop had left, so one hop can never spend 2 * the per-call timeout:
+    # before the fix the retry was handed the full 1,800 s a second time.
+    assert seen[0] == 1800, seen
+    assert len(seen) == 2, seen
+    assert 0 < seen[1] <= 200, seen
+
+
+def test_a_hop_with_no_time_left_does_not_retry_the_reasoning_knob() -> None:
+    called: list[int] = []
+
+    def fake_urlopen(req, timeout=0):
+        called.append(timeout)
+        raise urllib.error.HTTPError(req.full_url, 400, "Bad Request", {}, io.BytesIO(b"unknown reasoning field"))
+
+    monkey = pytest.MonkeyPatch()
+    try:
+        monkey.setattr(hare_r1.urllib.request, "urlopen", fake_urlopen)
+        with pytest.raises(Exception):
+            hare_r1.chat_complete(
+                "https://x.test/v1", "k", "m", [], {"reasoning": {"effort": "high"}},
+                timeout=1800, deadline=time.time() - 1,
+            )
+    finally:
+        monkey.undo()
+    # The first call still happens: this is the first call running out, not a
+    # hop that refused to start. What must not happen is the second one.
+    assert called == [1800], called
 
 
 def _workflow_env(name: str) -> str:
@@ -2144,7 +2274,7 @@ def test_finished_findings_survive_the_model_that_found_them(monkeypatch) -> Non
     merged = hare_r1.merge_salvage([{"path": "a.py", "line": 4, "issue": "same"}], kept + [{"path": "b.py", "line": 1, "issue": "new"}])
     assert [f["path"] for f in merged] == ["a.py", "b.py"]  # a.py:3 is a.py:4's finding; b.py is new
 
-    def hop(base, key, model, messages, options, timeout=0):
+    def hop(base, key, model, messages, options, timeout=0, deadline=None):
         if model == "m1":
             hare_r1.SALVAGE["text"] = PARTIAL
             raise TimeoutError("timed out")
@@ -2154,7 +2284,7 @@ def test_finished_findings_survive_the_model_that_found_them(monkeypatch) -> Non
     assert sorted((f["path"], f["line"]) for f in seen["findings"]) == [("a.py", 3), ("a.py", 8)]
     assert "kept from" in str(seen["cost"]) and "needed" not in seen
 
-    def all_die(base, key, model, messages, options, timeout=0):
+    def all_die(base, key, model, messages, options, timeout=0, deadline=None):
         hare_r1.SALVAGE["text"] = PARTIAL
         raise TimeoutError("timed out")
 
@@ -2187,7 +2317,7 @@ def test_slow_hops_leave_time_for_the_fast_fallbacks(monkeypatch) -> None:
     clock = Clock()
     timeouts: list[int] = []
 
-    def hop(base, key, model, messages, options, timeout=0):
+    def hop(base, key, model, messages, options, timeout=0, deadline=None):
         if model.startswith("slow"):
             timeouts.append(timeout)
             clock.now += timeout  # hangs for as long as it is allowed
@@ -2212,7 +2342,7 @@ def test_the_graph_reaches_the_model(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
     sent: list[str] = []
 
-    def hop(base, key, model, messages, options, timeout=0):
+    def hop(base, key, model, messages, options, timeout=0, deadline=None):
         sent.append(messages[1]["content"])
         return '{"summary": "s", "aim": "a", "findings": []}'
 
@@ -2444,7 +2574,7 @@ def test_a_reasoning_call_that_dies_is_retried_once_without_it(monkeypatch) -> N
     """
     seen: list[dict] = []
 
-    def hop(base, key, model, messages, options, timeout=0):
+    def hop(base, key, model, messages, options, timeout=0, deadline=None):
         seen.append(dict(options or {}))
         if (options or {}).get("reasoning", {}).get("enabled") is not False:
             raise RuntimeError("LLM 400 reasoning effort not supported")
@@ -2477,7 +2607,7 @@ def test_the_reasoning_retry_does_not_buy_a_hop_more_time_than_it_had(monkeypatc
     clock = Clock()
     timeouts: list[int] = []
 
-    def hop(base, key, model, messages, options, timeout=0):
+    def hop(base, key, model, messages, options, timeout=0, deadline=None):
         timeouts.append(timeout)
         clock.now += timeout  # hangs for as long as it is allowed
         raise TimeoutError("timed out")
@@ -2513,7 +2643,7 @@ def _caps_world(monkeypatch, models, hop, caps, start=1000.0):
     monkeypatch.setattr(hare_r1, "CAPS", caps)
     calls: list[str] = []
 
-    def counting(base, key, model, messages, options, timeout=0):
+    def counting(base, key, model, messages, options, timeout=0, deadline=None):
         calls.append(model)
         clock.now += timeout
         return hop(base, key, model, messages, options, timeout=timeout)
@@ -2528,7 +2658,7 @@ def test_the_wall_clock_cap_stops_the_chain(monkeypatch) -> None:
     the note never lands, which is the one outcome the caps must not buy."""
     caps = hare_r1.Caps(wall_clock_s=300, max_attempts=0)
 
-    def hop(base, key, model, messages, options, timeout=0):
+    def hop(base, key, model, messages, options, timeout=0, deadline=None):
         raise TimeoutError("timed out")
 
     seen, calls = _caps_world(monkeypatch, ["m1", "m2", "m3", "m4"], hop, caps)
@@ -2546,8 +2676,14 @@ def test_the_attempt_cap_stops_the_chain(monkeypatch) -> None:
     is a cap that has already cost its call.
     """
     caps = hare_r1.Caps(max_attempts=2, wall_clock_s=0)
+    # A big enough hop budget that the attempt cap, not the budget, is what
+    # stops the chain. The two are separate guards and the walk reports the
+    # budget first when both are exhausted (#363 raised the per-call ceiling to
+    # 1800 s, so two dead hops can spend a 2700 s chain budget between them);
+    # a test that wanted the attempt cap has to not also fill the budget.
+    monkeypatch.setattr(hare_r1, "HOP_BUDGET_S", 7_200)
 
-    def hop(base, key, model, messages, options, timeout=0):
+    def hop(base, key, model, messages, options, timeout=0, deadline=None):
         raise RuntimeError("LLM empty content")
 
     seen, calls = _caps_world(monkeypatch, ["m1", "m2", "m3", "m4"], hop, caps)
@@ -2573,7 +2709,7 @@ def test_zero_is_uncapped_for_budget_wall_and_attempts(monkeypatch) -> None:
     monkeypatch.setattr(hare_r1, "LLM_TIMEOUT_SEC", 1)
     calls: list[str] = []
 
-    def hop(base, key, model, messages, options, timeout=0):
+    def hop(base, key, model, messages, options, timeout=0, deadline=None):
         calls.append(model)
         if len(calls) < 5:
             raise RuntimeError("LLM empty content")
@@ -2630,7 +2766,7 @@ def test_a_429_drops_the_provider_for_the_rest_of_the_run(monkeypatch) -> None:
     caps = hare_r1.Caps(wall_clock_s=0, max_attempts=0, rate_backoff_s=1)
     calls: list[str] = []
 
-    def hop(base, key, model, messages, options, timeout=0):
+    def hop(base, key, model, messages, options, timeout=0, deadline=None):
         calls.append(model)
         raise hare_r1.RateLimited("LLM 429 rate limit exceeded")
 
@@ -2678,7 +2814,7 @@ def test_the_rate_limit_backoff_survives_every_cap_being_uncapped(monkeypatch) -
     caps = hare_r1.Caps(reasoning_budget=0, wall_clock_s=0, max_attempts=0, rate_backoff_s=2)
     calls: list[str] = []
 
-    def hop(base, key, model, messages, options, timeout=0):
+    def hop(base, key, model, messages, options, timeout=0, deadline=None):
         calls.append(model)
         raise hare_r1.RateLimited("LLM 429")
 
