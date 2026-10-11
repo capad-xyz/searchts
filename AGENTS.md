@@ -23,6 +23,16 @@ A plan says what is true now and what is next. A log says what already happened.
 | Direction, not the task list | [`ROADMAP.md`](ROADMAP.md) |
 | What a user sees in a release | [`CHANGELOG.md`](CHANGELOG.md) |
 
+## Plans land on main
+
+A plan or an idea is not done until it is on `main`. Other agents read `main`, not a chat. Open the PR and merge it once the docs checks are green. Do not hold it for a later pass on the wording.
+
+Look at the open PRs first.
+
+- If one already edits the same lines, stack on that branch or wait. Do not merge a second copy over it.
+- Landing the plan does not merge a code PR that is still open. The rules can be on `main` while the code is still in review.
+- Do not rewrite a shipped box in `docs/plan-shipped.md` to match a new idea. The open rule goes in [`PLAN.md`](PLAN.md). One dated line goes in [`docs/freeze-log.md`](docs/freeze-log.md).
+
 ## Identity
 
 Free, open-source, **keyless** package for agents. Fetch a URL or admit you can't. Won by reliability and being easy to reach for, not by feature count. Do not cite "keyless" as a ban on clearing a DataDome script, or as "a hosted read can never exist" (**F18**).
