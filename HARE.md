@@ -25,5 +25,10 @@ to a 3 or higher; the next run drops the line.
 <!-- hare-ledger:rules -->
 **What the owner said Hare missed (from the ledger, PLAN R2c).** Each line is the reason behind a low score, filed by `scripts/hare_ledger.py` from `/hare score`. Hare reads these as rules for the next note. Each ledger run rewrites this block; to retire a line, delete its score comment or edit the score to 3 or higher.
 
-- (none yet: a `/hare score 1..5 <why>` of 2 or less with a reason lands here)
+- Held nothing, so it cost nothing, but it read an incremental diff as the whole PR again and returned prose where the prompt asks for JSON. The 2 is for the same reason as 321's: correct-by-accident is. (#324, scored 2/5 on 2026-10-07)
+- Ship on the sidebar regex was already scored. This note holds the PR for the coverage carve-out and uninstall --browser. The carve-out arrived with main (#302). uninstall is #304. Neither is this diff. (#306, scored 2/5 on 2026-10-06)
+- the double-fetch note was already scored. This note holds the PR for uninstall --browser and the Jina global. Neither file is in this diff. They are on main, from #304 and #305, because the branch mer. (#303, scored 2/5 on 2026-10-06)
+- the same model asked to shorten this comment and then to lengthen it; the cause belongs in the comment, the flip does not. (#299, scored 2/5 on 2026-10-05)
+- said Ship while a comment Hare itself posts would start a run in the command's own concurrency group and cancel it; check what every new side effect triggers. (#282, scored 2/5 on 2026-10-05)
+- missed an unbounded read of a whole job log and AGENTS.md lines contradicting the diff; called a test that checks source text instead of behaviour a skip, when it is real. (#269, scored 2/5 on 2026-10-04)
 <!-- /hare-ledger:rules -->
