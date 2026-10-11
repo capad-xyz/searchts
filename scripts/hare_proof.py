@@ -134,7 +134,9 @@ def score_against_cases(rows: list[dict[str, Any]], raw_dir: Path, cases_file: P
     return out
 
 
-def score_by_model(runs: list[dict[str, Any]], raw_dir: Path, cases_file: Path) -> dict[str, Any]:
+def score_by_model(
+    runs: list[dict[str, Any]], raw_dir: Path, cases_file: Path
+) -> dict[tuple[str, str, str], dict[str, Any]]:
     """One row per model and level, across every case: what it caught, what it
     wrote that was not there, and what it spent.
 
