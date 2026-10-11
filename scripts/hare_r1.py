@@ -203,17 +203,26 @@ REASONING_SHAPE = {
     "openrouter": "nested",
     # Zen is not "no reasoning": its models publish reasoning levels, and the
     # hop is expected to ask for one. The shape is left "none" because the wire
-    # field cannot be verified. Two facts measured 2026-10-10:
-    #   1. Every Zen free model answers a direct HTTP call with
+    # field cannot be verified. Two facts measured on this box:
+    #   1. Four of the five Zen free models answer a direct HTTP call with
     #      `FreeTierError: OpenCode's free tier can only be used from within
-    #      OpenCode`, whatever the User-Agent, so a hop here sends nothing that
-    #      arrives. Nothing about the request body can be confirmed from outside.
+    #      OpenCode`, whatever the User-Agent, so a hop to those sends nothing
+    #      that arrives and nothing about the request body can be confirmed from
+    #      outside. `space-bunny-free` is the fifth and it does answer: 200 on a
+    #      direct call, `reasoning_content` and reasoning tokens in the usage,
+    #      and a bogus `reasoning_effort` comes back 400, so the field is parsed
+    #      upstream rather than dropped. Measured 2026-10-11, three calls in three,
+    #      after the 2026-10-10 probe recorded five refusals. So the wall is four
+    #      of five, and the one that answers is the only candidate whose
+    #      reachability is demonstrated, which is a fact to re-check rather than
+    #      a licence to guess a body for the other four.
     #   2. The client exposes the reasoning level as `--variant`, documented as
     #      "provider-specific reasoning effort", and the levels per model are in
     #      ZEN_EFFORTS below, read from the models.dev catalog the client uses.
     # Guessing the field to send anyway would put an untested request in the
-    # chain and call it reasoning. ZEN_EFFORTS records what is known; the shape
-    # flips to "nested" the day a request from here is shown to get through.
+    # chain and call it reasoning. ZEN_EFFORTS records what is known, and the
+    # shape flips when a Zen hop is actually built: CI passes no Zen key, so
+    # there is no hop to send one from until somebody adds it.
     "zen": "none",
 }
 # What each Zen model publishes, from models.dev (https://models.dev/api.json,
