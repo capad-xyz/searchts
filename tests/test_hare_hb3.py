@@ -59,25 +59,51 @@ def test_fallbacks_returning_fast_strand_the_reserve():
 
 
 def test_replay_candidates_are_collected_and_named():
-    """The replay list is populated by the skip path, not guessed at later."""
-    src = open(hare_r1.__file__, encoding="utf-8").read()
-    assert "skipped_for_budget" in src
-    assert "skipped_for_budget.append" in src
-    # Both skip paths must feed it, not just the reserve one.
-    assert src.count("skipped_for_budget.append") >= 2
+    """The replay list is populated by the skip path, not guessed at later.
+
+    This reads the function, not the source text: a grep of the file passes when
+    the skip path stops feeding the list, which is exactly the bug it is here to
+    catch. Three kinds of errs, and only one of them is a replay candidate.
+    """
+    chain = [
+        ("nous", "b", "k", "held", {}),
+        ("openrouter", "b", "k", "broke", {}),
+        ("groq", "b", "k", "throttled", {}),
+    ]
+    errs = [
+        "nous:held: skipped, the last 150 s are kept for the fast fallbacks",
+        "openrouter:broke: LLM empty content",
+        "groq:throttled: rate limited, groq dropped for this run",
+        "nous:held (replay): skipped, the last 150 s are kept for the fast fallbacks",
+    ]
+    assert [h[3] for h in hare_r1.replay_candidates(chain, errs, set())] == ["held"]
+    # A cap that held a hop back is not a candidate: the budget does not refill,
+    # so replaying it only walks the same empty list a second time.
+    capped = ["nous:held: wall clock spent", "nous:held: hop budget (1800 s) spent"]
+    assert hare_r1.replay_candidates(chain, capped, set()) == []
+    # A provider that 429'd stays out of the replay too.
+    assert hare_r1.replay_candidates(chain, errs, {"nous"}) == []
 
 
 def test_replay_only_runs_when_the_chain_found_nothing():
-    """A chain that answered must not spend leftover budget replaying."""
+    """A chain that answered must not spend leftover budget replaying.
+
+    The behaviour is pinned end to end by `test_a_healthy_chain_does_not_replay`
+    and `test_a_skipped_hop_is_replayed_and_can_answer` below. What this adds is
+    the guard itself: the replay is reachable only under `parsed is None`, so
+    reading down from where the candidates are computed must find it.
+    """
     src = open(hare_r1.__file__, encoding="utf-8").read()
-    block = src.split("if parsed is None and (deferred", 1)
-    assert len(block) == 2, "replay block not found"
-    assert block[1].lstrip().startswith(":="), "replay is not guarded by parsed is None"
+    block = src.split("deferred = replay_candidates(", 1)
+    assert len(block) == 2, "replay candidates not computed"
+    assert "if parsed is None and deferred" in block[1][:200], "replay is not guarded by parsed is None"
 
 
-def test_replay_marks_the_hop_it_used():
+def test_replay_marks_the_hop_it_used(monkeypatch):
     """The cost line has to say the answer came from a replay."""
-    assert "(replay)" in open(hare_r1.__file__, encoding="utf-8").read()
+    assert hare_r1._walk_chain.__doc__ is not None
+    src = open(hare_r1.__file__, encoding="utf-8").read()
+    assert 'label="replay"' in src, "the replay pass must label its hops"
 
 
 def test_a_skipped_hop_is_replayed_and_can_answer(monkeypatch):
@@ -130,7 +156,7 @@ def test_a_skipped_hop_is_replayed_and_can_answer(monkeypatch):
     # Chain: a slow hop first, then the fast fallbacks, then more slow hops.
     monkeypatch.setattr(
         hare_r1, "build_provider_chain",
-        lambda keys, models, deep=False: [
+        lambda keys, models, deep=False, **kwargs: [
             ("nous", "b", "k", "slow-1", {}),
             ("groq", "b", "k", "fast", {}),
             ("gemini", "b", "k", "fast-2", {}),

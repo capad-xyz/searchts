@@ -1,4 +1,5 @@
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -191,3 +192,36 @@ def test_the_eval_prefers_its_own_keys() -> None:
     env = {k: v for step in wf["jobs"]["eval"]["steps"] for k, v in (step.get("env") or {}).items()}
     for p in ("GROQ", "GEMINI", "NOUS", "OR"):
         assert env[f"SEARCHTS_HARE_API_KEY_{p}"] == f"${{{{ secrets.HARE_EVAL_KEY_{p} || secrets.SEARCHTS_HARE_API_KEY_{p} }}}}"
+
+
+def test_every_mode_the_workflow_offers_is_a_mode_the_eval_runs() -> None:
+    """The modes input defaults to a list, and a name in it that is not in
+    hare_eval.MODES is dropped silently, so the default ran half of what it said:
+    `off,on` ran only `off` once `on` stopped being a mode (#359). Both the
+    default and the words the description offers are checked, because a reader
+    types what the description says."""
+    import yaml
+
+    wf = yaml.safe_load((Path(__file__).resolve().parents[1] / ".github" / "workflows" / "hare-eval.yml").read_text())
+    modes_input = wf[True]["workflow_dispatch"]["inputs"]["modes"]
+    offered = [m.strip() for m in modes_input["default"].split(",")]
+    assert offered, "the modes input has no default, so a hand run measures nothing"
+    for name in offered:
+        assert name in hare_eval.MODES, f"{name!r} is not a mode; the eval drops it and runs the rest"
+    for name in re.findall(r"\b(?:off|effort|budget|max|on)\b", modes_input["description"]):
+        assert name in hare_eval.MODES, f"the description offers {name!r}, which is not a mode"
+
+
+def test_a_mode_the_eval_does_not_know_is_named_not_dropped_silently(capsys, tmp_path) -> None:
+    """A dropped mode is how `off,on` measured only `off` and said nothing."""
+    assert "on" not in hare_eval.MODES  # the mode that started this
+    # --out goes to tmp_path: main() writes docs/hare-eval-<date>.{json,md} and
+    # a test has no business dropping a report into the repo's docs/.
+    hare_eval.main([
+        "--modes", "off,on",
+        "--providers", "",
+        "--cases", "docs/hare-proof-cases.json",
+        "--out", str(tmp_path),
+    ])
+    out = capsys.readouterr().out
+    assert "on" in out and "not a mode" in out

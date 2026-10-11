@@ -1,0 +1,48 @@
+{
+ "case": "245-proof",
+ "pr": 245,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "effort",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "effort": "high",
+   "exclude": true
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 8261,
+  "completion_tokens": 1642,
+  "total_tokens": 9903,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 968,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 202,
+  "answer_chars": 2753,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "{\"effort\":\"low\",\"summary\":\"Three small armor plates for Hare's wrap-up. Quiet. Useful.\\n\\n1. **repair_json** now uses the escape walk to detect open strings instead of counting raw quotes.\\n2. **Restart logic** in wrap_up only accepts a fresh `{` object when it carries more findings than the kept partial.\\n3. **Timeout message** extracts the actual tier seconds from the error instead of always using LLM_TIMEOUT_SEC.\",\"aim\":\"Fix three bugs Hare Bot found on #244 and #243: escaped quotes breaking repair_json, restarts losing kept findings, and timeout messages showing the wrong tier.\",\"case\":\"The diff is narrow, each change has a dedicated test, and the fixes directly address the reported failure modes. No behavior changes beyond the three bugs. Safe to ship.\",\"findings\":[{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":589,\"issue\":\"The _walk docstring says it returns the index past the last seam and whether a string is open, but the return type annotation still shows tuple[list[str], int].\",\"short\":\"_walk return type annotation missing the new bool\",\"fix\":\"yes\",\"change\":\"Update the return type annotation to include the bool.\",\"original\":\"def _walk(text: str) -> tuple[list[str], int, bool]:\",\"suggestion\":\"def _walk(text: str) -> tuple[list[str], int, bool]:\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":847,\"issue\":\"The restart branch assigns stitched = tail but the else branch assigns stitched = partial + tail. If the restart condition fails, stitched is never set before the except block.\",\"short\":\"stitched may be unbound when restart condition fails\",\"fix\":\"yes\",\"change\":\"Initialize stitched before the if/else or ensure both branches assign it.\",\"original\":\"            if tail.lstrip().startswith(\\\"{\\\")\\n                # A restart, not a continuation. An 800-token restart cannot hold\\n                # the findings the cut kept, so it only wins if it holds more.\\n                restart = extract_json(tail)\\n                kept_obj = extract_json(repair_json(partial)) or {}\\n                if restart and len(restart.get(\\\"findings\\\") or []) > len(kept_obj.get(\\\"findings\\\") or []):\\n                    stitched = tail\\n            else:\\n                stitched = partial + tail\",\"suggestion\":\"            stitched = partial + tail\\n            if tail.lstrip().startswith(\\\"{\\\")\\n                # A restart, not a continuation. An 800-token restart cannot hold\\n                # the findings the cut kept, so it only wins if it holds more.\\n                restart = extract_json(tail)\\n                kept_obj = extract_json(repair_json(partial)) or {}\\n                if restart and len(restart.get(\\\"findings\\\") or []) > len(kept_obj.get(\\\"findings\\\") or []):\\n                    stitched = tail\"}]}"
+}
