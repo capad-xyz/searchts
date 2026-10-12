@@ -22,3 +22,8 @@ DEVLOG.md
 benchmarks/cases.local.json
 benchmarks/results/
 docs/results.json
+
+# Verification proof artifacts (.agents/skills/verify-searchts/artifacts/). Raw
+# stdout, stderr and exit codes from one drive. Per-run evidence: the durable
+# findings live in the feature files, in Gotchas, next to what they cost.
+.agents/skills/verify-searchts/artifacts/
