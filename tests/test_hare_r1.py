@@ -964,6 +964,74 @@ def test_workflow_model_overrides_do_not_undo_the_python_defaults() -> None:
         assert pinned == default, f"{env_name} pins {pinned!r} but the default is {default!r}"
 
 
+def test_reasoning_on_means_the_models_own_default_not_the_top_of_its_ladder() -> None:
+    """Reasoning is on. "On" is the level the gateway says the model runs at by
+    default, which is not the same as the top of the ladder.
+
+    The Zen proof (#359, docs/proofs/hare-reasoning/zen/) measured the raised
+    arm: 5 of 10 pairs returned nothing when a model was pushed above its
+    default, while the default level caught the same findings and cost nothing.
+    So production asks for `default_effort` from the live catalog, and the
+    `/hare deep` and `level=` overrides still win over it.
+    """
+    assert hare_r1.model_default_effort("openrouter", "nvidia/nemotron-3-ultra-550b-a55b:free", CATALOG_2026_10_10) == "high"
+    assert hare_r1.model_default_effort("openrouter", "nvidia/nemotron-3-super-120b-a12b:free", CATALOG_2026_10_10) == "medium"
+    # Lightning publishes no ladder and no default, so the provider default stands.
+    assert hare_r1.model_default_effort("openrouter", "nvidia/nemotron-3.5-lightning:free", CATALOG_2026_10_10) == ""
+
+    keys = {"openrouter": "k"}
+    models = {"openrouter": ["nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3-super-120b-a12b:free"]}
+    hops = hare_r1.build_provider_chain(keys, models, catalog=CATALOG_2026_10_10)
+    # Reasoning is present on every hop - this is the "on" the owner asked for.
+    assert all("reasoning" in o for *_x, o in [(h[0], h[1], h[2], h[3], h[4]) for h in hops])
+    assert [h[4]["reasoning"]["effort"] for h in hops] == ["high", "medium"]
+    # An explicit level still wins, so a cap above the default is reachable. It
+    # is clamped into what each model publishes: Ultra has no `low`, so `low`
+    # lands on the weakest it does take, `medium`.
+    forced = hare_r1.build_provider_chain(keys, models, catalog=CATALOG_2026_10_10, level="low")
+    assert [h[4]["reasoning"]["effort"] for h in forced] == ["medium", "low"]
+    # `/hare deep` still means the deep pass.
+    deep = hare_r1.build_provider_chain(keys, models, catalog=CATALOG_2026_10_10, deep=True)
+    assert [h[4]["reasoning"]["effort"] for h in deep] == ["high", "medium"]
+
+
+def test_agents_md_states_the_chain_order_the_code_actually_runs() -> None:
+    """AGENTS.md is sent to every review as the rules, so a stale chain order in
+    it is a prompt that contradicts the script running it.
+
+    AGENTS.md said "OpenRouter then Nous then Groq ..." while build_provider_chain
+    walks nous, openrouter, groq. A model reading the rules is told Nous is second
+    while the run puts it first, and cannot tell which one is true. The order is
+    the contract, so it is read out of the code rather than restated.
+    """
+    import re as _re
+    from pathlib import Path as _P
+
+    agents = (_P(__file__).resolve().parents[1] / "AGENTS.md").read_text(encoding="utf-8")
+    m = _re.search(r"Brain:\s*\**([A-Za-z ,]+?)\s*\**\s*\(#258", agents)
+    assert m, "AGENTS.md no longer states the chain order, so this cannot catch it going stale"
+    said = [w for w in _re.split(r"[ ,]+", m.group(1)) if w]
+    said = [w.capitalize() for w in _re.split(r"[ ,]+", m.group(1)) if w and w.lower() != "then"]
+    # The order the script actually walks, in the same words AGENTS.md uses.
+    walked = [p.capitalize() for p in ("nous", "openrouter", "groq", "gemini", "zen")]
+    assert said == walked, f"AGENTS.md says {said}, build_provider_chain walks {walked}"
+
+
+def test_a_score_from_anybody_but_the_owner_cannot_become_a_rule() -> None:
+    """`/hare score` lands in HARE.md, and HARE.md is read into every prompt.
+
+    The ledger records who posted each score but never checked, so anyone able to
+    comment on a public repo could comment `/hare score 1 ...` and write rules
+    into the file the reviewer is told to obey. A stranger's score is now kept
+    for the record with `ignored`, and never counted.
+    """
+    import hare_ledger
+
+    assert hare_ledger.is_score_author("capad-xyz") is True
+    for stranger in ("randomuser", "coderabbitai[bot]", "", "someone"):
+        assert hare_ledger.is_score_author(stranger) is False
+
+
 def test_the_nous_and_openrouter_slugs_are_written_in_both_places() -> None:
     """The chain is pinned twice, in hare_r1.py and in the workflow env, and CI
     runs the workflow one. A slug added to one file and not the other is a hop

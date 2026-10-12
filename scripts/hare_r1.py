@@ -338,6 +338,26 @@ def efforts_support_budget(provider: str, model: str, catalog: dict[str, dict[st
     return False
 
 
+def model_default_effort(provider: str, model: str, catalog: dict[str, dict[str, Any]] | None = None) -> str:
+    """The level the gateway says this model runs at by default, or "".
+
+    Reasoning is on, and this is where "on" means: the model's own default, not
+    the top of its ladder. The Zen proof (#359) measured the difference. Raising a
+    model above its default returned nothing in 5 of 10 paired runs, while its
+    default level caught the same findings as no reasoning at all and cost
+    nothing. So the safe setting is the model's own, and the catalog publishes it
+    as `default_effort` - read it rather than pinning a level that happens to
+    match today and silently rails to the top after a catalog update.
+    """
+    entry = (catalog or {}).get(_base_slug(model))
+    meta = entry.get("reasoning") if isinstance(entry, dict) else None
+    if isinstance(meta, dict):
+        got = meta.get("default_effort")
+        if isinstance(got, str) and got in EFFORT_LADDER:
+            return got
+    return ""
+
+
 def clamp_effort(level: str, efforts: tuple[str, ...]) -> str:
     """The strongest level that is at or below `level` and this model accepts.
 
@@ -2921,6 +2941,7 @@ def build_provider_chain(
         "openrouter": OR_BASE,
         "zen": ZEN_BASE,
     }
+    level_arg = level if level in REASONING_WORDS else ""
     if level in REASONING_WORDS:  # an explicit level, including "none" for off
         wanted = {p: level for p in bases}
     elif deep:
@@ -2929,6 +2950,11 @@ def build_provider_chain(
         # The owner's cap on the quiet pass overrides the per-model ladder.
         wanted = {p: HARE_REASONING for p in bases}
     else:
+        # Reasoning is ON, at the level each model publishes as its own default.
+        # Not the top of the ladder: the Zen proof measured the raised arm
+        # returning nothing in 5 of 10 pairs while the default level cost
+        # nothing and caught the same. A model that publishes no default falls
+        # back to the provider default, which is `high`.
         wanted = {p: PROVIDER_FALLBACK_LEVEL.get(p, "high") for p in bases}
     chain: list[tuple[str, str, str, str, dict[str, Any]]] = []
     # Order is the owner's call, not the ledger's: the ledger's notes mostly
@@ -2947,7 +2973,13 @@ def build_provider_chain(
         if not key:
             continue
         for model in models.get(name, []):
-            opts = reasoning_options(name, model, wanted.get(name, "high"), caps.reasoning_budget, catalog, shape)
+            # Reasoning on, at the model's own published default when the caller
+            # asked for no particular level. An explicit `level=` and `/hare deep`
+            # are the owner asking for something specific, and both win.
+            level = wanted.get(name, "high") if (level_arg or deep or HARE_REASONING in REASONING_WORDS) else ""
+            if not level:
+                level = model_default_effort(name, model, catalog) or PROVIDER_FALLBACK_LEVEL.get(name, "high")
+            opts = reasoning_options(name, model, level, caps.reasoning_budget, catalog, shape)
             chain.append((name, bases[name], key, model, opts))
     return chain
 
