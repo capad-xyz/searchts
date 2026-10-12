@@ -26,3 +26,8 @@ docs/results.json
 # Hare's head tree: the PR's own code, fetched so its tests can be run. A throwaway
 # unpack of the tarball, never committed and never read into a prompt.
 .hare-head/
+
+# Verification proof artifacts (.agents/skills/verify-searchts/artifacts/). Raw
+# stdout, stderr and exit codes from a drive. They are per-run evidence and the
+# durable record is the "Proven here" note in each feature file.
+.agents/skills/verify-searchts/artifacts/
