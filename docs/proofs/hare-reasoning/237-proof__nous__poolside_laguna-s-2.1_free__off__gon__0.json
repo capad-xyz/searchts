@@ -1,0 +1,29 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "nous",
+ "model": "poolside/laguna-s-2.1:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "completion_tokens": 12271,
+  "estimated": true,
+  "prompt_tokens": 29579
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 11699,
+  "answer_chars": 43490,
+  "finish_reason": "",
+  "cut": "length",
+  "usage_reported": false
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"Hare hop fix: effort=none for Nous/Groq/Zen, robust JSON extraction, local runner, wider timeout.\",\"aim\":\"Make the reasoning hop actually answer instead of eating the whole token budget thinking, and give maintainers a local terminal loop.\",\"case\":\"The core fix is sound and well-tested: effort=none on Nous/Groq/Zen, json_objects with string-aware brace matching, and a local runner that dry-runs by default. One real bug in the fence regex of extract_json: backticks were replaced with double backslashes, making the fence-matching path dead code. json_objects covers it as a fallback, so tests pass, but the fence optimization is non-functional. Fix is a one-line restore of backticks and non-greedy matching.\",\"findings\":[{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":247,\"issue\":\"The fence regex in extract_json uses double backslashes (r\\\"\\\\\\\\(?:json)?...\\\") instead of backticks, so it never matches a markdown code fence. The json_objects fallback still finds the JSON, but the fence optimization is dead code.\",\"short\":\"Fence regex uses \\\\\\\\ instead of backticks, so code-fence matching never fires.\",\"fix\":\"later\",\"change\":\"Restore backticks and non-greedy matching in the fence regex: r\\\"```(?:json)?\\\\s*(\\\\{.*?\\\\})\\\\s*```\\\"\",\"original\":\"    fence = re.search(r\\\"\\\\\\\\(?:json)?\\\\s*(\\\\{.*\\\\})\\\\s*\\\\\\\\\\\", text, re.S)\",\"suggestion\":\"    fence = re.search(r\\\"```(?:json)?\\\\s*(\\\\{.*?\\\\})\\\\s*```\\\", text, re.S)\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":232,\"issue\":\"The json_objects docstring contains a literal tab character (\\\\t) where \\\"text\\\" was intended: \\\"Every top-level {...} in \\\\text, by brace matching\\\".\",\"short\":\"Docstring has a literal tab where \\\"text\\\" was meant.\",\"fix\":\"no\",\"change\":\"\",\"original\":\"\",\"suggestion\":\"\"}],\"aim\":\"Make the reasoning hop actually answer instead of eating the whole token budget thinking, and give maintainers a local terminal loop.\",\"case\":\"The core fix is sound and well-tested: effort=none on Nous/Groq/Zen, json_objects with string-aware brace matching, and a local runner that dry-runs by default. One real bug in the fence regex of extract_json: backticks were replaced with double backslashes, making the fence-matching path dead code. json_objects covers it as a fallback, so tests pass, but the fence optimization is non-functional. Fix is a one-line restore of backticks and non-greedy matching.\"}"
+}

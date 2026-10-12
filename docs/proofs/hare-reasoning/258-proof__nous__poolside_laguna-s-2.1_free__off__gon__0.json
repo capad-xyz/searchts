@@ -1,0 +1,46 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "nous",
+ "model": "poolside/laguna-s-2.1:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 10328,
+  "completion_tokens": 620,
+  "total_tokens": 10948,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  },
+  "cost": 0,
+  "cost_details": {
+   "source": "nas_model_override",
+   "floor_applied": false,
+   "rate_source": "nas_model_override"
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 620,
+  "answer_chars": 2444,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "Looking at this PR, the chain order is being reordered from Groq-first to OpenRouter-first, with Groq and Gemini moved to fallbacks. Let me verify the diff is internally consistent.\n\nThe code change in `build_provider_chain` changes the loop order to `(\"openrouter\", \"nous\", \"groq\", \"gemini\", \"zen\")`. The tests are updated to match. The PLAN.md failover line is updated to match. The comment in the code explains the reasoning.\n\nLet me check the test assertions carefully against the new order.\n\nIn `test_provider_chain_is_the_fixed_order`, the new assertion is `[\"openrouter\", \"nous\", \"nous\", \"groq\", \"gemini\", \"zen\"]`. The models dict has `nous` with two entries (`n1`, `n2`), so two `nous` hops is correct. The order matches the loop.\n\nIn `test_provider_chain_drops_a_provider_with_no_key`, keys are `{\"groq\": \"g\", \"nous\": \"n\"}`, so the chain should be `[\"nous\", \"groq\"]` \u2014 matches.\n\nIn `test_hop_loop_sends_every_provider_its_own_options`, the fake_complete dies on everything except `g1` (Groq). With the new order, OpenRouter (`o1`) and Nous (`n1`) die first, then Groq (`g1`) succeeds. The assertions `[\"o1\", \"n1\", \"g1\"]` and `[\"o\", \"n\", \"g\"]` match. The request_options assertions also match: OpenRouter gets `{\"reasoning\": {\"effort\": \"low\", \"exclude\": True}}`, Nous gets `{\"reasoning\": {\"effort\": \"none\"}}`, Groq gets `{}`.\n\nThe diff is consistent. The PR body claims tests pass, and the test changes align with the code change. The PLAN.md line is updated to match. The comment in the code is updated.\n\nOne thing to verify: the PR body says \"the ledger cannot rank hops yet, because its notes mostly predate the fixes that landed today.\" The code comment says the same. This is consistent.\n\nThe PR is a single change (chain order), doesn't touch version numbers, and the test plan is checked. The diff is internally consistent and the tests match the code.\n\n{\"effort\":\"low\",\"summary\":\"Chain reorder: OpenRouter and Nous lead, Groq and Gemini fall back.\",\"aim\":\"Reorder the Hare provider failover chain so slower models try first and the fast hops (Groq, Gemini) are fallbacks, per the owner's call.\",\"case\":\"The diff is internally consistent: the loop order in build_provider_chain, the three updated tests, and the PLAN.md failover line all agree on the new order. The test assertions match the code change exactly, including the per-hop request_options. No version bump, one change, test plan checked. Safe to ship.\",\"findings\":[]}"
+}
