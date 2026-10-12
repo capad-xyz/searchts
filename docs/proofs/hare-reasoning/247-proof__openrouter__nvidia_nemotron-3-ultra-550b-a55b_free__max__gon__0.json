@@ -1,0 +1,18 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "max",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "max_tokens": 12000,
+   "exclude": true
+  }
+ },
+ "error": "LLM empty content https://openrouter.ai/api/v1 nvidia/nemotron-3-ultra-550b-a55b:free (finish_reason=?, max_tokens=32000)",
+ "usage": {},
+ "answer": ""
+}

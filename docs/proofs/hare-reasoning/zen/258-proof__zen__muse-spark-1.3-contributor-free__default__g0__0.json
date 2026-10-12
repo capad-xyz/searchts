@@ -1,0 +1,33 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 68.3,
+ "steps": 14,
+ "answer_part": "text",
+ "reasoning_chars": 2082,
+ "usage": {
+  "prompt_tokens": 60616,
+  "completion_tokens": 2937,
+  "completion_tokens_details": {
+   "reasoning_tokens": 12855
+  }
+ },
+ "answer": "Hopping the slow reviewers to the front, checking the new order holds.The first pass looks consistent, now digging for stale references and mismatched chains.The chain reorder checks out so far; now hunting for anything the diff leaves behind.Spotted the leftover contradictions; now pinning the exact lines for the report.{\"effort\": \"low\", \"summary\": \"Tortoise strategy: slow reviewers first, sprinters on standby. \ud83d\udc22\", \"aim\": \"Reorder the Hare failover so OpenRouter and Nous lead and Groq with Gemini fall back.\", \"case\": \"The provider loop, PLAN chain and tests agree on the new order, but AGENTS.md and two nearby comment bullets still teach the old Groq-first chain, so the next reader gets conflicting directions.\", \"findings\": [{\"sev\": \"real\", \"path\": \"AGENTS.md\", \"line\": null, \"issue\": \"Trigger line still says Groq then OpenRouter then Nous with the old slug chain, while build_provider_chain now runs OpenRouter then Nous then Groq.\", \"short\": \"AGENTS.md still lists Groq first, contradicting the new OpenRouter then Nous then Groq chain in code.\", \"fix\": \"later\", \"change\": \"Update the Brain chain in AGENTS.md to OpenRouter then Nous then Groq then Gemini then Zen with the new slugs.\"}, {\"sev\": \"real\", \"path\": \"PLAN.md\", \"line\": null, \"issue\": \"The bullet right under the new failover line still says Space Bunny is last on Nous, while the new chain puts it first on Nous and second on OpenRouter.\", \"short\": \"PLAN still calls Space Bunny last on Nous, opposite the new first on Nous and second on OpenRouter chain.\", \"fix\": \"later\", \"change\": \"Rewrite that bullet to say Space Bunny rides first on Nous and second on OpenRouter for its last free day.\"}, {\"sev\": \"skip\", \"path\": \"scripts/hare_r1.py\", \"line\": null, \"issue\": \"Catalog comments above the defaults still say Groq stays first and space-bunny-alpha is last on Nous, opposite the new provider order and defaults.\", \"short\": \"Groq stays first and Bunny last comments survived, contradicting the reordered chain and model defaults.\", \"fix\": \"later\", \"change\": \"Refresh those comments to place Groq after Nous and Bunny first on Nous.\"}]}"
+}

@@ -1,0 +1,33 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 99.6,
+ "steps": 21,
+ "answer_part": "text",
+ "reasoning_chars": 38009,
+ "usage": {
+  "prompt_tokens": 42009,
+  "completion_tokens": 3387,
+  "completion_tokens_details": {
+   "reasoning_tokens": 9837
+  }
+ },
+ "answer": "{\"effort\":\"low\",\"summary\":\"One tuple moved, two pins followed it. Gemini stops being the house default. \ud83d\udc07\\n\\n1. **chain order** Groq, OpenRouter, Nous, Gemini, Zen, with the owner's reason in a comment above the loop.\\n2. **tests** the order pin and the hop-loop options pin now expect the new hop list.\",\"aim\":\"Promote the OpenRouter qwen hop and demote Gemini Flash-Lite from the default slot to the fallback, so every diff Groq cannot take lands on a reviewer that reads code better.\",\"case\":\"The change is one tuple and both order pins match it: I ran tests/test_hare_r1.py at this head, 82 passed, so nothing order-dependent else broke. The body's qwen claim holds too, the workflow pin and HARE_OR_DEFAULT both start with qwen/qwen3.8-27b:free. Nothing here needs to block; the doc lines that still name the old chain are real but cheap, and worth saying out loud that the hop the body praises now queues behind OpenRouter's five-model pin.\",\"findings\":[{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":1356,\"issue\":\"The new order lands here, but scripts/hare_r1.py:2 still reads 'review a PR via Groq, Gemini, Nous, then OpenRouter', the Gemini catalog comment at :112-116 still says Flash-Lite 'goes first', and AGENTS.md:45 still lists the old chain. The build_provider_chain docstring also still calls PLAN.md R1c the contract.\",\"short\":\"Module docstring, the Gemini catalog comment and AGENTS.md Brain line still name Groq, Gemini, Nous, OpenRouter.\",\"fix\":\"later\",\"change\":\"Rewrite hare_r1.py:2, the Gemini note near :112, and the Brain line in AGENTS.md:45 to the new hop order in this PR or the fold the checklist promises.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":643,\"issue\":\"The comment says 'OpenRouter's qwen leads, then Nous, then Gemini', but the assert right below keeps Groq first. Anyone reading the order off the comment gets it backwards.\",\"short\":\"Comment says OpenRouter's qwen leads; the assert below keeps Groq first, so the order reads backwards.\",\"fix\":\"yes\",\"change\":\"Say Groq still leads in the comment above the assert.\",\"original\":\"    # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is\\n    # fast and misses things. OpenRouter's qwen leads, then Nous, then Gemini.\",\"suggestion\":\"    # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is\\n    # fast and misses things. Groq still leads, then OpenRouter, Nous, Gemini.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":1356,\"issue\":\"CI pins five OpenRouter models, so the hop the body praises on #235 and #236 now waits behind up to five calls inside HOP_BUDGET_S (600 s). What does not say what happens when those free models stall rather than fail fast.\",\"short\":\"Nous now waits behind OpenRouter's five-model pin inside the 600 s hop budget; What does not say that.\",\"fix\":\"later\",\"change\":\"Say in Why what happens to Nous when the OpenRouter models stall, or pin fewer OpenRouter hops ahead of it.\"}]}"
+}

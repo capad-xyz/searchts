@@ -1,0 +1,33 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "max",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "max",
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "timeout after 900s",
+ "seconds": 10938.7,
+ "steps": 0,
+ "answer_part": "",
+ "reasoning_chars": 0,
+ "usage": {
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "completion_tokens_details": {
+   "reasoning_tokens": 0
+  }
+ },
+ "answer": ""
+}

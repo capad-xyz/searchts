@@ -1,0 +1,47 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 7504,
+  "completion_tokens": 577,
+  "total_tokens": 8081,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 167,
+  "answer_chars": 2141,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "{\n  \"effort\": \"low\",\n  \"summary\": \"Hare brain chain reorder: Groq \u2192 OpenRouter \u2192 Nous \u2192 Gemini \u2192 Zen. Gemini demoted to fallback.\",\n  \"aim\": \"Change the provider fallback order so OpenRouter's qwen model runs before Gemini, per owner's call that Gemini 3.1 Flash-Lite answers fast but misses things.\",\n  \"case\": \"The diff is a pure ordering change with updated tests. No behavior change beyond the hop sequence. Tests pass and the chain logic is straightforward. Safe to ship.\",\n  \"findings\": [\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 1353,\n      \"issue\": \"Comment references a specific date (2026-10-04) which will age poorly. Consider a generic 'owner's call' note instead.\",\n      \"short\": \"Hardcoded date in comment will become stale\",\n      \"fix\": \"later\",\n      \"change\": \"Replace the date with a generic reference or remove it\",\n      \"original\": \"# Gemini goes after OpenRouter and Nous (owner's call, 2026-10-04): Flash-Lite\\n# answers fast and misses things, so it is the fallback, not the default.\\n# Groq stays first: it 413s on a big prompt in under a second, so it costs\\n# nothing when it cannot take the diff.\",\n      \"suggestion\": \"# Gemini goes after OpenRouter and Nous (owner's call): Flash-Lite\\n# answers fast and misses things, so it is the fallback, not the default.\\n# Groq stays first: it 413s on a big prompt in under a second, so it costs\\n# nothing when it cannot take the diff.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"tests/test_hare_r1.py\",\n      \"line\": 643,\n      \"issue\": \"Test comment duplicates the date from the implementation comment. Same staleness concern.\",\n      \"short\": \"Test comment has same hardcoded date\",\n      \"fix\": \"later\",\n      \"change\": \"Align test comment with implementation comment style\",\n      \"original\": \"# Gemini is the fallback, not the default (owner's call, 2026-10-04): it is\\n# fast and misses things. OpenRouter's qwen leads, then Nous, then Gemini.\",\n      \"suggestion\": \"# Gemini is the fallback, not the default (owner's call): it is\\n# fast and misses things. OpenRouter's qwen leads, then Nous, then Gemini.\"\n    }\n  ]\n}"
+}

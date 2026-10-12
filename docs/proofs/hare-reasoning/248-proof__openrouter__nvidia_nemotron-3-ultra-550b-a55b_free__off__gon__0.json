@@ -1,0 +1,47 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 11189,
+  "completion_tokens": 988,
+  "total_tokens": 12177,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 278,
+  "answer_chars": 3429,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "{\n  \"effort\": \"medium\",\n  \"summary\": \"Hare gets its own memory file. AGENTS.md stays the contract; HARE.md is what Hare learned from low scores.\",\n  \"aim\": \"Split Hare's learned rules into HARE.md so the weekly ledger run writes there instead of rewriting a block inside AGENTS.md.\",\n  \"case\": \"The diff is clean and scoped: a new HARE.md with the same marked block, the ledger script now writes --rules HARE.md, and hare_r1.py fetches HARE.md from the base branch and passes it to the model. Tests cover the new behavior (proposed_rules, apply_rules, HARE.md reaching the prompt). No behavior change for callers; CI should stay green.\",\n  \"findings\": [\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_ledger.py\",\n      \"line\": 295,\n      \"issue\": \"proposed_rules is called twice when writing HARE.md (once for the print, once inside apply_rules).\",\n      \"short\": \"Duplicate call to proposed_rules when writing rules file.\",\n      \"fix\": \"later\",\n      \"change\": \"Store the result of proposed_rules(ledger) in a variable and reuse it for both the print and apply_rules.\",\n      \"original\": \"    if args.rules:\\n        before = Path(args.rules).read_text(encoding=\\\"utf-8\\\") if Path(args.rules).exists() else \\\"\\\"\\n        after = apply_rules(before, proposed_rules(ledger))\\n        if after != before:\\n            Path(args.rules).write_text(after, encoding=\\\"utf-8\\\")\\n            print(f\\\"hare ledger: {len(proposed_rules(ledger))} rule(s) written to {args.rules}\\\")\",\n      \"suggestion\": \"    if args.rules:\\n        rules = proposed_rules(ledger)\\n        before = Path(args.rules).read_text(encoding=\\\"utf-8\\\") if Path(args.rules).exists() else \\\"\\\"\\n        after = apply_rules(before, rules)\\n        if after != before:\\n            Path(args.rules).write_text(after, encoding=\\\"utf-8\\\")\\n            print(f\\\"hare ledger: {len(rules)} rule(s) written to {args.rules}\\\")\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 1475,\n      \"issue\": \"HARE.md is fetched from the base branch SHA, but the variable is named base_ref and uses base.sha; if base.sha is missing it falls back to 'main'. That's fine, but the comment says 'from the base branch (R2c)' while the code uses the base commit SHA. No bug, just a slight mismatch.\",\n      \"short\": \"Comment says base branch but code uses base commit SHA.\",\n      \"fix\": \"later\",\n      \"change\": \"Update the comment to say 'from the base commit' or keep as-is since the SHA is more precise.\",\n      \"original\": \"    hare_md = \\\"\\\"\\n    try:  # HARE.md: the owner's rules for Hare, from the base branch (R2c). Optional.\\n        base_ref = str((pr_data.get(\\\"base\\\") or {}).get(\\\"sha\\\") or \\\"main\\\")\\n        file = github_api(\\\"GET\\\", f\\\"/repos/{owner}/{repo}/contents/HARE.md?ref={base_ref}\\\", token)\\n        hare_md = base64.b64decode(file.get(\\\"content\\\") or \\\"\\\").decode(\\\"utf-8\\\", errors=\\\"replace\\\")\\n    except Exception:\\n        hare_md = \\\"\\\"\",\n      \"suggestion\": \"    hare_md = \\\"\\\"\\n    try:  # HARE.md: the owner's rules for Hare, from the base commit (R2c). Optional.\\n        base_ref = str((pr_data.get(\\\"base\\\") or {}).get(\\\"sha\\\") or \\\"main\\\")\\n        file = github_api(\\\"GET\\\", f\\\"/repos/{owner}/{repo}/contents/HARE.md?ref={base_ref}\\\", token)\\n        hare_md = base64.b64decode(file.get(\\\"content\\\") or \\\"\\\").decode(\\\"utf-8\\\", errors=\\\"replace\\\")\\n    except Exception:\\n        hare_md = \\\"\\\"\"\n    }\n  ]\n}"
+}

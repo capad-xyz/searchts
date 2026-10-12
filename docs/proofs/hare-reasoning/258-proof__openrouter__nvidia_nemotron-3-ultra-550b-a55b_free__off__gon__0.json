@@ -1,0 +1,47 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 10343,
+  "completion_tokens": 1178,
+  "total_tokens": 11521,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 332,
+  "answer_chars": 3830,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "{\n  \"effort\": \"low\",\n  \"summary\": \"Hare chain reorder: slow models first, fast ones as fallbacks. Tests updated to match.\",\n  \"aim\": \"Change the provider chain order so OpenRouter and Nous models run before Groq and Gemini, per the owner's call that slower reviewers catch things the fast ones miss.\",\n  \"case\": \"The diff is a focused chain reorder with matching test updates. The new order is documented in PLAN.md and implemented in hare_r1.py. Tests assert the new sequence and the drop-key behavior. No other code paths call build_provider_chain with different expectations. Safe to ship.\",\n  \"findings\": [\n    {\n      \"sev\": \"skip\",\n      \"path\": \"PLAN.md\",\n      \"line\": 265,\n      \"issue\": \"The failover comment still references Groq as first in the list ('Groq stays first because a 413 on a big prompt costs under a second') but the new order puts Groq after Nous.\",\n      \"short\": \"Comment says Groq stays first but code puts it third.\",\n      \"fix\": \"later\",\n      \"change\": \"Update the comment to match the new order: Groq is now a fallback after Nous.\",\n      \"original\": \"    - **Failover (fixed list, not a router), as of 2026-10-04 (#236, #247, #255, #258):** OpenRouter `qwen/qwen3.8-27b:free` \u2192 `stealth/space-bunny-alpha` (last free day) \u2192 `thinkingmachines/inkling-small:free` \u2192 `thinkingmachines/inkling:free` \u2192 `google/gemma-4-31b-it:free` \u2192 Nous `stealth/space-bunny-alpha` \u2192 `meituan/longcat-2.5-preview:free` \u2192 `poolside/laguna-s-2.1:free` \u2192 Groq `openai/gpt-oss-120b` \u2192 Gemini `gemini-3.1-flash-lite` \u2192 `gemini-3.5-flash` \u2192 Zen `space-bunny-free`. Owner's call: the slower models first, the fast hops (Groq, Gemini) as fallbacks; they answer in seconds and have missed what a slower reviewer caught on the same PR. The ledger cannot rank hops yet: its notes mostly predate the 2026-10-04 fixes.\",\n      \"suggestion\": \"    - **Failover (fixed list, not a router), as of 2026-10-04 (#236, #247, #255, #258):** OpenRouter `qwen/qwen3.8-27b:free` \u2192 `stealth/space-bunny-alpha` (last free day) \u2192 `thinkingmachines/inkling-small:free` \u2192 `thinkingmachines/inkling:free` \u2192 `google/gemma-4-31b-it:free` \u2192 Nous `stealth/space-bunny-alpha` \u2192 `meituan/longcat-2.5-preview:free` \u2192 `poolside/laguna-s-2.1:free` \u2192 Groq `openai/gpt-oss-120b` \u2192 Gemini `gemini-3.1-flash-lite` \u2192 `gemini-3.5-flash` \u2192 Zen `space-bunny-free`. Owner's call: the slower models first, the fast hops (Groq, Gemini) as fallbacks; they answer in seconds and have missed what a slower reviewer caught on the same PR. The ledger cannot rank hops yet: its notes mostly predate the 2026-10-04 fixes. Groq 413s on a big prompt in under a second, so sitting lower costs nothing.\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 1362,\n      \"issue\": \"The comment says 'Groq after Nous (it 413s on a big prompt anyway)' but the code order is openrouter, nous, groq, gemini, zen \u2014 so Groq is after Nous, which matches. However the comment also says 'Gemini after Groq' which matches. The comment is accurate but could be clearer that the 413 behavior is why Groq as fallback costs nothing.\",\n      \"short\": \"Comment explains Groq fallback rationale; accurate but slightly redundant.\",\n      \"fix\": \"no\",\n      \"change\": \"\",\n      \"original\": \"    # Order is the owner's call (2026-10-04), not the ledger's: the ledger's\\n    # notes mostly predate the fixes that landed that day, so it cannot rank\\n    # hops yet. OpenRouter and Nous go first because their models take their\\n    # time with the diff. Groq and Gemini answer in seconds and the owner has\\n    # watched them miss what a slower reviewer caught on the same PR, so both\\n    # are fallbacks: Groq after Nous (it 413s on a big prompt anyway), Gemini\\n    # after Groq. The ledger's per-hop scores decide the order later.\",\n      \"suggestion\": \"\"\n    }\n  ]\n}"
+}

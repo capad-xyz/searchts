@@ -1,0 +1,33 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "xhigh",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "xhigh",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 70.8,
+ "steps": 16,
+ "answer_part": "text",
+ "reasoning_chars": 1624,
+ "usage": {
+  "prompt_tokens": 48891,
+  "completion_tokens": 2695,
+  "completion_tokens_details": {
+   "reasoning_tokens": 9630
+  }
+ },
+ "answer": "Hopping through the failover shuffle, checking the new order holds up.The first peek landed in the wrong burrow, so I'll track down the right files.Confirmed this is the slow-hops reorder, now digging for anything it missed.I've mapped the exact lines, now weighing what actually deserves a flag.{\"effort\": \"low\", \"summary\": \"Slow reviewers first, speedsters on fallback duty. \ud83d\udc22\ud83d\udca8\", \"aim\": \"Put OpenRouter and Nous first because slower reviews catch what fast hops miss.\", \"case\": \"The code switch and its tests line up neatly, yet two spec lines still describe the old order and now contradict the new list.\", \"findings\": [{\"sev\": \"real\", \"path\": \"AGENTS.md\", \"line\": null, \"issue\": \"The Trigger line still says Groq then OpenRouter then Nous, while the code now runs OpenRouter then Nous then Groq. The spec claims an order the code no longer keeps.\", \"short\": \"AGENTS.md Trigger still orders Groq first, contradicting the new OpenRouter then Nous then Groq chain in code\", \"fix\": \"later\", \"change\": \"Update the Trigger brain order and slug list to match the new chain.\"}, {\"sev\": \"real\", \"path\": \"PLAN.md\", \"line\": null, \"issue\": \"The Space Bunny bullet still says last on Nous, while the new failover line puts Bunny first on Nous and second on OpenRouter. The two bullets contradict each other.\", \"short\": \"PLAN still says Bunny is last on Nous while the new failover line lists it first there\", \"fix\": \"later\", \"change\": \"Rewrite the Bunny bullet to state the first on Nous, second on OpenRouter spot until 2026-10-05.\"}, {\"sev\": \"skip\", \"path\": \"scripts/hare_r1.py\", \"line\": null, \"issue\": \"The Groq catalog comment still says gpt-oss-120b stays first, and the Nous note still has Bunny last. Both describe the pre-258 order.\", \"short\": \"Groq catalog comment still says stays first and Nous note still has Bunny last after the reorder\", \"fix\": \"later\", \"change\": \"Refresh the Groq and Nous catalog comments to name the post-258 seats.\"}]}"
+}

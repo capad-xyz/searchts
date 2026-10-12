@@ -1,0 +1,33 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 163.2,
+ "steps": 3,
+ "answer_part": "text",
+ "reasoning_chars": 2021,
+ "usage": {
+  "prompt_tokens": 38098,
+  "completion_tokens": 1362,
+  "completion_tokens_details": {
+   "reasoning_tokens": 13757
+  }
+ },
+ "answer": "Hare review queued; inspecting the diff for intent misses.Spotted a stale duplicate rule block; checking the workflow details to lock the finding lines.{\"effort\":\"medium\",\"summary\":\"A snug new burrow for Hare's hard-won lessons. \ud83d\udc07\\n1. **ledger** low scores with reasons become newest-first rules in HARE.md\\n2. **prompt** hare_r1.py loads HARE.md next to AGENTS.md with a cap\\n3. **workflow** weekly ledger job writes and ships HARE.md\\n4. **docs** seeds HARE.md plus the same block in AGENTS.md\",\"aim\":\"Give Hare its own file for owner-taught rules so low scores reshape future notes without churning AGENTS.md.\",\"case\":\"The ledger logic, capped prompt read, fail-open fetch, and tests look solid. The AGENTS.md twin of the rules block claims weekly rewrites that only HARE.md receives, so the two files contradict after one run.\",\"findings\":[{\"sev\":\"real\",\"path\":\"AGENTS.md\",\"line\":26,\"issue\":\"AGENTS.md says each ledger run rewrites this block, yet the workflow runs the ledger with --rules HARE.md so only HARE.md changes. The AGENTS.md copy freezes at none-yet while HARE.md learns, leaving two files that disagree.\",\"short\":\"AGENTS.md block promises weekly rewrites the ledger never gives it, freezing a stale twin of HARE.md.\",\"fix\":\"later\",\"change\":\"Delete the AGENTS.md block or replace it with a pointer to HARE.md.\"},{\"sev\":\"skip\",\"path\":\"HARE.md\",\"line\":10,\"issue\":\"HARE.md retires a rule by resolve or edit while AGENTS.md in the same diff retires by edit or delete. One block should teach one exit.\",\"short\":\"HARE.md and AGENTS.md in this diff teach different retire steps for the same rules block, leaving readers unsure.\",\"fix\":\"later\",\"change\":\"Use one retirement sentence in both places, matching delete or rescore drops the line.\"}]}"
+}

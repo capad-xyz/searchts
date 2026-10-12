@@ -1,0 +1,125 @@
+{
+  "about": "Five merged (or closed) PRs whose ground truth is Hare's own ledger, docs/hare-ledger.json, not a third-party bot. Each case lists what Hare posted on that PR and what became of it, so a rerun can be scored against a known truth rather than against another model's opinion. Chosen because between them they carry the three outcomes a proof has to separate: a real finding that was right and got fixed or resolved (#245, #247, #248), a real finding the owner judged wrong (#258), and a real finding on a PR that closed unmerged (#237). Every case is scored the same way scripts/hare_eval.py scores docs/hare-eval-cases.json: a finding catches an expected issue when it names the same file (and a line within 25, when one is given) and its text carries one of the words.",
+  "built": "2026-10-10",
+  "truth_from": "docs/hare-ledger.json (built by scripts/hare_ledger.py from the notes, the Since lines and resolved threads)",
+  "cases": [
+    {
+      "id": "245-proof",
+      "pr": 245,
+      "head": "944ef4d",
+      "note": "One real finding, judged right, thread resolved. The ledger's `resolved` fate means the finding's thread was resolved on GitHub.",
+      "expect": [
+        {
+          "path": "scripts/hare_r1.py",
+          "line": 842,
+          "words": ["stitched", "unbound", "assigned", "tail", "restart", "not longer"],
+          "what": "`stitched` is never assigned when the restart is not longer than the kept findings, so the later read raises UnboundLocalError",
+          "by": "Hare",
+          "fate": "resolved",
+          "verdict": "real"
+        }
+      ]
+    },
+    {
+      "id": "247-proof",
+      "pr": 247,
+      "head": "2d26fa8",
+      "note": "One real finding, judged right, thread resolved.",
+      "expect": [
+        {
+          "path": "scripts/hare_r1.py",
+          "line": 1355,
+          "words": ["chain order", "order", "provider", "scope", "plan"],
+          "what": "the provider chain order changes without a PLAN entry, which the repo's scope rules call out",
+          "by": "Hare",
+          "fate": "resolved",
+          "verdict": "real"
+        }
+      ]
+    },
+    {
+      "id": "248-proof",
+      "pr": 248,
+      "head": "031b6ff",
+      "note": "One real finding, judged right, fixed by the author. The second row is a skip the ledger kept open; it is listed so a rerun that reproduces it is not counted as a false alarm.",
+      "expect": [
+        {
+          "path": "scripts/hare_ledger.py",
+          "words": ["anchor", "apply_rules", "## R1", "header", "em dash", "appended"],
+          "what": "`apply_rules` anchors on a header string that does not match the real header, so the block lands at the end of the file",
+          "by": "Hare",
+          "fate": "fixed",
+          "verdict": "real"
+        },
+        {
+          "path": ".github/workflows/hare-ledger.yml",
+          "line": 27,
+          "words": ["title", "AGENTS.md", "HARE.md", "mismatch"],
+          "what": "the title says AGENTS.md and the change moves the rules to HARE.md",
+          "by": "Hare",
+          "fate": "open",
+          "verdict": "skip"
+        }
+      ]
+    },
+    {
+      "id": "258-proof",
+      "pr": 258,
+      "head": "99fb7ef",
+      "note": "The one case with a known WRONG finding. The ledger records `wrong`, so any run that reproduces it as `real` is making the same mistake again, and any run that does not reproduce it has removed a false alarm. This is the row that separates a better review from a different review.",
+      "expect": [
+        {
+          "path": "tests/test_hare_r1.py",
+          "words": ["four hops", "three calls", "n1", "n2", "g1", "chain order", "asserts"],
+          "what": "the test asserts three calls but the chain order fires four hops before g1 answers",
+          "by": "Hare",
+          "fate": "wrong",
+          "verdict": "real"
+        },
+        {
+          "path": "PLAN.md",
+          "words": ["line length", "80", "long", "character", "readab"],
+          "what": "the added failover line is over 80 characters",
+          "by": "Hare",
+          "fate": "open",
+          "verdict": "skip"
+        },
+        {
+          "path": "scripts/hare_r1.py",
+          "line": 1356,
+          "words": ["line length", "80", "comment", "character", "long"],
+          "what": "the new comment is over 80 characters",
+          "by": "Hare",
+          "fate": "open",
+          "verdict": "skip"
+        }
+      ]
+    },
+    {
+      "id": "237-proof",
+      "pr": 237,
+      "head": "bbce985",
+      "note": "Closed unmerged, so every finding's fate is `dropped`. The real one is still the known truth for what was wrong in that diff; the drops are about what happened to the PR, not about whether the finding was right.",
+      "expect": [
+        {
+          "path": "scripts/hare_r1.py",
+          "line": 272,
+          "words": ["fence", "regex", "backslash", "triple backticks", "dead code", "json_objects"],
+          "what": "the fence regex matches a literal backslash, so the fence path is dead code and the test passes only because json_objects covers the case",
+          "by": "Hare",
+          "fate": "dropped",
+          "verdict": "real"
+        },
+        {
+          "path": "tests/test_hare_r1.py",
+          "line": 789,
+          "words": ["co_varnames", "hop_override", "inspects", "will pass even if", "not calling"],
+          "what": "the test inspects co_varnames instead of calling the function, so it passes even if the parameter is ignored",
+          "by": "Hare",
+          "fate": "dropped",
+          "verdict": "skip"
+        }
+      ]
+    }
+  ]
+}

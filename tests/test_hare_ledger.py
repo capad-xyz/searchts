@@ -88,7 +88,7 @@ def test_pr_rows_follows_a_finding_from_note_to_note() -> None:
         {"body": NOTE_2, "submitted_at": "2026-10-03T21:00:00Z", "html_url": "u2"},
     ]
     comments = [
-        {"body": "/hare score 2 thin on the tests", "user": {"login": "owner"}, "created_at": "2026-10-03T22:00:00Z"},
+        {"body": "/hare score 2 thin on the tests", "user": {"login": "capad-xyz"}, "created_at": "2026-10-03T22:00:00Z"},
         {"body": hare_r1.needed_body("no hop answered"), "user": {"login": "searchts-hare[bot]"}, "created_at": "2026-10-03T19:00:00Z"},
     ]
     threads = [{"isResolved": True, "path": "scripts/b.py", "line": 7, "comments": {"nodes": [{"body": hare_r1.TOKEN}]}}]
@@ -96,7 +96,7 @@ def test_pr_rows_follows_a_finding_from_note_to_note() -> None:
     fates = {f["loc"]: f["fate"] for f in e["findings"]}
     assert fates == {"scripts/a.py:12": "fixed", "docs/x.md:3": "still applies", "scripts/b.py:7": "resolved"}
     assert len(e["notes"]) == 2 and e["notes"][0]["hop"].startswith("gemini") and e["notes"][1]["findings"] == 1
-    assert e["scores"] == [{"score": 2, "text": "thin on the tests", "by": "owner", "at": "2026-10-03T22:00:00Z"}]
+    assert e["scores"] == [{"score": 2, "text": "thin on the tests", "by": "capad-xyz", "at": "2026-10-03T22:00:00Z"}]
     s = hare_ledger.summarize([e])
     assert s["real"] == 1 and s["real_fixed_or_resolved"] == 1 and s["score_avg"] == 2.0 and s["cut_notes"] == 1
     assert e["needed"] == 1 and s["needed"] == 1  # the needed comment is a failed hop, not a note
@@ -111,7 +111,7 @@ def test_the_owner_word_on_a_finding_beats_the_thread_and_a_closed_pr_drops_the_
     assert hare_r1.is_score("/hare fate scripts/a.py:12 wontfix owner's call")  # the Action records it, no note
     reviews = [{"body": NOTE_1, "submitted_at": "2026-10-03T20:00:00Z", "html_url": "u1"}]
     threads = [{"isResolved": True, "path": "scripts/a.py", "line": 12, "comments": {"nodes": [{"body": hare_r1.TOKEN}]}}]
-    comments = [{"body": "/hare fate scripts/a.py:12 wrong the test passes", "user": {"login": "owner"}, "created_at": "2026-10-03T22:00:00Z"}]
+    comments = [{"body": "/hare fate scripts/a.py:12 wrong the test passes", "user": {"login": "capad-xyz"}, "created_at": "2026-10-03T22:00:00Z"}]
     e = hare_ledger.pr_rows({"number": 7, "state": "closed"}, reviews, comments, threads)
     fates = {f["loc"]: f["fate"] for f in e["findings"]}
     assert fates == {"scripts/a.py:12": "wrong", "docs/x.md:3": "dropped"}  # the word beats the resolved thread; closed takes the rest
@@ -126,7 +126,7 @@ def test_the_owner_word_on_a_finding_beats_the_thread_and_a_closed_pr_drops_the_
 
 def test_the_ledger_primes_the_next_note(tmp_path, monkeypatch) -> None:
     reviews = [{"body": NOTE_1, "submitted_at": "2026-10-03T20:00:00Z"}, {"body": NOTE_2, "submitted_at": "2026-10-03T21:00:00Z"}]
-    comments = [{"body": "/hare score 2 thin on the tests", "user": {"login": "owner"}, "created_at": "2026-10-03T22:00:00Z"}]
+    comments = [{"body": "/hare score 2 thin on the tests", "user": {"login": "capad-xyz"}, "created_at": "2026-10-03T22:00:00Z"}]
     e = hare_ledger.pr_rows({"number": 7, "title": "t", "state": "open"}, reviews, comments, [])
     ledger = {"entries": [e]}
     path = tmp_path / "hare-ledger.json"
