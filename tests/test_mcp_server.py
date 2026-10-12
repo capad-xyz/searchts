@@ -246,6 +246,13 @@ def test_create_server_builds_against_the_installed_sdk():
         "fetch_asset",
         "grab_site",
         "transcribe",
+        # The three login verbs. read_url's login-wall error names them, so
+        # without them that error asks the agent to do something it has no tool
+        # to do. login_status is read-only; login_signin and login_kill change
+        # what searchts holds and each says so in its own description.
+        "login_status",
+        "login_signin",
+        "login_kill",
     }
 
 
@@ -934,9 +941,14 @@ def test_the_receipts_key_set_is_pinned(monkeypatch):
 
     assert set(json.loads(mcp_server.read_url("https://x.test/a"))) == {
         "url", "final_url", "fetched_at", "backend", "status", "chars",
-        "authenticated", "text", "more", "pages",
+        # `login_via` joins `authenticated` and answers a different question:
+        # not "did this carry a login" but "where did that login come from", which
+        # is what tells an agent whether the next read will prompt. Empty on an
+        # anonymous read.
+        "authenticated", "login_via", "text", "more", "pages",
     }
     assert set(json.loads(mcp_server.read_url("https://x.test/a", page_items=2))) == {
         "url", "final_url", "fetched_at", "backend", "status", "authenticated",
+        "login_via",
         "offset", "total_items", "has_more", "next_cursor", "items",
     }

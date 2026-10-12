@@ -54,24 +54,9 @@ _domain_matches = sc._domain_matches
 # ── fixtures ───────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
-def tmp_home(tmp_path, monkeypatch):
-    """Redirect every home-ish variable session_cookies reads into tmp_path.
-
-    HOME alone is not enough on Windows: ntpath.expanduser honours USERPROFILE
-    and ignores HOME, so a test that only set HOME would create
-    ~/.searchts/cookies/owned.json in the real user's profile.
-    """
-    home = tmp_path / "home"
-    appdata = home / "AppData" / "Roaming"
-    localappdata = home / "AppData" / "Local"
-    for d in (home, appdata, localappdata):
-        d.mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(home))
-    monkeypatch.setenv("APPDATA", str(appdata))
-    monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
-    return home
+# `tmp_home` now lives in tests/conftest.py so every file gets it. It used to
+# be defined here, and that is exactly how the other eight files that read a
+# URL were left able to reach the real store.
 
 
 # Every directory _firefox_profile_roots may consult for these two browsers, as

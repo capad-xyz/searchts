@@ -43,3 +43,30 @@ def reset_jina_spent():
     unlocker._jina_spent = False
     yield
     unlocker._jina_spent = False
+
+
+@pytest.fixture
+def tmp_home(tmp_path, monkeypatch):
+    """Redirect every home-ish variable the cookie code reads into tmp_path.
+
+    Promoted out of test_session_cookies.py because ``searchts read`` now
+    consults the owned store, so any test that reads a URL can reach the real
+    one -- and, worse, write to it. Nine files could, and two of them leaked
+    into each other during a full run, with the assertion that failed naming a
+    completely different host.
+
+    HOME alone is not enough on Windows: ntpath.expanduser honours USERPROFILE
+    and ignores HOME, so a test that only set HOME would create
+    ~/.searchts/cookies/owned.json in the real user's profile. That happened
+    twice during manual verification before this was written down.
+    """
+    home = tmp_path / "home"
+    appdata = home / "AppData" / "Roaming"
+    localappdata = home / "AppData" / "Local"
+    for d in (home, appdata, localappdata):
+        d.mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("APPDATA", str(appdata))
+    monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
+    return home

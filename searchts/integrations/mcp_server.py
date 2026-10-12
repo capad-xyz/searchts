@@ -168,6 +168,52 @@ def create_server():
         n = max(1, min(int(max_results or 5), 25))
         return web_search(query, n)
 
+    # ── logins ──────────────────────────────────────────────────────────────
+    # read_url's login-wall error names these by name. A tool list that says
+    # "ask the user to sign in" with no way to sign in is an instruction the
+    # agent cannot carry out, so the three verbs that change a site's state are
+    # exposed rather than left for the user to find in a shell.
+
+    @mcp.tool(
+        name="login_status",
+        description=(
+            "What searchts holds for logged-in reads: which sites are kept, "
+            "whether this session may copy logins, which sites it has copied, "
+            "and where the scratch folder is. Call this when a read_url error "
+            "mentions a login, to tell the user what searchts already has "
+            "before asking for anything. Returns JSON; never contains a cookie "
+            "value."
+        ),
+    )
+    def login_status_tool() -> str:
+        return login_status()
+
+    @mcp.tool(
+        name="login_signin",
+        description=(
+            "Sign in once for a site, in a browser searchts opens, and keep "
+            "that login. Nothing is copied from the user's own browser. This "
+            "is the way past a login wall when the user has no browser session "
+            "worth copying, or refuses to have one read. Requires the user to "
+            "be at the machine to sign in. Returns 'Error: ...' on failure."
+        ),
+    )
+    def login_signin_tool(url: str, browser: str = "chrome") -> str:
+        return login_signin(url, browser=browser)
+
+    @mcp.tool(
+        name="login_kill",
+        description=(
+            "Delete searchts's own saved login for one site, so the next read "
+            "of it asks again. Use when a read_url error says the saved login "
+            "has expired. Does NOT delete the cookies in the user's own "
+            "Firefox or Chrome unless also_browser is true, because those are "
+            "the user's and they did not ask for them to be removed."
+        ),
+    )
+    def login_kill_tool(url: str, also_browser: bool = False) -> str:
+        return login_kill(url, also_browser=also_browser)
+
     @mcp.tool(
         name="fetch_asset",
         description=(
@@ -222,6 +268,103 @@ def create_server():
         )
 
     return mcp
+
+
+def login_status() -> str:
+    """What searchts holds for logged-in reads. Provenance only, never a value."""
+    from searchts.login_store import audit
+
+    a = audit()
+    return json.dumps(
+        {
+            "kept": a.kept,
+            "session_copy_granted": a.session_copy_granted,
+            "session_copied_sites": a.session_copied_sites,
+            "scratch": a.scratch,
+            "store_dir": a.store_dir,
+        },
+        ensure_ascii=False,
+        indent=2,
+    )
+
+
+def login_signin(url: str, browser: str = "chrome") -> str:
+    """Sign in once and keep it. The user's own browser is never read."""
+    from searchts.login_store import host_of, keep
+    from searchts.session_cookies import CookieReadError
+    from searchts.signin_browser import signin
+
+    host = host_of(url)
+    if not host:
+        return f"Error: {url!r} is not a site searchts can file a login under."
+    try:
+        source = signin(url, browser=browser)
+    except CookieReadError as e:
+        return f"Error: {e}"
+    except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
+        return _unexpected("login_signin", e)
+    out = keep(url, source.cookies, browser=browser)
+    return json.dumps(
+        {"host": host, "kept": True, "cookies": out.count, "why": out.why},
+        ensure_ascii=False,
+    )
+
+
+def login_kill(url: str, also_browser: bool = False) -> str:
+    """Drop searchts's copy of one site's login."""
+    from searchts.login_store import host_of, kill
+
+    host = host_of(url)
+    if not host:
+        return f"Error: {url!r} is not a site searchts can file a login under."
+    try:
+        out = kill(url, browser_copies=bool(also_browser))
+    except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
+        return _unexpected("login_kill", e)
+    return json.dumps(
+        {
+            "host": host,
+            "removed_from_store": out.removed_from_store,
+            "scratch_removed": len(out.scratch_removed),
+            "browser_copies_touched": bool(also_browser),
+            "why": out.why,
+        },
+        ensure_ascii=False,
+    )
+
+
+def _login_wall_error(url: str, exc: BaseException, *, had_cookies: bool) -> str:
+    """Name the next step for a login wall, in the form an agent can act on.
+
+    Its own function because this is the one place the MCP surface has to
+    answer a question rather than report a fact: "the page is behind a login" is
+    a reason, and the agent's problem is what to do next. The right next step
+    differs, so one generic sentence would be wrong in one of these two cases:
+
+      had a jar, still a wall    the session expired; re-authenticate
+      no jar, nothing kept       offer the two ways to get a login
+    """
+    from searchts.login_store import host_of, kept
+
+    host = host_of(url)
+    base = f"Error: {exc}\n"
+    if not host:
+        return base
+    if had_cookies or kept(url):
+        return base + (
+            f"  {host} had a login sent and the site still returned its login "
+            f"page, so that saved login has expired. Ask the user to "
+            f"re-authenticate: call `login_kill` with host {host!r}, then "
+            f"`login_signin` for {url}."
+        )
+    return base + (
+        f"  {host} is behind a login and this read had none. Two ways forward:\n"
+        f"    1. Ask the user to approve one copy for this session, then "
+        f"re-call read_url with cookies_from_browser set to a Firefox-family "
+        f"browser (firefox, zen, librewolf).\n"
+        f"    2. Ask the user to sign in once: call `login_signin` with url "
+        f"{url}. Then re-call read_url."
+    )
 
 
 def _unexpected(tool: str, exc: BaseException) -> str:
@@ -421,7 +564,12 @@ def read_url(
         return blocked
 
     jar: Optional[List[CookieRecord]] = None
-    if cookies or cookies_from_browser or cdp_port:
+    # Provenance of whatever produced the jar, so the receipt can say where the
+    # login came from without naming a value. Empty means an anonymous read.
+    login_via = ""
+    if cookies or cdp_port:
+        # An explicit file or port is the caller pointing at something
+        # specific, so it keeps the old behaviour exactly.
         from searchts.session_cookies import CookieReadError, resolve_cookies
 
         try:
@@ -435,6 +583,43 @@ def read_url(
             return f"Error: cookies: {e}"
         except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
             return _unexpected("read_url", e)
+    else:
+        # No explicit source: the store decides, exactly as `searchts read`
+        # does. A kept login is used with no prompt, which is the point of
+        # keeping it. A browser named without a grant is refused here rather
+        # than silently reading that profile's cookies.
+        from searchts.login_store import SessionConsentNeeded, prepare
+        from searchts.session_cookies import CookieReadError
+
+        # Bound before the try: the anonymous-read path returns from inside
+        # `except CookieReadError` with jar already None, and a name only
+        # assigned on the success path would be unbound at the line after.
+        source = None
+        try:
+            source = prepare(url, browser=cookies_from_browser or "")
+        except SessionConsentNeeded as e:
+            # This is the answer an agent needs most and had no way to get: the
+            # read stopped because it wanted a login, and here is the exact
+            # command that gets it one.
+            return (
+                f"Error: this read needs a login and did not have one.\n{e}\n"
+                f"Either ask the user to approve one copy for this session, or "
+                f"have them sign in once with the `login_signin` tool, then "
+                f"call read_url again."
+            )
+        except CookieReadError as e:
+            if not cookies_from_browser:
+                # Not kept and nothing to copy: an anonymous read is still a
+                # valid read. Only a login wall will make this matter, and the
+                # unlocker's own error says so.
+                jar = None
+            else:
+                return f"Error: cookies: {e}"
+        except Exception as e:  # noqa: BLE001 - MCP contract: never a raise
+            return _unexpected("read_url", e)
+        if source is not None and getattr(source, "count", 0) > 0:
+            jar = list(source.cookies)
+            login_via = getattr(source, "via", "") or "login"
 
     # One 403 must not disable Jina for every later tool call on this server.
     unlocker.reset_jina_spend()
@@ -455,6 +640,11 @@ def read_url(
         else:
             pages = unlocker.read_pages(url, max_pages, **extra)
     except unlocker.UnlockerError as e:
+        # A login wall on an anonymous read is the one failure where the reason
+        # is not the whole answer. Without the next step, an agent retries the
+        # same call forever; with it, the retry is a different tool.
+        if any("login-wall" in why for _, why in e.attempts):
+            return _login_wall_error(url, e, had_cookies=jar is not None)
         return f"Error: {e}"
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
         return _unexpected("read_url", e)
@@ -490,6 +680,7 @@ def read_url(
                 "backend": result.backend,
                 "status": result.status,
                 "authenticated": result.authenticated,
+                "login_via": login_via,
                 "offset": page["offset"],
                 "total_items": page["total_items"],
                 "has_more": page["has_more"],
@@ -512,6 +703,12 @@ def read_url(
             # are indistinguishable to the agent, which is the difference
             # between "here is your Drive" and "here is Drive's public page".
             "authenticated": result.authenticated,
+            # Where the login came from, never a value: "owned store" means a
+            # kept login and no browser opened, "sign-in browser (chrome)" means
+            # the user signed in this session, anything else is a scratch copy.
+            # Without it an agent cannot tell a kept login from a one-off copy,
+            # and so cannot tell whether the next read will prompt.
+            "login_via": login_via,
             "text": text,
             # `next_url` is deliberately NOT here. It is page-authored: it comes
             # from a <link rel=next> or a "Next page" anchor, and it already

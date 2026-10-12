@@ -1,11 +1,29 @@
 import inspect
 import json
+import os
 
 import pytest
 
 from searchts import cli
 from searchts.session_cookies import CookieReadError, CookieRecord, CookieSource
 from searchts.unlocker import FetchResult
+
+
+@pytest.fixture
+def temp_home(tmp_path, monkeypatch):
+    """Point the cookie store somewhere disposable.
+
+    Needed because `read` now consults the store, so a test that does not
+    isolate HOME can pick up a real saved login for the same host. On Windows
+    that means USERPROFILE, which is what `expanduser` reads -- setting HOME
+    alone leaves the real profile in play.
+    """
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.setattr(os.path, "expanduser", lambda p: str(home))
+    return home
 
 
 def _run(monkeypatch, argv):
@@ -30,7 +48,17 @@ def test_read_without_cookie_flag_passes_none(monkeypatch):
     assert seen["cookies"] is None
 
 
-def test_read_browser_cookie_line_has_no_value(monkeypatch, capsys):
+def test_read_browser_cookie_line_has_no_value(monkeypatch, capsys, temp_home):
+    """A copied read reports provenance, and never a value.
+
+    Copying now needs the session's one approval, so the grant is set up here
+    rather than only at the `login` verb. That is the behaviour change this
+    branch exists for: the read that touches a real browser is the read that
+    asks.
+    """
+    from searchts.login_store import grant_session_copy
+
+    grant_session_copy()
     record = CookieRecord("session", "SECRET-VALUE", ".example.com")
     source = CookieSource(
         site="https://example.com", cookies=[record], browser="zen",
@@ -43,12 +71,39 @@ def test_read_browser_cookie_line_has_no_value(monkeypatch, capsys):
 
     captured = capsys.readouterr()
     assert captured.err.count("cookies:") == 1
-    assert "zen" in captured.err
     assert "SECRET-VALUE" not in captured.out
     assert "SECRET-VALUE" not in captured.err
+    # Provenance names the source, not the browser the user named.
+    assert "browser" in captured.err
 
 
-def test_cookie_read_error_is_one_clean_line(monkeypatch, capsys):
+def test_read_without_the_session_approval_refuses_to_copy(monkeypatch, capsys, temp_home):
+    """The whole point: a read that copies cookies must ask first.
+
+    No grant, so the copy must not happen at all, and the reason must be the
+    approval rather than a bare failure an agent would retry forever.
+    """
+    called = []
+    monkeypatch.setattr(
+        "searchts.session_cookies.for_site",
+        lambda site, browser: called.append(site),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, ["read", "https://example.com", "--cookies-from-browser", "zen"])
+
+    assert exc.value.code == 3
+    assert called == [], "copied despite no session approval"
+    err = capsys.readouterr().err
+    assert "approval once per session" in err
+    assert "Traceback" not in err
+
+
+def test_cookie_read_error_is_one_clean_line(monkeypatch, capsys, temp_home):
+    from searchts.login_store import grant_session_copy
+
+    grant_session_copy()
+
     def fail(site, browser):
         raise CookieReadError("no cookies for example.com")
 
@@ -61,6 +116,28 @@ def test_cookie_read_error_is_one_clean_line(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.err.count("no cookies for example.com") == 1
     assert "Traceback" not in captured.err
+
+
+def test_kept_login_is_used_by_a_bare_read_with_no_flag(monkeypatch, capsys, temp_home):
+    """State 1, the reason a login is kept: no browser opens and no flag needed.
+
+    The same command with no `--cookies-from-browser` used to read
+    anonymously while a saved login sat unused. That was the gap this closes.
+    """
+    from searchts.login_store import keep
+    from searchts.session_cookies import CookieRecord as _C
+
+    keep("example.com", [_C(name="sid", value="KEPT-VALUE", domain="example.com", secure=True)])
+    seen = {}
+    monkeypatch.setattr("searchts.unlocker.fetch", _fake_fetch(seen))
+
+    _run(monkeypatch, ["read", "https://example.com"])
+
+    assert seen["cookies"], "kept login was ignored by a bare read"
+    captured = capsys.readouterr()
+    assert "already kept" in captured.err
+    assert "KEPT-VALUE" not in captured.err
+    assert "KEPT-VALUE" not in captured.out
 
 
 def test_chromium_cookie_error_explains_cdp(monkeypatch, capsys):

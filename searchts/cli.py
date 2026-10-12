@@ -1770,6 +1770,13 @@ def _cmd_read(args):
         # is the whole question.
         if e.hint:
             print(f"  hint: {e.hint}", file=sys.stderr)
+        # A login wall on an anonymous read is the one failure where the
+        # reason is not the whole answer: the page exists, it is just
+        # behind a login. Naming the commands here is what turns a wall into
+        # something an agent can act on, and it costs one line on a path
+        # that has already failed.
+        if any("login-wall" in why for _, why in e.attempts):
+            _print_login_wall_hint(args.url)
         sys.exit(1)
 
     # Surface prompt-injection findings to stderr so stdout stays clean content.
@@ -1839,33 +1846,93 @@ def _read_command_proxy(args):
 
 
 def _read_command_cookies(args):
-    """Resolve opt-in cookies for one read, reporting only safe provenance.
+    """Resolve cookies for one read, reporting only safe provenance.
 
-    A thin wrapper: the rules live in ``session_cookies.resolve_cookies`` so
-    the MCP tool resolves the same jar, with the same scoping and the same
-    messages. What is added here is the CLI's own behaviour around it -- report
-    where the cookies came from without naming a value, and exit non-zero when
-    there is nothing to send.
+    The rules live in ``login_store`` so the read path, the ``login`` verbs and
+    the MCP tool cannot reach different conclusions about the same site.
+
+    Two routes, and the difference is whether the user asked for a browser:
+
+    * No browser named. The store decides. A kept site is used with no prompt
+      at all, which is the entire point of keeping it. A site that is not kept
+      is *not* silently escalated: read falls back to anonymous and, if that
+      hits a login, the failure names the exact ``login`` command to run.
+    * A browser named. That is the user reaching for a login that is not kept,
+      so it is the copy route, and the session's one approval is required. It
+      is asked for exactly here rather than per URL.
     """
-    from searchts.session_cookies import CookieReadError, resolve_cookies
+    from searchts.login_store import (
+        SessionConsentNeeded,
+        host_of,
+        prepare,
+    )
+    from searchts.session_cookies import CookieReadError
 
+    browser = getattr(args, "cookies_from_browser", None) or ""
+    cookie_file = getattr(args, "cookies", None) or ""
+    cdp_port = getattr(args, "cdp_port", None)
+
+    # Explicit, non-browser sources stay exactly as they were: a file or a port
+    # is already the user pointing at something specific.
+    if cookie_file or cdp_port:
+        from searchts.session_cookies import resolve_cookies
+
+        try:
+            records = resolve_cookies(
+                args.url, cookies=cookie_file,
+                cookies_from_browser=browser, cdp_port=cdp_port,
+            )
+        except CookieReadError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"could not read cookies: {e}", file=sys.stderr)
+            sys.exit(1)
+        if not records:
+            return None
+        print(f"cookies: {_cookie_provenance(args, len(records))}", file=sys.stderr)
+        return records
+
+    # No explicit source: let the state machine decide what this site is.
+    host = host_of(args.url)
     try:
-        records = resolve_cookies(
-            args.url,
-            cookies=getattr(args, "cookies", None) or "",
-            cookies_from_browser=getattr(args, "cookies_from_browser", None) or "",
-            cdp_port=getattr(args, "cdp_port", None),
-        )
+        if browser:
+            # Whether this browser *can* be read is settled before the consent
+            # question, not after. A Chromium cookie file is locked, so asking
+            # the user to approve a copy that cannot happen is a question whose
+            # answer does not matter, and it burns the one approval the session
+            # was going to get for a site that could have used it.
+            source = prepare(args.url, browser=browser)
+        else:
+            source = prepare(args.url)
+    except SessionConsentNeeded as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(3)
     except CookieReadError as e:
+        # A site that is not kept and has nothing to copy is not an error
+        # here. An anonymous read is still a valid read; only a login wall
+        # will make the user care, and that names the command to run.
+        if not browser:
+            return None
         print(str(e), file=sys.stderr)
         sys.exit(1)
-    except Exception as e:  # CDP clients can expose non-CookieReadError failures.
+    except Exception as e:
         print(f"could not read cookies: {e}", file=sys.stderr)
         sys.exit(1)
-    if not records:
+
+    if not source or not getattr(source, "count", 0):
         return None
-    print(f"cookies: {_cookie_provenance(args, len(records))}", file=sys.stderr)
-    return records
+    label = getattr(source, "via", "") or "login"
+    print(f"cookies: {label} -> {source.count} cookies for {args.url}", file=sys.stderr)
+    if source.via == "owned store":
+        print(f"{host} was already kept; no browser opened.", file=sys.stderr)
+    else:
+        print(
+            "copied for this session only, not kept. "
+            f"`searchts login kill {host}` removes any saved login.",
+            file=sys.stderr,
+        )
+    return source.cookies
 
 
 def _cookie_provenance(args, count):
@@ -1988,6 +2055,39 @@ def _cmd_login(args):
 
     print(f"unknown login action {action!r}", file=sys.stderr)
     sys.exit(2)
+
+
+def _print_login_wall_hint(url: str) -> None:
+    """On a login wall, name the two commands that can get past it.
+
+    Printed only when a rung actually reported ``login-wall``, so it never
+    appears on a page that merely embeds a sign-in link, and never on a read
+    that already carried cookies -- in that case ``unlocker`` has its own
+    ``hint`` naming the real cause, and two competing explanations would be
+    worse than one.
+    """
+    from searchts.login_store import host_of, kept
+
+    host = host_of(url)
+    if not host:
+        return
+    if kept(url):
+        # Already kept and still a wall: the saved login is stale, so keeping
+        # is not the fix and suggesting it would waste the user's time.
+        print(
+            f"  {host} is already in the searchts store and still returned a "
+            f"login page, so that saved login has expired. Sign in again: "
+            f"`searchts login kill {host}` then "
+            f"`searchts login signin {url}`.",
+            file=sys.stderr,
+        )
+        return
+    print(
+        f"  {host} is behind a login. Two ways past it, your call:\n"
+        f"    searchts login signin {url}          sign in once in a browser searchts opens\n"
+        f"    searchts read {url} --cookies-from-browser firefox   copy from a browser you already signed into",
+        file=sys.stderr,
+    )
 
 
 def _cmd_get(args):

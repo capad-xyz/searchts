@@ -667,9 +667,20 @@ def prepare(site: str, *, browser: str = "", allow_signin: bool = False) -> Cook
         return decision.source
 
     if decision.state == COPY:
-        require_copy_consent(site)
-        from searchts.session_cookies import for_site
+        # Settle "can this browser be read at all" before asking for consent.
+        # A Chromium cookie file is locked, and a user asked to approve a copy
+        # that cannot happen has been asked a question whose answer does not
+        # matter -- and has spent the session's one approval on it. The refusal
+        # from for_site carries the real reason and the working alternative.
+        from searchts.session_cookies import (
+            chromium_locked_message,
+            family_of,
+            for_site,
+        )
 
+        if family_of(browser) == "chromium":
+            raise CookieReadError(chromium_locked_message(browser))
+        require_copy_consent(site)
         source = for_site(site, browser)
         note_copied(site)
         return source
