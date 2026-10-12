@@ -203,10 +203,9 @@ def _run():
     p_read.add_argument(
         "--yes",
         action="store_true",
-        help="Approve copying cookies out of YOUR browser, for this session "
-             "only. Without it --cookies-from-browser is refused with exit 3, "
-             "because the copy is never silent. The approval covers the sites "
-             "this session reads, not the rest of your machine.",
+        help="Approve copying cookies out of YOUR browser, this session only. "
+             "Without it --cookies-from-browser is refused, because the copy "
+             "is never silent.",
     )
     p_read.add_argument(
         "--cookies",
@@ -2064,12 +2063,13 @@ def _cmd_login(args):
         # happened: a browser that loads the sign-in page sets guest cookies
         # (bcookie, lidc, __cf_bm) before anyone types anything, and counting
         # host-matching cookies as proof of authentication reported a success
-        # for a sign-in that never occurred. Only the next read can tell, so
-        # this line states what was observed and lets that read be the judge.
+        # for a sign-in that never occurred. This says what was observed. The
+        # read is a separate command, so it cannot be pointed at from here --
+        # the point is that only a read can settle it, not that one is coming.
         print(
             f"read {source.count} cookie(s) for {host} from the sign-in browser "
-            f"({source.via}). These may be guest cookies if no sign-in happened; "
-            f"the read below is what proves it."
+            f"({source.via}). If no sign-in happened these are guest cookies, "
+            f"and only a later read of {host} can tell the difference."
         )
         if args.yes:
             kept_login = keep(args.url, source.cookies, browser=args.browser)

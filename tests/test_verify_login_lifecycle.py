@@ -20,6 +20,7 @@ never visible in the source -- it was visible in what the script failed to do.
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -66,8 +67,6 @@ def test_a_stray_profile_makes_the_verifier_fail(tmp_path):
     try:
         out = _run()
     finally:
-        import shutil
-
         shutil.rmtree(stray, ignore_errors=True)
 
     assert out.returncode != 0, "a leftover profile did not fail the verifier"
