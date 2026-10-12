@@ -79,7 +79,7 @@ def test_replay_candidates_are_collected_and_named():
     assert [h[3] for h in hare_r1.replay_candidates(chain, errs, set())] == ["held"]
     # A cap that held a hop back is not a candidate: the budget does not refill,
     # so replaying it only walks the same empty list a second time.
-    capped = ["nous:held: wall clock spent", "nous:held: hop budget (1800 s) spent"]
+    capped = ["nous:held: wall clock spent", f"nous:held: hop budget ({hare_r1.HOP_BUDGET_S} s) spent"]
     assert hare_r1.replay_candidates(chain, capped, set()) == []
     # A provider that 429'd stays out of the replay too.
     assert hare_r1.replay_candidates(chain, errs, {"nous"}) == []
@@ -170,7 +170,7 @@ def test_a_skipped_hop_is_replayed_and_can_answer(monkeypatch):
     # is the whole point.
     first_pass = {"n": 0}
 
-    def hop2(base, key, model, messages, opts, timeout=0):
+    def hop2(base, key, model, messages, opts, timeout=0, deadline=None):
         order.append((model, timeout))
         if first_pass["n"] < 3:
             first_pass["n"] += 1

@@ -22,3 +22,6 @@ DEVLOG.md
 benchmarks/cases.local.json
 benchmarks/results/
 docs/results.json
+
+# AI reviewer timing research working notes (the doc is committed, the notes are not)
+.hare-timing/

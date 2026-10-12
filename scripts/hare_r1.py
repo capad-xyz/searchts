@@ -64,14 +64,33 @@ GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/openai"
 # hop is retried with reasoning off. A bounded reasoning hop takes longer than a
 # no-think one, so the call ceiling went 300 -> 600 s: a hop cut off at 300 s
 # leaves a good answer unfinished, which is the one outcome the caps must not buy.
-LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "600"))
+#
+# Raised 600 -> 1800 s (2026-10-11, #363). 600 s was smaller than the chain's
+# own best model: Step 5 Preview answers in 13 to 15 min (780 to 900 s) at
+# reasoning on, so the per-call ceiling cut it off mid-answer, which is exactly
+# the failure the 300 -> 600 raise existed to stop. 1800 s is twice the slowest
+# reported Hare hop, and it is deliberately stricter than the vendors' tails
+# rather than borrowing them: the survey measured 946 public AI-reviewer messages in
+# 16 products, the product medians run 39 s to 7m17s and the worst turn that
+# completed inside the one-hour cut is 57m18s (CodeRabbit). Those tails are lower
+# bounds, not ceilings, so copying one would import a number this survey cannot
+# fully see. Sources and the full table: docs/research/ai-reviewer-timing.md.
+LLM_TIMEOUT_SEC = int(os.environ.get("HARE_LLM_TIMEOUT_S", "1800"))
 # Model hops stop after this, so the needed note posts before the job timeout.
 # Raised 600 -> 1800 s with reasoning on. The old ceiling was sized for a chain
 # that answered in 1 to 6 s thinking off; with a 12,000-token thinking budget a
 # single hop can legitimately use several minutes, and a 600 s chain budget
 # meant one slow hop spent everything before the fast fallbacks got a turn.
-# Still a guard, not a budget: the wall-clock cap below is the review-wide net.
-HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "1800"))
+# Still a guard, not a budget: the wall-clock cap below bounds model hops and
+# leaves the job timeout as the final failsafe for the complete Action run.
+#
+# Raised 1800 -> 2700 s (2026-10-11, #363). The chain budget must be at least one
+# full slow call or raising LLM_TIMEOUT_SEC buys nothing: with an 1800 s budget
+# and a 2700 s call, the second hop would only ever see the time the first one
+# happened not to use. The budget nests with the per-call ceiling rather than
+# adding to it (every hop's timeout is min(call_timeout, budget left)), so this
+# is the total the whole chain can spend, both passes together.
+HOP_BUDGET_S = int(os.environ.get("HARE_HOP_BUDGET_S", "2700"))
 
 # Slow hops go first (#258), so slow failures can spend the whole budget before
 # the fast fallbacks get a turn: on #287 two Nous hops answered nothing and the
@@ -85,7 +104,12 @@ LLM_MAX_TOKENS = int(os.environ.get("HARE_MAX_TOKENS", "32000"))
 # diff gets twice the time, and only a very big diff, so a one-file change
 # never pays for a 40-minute job.
 BIG_DIFF_LINES = int(os.environ.get("HARE_BIG_DIFF_LINES", "1000"))
-BIG_LLM_TIMEOUT_SEC = int(os.environ.get("HARE_BIG_LLM_TIMEOUT_S", "900"))
+# Raised 900 -> 2700 s (2026-10-11, #363). The big tier was *below* the new
+# normal tier: a 1,000-line diff would have got 900 s per call while a 999-line
+# diff got 1800 s, which is backwards and would have punished exactly the PRs
+# that need the most room. 2700 s is three times Step 5's reported 900 s and
+# still inside BIG_HOP_BUDGET_S.
+BIG_LLM_TIMEOUT_SEC = int(os.environ.get("HARE_BIG_LLM_TIMEOUT_S", "2700"))
 BIG_HOP_BUDGET_S = int(os.environ.get("HARE_BIG_HOP_BUDGET_S", "3300"))
 
 
@@ -1925,6 +1949,7 @@ def chat_complete(
     messages: list[dict[str, str]],
     request_options: dict[str, Any] | None = None,
     timeout: int | None = None,
+    deadline: float | None = None,
 ) -> str:
     timeout = timeout or LLM_TIMEOUT_SEC
     body: dict[str, Any] = {
@@ -1959,9 +1984,18 @@ def chat_complete(
             raise RuntimeError(f"LLM {e.code} {base} {model}: {err[:400]}") from e
         # A gateway that does not know the reasoning knob must not cost the hop.
         # The retry can fail too, and that failure has to keep its body.
+        #
+        # The retry is bounded by the hop's own deadline, not by `timeout` again.
+        # Re-spending the full per-call ceiling would let one hop buy a second
+        # call worth 2 * timeout, which is how the wall clock stopped being the
+        # review-wide net: on a big diff 2 * 2,700 s is 5,400 s against a 3,600 s
+        # cap. _call_hop bounds its own reasoning retry the same way.
+        left = int(deadline - time.time()) if deadline is not None else timeout
+        if left < 1:
+            raise RuntimeError("LLM timeout: no time left in the hop for the reasoning retry")
         plain = {k: v for k, v in body.items() if k != "reasoning"}
         try:
-            content, finish, usage, cut = _call(req, plain, timeout)
+            content, finish, usage, cut = _call(req, plain, min(timeout, left))
         except urllib.error.HTTPError as e2:
             err2 = _err_body(e2).decode("utf-8", errors="replace")
             if looks_rate_limited(e2.code, err2):
@@ -3105,7 +3139,7 @@ def _call_hop(
     than the same timeout without it.
     """
     try:
-        return chat_complete(base, key, model, messages, request_options, timeout=timeout), 1
+        return chat_complete(base, key, model, messages, request_options, timeout=timeout, deadline=deadline), 1
     except RateLimited:
         raise
     except Exception as first:
@@ -3117,7 +3151,7 @@ def _call_hop(
             _cap_fired(f"reasoning retry on `{provider}:{model}` skipped, {max(0, left)}s left in the hop")
             raise
         try:
-            text = chat_complete(base, key, model, messages, off, timeout=min(timeout, left))
+            text = chat_complete(base, key, model, messages, off, timeout=min(timeout, left), deadline=deadline)
         except RateLimited:
             raise
         except Exception:
