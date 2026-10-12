@@ -140,20 +140,27 @@ def test_kept_login_is_used_by_a_bare_read_with_no_flag(monkeypatch, capsys, tem
     assert "KEPT-VALUE" not in captured.out
 
 
-def test_chromium_cookie_error_explains_cdp(monkeypatch, capsys):
-    monkeypatch.setattr(
-        "searchts.session_cookies.for_site",
-        lambda site, browser: (_ for _ in ()).throw(
-            CookieReadError("chrome's cookies are locked (App-Bound Encryption). Use --cdp-port <port>")
-        ),
-    )
+def test_chromium_cookie_error_explains_cdp(monkeypatch, capsys, tmp_home):
+    """A Chromium cookie file cannot be read, and says what does work.
+
+    Asserted on the real ``chromium_locked_message`` rather than on a literal,
+    because that message is deliberately platform-specific: App-Bound
+    Encryption is Windows-only since Chrome 127, and macOS and Linux get the
+    system-keyring explanation instead. Pinning the Windows wording here made
+    this fail on CI's Linux runner while passing on the dev machine, which is
+    the failure mode this is meant to avoid.
+    """
+    from searchts.session_cookies import chromium_locked_message
 
     with pytest.raises(SystemExit):
         _run(monkeypatch, ["read", "https://example.com", "--cookies-from-browser", "chrome"])
 
     err = capsys.readouterr().err
-    assert "App-Bound Encryption" in err
+    # The parts that are true on every platform.
+    assert "locked" in err
     assert "--cdp-port" in err
+    # And the platform's own reason, whatever it is.
+    assert chromium_locked_message("chrome") in err
 
 
 def test_cdp_non_localhost_rejected_before_connect(monkeypatch, capsys):
