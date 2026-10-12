@@ -1750,7 +1750,9 @@ def test_every_note_ends_with_how_to_answer_hare(monkeypatch) -> None:
 
 
 def test_the_model_knows_how_its_note_is_used() -> None:
-    assert "tracked by path:line in a ledger" in hare_r1.SYSTEM
+    assert "tracked in a ledger" in hare_r1.SYSTEM
+    # A fate is matched by the claim now, so the model has to write the claim.
+    assert "A fate matches a finding by the claim, not by the line" in hare_r1.SYSTEM
     # HARE.md holds the rules; how Hare works moved to docs/hare.md (not sent).
     assert "/hare score and /hare fate" in hare_r1.SYSTEM and "the owner's rules for Hare on this repo" in hare_r1.SYSTEM
 

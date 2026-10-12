@@ -146,5 +146,16 @@ jobs:
           HARE_MAX_ATTEMPTS: ${{ github.event.inputs.attempts || env.HARE_MAX_ATTEMPTS }}
           HARE_RATE_BACKOFF_S: 20
           HARE_RATE_MAX_BACKOFF_S: 120
+          # ── The computer run (fix #4) ──
+          # The Action checks out the trusted base, so the script fetches the PR's
+          # own tree into `.hare-head/`, installs its `[dev]` extra if pytest and
+          # searchts are not importable, and runs the test files the diff touches.
+          # The result goes into the prompt and into the note's fold, so a claim
+          # about a test is a thing that happened. `HARE_TESTS: '0'` turns it off
+          # and the note says the run did not happen. The seconds this spends are
+          # charged to the review wall clock, so the caps line stays true.
+          HARE_TESTS: '1'
+          HARE_TEST_TIMEOUT_S: '300'
+          HARE_INSTALL_TIMEOUT_S: '420'
 
         run: python scripts/hare_r1.py

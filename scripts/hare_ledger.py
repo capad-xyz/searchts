@@ -12,11 +12,10 @@ review thread, `dropped` when the PR closed unmerged, and the owner's word
 beats all three.
 
 A fate is matched to a finding by **identity, not by `path:line`** (`fate_matches`).
-A line is where the bubble landed, not where the claim lives: the owner's
-`/hare fate tests/test_hare_r1.py:63 wrong` on #359 meant the finding at :65, and
-with the exact key as the only match the rejection never landed, so the same false
-finding came back at 23:23 and again at 01:12. Identity is the file plus the
-claim's own words, with the line a tie-breaker.
+A line is where the bubble landed, not what the claim is about: the owner's
+`/hare fate tests/test_hare_r1.py:63 wrong` on #359 meant the finding at :65, so
+with the exact key as the only match the rejection never landed and the same false
+finding came back on #363 at 23:23, again at 01:12, and again at 01:53.
 
 Hare only. Other reviewers on this repo are not Hare's business; a comparison
 against them is a repo-local script (scripts/compare_reviewers.py), not the ledger.
@@ -74,12 +73,16 @@ def fate_from(comment: str) -> tuple[str, str, str]:
 # ── Finding identity ──────────────────────────────────────────────────────────
 # Everything here answers one question: is the finding Hare just raised the same
 # finding the owner already ruled on? Keying that on `path:line` is what made
-# `/hare fate` a no-op for two days on #359.
+# `/hare fate` a no-op for two days, so the key is the file plus the claim's own
+# words.
+#
+# Why not "same file, near line, two words in common": it matched a finding about
+# `test_hop_loop` against a rejection about `LLM_TIMEOUT_SEC` and would have
+# dropped a real row on the strength of the word `asserts`. So identity is scored:
+# same file, then the words the two texts share, of which some have to be anchors
+# - the identifiers and names a claim is actually made of. Sharing `test` and
+# `asserts` is not a shared claim. Sharing `llm_timeout_sec` and `600` is.
 
-# How far apart two lines on one file can be and still be one finding. The diff
-# moves lines as it grows, and the owner types the line they can see, which is
-# often the line above the bubble.
-LINE_WINDOW = 8
 # `wrong` and `wontfix` are the owner's word that the finding should not have been
 # made. Both stop it coming back; they stay apart in the ledger so it can say which.
 REJECTED_FATES = ("wrong", "wontfix")
@@ -93,6 +96,13 @@ STOP_WORDS = frozenset(
     why will with would you your still already just very each any all also after before again new here there
     does did done going gets got get make makes made say says said thing things way ways also""".split()
 )
+# How much has to be shared before one rejection silences another finding. Three
+# content words, two of them anchors. Measured against the four notes on #363 that
+# the owner's #359 rejection was about: two of them name `LLM_TIMEOUT_SEC` and
+# `600` and match; a fifth, unrelated finding about `test_hop_loop` on the same
+# file two lines up shares only `asserts` and does not.
+MIN_SHARED = 3
+MIN_ANCHORS = 2
 
 
 def loc_parts(loc: str) -> tuple[str, int | None]:
@@ -114,30 +124,62 @@ def claim_of(row: dict[str, Any]) -> tuple[str, int | None, str]:
     return path, line, str(row.get("issue") or "")
 
 
-def claim_words(text: str) -> set[str]:
-    """The words a finding claims, minus the ones that only place it and the ones
-    that hold it together. Two notes that describe one problem in different words
-    still share the words that carry the problem."""
+def path_words(path: str) -> set[str]:
+    """The words a file path is made of, whole and split: `tests/test_hare_r1.py`
+    gives {tests, test_hare_r1, hare, r1}. Every finding in that file names them,
+    so they carry no identity on their own."""
+    out: set[str] = set()
+    for w in WORD_RE.findall((path or "").lower()):
+        if len(w) > 2:
+            out.add(w)
+            out |= {p for p in w.split("_") if len(p) > 2}
+    return out
+
+
+def is_anchor(word: str) -> bool:
+    """Whether a word names something rather than saying it: an identifier
+    (`llm_timeout_sec`), a dotted name (`hare_r1.py`), or a long single token.
+    `asserts` is not an anchor; `llm_timeout_sec` is."""
+    return "_" in word or "." in word or any(c.isdigit() for c in word) or len(word) >= 7
+
+
+def claim_words(text: str, path: str = "") -> set[str]:
+    """The words a finding claims: content words, minus the file's own path words.
+
+    Numbers stay. The most specific part of "this constant is 600, the diff sets
+    1800" is 600, and dropping bare digits - the first cut at this did - threw
+    away the one token that separates this claim from another one in the same
+    file. A sha or a test count in the owner's reason carries no weight on its
+    own: it has to reach MIN_ANCHORS with the rest."""
+    skip = path_words(path)
     return {
         w
         for w in WORD_RE.findall((text or "").lower())
-        if len(w) > 2 and not w.isdigit() and w not in STOP_WORDS
+        if len(w) > 2 and w not in STOP_WORDS and not any(w in s for s in skip)
     }
 
 
-def shared_words(a: str, b: str) -> int:
-    """How many content words two texts about a finding have in common."""
-    return len(claim_words(a) & claim_words(b))
+def shared_claim(a: str, b: str, path: str = "") -> tuple[int, int]:
+    """(content words in common, how many of those are anchors) for two texts about
+    one finding."""
+    common = claim_words(a, path) & claim_words(b, path)
+    return len(common), sum(1 for w in common if is_anchor(w))
 
 
 def fate_matches(finding: tuple[str, int | None, str], loc: str, why: str = "") -> bool:
-    """Does this adjudication cover that finding? Three ways, exact first.
+    """Does this adjudication cover that finding? Two ways, exact first.
 
-    1. the exact `path:line` the fate names.
-    2. a `path:line` the owner's own words name, which is how a fate recorded at
-       :63 against a finding at :65 reads on #359.
-    3. the same file, lines within `LINE_WINDOW`, and two content words in
-       common: the file plus the claim, with the line only as a tie-breaker.
+    1. the exact `path:line` the fate names. A bubble landed there and the owner
+       ruled on it, which is the ledger's own key and needs no wording to agree.
+    2. the same file, and enough of the claim in common: `MIN_SHARED` content
+       words of which `MIN_ANCHORS` are anchors. The line is deliberately not
+       part of this test. A stacked PR moves every line below its first hunk, and
+       #363 - stacked on #359, where the owner ruled - is exactly that case.
+
+    Deliberately not a test: "the owner's reason happens to name this path:line".
+    The #359 reason names `tests/test_hare_r1.py:65` because that is where the
+    bubble was, and it also silenced an unrelated finding at that same line. The
+    claim has to agree, not the address.
     """
     path, line, issue = finding
     other, other_line = loc_parts(loc)
@@ -145,31 +187,35 @@ def fate_matches(finding: tuple[str, int | None, str], loc: str, why: str = "") 
         return False
     if line is not None and other_line is not None and line == other_line:
         return True
-    if line is not None and re.search(rf"(?<![\w/.-]){re.escape(path)}:{line}(?![\d])", why or ""):
-        return True
-    if line is None or other_line is None or abs(other_line - line) > LINE_WINDOW:
+    if not issue.strip() or not (why or "").strip():
         return False
-    return bool(issue.strip()) and shared_words(issue, why) >= 2
+    shared, anchors = shared_claim(issue, why, path)
+    return shared >= MIN_SHARED and anchors >= MIN_ANCHORS
 
 
-def rejected_lines(findings: list[dict[str, Any]], fates: list[dict[str, str]]) -> list[str]:
+def rejected_lines(findings: list[dict[str, Any]], fates: list[dict[str, str]]) -> list[dict[str, Any]]:
     """Which findings a list of adjudicated fates kills, and what killed them.
 
     `findings` are the rows this run produced (ledger shape), `fates` the rows of
-    `fate_from` plus `{"pr": n}`. A fate only ever removes a finding, so it is the
-    cheap half of the note: what it drops is named so the absence is explained
-    rather than mysterious.
+    `fate_from` plus `{"pr": n}`. One row per killed finding, first matching fate
+    wins.
+
+    Returned as rows, not as a sentence, because the caller has to print them in
+    two different shapes (the prompt's list and the note's fold) and a fate only
+    ever removes a finding: if one goes, it has to be visible that it went.
     """
-    out: list[str] = []
+    out: list[dict[str, Any]] = []
     for f in findings:
         claim = claim_of(f)
         for d in fates:
-            if str(d.get("fate") or "") not in REJECTED_FATES or not fate_matches(claim, str(d.get("loc") or ""), str(d.get("why") or "")):
+            if str(d.get("fate") or "") not in REJECTED_FATES:
                 continue
-            loc = str(f.get("loc") or f"{claim[0]}:{claim[1]}" if claim[1] is not None else claim[0])
-            out.append(f"{loc} ({d['fate']}" + (f" on #{d['pr']}" if d.get("pr") is not None else "") + ")")
+            if not fate_matches(claim, str(d.get("loc") or ""), str(d.get("why") or "")):
+                continue
+            out.append({"loc": str(f.get("loc") or f"{claim[0]}:{claim[1]}"), "fate": d["fate"], "pr": d.get("pr")})
             break
     return out
+
 
 
 HARE_OWNER_LOGINS = hare_r1.HARE_OWNER_LOGINS

@@ -22,3 +22,7 @@ DEVLOG.md
 benchmarks/cases.local.json
 benchmarks/results/
 docs/results.json
+
+# Hare's head tree: the PR's own code, fetched so its tests can be run. A throwaway
+# unpack of the tarball, never committed and never read into a prompt.
+.hare-head/
