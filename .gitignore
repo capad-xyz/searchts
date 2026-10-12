@@ -22,3 +22,8 @@ DEVLOG.md
 benchmarks/cases.local.json
 benchmarks/results/
 docs/results.json
+
+# Verification proof artifacts (.agents/skills/verify-searchts/artifacts/). Raw
+# stdout, stderr and exit codes from a drive. They are per-run evidence and the
+# durable record is the "Proven here" note in each feature file.
+.agents/skills/verify-searchts/artifacts/
