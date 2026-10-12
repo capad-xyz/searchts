@@ -225,3 +225,41 @@ def test_a_mode_the_eval_does_not_know_is_named_not_dropped_silently(capsys, tmp
     ])
     out = capsys.readouterr().out
     assert "on" in out and "not a mode" in out
+
+
+def test_finding_severity_and_filing_are_scored_apart() -> None:
+    """One number was doing three jobs, and a correct finding filed against a
+    neighbouring file read as a run that found nothing.
+
+    #248 is the case that proved it: the model named both ground-truth issues,
+    one as `skip` and one against AGENTS.md instead of the workflow, and scored
+    zero. `found` asks whether the issue was named; `caught` keeps the old
+    strict reading; `misfiled` is the bucket that used to vanish.
+    """
+    case = {"id": "x", "expect": [{"path": "scripts/ledger.py", "words": ["anchor", "header"], "fate": "real"}]}
+    # Only the misfiled one, plus an unrelated real finding.
+    s = hare_eval.score(case, [
+        {"sev": "real", "path": "AGENTS.md", "line": 26, "text": "the header still says AGENTS.md"},
+        {"sev": "real", "path": "scripts/hare_r1.py", "line": 9, "text": "unrelated thing"},
+    ])
+    assert s["n_found"] == 1, "the misfiled finding was found, it just landed on the wrong file"
+    assert s["n_caught_real"] == 0, "nothing was both correct and filed where the key says"
+    assert s["n_misfiled"] == 1
+    assert s["unexpected"] == 1, "the real finding naming nothing in the key is a column, not noise"
+
+    # The same issue, graded skip in the right file: found, not escalated.
+    graded = hare_eval.score(case, [
+        {"sev": "skip", "path": "scripts/ledger.py", "line": 1, "text": "apply_rules anchors the header"},
+    ])
+    assert graded["n_found"] == 1 and graded["n_caught_real"] == 0 and graded["n_misfiled"] == 0
+
+
+def test_the_known_wrong_finding_is_never_credited_even_when_named() -> None:
+    """#258 is in the key because the owner judged it wrong. A matcher loose
+    enough to credit it would buy a win with a known false positive."""
+    case = {"id": "258", "expect": [{"path": "tests/test_hare_r1.py", "words": ["four hops", "three calls"], "fate": "wrong"}]}
+    as_real = [{"sev": "real", "path": "tests/test_hare_r1.py", "line": 10, "text": "three calls but four hops"}]
+    as_skip = [{"sev": "skip", "path": "tests/test_hare_r1.py", "line": 10, "text": "three calls but four hops"}]
+    assert hare_eval.score(case, as_real)["n_caught_real"] == 1, "the strict match still counts, so the trap is visible"
+    assert hare_eval.score(case, as_skip)["n_found"] == 1, "named, and correctly not escalated"
+    assert hare_eval.score(case, as_skip)["n_caught_real"] == 0

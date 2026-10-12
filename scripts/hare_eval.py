@@ -166,24 +166,80 @@ def findings_of(parsed: dict[str, Any] | None) -> list[dict[str, Any]]:
     return out
 
 
-def matches(expect: dict[str, Any], f: dict[str, Any]) -> bool:
+def words_match(expect: dict[str, Any], f: dict[str, Any]) -> bool:
+    """The finding's text names the issue, whatever file it is filed against.
+
+    Split out from `matches` because a model that finds the right thing and
+    blames the neighbouring file was scored as a total miss. On #248 it named
+    both ground-truth issues and scored zero: one filed as `skip`, one filed
+    against `AGENTS.md` instead of the workflow. Both were found.
+    """
+    text = str(f.get("text") or "").lower()
+    return any(str(w).lower() in text for w in expect.get("words") or [])
+
+
+def path_ok(expect: dict[str, Any], f: dict[str, Any]) -> bool:
+    """The finding is filed at the file, and near the line, the answer key says."""
     want, got = _norm(expect.get("path")), f.get("path") or ""
     if not got or not (got == want or got.endswith("/" + want) or want.endswith("/" + got)):
         return False
     line = expect.get("line")
     if line and f.get("line") and abs(int(line) - int(f["line"])) > LINE_SLACK:
         return False
-    text = str(f.get("text") or "").lower()
-    return any(str(w).lower() in text for w in expect.get("words") or [])
+    return True
+
+
+def matches(expect: dict[str, Any], f: dict[str, Any]) -> bool:
+    """Found AND filed in the right place: the strict reading, unchanged."""
+    return path_ok(expect, f) and words_match(expect, f)
 
 
 def score(case: dict[str, Any], fs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Score a run, keeping three things apart that used to be one number.
+
+    `found` is detection: did the model name the issue at all. `caught` is
+    detection AND severity agreement AND the right file. Between them sits
+    `misfiled`, found but filed against a neighbouring file. A run that finds
+    everything and files it wrongly is not a run that found nothing, and
+    reading it as one is how "0 of 4" came to mean "does not detect".
+
+    `unexpected` counts real findings that name nothing in the key. Those are
+    not automatically wins - #258 is in the key precisely because its finding
+    is wrong - but they are the only record of what the model actually looks
+    at, and the key is a list of nine things from one day in October.
+    """
     caught: list[str] = []
+    found: list[bool] = []
+    misfiled: list[bool] = []
     for e in case.get("expect") or []:
-        hits = [f for f in fs if matches(e, f)]
-        caught.append("real" if any(h["sev"] == "real" for h in hits) else ("skip" if hits else ""))
+        strict = [f for f in fs if matches(e, f)]
+        loose = [f for f in fs if words_match(e, f)]
+        found.append(bool(loose))
+        misfiled.append(bool(loose) and not bool(strict))
+        caught.append("real" if any(h["sev"] == "real" for h in strict) else ("skip" if strict else ""))
     reals = sum(1 for f in fs if f["sev"] == "real")
-    return {"caught": caught, "reals": reals, "findings": len(fs), "false_reals": reals if case.get("clean") else 0}
+    expectations = case.get("expect") or []
+    # Unexpected is per finding, not per run: a real finding is unexpected when
+    # it names none of this case's expected issues. A run-wide `named` flag
+    # would silently drop every unmatched finding as soon as one expectation
+    # was hit, which is the opposite of what this column is for.
+    unexpected = [
+        f for f in fs
+        if f["sev"] == "real" and not any(words_match(e, f) for e in expectations)
+    ]
+    return {
+        "caught": caught,
+        "found": found,
+        "misfiled": misfiled,
+        "n_found": sum(found),
+        "n_caught_real": sum(c == "real" for c in caught),
+        "n_misfiled": sum(misfiled),
+        "unexpected": len(unexpected),
+        "unexpected_paths": sorted({f["path"] for f in unexpected if f["path"]}),
+        "reals": reals,
+        "findings": len(fs),
+        "false_reals": reals if case.get("clean") else 0,
+    }
 
 
 # Free tiers say no in two ways. A per-minute limit (HTTP 429, "rate limit",
