@@ -99,6 +99,60 @@ def test_read_without_the_session_approval_refuses_to_copy(monkeypatch, capsys, 
     assert "Traceback" not in err
 
 
+def test_yes_grants_the_copy_from_the_command_line(monkeypatch, capsys, temp_home):
+    """`--yes` is how a person approves, and it is the only way.
+
+    Every existing test above reached consent by calling
+    `grant_session_copy()` directly, from inside the test process. Nothing in
+    the shipped CLI did that: `read --cookies-from-browser` exited 3 on every
+    invocation, forever, because the grant was defined and never called. The
+    suite was green throughout, since the tests granted consent themselves and
+    so never exercised the path a user actually takes.
+
+    This drives the real argv, so it fails if the CLI stops granting.
+    """
+    from searchts.login_store import session_granted
+
+    assert not session_granted(), "consent leaked in from an earlier test"
+
+    record = CookieRecord("session", "SECRET-VALUE", ".example.com")
+    source = CookieSource(
+        site="https://example.com", cookies=[record], browser="zen",
+        via="browser", count=1,
+    )
+    monkeypatch.setattr("searchts.session_cookies.for_site", lambda site, browser: source)
+    monkeypatch.setattr("searchts.unlocker.fetch", _fake_fetch({}))
+
+    _run(monkeypatch, [
+        "read", "https://example.com", "--cookies-from-browser", "zen", "--yes",
+    ])
+
+    captured = capsys.readouterr()
+    assert "cookies:" in captured.err, "--yes did not reach the copy path"
+    assert "SECRET-VALUE" not in captured.err
+
+
+def test_yes_without_a_browser_still_copies_nothing(monkeypatch, temp_home):
+    """`--yes` must not become a blanket approval for the whole session.
+
+    The grant it writes is scoped to this PID, and `--yes` is only honoured
+    when a browser was actually named. A plain `read --yes` is not a request
+    to go read someone's browser.
+    """
+    from searchts.login_store import session_granted
+
+    called = []
+    monkeypatch.setattr(
+        "searchts.session_cookies.for_site",
+        lambda site, browser: called.append(site),
+    )
+
+    _run(monkeypatch, ["read", "https://example.com", "--yes"])
+
+    assert called == [], "--yes reached a copy with no browser named"
+    assert not session_granted(), "--yes granted consent for a read that named no browser"
+
+
 def test_cookie_read_error_is_one_clean_line(monkeypatch, capsys, temp_home):
     from searchts.login_store import grant_session_copy
 

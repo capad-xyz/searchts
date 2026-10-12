@@ -201,6 +201,14 @@ def _run():
         help="Read YOUR browser's cookies for this site only (opt-in)",
     )
     p_read.add_argument(
+        "--yes",
+        action="store_true",
+        help="Approve copying cookies out of YOUR browser, for this session "
+             "only. Without it --cookies-from-browser is refused with exit 3, "
+             "because the copy is never silent. The approval covers the sites "
+             "this session reads, not the rest of your machine.",
+    )
+    p_read.add_argument(
         "--cookies",
         metavar="PATH",
         help="Read a searchts-owned cookie file for this site only (opt-in)",
@@ -1863,6 +1871,7 @@ def _read_command_cookies(args):
     """
     from searchts.login_store import (
         SessionConsentNeeded,
+        grant_session_copy,
         host_of,
         prepare,
     )
@@ -1895,6 +1904,15 @@ def _read_command_cookies(args):
 
     # No explicit source: let the state machine decide what this site is.
     host = host_of(args.url)
+
+    # `--yes` is the only way this process grants itself the copy approval.
+    # It is deliberately explicit: consent is recorded per PID, so a grant
+    # cannot outlive the run that the user approved, and there is no ambient
+    # "always allow" that would survive the next terminal. The grant happens
+    # here, inside this process, because that is what the PID scoping means.
+    if browser and getattr(args, "yes", False):
+        grant_session_copy()
+
     try:
         if browser:
             # Whether this browser *can* be read is settled before the consent
@@ -2042,7 +2060,17 @@ def _cmd_login(args):
         except CookieReadError as e:
             print(str(e), file=sys.stderr)
             sys.exit(1)
-        print(f"Signed in to {host}: {source.count} cookies ({source.via}).")
+        # Not "Signed in to X". Nothing here has verified that a sign-in
+        # happened: a browser that loads the sign-in page sets guest cookies
+        # (bcookie, lidc, __cf_bm) before anyone types anything, and counting
+        # host-matching cookies as proof of authentication reported a success
+        # for a sign-in that never occurred. Only the next read can tell, so
+        # this line states what was observed and lets that read be the judge.
+        print(
+            f"read {source.count} cookie(s) for {host} from the sign-in browser "
+            f"({source.via}). These may be guest cookies if no sign-in happened; "
+            f"the read below is what proves it."
+        )
         if args.yes:
             kept_login = keep(args.url, source.cookies, browser=args.browser)
             print(kept_login.why)

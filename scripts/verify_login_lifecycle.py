@@ -358,29 +358,33 @@ def main() -> int:
         c.ok("the real store is untouched",
              _snapshot(REAL_STORE) == real_store_before)
 
-        rule("VERDICT")
-        if c.failures:
-            print(f"  {len(c.failures)} check(s) FAILED:")
-            for f in c.failures:
-                print(f"    - {f}")
-            return 1
-        print("  every check held.")
-        print()
-        print("  What this does NOT prove: that a real site accepts a real")
-        print("  login. That needs a human at a browser. Everything above is")
-        print("  the behaviour around it, with the network stubbed.")
-        return 0
-
     finally:
         shutil.rmtree(home, ignore_errors=True)
 
     # Checked here rather than inside the try: the cleanup above is what this
     # asserts, so testing before it runs tests the wrong moment.
+    #
+    # It has to be after the try rather than inside it. A `return` inside the
+    # try skips everything past the `finally`, so while the verdict and its
+    # returns sat inside the try, this check sat past the finally and ran on no
+    # code path at all -- a safety check that reads as part of the verifier and
+    # never executes. The verdict moved here for the same reason: a verdict
+    # printed from inside the try would report before this last check ran.
     stray = list(Path(tempfile.gettempdir()).glob("searchts-verify-*"))
     c.ok("the throwaway profile is cleaned up", not stray,
          f"{len(stray)} left" if stray else "")
+
+    rule("VERDICT")
     if c.failures:
+        print(f"  {len(c.failures)} check(s) FAILED:")
+        for f in c.failures:
+            print(f"    - {f}")
         return 1
+    print("  every check held.")
+    print()
+    print("  What this does NOT prove: that a real site accepts a real")
+    print("  login. That needs a human at a browser. Everything above is")
+    print("  the behaviour around it, with the network stubbed.")
     return 0
 
 
