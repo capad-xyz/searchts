@@ -514,4 +514,11 @@ def test_the_rescore_is_unchanged_and_its_trap_is_still_sprung() -> None:
         out.stdout,
     )
     assert m, out.stdout[-800:]
-    assert (m.group(2), m.group(3), m.group(4), m.group(5)) == ("36", "62", "9", "11")
+    # These four numbers track the proof data in docs/proofs/, not the scoring
+    # logic. Verified both ways while rebasing onto main: with this branch's own
+    # proofs the row is (36, 62, 9, 11); with main's, which carry the newer
+    # 2026-10-10 eval run from #360, it is (35, 62, 9, 12). One finding is filed
+    # at a different path in the newer data, so it counts as misfiled rather
+    # than credited. The trap check above is clean under either, which is the
+    # part that would break if the identity scoring regressed.
+    assert (m.group(2), m.group(3), m.group(4), m.group(5)) == ("35", "62", "9", "12")

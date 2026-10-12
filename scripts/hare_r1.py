@@ -48,6 +48,8 @@ QUIET_S = int(os.environ.get("HARE_QUIET_S", "30"))
 # note prints it. Set a number to pause after that many notes until /hare.
 PAUSE_AFTER = int(os.environ.get("HARE_PAUSE_AFTER", "0"))
 PAUSED = "<!-- searchts-r1-paused -->"
+# A skip the PR can see. The log line alone reads as "Hare never ran."
+SKIPPED = "<!-- searchts-r1-skipped -->"
 
 NOUS_BASE = "https://inference-api.nousresearch.com/v1"
 OR_BASE = "https://openrouter.ai/api/v1"
@@ -3041,9 +3043,32 @@ def cadence_skip(event: str, pr: dict[str, Any], notes: list[dict[str, Any]]) ->
 
 def paused_body(count: int) -> str:
     return _no_em(
-        f"{PAUSED}\n\n🐰 Hare has reviewed {count} pushes on this PR and is pausing here. "
+        f"{PAUSED}\n\nReviews paused. 🐰 Hare has reviewed {count} pushes on this PR and is pausing here. "
         "Say `/hare` for another look, or `@hare` with a short ask (this file, full review).\n"
     )
+
+
+def skipped_body(why: str) -> str:
+    """The one comment a refused automatic pass leaves. Draft and closed only.
+
+    A newer commit during the quiet period stays quiet: the run that owns the
+    new head is the one that reviews. Saying it here would be a second voice.
+    """
+    if why == "draft":
+        line = (
+            "Review skipped. This pull request is a draft. "
+            "Hare reviews it when it is marked ready, or now if you say `/hare`."
+        )
+    elif why == "closed":
+        line = "Review skipped. This pull request is closed. Say `/hare` if you still want a pass."
+    else:
+        line = f"Review skipped. {why}."
+    return _no_em(f"{SKIPPED}:{why}\n\n{line}\n")
+
+
+def skip_already_said(comments: list[Any], why: str) -> bool:
+    mark = f"{SKIPPED}:{why}"
+    return any(mark in str(c.get("body") or "") for c in comments if isinstance(c, dict))
 
 
 def wants_deep(comment: str) -> bool:
@@ -3860,6 +3885,20 @@ def _hare_once(
         if not any(PAUSED in str(c.get("body") or "") for c in (talk or []) if isinstance(c, dict)):
             github_api("POST", f"/repos/{owner}/{repo}/issues/{n}/comments", token, {"body": paused_body(len(notes))})
         print(f"hare skip: paused after {len(notes)} notes")
+        return 0
+    if why in {"draft", "closed"}:
+        try:
+            talk = github_api("GET", f"/repos/{owner}/{repo}/issues/{n}/comments?per_page=100", token)
+        except RuntimeError:
+            talk = []
+        if not skip_already_said(talk if isinstance(talk, list) else [], why):
+            github_api(
+                "POST",
+                f"/repos/{owner}/{repo}/issues/{n}/comments",
+                token,
+                {"body": skipped_body(why)},
+            )
+        print(f"hare skip: {why}")
         return 0
     if why:
         print(f"hare skip: {why}")
