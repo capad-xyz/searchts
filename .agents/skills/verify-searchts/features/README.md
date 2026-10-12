@@ -1,39 +1,82 @@
-# searchts feature map
+# searchts verification map
 
-Five user-facing features, one file each. Each file answers, from a user's point
-of view: what it is, how to reach it, how to drive it, and what end state proves
-it worked.
+This directory is the maintained source for verifying the user-facing behavior of
+searchts. Read this index before driving anything, then use the matching feature
+file as the recipe.
 
-**Proof standard.** The end state is the tool's own output: the JSON it printed,
-the file it wrote, the exit code it returned. Not "it did not error". A command
-that exits `0` having produced nothing is a failure, and so is one that exits
-non-zero having produced the right thing.
+## Baseline preconditions
 
-**Before driving:** run `doctor --json` (see `../SKILL.md`). After a drive that
-misbehaved, run it again before believing anything about the next one.
+- The repo is checked out and `.venv` exists with `[dev]` installed, as
+  [`SKILL.md`](../SKILL.md) describes.
+- `python -m searchts doctor --json` has been run in this run, and its `github`,
+  `youtube`, `tiktok`, `instagram`, `reddit-video` and `rss` entries are `ok`.
+- The `web` entry has been read, not just its status. Its message names any read
+  tier that is not installed, which bounds what a hard `read` can prove here.
+- No drive has been run against a different interpreter than
+  `.venv/bin/python -m searchts`.
+- Never drive a process this run did not start. Nothing here is long-lived, so
+  there is no shared instance to corrupt.
 
-One command the user reaches for that is **not** on this map: the read ladder's
-higher tiers. `stealth-browser` needs `searchts install --browser`, and until it
-is installed a bot-walled page cannot be fetched at all. That is a readiness
-fact about the machine, not a gap in the map, and it is recorded in
-[`doctor.md`](doctor.md) and [`read.md`](read.md).
+## Driving conventions
 
-| Feature | File | End state that proves it |
-|---|---|---|
-| Read a page | [read.md](read.md) | JSON with `status: 200`, non-empty `text`, a named `backend` |
-| Search the web | [search.md](search.md) | JSON array with `title`, `url`, `snippet`, `source` per hit |
-| Transcribe a video | [transcribe.md](transcribe.md) | a text file on disk with real sentences, `exit 0` |
-| Grab a page's design | [grab.md](grab.md) | manifest JSON with a non-empty `palette` and `downloaded > 0` |
-| Download one asset | [get.md](get.md) | a non-empty file at the path `-o` named |
-| Check the environment | [doctor.md](doctor.md) | JSON where the core channels are `ok` with an `active_backend` |
+- Treat every command as literal. Keep quoted URLs and flags unchanged.
+- Start every recipe from the baseline unless its preconditions say otherwise.
+- Capture stdout and stderr to separate files. Never pipe a searchts verb into
+  `head` or `grep`.
+- Use `--json` for any assertion on structured output. Human output moves with
+  terminal width.
+- Assert on the payload, not on the exit code alone. A verb that exits `0` having
+  produced nothing has failed.
+- Set `HOME` to a scratch directory when a drive must not read the user's
+  `~/.searchts` config.
+- Pass `--out` or `-o` to every verb that writes, so no drive leaves files in the
+  working directory.
+- Do not remove proof artifacts during cleanup.
 
-## What this map does not cover
+## Proof and skip reporting
 
-- The MCP server (`searchts mcp serve`). It is a second surface over the same
-  functions, and it needs its own entry here before anyone calls the MCP path
-  verified.
-- `setup`, `install`, `configure`, `uninstall`, `skill`. Interactive and
-  destructive; they change the user's machine and are proven by their own
-  install/uninstall tests, not by driving them.
-- Any tier of the read ladder above `curl_cffi`. `stealth-browser` needs
-  `searchts install --browser` and is proven in CI, not here.
+- CLI proof includes the command, stdout, stderr and exit code.
+- A verb whose proof is a file on disk is proved by that file's bytes, not by its
+  name.
+- Record the feature and the command used with every artifact.
+- Report an unreachable path with the attempted command and the unmet
+  precondition. A missing read tier, a missing optional provider and an absent
+  `patchright` are preconditions, not failures.
+- Do not report one entry point as verified through a different path. `read` and
+  `get` climb the same ladder and neither proves the other.
+
+## Feature entry contract
+
+Each feature file starts with an H1 title and one paragraph describing the
+user-visible behavior. It then uses exactly four H2 sections in this order.
+
+1. `Sub-features` lists short IDs with one line for each behavior.
+2. `How to get to it (user POV)` lists every user entry point.
+3. `Driving it with searchts` starts with `Preconditions:` and uses labeled
+   bullets that pair each user action with an exact command and observable
+   result.
+4. `Gotchas` lists traps that can waste or invalidate a verification run.
+
+Keep implementation details out of the map. Name only user paths, commands,
+required state and observable proof.
+
+## Features
+
+- [Read a page](./read.md) covers the escalating fetch, JSON output, pagination,
+  injection scrubbing, and the non-zero exit when no tier produced content.
+- [Search the web](./search.md) covers keyless multi-provider search, the JSON
+  result shape, and an empty result set as a valid answer.
+- [Transcribe a video](./transcribe.md) covers caption-first transcription, the
+  output file, and local audio input.
+- [Grab a page's design](./grab.md) covers asset download, the colour palette,
+  font extraction and the manifest.
+- [Download one asset](./get.md) covers the single-asset download and the file it
+  writes.
+- [Check the environment](./doctor.md) covers per-channel status, the active
+  backend, and the read-tier report that bounds every other feature.
+
+Not covered, and named so no run claims it: `searchts mcp serve` is a second
+surface over the same functions and no feature file here drives it. The
+install, setup and uninstall verbs change the user's machine and are proved by
+their own tests, not by driving them. Every tier of the read ladder above the
+first needs an extra install and is bounded per run by the `doctor` entry.

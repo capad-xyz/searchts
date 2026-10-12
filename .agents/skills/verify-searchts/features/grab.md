@@ -1,56 +1,55 @@
 # Grab a page's design
 
-`searchts grab <url>` downloads a page's images, icons, CSS, fonts and SVG, then
-reports a colour palette and the fonts in use. `searchts get <url>` is the
-single-asset version of the same machinery.
+Grab a page's design downloads a page's images, icons, stylesheets, fonts and
+vector art into a directory, and reports the colour palette and the fonts the
+page uses. It is the on-demand asset grabber, reached through the same escalating
+fetch as reading a page.
 
 ## Sub-features
 
 - `grab-assets` downloads images, icons, css, fonts and svg into a directory.
+- `grab-kinds` narrows which kinds are downloaded.
+- `grab-scripts` widens the set to script sources.
 - `grab-palette` returns hex colours with occurrence counts, most used first.
-- `grab-fonts` returns the font family names found in the page's CSS.
-- `grab-json` emits the manifest instead of a human summary.
-- `grab-kinds` narrows what is downloaded (`--kinds`), `--scripts` widens it.
-- `grab-read` also saves the page text as `page.md`.
-- `get-one` downloads exactly one asset to `-o`.
+- `grab-fonts` returns the font family names found in the page.
+- `grab-json` emits the manifest as an object.
+- `grab-read` also saves the page text alongside the assets.
+- `grab-max` caps how many assets are downloaded.
 
 ## How to get to it (user POV)
 
-- `searchts grab https://tailwindcss.com --out ./out`
-- `searchts get https://example.com/favicon.ico -o ./favicon.ico`
+- Run `searchts grab <url>` to download into a directory beside you.
+- Run `searchts grab <url> --out ./out` to choose the directory.
+- Run `searchts grab <url> --json` to print the manifest.
+- Run `searchts grab <url> --read` to keep the page text too.
 
-## Driving it
+## Driving it with searchts
 
-Preconditions: `.venv` installed. **Always pass `--out`.** Without it the CLI
-writes `./searchts-grab-<host>/` into whatever directory the drive ran in, which
-is how a proof leaves sixty untracked files in the repo.
+Preconditions:
 
-- **Grab.** `.venv/bin/python -m searchts grab https://tailwindcss.com --out artifacts/grab/tailwind --json > artifacts/grab/tailwind.json 2> artifacts/grab/tailwind.err`. Exit `0`.
-- **Proof.** `artifacts/grab/tailwind.json` has a `palette` array that is not
-  empty, each entry with `hex` and `count`; a `fonts` array that is not empty; a
-  `downloaded` count greater than zero; and `artifacts/grab/tailwind/` on disk
-  containing that many files.
-- **Palette is evidence, not taste.** Counts sum to more than the palette length,
-  and the top entry is the most frequent colour on the page. Assert on structure
-  and ordering, never on a specific hex; a site redesign changes the hex.
-- **Fonts can be junk.** `fonts` can contain `"<value>"` and `"Fallback"`
-  entries scraped from CSS custom properties. A non-empty array with some odd
-  members is normal and is not a failure.
-- **Single asset.** `.venv/bin/python -m searchts get https://example.com/favicon.ico -o artifacts/grab/favicon.ico`. Exit `0` and the file exists and is non-empty.
+- `.venv` is installed as `SKILL.md` describes.
+- `doctor --json` has been run. Grab climbs the same ladder as reading, so a
+  missing tier bounds it the same way.
+
+- **Grab.** Run `.venv/bin/python -m searchts grab https://tailwindcss.com --out artifacts/grab/tailwind --json > artifacts/grab/tailwind.json 2> artifacts/grab/tailwind.err`. Exit code `0`.
+- **Palette.** Read `artifacts/grab/tailwind.json`. Its `palette` is a non-empty array and each entry has `hex` and `count`. The counts sum to more than the array's length and the first entry is the most frequent colour on the page.
+- **Fonts.** The `fonts` array is non-empty.
+- **Downloaded files.** `downloaded` in the manifest is greater than zero, and `artifacts/grab/tailwind/` holds that many files.
+- **Narrow the set.** Run `.venv/bin/python -m searchts grab https://tailwindcss.com --out artifacts/grab/icons --kinds icons --json > artifacts/grab/icons.json 2> artifacts/grab/icons.err`. Exit code `0` and the manifest's icon count is lower than the unfiltered run's.
+- **Proof.** Open `artifacts/grab/tailwind.json` and count the files in `artifacts/grab/tailwind/`. The manifest's `downloaded` number and the directory's file count agreeing is what shows the assets really landed, rather than the manifest describing a download that did not happen.
+- **Clean the working directory.** Confirm `searchts-grab-<host>/` does not exist in the working directory. Any drive that omitted `--out` leaves one, and it must be removed.
 
 ## Gotchas
 
-- `download: 60` is the default ceiling (`--max`). A page with more assets
-  reports 60, which is not a truncation bug.
-- `theme_color` is `null` on many sites. `null` here is normal and not a failure.
-- `page_backend` names which read tier fetched the page, the same field `read`
-  reports as `backend`.
-- `grab` follows the same unlocker as `read`, so a site behind a bot-wall may
-  need `--kinds` narrowed or will fail on the fetch, not the download.
-## Proven here
-
-Driven 2026-10-12 against `searchts v0.14.0`:
-`grab https://tailwindcss.com --out artifacts/grab/tailwind --json` → exit `0`,
-12 palette entries whose counts sum to 571 (top `#ffffff` at 227), 9 font names
-including the usual `Fallback` junk, `downloaded: 60`, and 61 files on disk. 60
-is the `--max` ceiling, so a site with more assets reports the same number.
+- Without `--out` the assets land in a `searchts-grab-<host>` directory in the
+  current working directory. Always pass `--out`.
+- `download` reaching its ceiling is normal, not truncation: the default ceiling
+  is 60 assets and a larger page reports exactly that.
+- `theme_color` is `null` on many sites. That is not a failure.
+- `page_backend` names the fetch tier that retrieved the page, and it carries
+  the same meaning as the `backend` field of a read.
+- Palette entries are evidence of frequency, not of taste. A site redesign
+  changes the hex values, so assert on structure and ordering and never on a
+  specific colour.
+- Font names scraped from stylesheets can include placeholders such as `Fallback`
+  and property values. That is normal and is not a failure.
