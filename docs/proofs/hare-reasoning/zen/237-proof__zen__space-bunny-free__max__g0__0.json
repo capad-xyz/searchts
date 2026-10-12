@@ -1,0 +1,33 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "max",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "max",
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 3533.0,
+ "steps": 22,
+ "answer_part": "text",
+ "reasoning_chars": 86814,
+ "usage": {
+  "prompt_tokens": 77681,
+  "completion_tokens": 4266,
+  "completion_tokens_details": {
+   "reasoning_tokens": 23258
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"A hop that finally answers: reasoning pinned off, a parser that stops dropping whole reviews, and a local runner to watch it happen \ud83d\udc07\\n\\n1. **measurement** `docs/hare-thinking-ab.md`: thinking on vs off, same prompt, 7 PRs; on is 6 for 6 empty at 32000.\\n2. **hop knobs** `effort=none` on Nous, Groq and Zen through one `PROVIDER_REQUEST_OPTIONS`; 32000 tokens, 180 s call, 600 s budget, all env-readable.\\n3. **parser** `json_objects` walks braces with string awareness; `extract_json` prefers the last review object over an echoed schema.\\n4. **diagnostics** empty content now carries `finish_reason` and `reasoning_tokens`; `_short_fail` and `needed_body` name which fault it was instead of shrugging.\\n5. **local runner** `scripts/hare_local.py`: dry run by default, `--model` order, and a `--post` mode.\\n6. **workflow** job timeout 20 to 30 min, with the worst-case arithmetic written above it.\",\"aim\":\"Stop the R1 review hop coming back empty, so a PR gets a review note instead of a `searchts-r1-needed` nag.\",\"case\":\"The viability claim is backed by a measured table and the actual knob is one line per hop, with tests pinning it, so the core of this diff is safe. Two things want work first: the rewritten fence regex in `extract_json` can never match a markdown fence, so a branch the diff adds is dead code, and the new `--post` mode can publish a review carrying Hare's marker under a human's account. The parser rewrite itself reads right, and searching from the end is the correct call for a reply that concludes with its answer.\",\"findings\":[{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":295,\"issue\":\"The fence pattern lost its backticks and doubled its backslashes, so it now reads `r\\\"\\\\\\\\(?:json)?\\\\s*(\\\\{.*\\\\})\\\\s*\\\\\\\\\\\"` and can never match a ```json block. Checked on the branch: `re.search` returns None on a fenced answer, and the fenced branch added here is dead.\",\"short\":\"Fence regex lost its backticks and gained double backslashes, so it never matches a ```json block.\",\"fix\":\"yes\",\"change\":\"\",\"original\":\"    fence = re.search(r\\\"\\\\\\\\(?:json)?\\\\s*(\\\\{.*\\\\})\\\\s*\\\\\\\\\\\", text, re.S)\",\"suggestion\":\"    fence = re.search(r\\\"```(?:json)?\\\\s*(\\\\{.*?\\\\})\\\\s*```\\\", text, re.S)\"},{\"sev\":\"real\",\"path\":\"scripts/hare_local.py\",\"line\":123,\"issue\":\"`--post` sends the same review body, Hare's `<!-- searchts-r1-review -->` marker included, through your gh account. AGENTS R1 says Hare is the Action and nobody reviews as another GitHub user, and the ledger and the three-note cadence both count that marker as a Hare note.\",\"short\":\"`--post` publishes a review carrying Hare's marker as your gh user, which reads as a Hare note.\",\"fix\":\"later\",\"change\":\"When the review is not going out as `searchts-hare[bot]`, drop the marker or refuse to post, so a human note cannot be counted as Hare's.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":743,\"issue\":\"This test passed with the fence branch already dead, because `json_objects` recovers the same object. It pins nothing about the fence, which is how the mangled regex went unnoticed.\",\"short\":\"Fence test passes via json_objects, so it stayed green while the fence regex was dead.\",\"fix\":\"later\",\"change\":\"Pin the fence pattern itself: assert the module regex matches a ```json block, so a dead branch fails.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":232,\"issue\":\"The docstring for `json_objects` picked up two stray control characters: a tab inside `text` and a form feed inside `find`. They render as odd gaps in help() and in any grep for either word.\",\"short\":\"Docstring has a tab in \\\"text\\\" and a form feed in \\\"find\\\"; help() shows odd gaps.\",\"fix\":\"yes\",\"change\":\"\",\"original\":\"    \\\"\\\"\\\"Every top-level {...} in \\text, by brace matching that respects strings.\\n\\n    A model asked for JSON only often answers with prose first, and that prose\\n    quotes the diff, so a \\find(\\\"{\\\")..rfind(\\\"}\\\") slice can straddle a stray brace\",\"suggestion\":\"    \\\"\\\"\\\"Every top-level {...} in text, by brace matching that respects strings.\\n\\n    A model asked for JSON only often answers with prose first, and that prose\\n    quotes the diff, so a find(\\\"{\\\")..rfind(\\\"}\\\") slice can straddle a stray brace\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":245,\"issue\":\"Every `{` that never closes restarts a full scan of the rest of the reply, so a brace-heavy answer is quadratic. Measured on the branch: 1.2 s on a 17 KB echo and 5.9 s on 42 KB, all of it inside the hop budget.\",\"short\":\"Each unmatched brace rescans the tail, quadratic: 5.9 s measured on a 42 KB echo.\",\"fix\":\"later\",\"change\":\"Carry the resume point forward for an unclosed span, or bound the inner scan, so a brace-heavy answer does not cost seconds per hop.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":790,\"issue\":\"This asserts on the source text of `hare_r1.py` rather than on behavior, so a reformat or a renamed variable fails it while the ask path could be broken and still pass.\",\"short\":\"Test greps hare_r1 source for a string instead of running the ask path.\",\"fix\":\"later\",\"change\":\"Call `_hare_once` with a stubbed API and assert the ask reaches `build_user`, and drop the assertion that a substring must be absent.\"},{\"sev\":\"skip\",\"path\":\"docs/hare-thinking-ab.md\",\"line\":63,\"issue\":\"The prose says 14 findings; the table above sums to 13 (7 + 0 + 1 + 1 + 1 + 3, with the prose-not-JSON row counting none). The real count of 5 does add up, so this is the one number off.\",\"short\":\"Prose says 14 findings; the table above it sums to 13. The 5 real does add up.\",\"fix\":\"yes\",\"change\":\"\",\"original\":\"glossed: 14 findings, 5 marked real, roughly a tenth overlap.\",\"suggestion\":\"glossed: 13 findings, 5 marked real, roughly a tenth overlap.\"}]}"
+}

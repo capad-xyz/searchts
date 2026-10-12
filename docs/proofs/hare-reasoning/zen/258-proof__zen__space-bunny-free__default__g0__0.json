@@ -1,0 +1,33 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 127.0,
+ "steps": 23,
+ "answer_part": "text",
+ "reasoning_chars": 57389,
+ "usage": {
+  "prompt_tokens": 49639,
+  "completion_tokens": 4577,
+  "completion_tokens_details": {
+   "reasoning_tokens": 14738
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"A queue shuffle for the reviewer brain. Same five hops, new running order, and a plan line that did not keep its homework.\\n\\n1. **Chain order** `build_provider_chain` now walks OpenRouter, Nous, Groq, Gemini, Zen.\\n2. **Comment** the order note says it is the owner's call and not the ledger's, since the ledger's notes predate the fixes.\\n3. **Tests** the three order tests follow the new order and still pin the per-hop options.\\n4. **PLAN** the R1c failover line is rewritten to the new list.\",\"aim\":\"Put the slow models at the front and the instant ones (Groq, Gemini) behind as fallbacks, so a fast answer cannot pre-empt a better review.\",\"case\":\"The code move is mechanical and holds up: the chain is a plain tuple, a keyless provider still drops out, and running `build_provider_chain` from the branch gives exactly the order and per-hop options the three tests now assert. The paperwork is what needs a second pass: the rewritten PLAN line quietly deletes the fail rules, the nag contract, the hop budgets, the 40-minute job timeout and the no-router rule, none of which exist anywhere else in PLAN.md after this, and AGENTS.md still tells every agent the brain starts on Groq.\",\"findings\":[{\"sev\":\"real\",\"path\":\"PLAN.md\",\"line\":259,\"issue\":\"The rewritten failover line drops the whole tail of the old one: `Fail = 429 / 5xx / timeout / empty / no JSON / thinking cut` and the exhausted-to-`searchts-r1-needed` contract, `Call 300 s, hop budget 600 s` with `HARE_LLM_TIMEOUT_S` / `HARE_HOP_BUDGET_S` / `HARE_BIG_*`, `timeout-minutes: 40`, `No LLM in the router`, the live 2026-10-03 evidence and the skip list. None of those strings appear anywhere else in PLAN.md at this head, and the PR body claims one change: chain order.\",\"short\":\"Rewritten failover line deletes the fail rules, nag contract, hop budgets, job timeout and no-router rule; PLAN keeps none of them.\",\"fix\":\"later\",\"change\":\"Reorder the chain in that line but keep the dropped sentences, or move them to their own line so the fail definition and the budgets stay in the plan of record.\"},{\"sev\":\"real\",\"path\":\"AGENTS.md\",\"line\":null,\"issue\":\"AGENTS.md R1c still reads `Brain: Groq then Gemini then Nous then OpenRouter then Zen (fixed list in scripts/hare_r1.py...)`, which is the file every agent signs and the Action feeds into every prompt. This PR moves that list to OpenRouter first and updates PLAN.md, so the contract now names an order the code does not run.\",\"short\":\"AGENTS.md R1c still names Groq first; the chain this PR lands starts at OpenRouter, so the contract is stale.\",\"fix\":\"later\",\"change\":\"Update the Brain sentence in AGENTS.md to OpenRouter then Nous then Groq then Gemini then Zen, or say the order lives only in `scripts/hare_r1.py` and PLAN.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":1365,\"issue\":\"The comment ends with `The ledger's per-hop scores decide the order later`, but `scripts/hare_ledger.py` produces a notes-per-hop count and one score per note, not per hop, so there is no per-hop score to rank with yet. The PLAN line next to it says the ledger cannot rank hops yet, which is the honest half.\",\"short\":\"Comment promises ledger per-hop scores; the ledger only counts notes per hop and scores notes once per PR.\",\"fix\":\"later\",\"change\":\"Say what the ledger really produces today (a count of notes per hop) and that per-hop quality still has to be measured.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":1366,\"issue\":\"Groq used to lead because its 413 costs under a second. Behind two slow hops with `HARE_HOP_BUDGET_S` 600 and a 300 s call timeout, a slow OpenRouter plus a slow Nous can spend the budget before the cheap probe runs, so the fallback the old comment relied on is now the hop that never gets reached.\",\"short\":\"Behind two slow hops, the 600 s hop budget can run out before Groq's instant 413 ever gets tried.\",\"fix\":\"later\",\"change\":\"Say in the comment that the two slow hops can spend the hop budget first, and check that budget against two 300 s timeouts.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":646,\"issue\":\"Three comment lines now stack above the asserts. The two older ones still say `OpenRouter's qwen leads, then Nous, then Gemini`, which skips Groq, and the new line repeats the same reason in one longer sentence.\",\"short\":\"Two older comment lines still say then Nous, then Gemini, skipping Groq; the new line repeats the reason.\",\"fix\":\"later\",\"change\":\"Delete the two older comment lines so the test carries one comment naming the new order.\"}]}"
+}

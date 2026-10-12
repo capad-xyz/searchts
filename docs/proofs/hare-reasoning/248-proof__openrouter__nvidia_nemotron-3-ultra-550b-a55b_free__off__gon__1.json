@@ -1,0 +1,39 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 1,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 11189,
+  "completion_tokens": 1199,
+  "total_tokens": 12388,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 4320,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "answer": "{\n  \"effort\": \"medium\",\n  \"summary\": \"Hare gets its own file and a ledger that learns from low scores. Quiet. Useful.\\n\\n1. **HARE.md** created as Hare's personal rulebook, separate from AGENTS.md.\\n2. **hare_ledger.py** now extracts rules from `/hare score \u22642` comments and writes them into HARE.md's marked block.\\n3. **hare_r1.py** fetches HARE.md from the base branch and feeds it to the model before every review.\\n4. **hare-ledger.yml** workflow updated to pass `--rules HARE.md` and include it in the weekly PR.\",\n  \"aim\": \"Give Hare a persistent, version-controlled memory of what the owner said it missed, so low scores with reasons become rules that actually reach the next review.\",\n  \"case\": \"The diff is self-contained and safe: a new file, a ledger rewrite that only touches its marked block, a read path added to the reviewer, and a workflow tweak. Tests pass (1016 passed, 4 skipped) and cover the new logic \u2014 deduplication, newest-first ordering, owner lines surviving the run, and HARE.md reaching the prompt. No behavior change for existing PRs; the ledger PR will simply start carrying HARE.md when it changes. This ships clean.\",\n  \"findings\": [\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_ledger.py\",\n      \"line\": 195,\n      \"issue\": \"The rules block header text is duplicated between rules_block() and HARE_MD_HEAD. If the header wording changes, it must be updated in two places.\",\n      \"short\": \"Duplicated header text in rules_block and HARE_MD_HEAD.\",\n      \"fix\": \"later\",\n      \"change\": \"Extract the header into a constant or helper so there's a single source of truth.\",\n      \"original\": \"        f\\\"{RULES_START}\\\\n\\\"\\n        \\\"**What the owner said Hare missed (from the ledger, PLAN R2c).** Each line is the reason behind a low score, filed by \\\"\\n        \\\"`scripts/hare_ledger.py` from `/hare score`. Hare reads these as rules for the next note. Each ledger run rewrites \\\"\\n        \\\"this block, so to retire a line, edit or delete the score comment it came from.\\\\n\\\\n\\\"\\n        f\\\"{body}\\\\n\\\"\\n        f\\\"{RULES_END}\\\"\",\n      \"suggestion\": \"        f\\\"{RULES_START}\\\\n\\\"\\n        f\\\"{RULES_HEADER}\\\\n\\\\n\\\"\\n        f\\\"{body}\\\\n\\\"\\n        f\\\"{RULES_END}\\\"\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_ledger.py\",\n      \"line\": 215,\n      \"issue\": \"proposed_rules() is called twice in main() \u2014 once for the write and once for the print \u2014 which re-sorts and re-deduplicates unnecessarily.\",\n      \"short\": \"proposed_rules called twice in main; compute once and reuse.\",\n      \"fix\": \"later\",\n      \"change\": \"Store the result in a variable and reuse it for both the write and the log line.\",\n      \"original\": \"    if args.rules:\\n        before = Path(args.rules).read_text(encoding=\\\"utf-8\\\") if Path(args.rules).exists() else \\\"\\\"\\n        after = apply_rules(before, proposed_rules(ledger))\\n        if after != before:\\n            Path(args.rules).write_text(after, encoding=\\\"utf-8\\\")\\n            print(f\\\"hare ledger: {len(proposed_rules(ledger))} rule(s) written to {args.rules}\\\")\",\n      \"suggestion\": \"    if args.rules:\\n        before = Path(args.rules).read_text(encoding=\\\"utf-8\\\") if Path(args.rules).exists() else \\\"\\\"\\n        rules = proposed_rules(ledger)\\n        after = apply_rules(before, rules)\\n        if after != before:\\n            Path(args.rules).write_text(after, encoding=\\\"utf-8\\\")\\n            print(f\\\"hare ledger: {len(rules)} rule(s) written to {args.rules}\\\")\"\n    },\n    {\n      \"sev\": \"skip\",\n      \"path\": \"scripts/hare_r1.py\",\n      \"line\": 1475,\n      \"issue\": \"HARE.md is fetched from the base branch but truncated to 8000 chars without any indication. A large HARE.md could lose the rules block entirely.\",\n      \"short\": \"HARE.md silently truncated to 8000 chars; rules block could be cut.\",\n      \"fix\": \"later\",\n      \"change\": \"Either raise the cap, truncate only the owner's section, or add a note when truncation happens.\",\n      \"original\": \"    if hare_md:\\n        extra += f\\\"## HARE.md (the owner's rules for Hare on this repo)\\\\n{hare_md[:8_000]}\\\\n\\\\n\\\"\",\n      \"suggestion\": \"    if hare_md:\\n        extra += f\\\"## HARE.md (the owner's rules for Hare on this repo)\\\\n{hare_md[:8_000]}\\\\n\\\\n\\\"\"\n    }\n  ]\n}"
+}

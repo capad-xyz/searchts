@@ -1,0 +1,33 @@
+{
+ "case": "248-proof",
+ "pr": 248,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "xhigh",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "xhigh",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 81.8,
+ "steps": 3,
+ "answer_part": "text",
+ "reasoning_chars": 2152,
+ "usage": {
+  "prompt_tokens": 32273,
+  "completion_tokens": 1451,
+  "completion_tokens_details": {
+   "reasoning_tokens": 19148
+  }
+ },
+ "answer": "Hare review queued; inspecting the diff for rule-file and prompt wiring.The workspace looks ahead of the PR, so I'll pin down the exact diff lines for precise findings.{\"effort\": \"medium\", \"summary\": \"A memory patch for the bunny. Small file, long ears.\\n1. **rules** weekly low scores become lines in HARE.md via the ledger\\n2. **prompt** Hare reads HARE.md from base on every note\\n3. **workflow** ledger job carries HARE.md into its PR\\n4. **tests** cover rule filing, block replacement, and prompt wiring\", \"aim\": \"Give Hare a persistent HARE.md memory from low scores and read it before every note.\", \"case\": \"The ledger loop, prompt wiring, and tests fit together neatly. The extra AGENTS.md copy claims weekly rewrites it never gets, so that duplicate needs removal before landing.\", \"findings\": [{\"sev\": \"real\", \"path\": \"AGENTS.md\", \"line\": 27, \"issue\": \"AGENTS.md gains a rules block that the weekly job never rewrites; the workflow only writes HARE.md. The text promises each ledger run rewrites this block, and Why calls a bot-rewritten AGENTS.md the wrong shape, so the copy goes stale on the first run.\", \"short\": \"AGENTS.md block never updates; workflow writes only HARE.md, leaving a stale duplicate of the rules.\", \"fix\": \"later\", \"change\": \"Drop the AGENTS.md hunk and keep the rules block only in HARE.md.\"}, {\"sev\": \"skip\", \"path\": \"HARE.md\", \"line\": 17, \"issue\": \"Checked-in HARE.md block wording differs from `rules_block` output, so the next ledger run rewrites the block with zero new scores. The head text also retires lines differently, which guarantees a spurious diff.\", \"short\": \"Checked-in block text differs from generator output, causing a rewrite with no new scores.\", \"fix\": \"later\", \"change\": \"Align checked-in HARE.md with the generator template for empty rules.\"}, {\"sev\": \"skip\", \"path\": \"HARE.md\", \"line\": null, \"issue\": \"Title names AGENTS.md while the body, Why, and workflow put the rules in HARE.md. The squash title becomes the main commit, so the file name needs a swap.\", \"short\": \"Title says AGENTS.md but rules live in HARE.md; squash title needs the right filename.\", \"fix\": \"later\", \"change\": \"Retitle to name HARE.md instead of AGENTS.md.\"}]}"
+}

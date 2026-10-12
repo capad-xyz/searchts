@@ -1,0 +1,33 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "zen",
+ "model": "muse-spark-1.3-contributor-free",
+ "mode": "xhigh",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "xhigh",
+  "published_effort": [
+   "minimal",
+   "low",
+   "medium",
+   "high",
+   "xhigh"
+  ]
+ },
+ "error": "",
+ "seconds": 178.8,
+ "steps": 21,
+ "answer_part": "text",
+ "reasoning_chars": 2907,
+ "usage": {
+  "prompt_tokens": 63059,
+  "completion_tokens": 4460,
+  "completion_tokens_details": {
+   "reasoning_tokens": 17511
+  }
+ },
+ "answer": "Fixing the silent hop and lost reviews \u2014 now digging into the diff for the verdict.I've mapped the core fix \u2014 now pulling exact line numbers to ground each finding.Spotted a broken fence pattern and a source-reading test \u2014 now nailing down the remaining issues.Confirmed the docstring flag mismatch \u2014 now checking the remaining loose ends.Line numbers are locked \u2014 now shaping the final review.{\"effort\": \"medium\", \"summary\": \"Silent hop finally talks. Speedy, scrappy, still a bit tangled.\\n1. **reasoning** effort none for nous, groq and zen plus wider token budgets\\n2. **parsing** brace aware JSON recovery with clearer empty answer errors\\n3. **tooling** local runner with dry run default and thinking A/B doc\", \"aim\": \"Make the free reasoning hop answer quickly and keep the parser from discarding the answer.\", \"case\": \"The off switch and brace matcher fix real silence, but the fence matcher never matches, the helper docs promise a missing flag, and two tests assert on text rather than behavior, so another pass is needed.\", \"findings\": [{\"sev\": \"real\", \"path\": \"scripts/hare_r1.py\", \"line\": 295, \"issue\": \"The fence expression looks for backslashes instead of triple backticks, so it never matches a fenced reply. The clean fence test still passes only because the brace walker finds the object anyway.\", \"short\": \"Fence regex looks for backslashes instead of backticks so fenced JSON never matches and only fallback saves it\", \"fix\": \"later\", \"change\": \"Restore triple backticks and non greedy match for the fence expression.\"}, {\"sev\": \"real\", \"path\": \"scripts/hare_local.py\", \"line\": 7, \"issue\": \"The usage line documents --skip-checks while argparse defines --wait-checks, so the documented command errors. Default behavior is no wait, which makes the example doubly confusing.\", \"short\": \"Usage shows skip checks flag but code defines wait checks instead so the documented example command fails immediately\", \"fix\": \"yes\", \"change\": \"Align the usage example with the real wait checks flag.\", \"original\": \"    python scripts/hare_local.py 231 --skip-checks   # do not wait on CI\", \"suggestion\": \"    python scripts/hare_local.py 231 --wait-checks   # wait for CI to settle before reviewing\"}, {\"sev\": \"real\", \"path\": \"tests/test_hare_r1.py\", \"line\": 790, \"issue\": \"This test reads hare_r1.py as text and asserts on a string instead of exercising _hare_once with HARE_ASK. HARE.md names that pattern as a real finding.\", \"short\": \"Test reads source text for ask handling instead of running hare once with faked network and env\", \"fix\": \"later\", \"change\": \"Drive _hare_once with stubbed GitHub and HARE_ASK to prove manual runs count as asks.\"}, {\"sev\": \"real\", \"path\": \"tests/test_hare_r1.py\", \"line\": 783, \"issue\": \"Checking co_varnames proves the parameter exists but never proves the override is honoured. The test passes even when the hop list is ignored.\", \"short\": \"Asserts hop override parameter exists but never runs the hop so an ignored override still passes unnoticed\", \"fix\": \"later\", \"change\": \"Call _hare_once with a hop override and assert the provided order is used.\"}, {\"sev\": \"skip\", \"path\": \"docs/hare-thinking-ab.md\", \"line\": 93, \"issue\": \"The file ends without a trailing newline. Cosmetic, but the repo keeps POSIX newlines elsewhere.\", \"short\": \"Doc ends without trailing newline while other repo text files end with a newline character\", \"fix\": \"later\", \"change\": \"Add a trailing newline at end of file.\"}]}"
+}

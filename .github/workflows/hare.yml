@@ -19,6 +19,30 @@ on:
         description: Optional OpenRouter model slug for this run
         required: false
         type: string
+      budget:
+        description: Reasoning token budget per call (0 = uncapped)
+        required: false
+        type: string
+        default: '12000'
+      wall:
+        description: Wall-clock cap for the whole review, seconds (0 = uncapped)
+        required: false
+        type: string
+        default: '3600'
+      attempts:
+        description: Max calls per review across the chain (0 = uncapped)
+        required: false
+        type: string
+        default: '6'
+
+env:
+  # Defaults for the caps. A workflow_dispatch input overrides them per run, and
+  # `/hare budget=0 wall=0 attempts=0` overrides them per command. Each 0 means
+  # uncapped; the job timeout is the only ceiling then. Sources for these
+  # numbers are in docs/hare-next.md.
+  HARE_REASONING_BUDGET: '12000'
+  HARE_REVIEW_WALL_CLOCK_S: '3600'
+  HARE_MAX_ATTEMPTS: '6'
 
 concurrency:
   # Include event_name. CodeRabbit's skip-comment is issue_comment; without this
@@ -53,7 +77,13 @@ jobs:
        github.event.comment.user.login != 'github-actions[bot]') ||
       github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 40  # backstop for a very big diff (20 min hops + one 10 min call); a normal diff is bounded to ~16 min by the script
+    # 90 min, the backstop only. The script bounds a review itself: the hop
+    # budget sizes to the diff (30 min normal, 55 min big) and the wall-clock cap
+    # is 60 min for every review, so a run ends with ~30 min left to read CI and
+    # post. Raised from 40 so the wall-clock cap can actually bind instead of the
+    # job killing the run mid-chain; a normal diff still finishes far sooner.
+    timeout-minutes: 90
+
     # Always green: a dead brain posts searchts-r1-needed instead of failing CI.
     continue-on-error: true
     steps:
@@ -104,7 +134,17 @@ jobs:
           SEARCHTS_HARE_API_KEY_GEMINI: ${{ secrets.SEARCHTS_HARE_API_KEY_GEMINI }}
           HARE_GROQ_MODEL: openai/gpt-oss-120b
           HARE_GEMINI_MODEL: gemini-3.1-flash-lite,gemini-3.5-flash
-          HARE_NOUS_MODEL: stepfun/step-5-preview:free,poolside/laguna-s-2.1:free,meituan/longcat-2.5-preview:free
-          HARE_NOUS_EXTRA_MODEL: inclusionai/ling-3.0-flash-sante:free
-          HARE_OR_MODEL: ${{ github.event.inputs.or_model || 'nvidia/nemotron-3.5-lightning:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3-ultra-550b-a55b:free' }}
+          HARE_NOUS_MODEL: stepfun/step-5-preview:free,poolside/laguna-s-2.1:free,inclusionai/ling-3.0-flash-sante:free,meituan/longcat-2.5-preview:free
+          HARE_NOUS_EXTRA_MODEL: ''
+          HARE_OR_MODEL: ${{ github.event.inputs.or_model || 'nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3.5-lightning:free' }}
+          # ── Caps (scripts/hare_r1.py Caps, docs/hare-next.md has the table) ──
+          # 0 is uncapped for all three; the job timeout is the only ceiling then.
+          # Rate-limit backoff is not a cap and has no 0: hammering a free tier
+          # costs the account quota the live reviews need.
+          HARE_REASONING_BUDGET: ${{ github.event.inputs.budget || env.HARE_REASONING_BUDGET }}
+          HARE_REVIEW_WALL_CLOCK_S: ${{ github.event.inputs.wall || env.HARE_REVIEW_WALL_CLOCK_S }}
+          HARE_MAX_ATTEMPTS: ${{ github.event.inputs.attempts || env.HARE_MAX_ATTEMPTS }}
+          HARE_RATE_BACKOFF_S: 20
+          HARE_RATE_MAX_BACKOFF_S: 120
+
         run: python scripts/hare_r1.py

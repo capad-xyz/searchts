@@ -1,0 +1,33 @@
+{
+ "case": "237-proof",
+ "pr": 237,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 16.0,
+ "steps": 1,
+ "answer_part": "text",
+ "reasoning_chars": 0,
+ "usage": {
+  "prompt_tokens": 24004,
+  "completion_tokens": 1350,
+  "completion_tokens_details": {
+   "reasoning_tokens": 0
+  }
+ },
+ "answer": "{\"effort\":\"high\",\"summary\":\"The hop finally answers: reasoning turned off on every hop, the JSON salvage rewritten, and a local dry-run runner lands with it.\\n\\n1. **Reasoning off** `effort=none` on nous, groq and zen, one `PROVIDER_REQUEST_OPTIONS` table, budget 8000\u219232000, timeout 60\u2192180 s.\\n2. **Parser** `json_objects` does string-aware brace matching, searches from the end, and survives unclosed and unparseable spans.\\n3. **Diagnostics** empty content now names `finish_reason` and `reasoning_tokens`, `_short_fail` blames the budget only when the detail shows it, and the nag lead says which failure it was.\\n4. **Local runner** `scripts/hare_local.py` runs the same hop from a terminal, dry by default.\\n5. **Docs + workflow** the A/B writeup, and the job timeout 20\u219230 min with the arithmetic in a comment.\",\"aim\":\"Make the review hop return a review by pinning reasoning effort off, and stop the parser from throwing away a good answer.\",\"case\":\"The measurement is honest about its own weakness and the parser work is real: brace matching with string awareness plus searching from the end fixes a demonstrated data loss on the live 222 payload. Two things want checking before this lands: the fallback loop in `extract_json` can still return an object with no summary and no findings, which is the empty-review-under-the-bot-name case the docstring says is the expensive mistake, and `hare_local.py --post` calls `deliver_review` as the human while `post_needed` nags under the human too, so a documented posting mode silently skips `resolve_stale_threads`.\",\"findings\":[{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":312,\"issue\":\"The final fallback `return cands[-1] if cands else None` returns an arbitrary object, including one with neither key. `build_user` then sends a review with an empty summary and zero findings, which is exactly the cheap mistake the new docstring says to avoid.\",\"short\":\"Last-resort fallback returns any object, so an empty review can still post under the bot name\",\"fix\":\"later\",\"change\":\"Drop the bare fallback and return None, or require at least one of summary/findings before returning; a caller that wants a partial review should opt in.\"},{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":262,\"issue\":\"The fence regex is `r\\\"\\\\(?P<json)?\\\\s*(\\\\{.*\\\\})\\\\s*\\\\\\\"`, a backslash literal instead of a backtick. It can never match a real ```` ```json ```` fence, so every fenced answer now pays the full brace scan and the clean-fence case is dead code.\",\"short\":\"Fence regex uses an escaped backslash, not a backtick, so it never matches a real fence\",\"fix\":\"later\",\"change\":\"Use r\\\"```(?:json)?\\\\s*(\\\\{.*\\\\})\\\\s*```\\\" so a fenced answer is parsed as before.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":251,\"issue\":\"The docstring says \\\"Every top-level {...}\\\" but the function returns every *parseable* object, nested ones included. The test `test_json_objects_recovers_past_an_unclosed_brace` asserts membership only, so it does not pin the documented claim either.\",\"short\":\"Docstring says top-level, the function returns nested objects too\",\"fix\":\"later\",\"change\":\"Say 'Every object in text' in the docstring, or filter to depth 1.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_local.py\",\"line\":174,\"issue\":\"`dry_deliver` returns `\\\"needed\\\"` to keep `resolve_stale_threads` from firing, but `--post` runs the real `deliver_review`, so a posted run skips thread resolution while `post_needed` still nags under the gh user.\",\"short\":\"--post skips resolve_stale_threads and nags as the human; the documented mode is half wired\",\"fix\":\"later\",\"change\":\"Post the needed note as the bot only, or resolve threads too, and say which in the --post help.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":1042,\"issue\":\"`ask = ask_from(_env(\\\"HARE_ASK\\\")) if event != \\\"pull_request\\\" else \\\"\\\"` now reads HARE_ASK on `pull_request_target` and any other event name, widening the ask path beyond the manual-run case named in the PR body.\",\"short\":\"HARE_ASK is read on every non-push event, wider than the manual-run ask it claims\",\"fix\":\"later\",\"change\":\"Narrow the condition to `event in {\\\"issue_comment\\\", \\\"workflow_dispatch\\\", \\\"workflow_run\\\"}` and pin that set in the test.\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":687,\"issue\":\"`all(r.endswith(\\\"empty answer\\\") in r)` is the same test as the previous branch minus \\\"(reasoning ate the token budget)\\\", but it runs after it, so the third lead can only fire on strings that never contained \\\"empty content\\\".\",\"short\":\"Third nag lead is nearly unreachable after the budget branch already matched\",\"fix\":\"later\",\"change\":\"Merge the last two leads or reorder so each has a distinct, reachable condition.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":692,\"issue\":\"The new file has no newline at end of file, and `tests/test_hare_r1.py` still ends without one; the diff shows `\\\\ No newline at end of file` on both sides of the change.\",\"short\":\"Two files still end without a trailing newline\",\"fix\":\"later\",\"change\":\"Add a final newline to tests/test_hare_r1.py and the new files.\"},{\"sev\":\"skip\",\"path\":\"docs/hare-thinking-ab.md\",\"line\":93,\"issue\":\"The writeup and hare_local.py both end without a trailing newline, and the doc quotes \\\\`effort=none\\\\` as the shipped default while the next-experiment section still calls it a workaround.\",\"short\":\"Ends without a newline; the doc reads as shipped plus speculative at once\",\"fix\":\"no\",\"change\":\"\"}]}"
+}
