@@ -510,7 +510,20 @@ def read_cookie_file(path: str, site: str) -> CookieSource:
             continue
         name = item.get("name", item.get("n", ""))
         value = item.get("value", item.get("v", ""))
-        domain = item.get("domain", item.get("d", host))
+        # No host fallback here. The `if not domain` guard below is written to
+        # drop an entry that carries no domain, and a fallback to `host` makes
+        # that guard unreachable: domain is then always a non-empty string, and
+        # the cookie additionally matches *every* host, because it is scoped to
+        # exactly whatever site is being read. A file shaped
+        # [{"name":..,"value":..}] therefore passed filter_for_host for any URL,
+        # and MCP read_url accepts a cookie path, so one such file carried a
+        # login to whatever host an agent named next.
+        #
+        # Requiring the key is the documented contract: every cookie exporter
+        # writes a domain, and searchts's own store writes `d`. An entry
+        # without one is malformed, and dropping it is what the guard already
+        # said should happen.
+        domain = item.get("domain", item.get("d", ""))
         if not name or not domain:
             continue
         records.append(CookieRecord(
