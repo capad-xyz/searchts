@@ -506,6 +506,13 @@ def test_pushes_skip_drafts_closed_prs_and_pause_after_three_notes() -> None:
     assert hare_r1.cadence_skip("issue_comment", {"draft": True, "state": "open"}, three) == ""
     assert hare_r1.cadence_skip("workflow_dispatch", open_pr, three) == ""
     assert hare_r1.PAUSED in hare_r1.paused_body(3) and "/hare" in hare_r1.paused_body(3)
+    assert hare_r1.paused_body(3).split("\n\n", 1)[1].startswith("Reviews paused.")
+    draft = hare_r1.skipped_body("draft")
+    assert draft.startswith(hare_r1.SKIPPED + ":draft")
+    assert "Review skipped." in draft and "draft" in draft and "/hare" in draft
+    assert hare_r1.skip_already_said([{"body": draft}], "draft") is True
+    assert hare_r1.skip_already_said([{"body": draft}], "closed") is False
+    assert hare_r1.skip_already_said([], "draft") is False
 
 
 def test_hare_notes_ignore_other_reviews_and_sort_oldest_first() -> None:
