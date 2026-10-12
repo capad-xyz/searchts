@@ -423,8 +423,9 @@ python3 .hare-timing/measure_latency.py --author 'greptile-apps[bot]' --label Gr
   ([first PR review](https://www.greptile.com/docs/code-review/first-pr-review)). A first
   review of a large repo is therefore much slower than the steady state in our table.
 - **Caps:** `fileChangeLimit` is configurable and no hard line cap is published (not
-  public). Drafts are skipped by default. The docs show "Analyzing" during review and
-  the failed status "Tag @greptileai to retry"
+  public). Drafts are skipped by default. If a review does not appear, the docs advise
+  checking repository settings, draft status and branch filters, then commenting
+  `@greptileai` to trigger manually
   ([first PR review](https://www.greptile.com/docs/code-review/first-pr-review)).
 - **Free vs paid (DOCUMENTED):** 14-day trial on signup, then paid; the free plan includes
   PR reviews only, and CLI reviews need a trial or a paid plan
@@ -694,7 +695,7 @@ users to infer what happened from silence.
 | Qodo PR-Agent | every model failed | raises "Failed to generate prediction with any model of ..." | `pr_processing.py:830` |
 | Qodo Merge | close to the GitHub API limit | log line "Rate limit is too close to the limit, will not proceed"; user-visible wording not established | source log |
 | Mergify | new commits during a queued merge | "The queue request has been cancelled: new commits were pushed." | [kicad-mcp-pro#1207](https://github.com/oaslananka/kicad-mcp-pro/pull/1207) |
-| Greptile | review fails | failed status says `Tag @greptileai to retry`; docs also show `Analyzing` during review | [first PR review](https://www.greptile.com/docs/code-review/first-pr-review) |
+| Greptile | review does not appear | docs say to check repository settings, draft status and branch filters, then comment `@greptileai` to trigger manually | [first PR review](https://www.greptile.com/docs/code-review/first-pr-review) |
 | Cursor Bugbot | internal error or timeout | a fast note: "Something went wrong. Try again by commenting 'Cursor review' or 'bugbot run'", check concludes `neutral`, and "Bugbot does not emit a `skipped` conclusion" | [forum thread](https://forum.cursor.com/t/bugbot-fails-after-20-minutes/160592), [bugbot](https://cursor.com/docs/bugbot) |
 | Ellipsis | a reviewer fails or runs out of budget | "contributes nothing; the review still posts with the other reviewers' comments, never as an approval". With no reviewer finishing, "nothing is posted and nothing is marked reviewed" | [code-review](https://docs.ellipsis.dev/code-review) |
 | Ellipsis | a session hits a spend cap | the turn ends "with reason set to `budget_hit`: failed when the agent was working, cancelled when it hadn't started" | [budgets](https://docs.ellipsis.dev/budgets) |
