@@ -206,6 +206,10 @@ class TestCLI:
             "backend": "Jina Reader",
             "status": 200,
             "chars": len("markdown text"),
+            # F27: the receipt says whether this answer came from a request
+            # carrying session cookies, so a logged-in read and an anonymous one
+            # are distinguishable. False here: no cookies were asked for.
+            "authenticated": False,
             "text": "markdown text",
             "next_url": None,
             "more": [],

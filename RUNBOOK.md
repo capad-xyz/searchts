@@ -494,11 +494,15 @@ There is no web deploy target. `searchts` ships as a Python package.
 - **`docs/install.md` never mentions the extras.** No ffmpeg, whisper,
   patchright, chromium, `[browser]`, `[mcp]` or `[local-transcribe]` anywhere in
   `docs/`. Its "Directory Rules" table also assumes `/tmp/`, which is Unix-only.
-- **`rookiepy` is preferred for cookie extraction but is not a declared
-  dependency.** `searchts/cookie_extract.py` tries `rookiepy` first and falls
-  back to `browser_cookie3` (the `cookies` extra). If cookie extraction fails,
-  `pip install rookiepy` is the recommended fix even though pyproject never
-  mentions it.
+- **`rookiepy` is gone from cookie extraction.** `searchts/cookie_extract.py` no
+  longer tries it: rookiepy pins pyo3 0.20, which has no wheel for Python 3.13+,
+  so the suggested install could not build. Firefox-derived browsers (Zen,
+  Firefox, LibreWolf, ...) are read straight off disk by `searchts/session_cookies.py`
+  with `sqlite3` and `mode=ro`, no dependency at all; Chromium browsers go
+  through `browser_cookie3` (the `cookies` extra) and are refused with the real
+  reason, which is App-Bound Encryption rather than a missing package. A locked
+  Chromium profile is read through a debugger port the user opens
+  (`searchts read URL --cdp-port 9222`), never by decrypting the file.
 
 ## Project map
 
