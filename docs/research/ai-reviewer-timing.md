@@ -422,11 +422,12 @@ python3 .hare-timing/measure_latency.py --author 'greptile-apps[bot]' --label Gr
   prerequisite for automatic review
   ([first PR review](https://www.greptile.com/docs/code-review/first-pr-review)). A first
   review of a large repo is therefore much slower than the steady state in our table.
-- **Caps:** `fileChangeLimit` is configurable and no hard line cap is published (not
-  public). Drafts are skipped by default. If a review does not appear, the docs advise
-  checking repository settings, draft status and branch filters, then commenting
-  `@greptileai` to trigger manually
-  ([first PR review](https://www.greptile.com/docs/code-review/first-pr-review)).
+- **Caps:** No current hard file or line cap was found. The config reference says
+  previously saved review and auto-approval file limits no longer apply. Drafts are
+  skipped by default. If a review does not appear, the docs advise checking repository
+  settings, draft status and branch filters, then commenting `@greptileai` to trigger
+  manually ([config reference](https://www.greptile.com/docs/code-review/greptile-config-reference),
+  [first PR review](https://www.greptile.com/docs/code-review/first-pr-review)).
 - **Free vs paid (DOCUMENTED):** 14-day trial on signup, then paid; the free plan includes
   PR reviews only, and CLI reviews need a trial or a paid plan
   ([quickstart](https://www.greptile.com/quickstart)).
