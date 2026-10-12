@@ -11,6 +11,13 @@ review thread, `dropped` when the PR closed unmerged, and the owner's word
 `/hare fate <path:line> fixed|wrong|wontfix <why>` as a PR comment, which
 beats all three.
 
+A fate is matched to a finding by **identity, not by `path:line`** (`fate_matches`).
+A line is where the bubble landed, not where the claim lives: the owner's
+`/hare fate tests/test_hare_r1.py:63 wrong` on #359 meant the finding at :65, and
+with the exact key as the only match the rejection never landed, so the same false
+finding came back at 23:23 and again at 01:12. Identity is the file plus the
+claim's own words, with the line a tie-breaker.
+
 Hare only. Other reviewers on this repo are not Hare's business; a comparison
 against them is a repo-local script (scripts/compare_reviewers.py), not the ledger.
 
@@ -64,16 +71,115 @@ def fate_from(comment: str) -> tuple[str, str, str]:
     return m.group(1), m.group(2).lower(), hare_r1._no_em(hare_r1._plain(m.group(3)))[:200]
 
 
-HARE_OWNER_LOGINS = tuple(
-    x.strip() for x in os.environ.get("HARE_OWNER_LOGINS", "capad-xyz").split(",") if x.strip()
+# ── Finding identity ──────────────────────────────────────────────────────────
+# Everything here answers one question: is the finding Hare just raised the same
+# finding the owner already ruled on? Keying that on `path:line` is what made
+# `/hare fate` a no-op for two days on #359.
+
+# How far apart two lines on one file can be and still be one finding. The diff
+# moves lines as it grows, and the owner types the line they can see, which is
+# often the line above the bubble.
+LINE_WINDOW = 8
+# `wrong` and `wontfix` are the owner's word that the finding should not have been
+# made. Both stop it coming back; they stay apart in the ledger so it can say which.
+REJECTED_FATES = ("wrong", "wontfix")
+WORD_RE = re.compile(r"[a-z0-9_]+")
+# Words that only place a finding or hold the sentence together. They repeat across
+# every issue text, so sharing one says nothing about sharing a claim.
+STOP_WORDS = frozenset(
+    """a an and are as at be been but by can could did do does for from had has have he her his if in into is it its
+    may more most must my no not now of on one only or other our out over own same she should so some such than that
+    the their them then there these they this those to too two under up was we were what when where which while who
+    why will with would you your still already just very each any all also after before again new here there
+    does did done going gets got get make makes made say says said thing things way ways also""".split()
 )
+
+
+def loc_parts(loc: str) -> tuple[str, int | None]:
+    """`scripts/a.py:12` -> ("scripts/a.py", 12); `scripts/a.py` -> (path, None)."""
+    m = re.match(r"^(.*?):(\d+)$", (loc or "").strip())
+    return (m.group(1), int(m.group(2))) if m else ((loc or "").strip(), None)
+
+
+def claim_of(row: dict[str, Any]) -> tuple[str, int | None, str]:
+    """One finding as (file, line, the words it claims), from either shape: a ledger
+    row (`loc`) or a model's finding (`path` + `line`)."""
+    path, line = loc_parts(str(row.get("loc") or ""))
+    if not path:
+        path = str(row.get("path") or "")
+        try:
+            line = int(row["line"]) if row.get("line") is not None else line
+        except (TypeError, ValueError):
+            line = None
+    return path, line, str(row.get("issue") or "")
+
+
+def claim_words(text: str) -> set[str]:
+    """The words a finding claims, minus the ones that only place it and the ones
+    that hold it together. Two notes that describe one problem in different words
+    still share the words that carry the problem."""
+    return {
+        w
+        for w in WORD_RE.findall((text or "").lower())
+        if len(w) > 2 and not w.isdigit() and w not in STOP_WORDS
+    }
+
+
+def shared_words(a: str, b: str) -> int:
+    """How many content words two texts about a finding have in common."""
+    return len(claim_words(a) & claim_words(b))
+
+
+def fate_matches(finding: tuple[str, int | None, str], loc: str, why: str = "") -> bool:
+    """Does this adjudication cover that finding? Three ways, exact first.
+
+    1. the exact `path:line` the fate names.
+    2. a `path:line` the owner's own words name, which is how a fate recorded at
+       :63 against a finding at :65 reads on #359.
+    3. the same file, lines within `LINE_WINDOW`, and two content words in
+       common: the file plus the claim, with the line only as a tie-breaker.
+    """
+    path, line, issue = finding
+    other, other_line = loc_parts(loc)
+    if not path or not other or path != other:
+        return False
+    if line is not None and other_line is not None and line == other_line:
+        return True
+    if line is not None and re.search(rf"(?<![\w/.-]){re.escape(path)}:{line}(?![\d])", why or ""):
+        return True
+    if line is None or other_line is None or abs(other_line - line) > LINE_WINDOW:
+        return False
+    return bool(issue.strip()) and shared_words(issue, why) >= 2
+
+
+def rejected_lines(findings: list[dict[str, Any]], fates: list[dict[str, str]]) -> list[str]:
+    """Which findings a list of adjudicated fates kills, and what killed them.
+
+    `findings` are the rows this run produced (ledger shape), `fates` the rows of
+    `fate_from` plus `{"pr": n}`. A fate only ever removes a finding, so it is the
+    cheap half of the note: what it drops is named so the absence is explained
+    rather than mysterious.
+    """
+    out: list[str] = []
+    for f in findings:
+        claim = claim_of(f)
+        for d in fates:
+            if str(d.get("fate") or "") not in REJECTED_FATES or not fate_matches(claim, str(d.get("loc") or ""), str(d.get("why") or "")):
+                continue
+            loc = str(f.get("loc") or f"{claim[0]}:{claim[1]}" if claim[1] is not None else claim[0])
+            out.append(f"{loc} ({d['fate']}" + (f" on #{d['pr']}" if d.get("pr") is not None else "") + ")")
+            break
+    return out
+
+
+HARE_OWNER_LOGINS = hare_r1.HARE_OWNER_LOGINS
 
 
 def is_score_author(login: str) -> bool:
     """Whether this login's `/hare score` counts toward HARE.md.
 
-    HARE_OWNER_LOGINS, plus anyone with write access. A score of 2 or less with
-    a reason becomes a rule, and those rules are read back into every review
+    HARE_OWNER_LOGINS, plus anyone with write access. A score of 2 or less with a
+    reason becomes a rule, and those rules are read back into every review
     prompt, so this is the boundary between "the owner taught Hare something"
     and "a stranger rewrote Hare's instructions". Write access is checked at the
     call site, where the API can answer it; this is the list fallback.
@@ -214,8 +320,21 @@ def pr_rows(pr: dict[str, Any], reviews: list[dict[str, Any]], comments: list[di
                 continue
             scores.append({"score": n, "text": text, "by": who, "at": c.get("created_at", "")})
         loc, fate, why = fate_from(body)
-        if loc in findings:
-            findings[loc]["fate"], findings[loc]["why"] = fate, why
+        if not loc:
+            continue
+        if not hare_r1.is_fate_author(who, str(c.get("author_association") or "")):
+            # A fate now suppresses: it removes a finding that would have held the
+            # merge, so anyone who can comment could silence one. Same gate as a
+            # score, same reasoning (above).
+            continue
+        # By identity, not by key. `if loc in findings` only ever matched a bubble
+        # posted on exactly the line the owner typed, so a fate recorded a line or
+        # two off the finding it meant was recorded and then ignored: on #359 the
+        # owner's `wrong` on `tests/test_hare_r1.py:63` never reached the finding at
+        # :65, and that finding came back twice more.
+        for row in findings.values():
+            if fate_matches(claim_of(row), loc, why):
+                row["fate"], row["why"] = fate, why
     # A PR closed without merging takes its open findings with it: nothing
     # was fixed and nothing can be, so they are dropped, not open.
     state = "merged" if pr.get("merged_at") else str(pr.get("state") or "")
@@ -337,6 +456,31 @@ def prior_findings(ledger: dict[str, Any], paths: set[str], limit: int = 12) -> 
             path = str(f.get("loc", "")).rsplit(":", 1)[0]
             if path in paths:
                 out.append(f"#{e['pr']} {f['sev']} `{f['loc']}` ({f['fate']}): {f['issue'][:160]}")
+    return out[:limit]
+
+
+def rejected_findings(ledger: dict[str, Any], paths: set[str], limit: int = 8) -> list[str]:
+    """Findings the owner called wrong or wontfix on the files in this diff, with
+    their reason.
+
+    `prior_findings` already carried these, but as one row among every earlier
+    finding on the file, with the fate as a word in brackets. The model re-derived
+    what the owner had already ruled on because the row that mattered read like the
+    others, and what was missing was the reason: the owner's answer to "this test
+    breaks" was "CI test is green on 983490f (1269 passed)", and that sentence was
+    in the ledger and in no prompt. It is in this one.
+    """
+    out: list[str] = []
+    for e in sorted(ledger.get("entries", []), key=lambda e: -int(e.get("pr") or 0)):
+        for f in e.get("findings", []):
+            if str(f.get("fate") or "") not in REJECTED_FATES:
+                continue
+            path = str(f.get("loc", "")).rsplit(":", 1)[0]
+            if path not in paths:
+                continue
+            why = str(f.get("why") or "").strip()
+            line = f"#{e['pr']} {f.get('sev', 'real')} `{f.get('loc')}` ({f.get('fate')}): {str(f.get('issue') or '')[:140]}"
+            out.append(f"{line} - the owner said: {why[:200]}" if why else line)
     return out[:limit]
 
 

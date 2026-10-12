@@ -8,6 +8,7 @@ import http.client
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -90,6 +91,27 @@ BIG_HOP_BUDGET_S = int(os.environ.get("HARE_BIG_HOP_BUDGET_S", "3300"))
 
 def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default).strip()
+
+
+# Who may adjudicate a finding with `/hare fate <path:line> wrong`. The list is
+# the repo default and the workflow's own gate for `@hare` (OWNER / MEMBER /
+# COLLABORATOR) is the other way in. This is load-bearing: a fate only ever
+# removes a finding, and a finding that is real is the one holding a merge, so
+# anyone able to comment could otherwise silence one.
+HARE_OWNER_LOGINS = tuple(
+    x.strip() for x in os.environ.get("HARE_OWNER_LOGINS", "capad-xyz").split(",") if x.strip()
+)
+WRITE_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+
+
+def is_fate_author(login: str, association: str = "") -> bool:
+    """Whether this commenter can rule a finding wrong or wontfix.
+
+    The same boundary as a `/hare score`, which lands in HARE.md: a stranger on a
+    public repo can comment, and both words steer the next note. Recorded on the
+    ledger entry either way, so the owner can see who tried.
+    """
+    return bool(login) and (login in HARE_OWNER_LOGINS or (association or "").upper() in WRITE_ASSOCIATIONS)
 
 # HARE_REASONING: the owner's cap on the quiet pass, one word for every hop
 # that takes one (none, minimal, low, medium, high, max). Empty keeps the
@@ -1430,15 +1452,22 @@ def render_comment(
     case: str = "",
     log_tails: dict[str, str] | None = None,
     asked: str = "",
+    tests: dict[str, Any] | None = None,
+    ruled: list[str] | None = None,
 ) -> str:
     """v2 review body, the shape of Hare Bot's finals on #217, #220 and #221.
 
-    Summary (lead line, numbered kinds, a CI line), finding blocks, a "checks &
+Summary (lead line, numbered kinds, a CI line), finding blocks, a "checks &
     computer run" fold, Models. The Verdict line says Ship, Hold or Wait, set by the
     Action from CI and the real findings, and then the model's own case for
-    it: local Hare always said whether a PR looked good to ship and why, and
-    the owner wants that back (2026-10-04). Hare is still not the merge
+    it: local Hare always said whether a PR looked good to ship and why, and the
+    owner wants that back (2026-10-04). Hare is still not the merge
     button; the word is a call, the reasons are the point.
+
+    The fold carries the test run as its own line, before the CI lines: what was
+    run on this head, and what it said. A claim about a test that is not in that
+    line was not observed, and the note says so rather than leaving the reader to
+    guess which findings rest on a run.
 
     Findings: the real ones are the note. The skips go in one fold under them,
     because a page of nits reads like a page of problems and buries the one
@@ -1461,8 +1490,15 @@ def render_comment(
     run_lines: list[str] = []
     if sha:
         run_lines.append(f"- head `{sha[:7]}`")
+    if tests:
+        run_lines.append(test_run_line(tests, sha))
     run_lines.append(ci_fold(check_state, check_notes, green, log_tails))
     run_lines.append("- test-full / wheel-gate skipped by design")
+    if ruled:
+        # An absence the reader can account for. A finding that is not here because
+        # the owner ruled it wrong is quieter than a finding they cannot see, and
+        # quiet is what made #259's repeat look like a new observation.
+        run_lines.append(f"- findings dropped as already rejected: {len(ruled)} ({', '.join(ruled[:4])})")
     if cost:
         run_lines.append(cost)
     findings_md = "\n\n".join(blocks)
@@ -2104,6 +2140,8 @@ def build_user(
     ledger: str = "",
     hare_md: str = "",
     notice: str = "",
+    rejected: str = "",
+    observed: str = "",
 ) -> str:
     if len(diff) > MAX_DIFF:
         diff = diff[:MAX_DIFF] + "\n...[truncated]..."
@@ -2112,6 +2150,10 @@ def build_user(
         extra += f"## HARE.md (the owner's rules for Hare on this repo)\n{hare_md_for_prompt(hare_md)}\n\n"
     if ledger:
         extra += ledger + "\n\n"
+    if rejected:
+        extra += rejected + "\n\n"
+    if observed:
+        extra += observed + "\n\n"
     if since:
         rows = "\n".join(f"- {o['sev']} `{o['loc']}`: {o['issue']}" for o in (old or [])) or "- (none)"
         extra += (
@@ -2268,6 +2310,134 @@ def failed_log_tails(owner: str, repo: str, runs: list[dict[str, Any]], token: s
         if len(out) >= limit:
             break
     return out
+
+
+# ── The computer run, on the head this review is about ───────────────────────
+# A reviewer that asserts a test outcome without running it is the one thing a
+# reader has to re-check by hand, and it was wrong: on #259 the note claimed
+# `tests/test_hare_r1.py:65` still asserts 600 while the PR sets 1,800, and CI
+# was green on that very push (1269 passed). Running the file takes seconds and
+# the result goes in the note, so the claim and the evidence cannot disagree in
+# the open.
+
+HEAD_DIR = _env("HARE_HEAD_DIR", "head")
+TEST_TIMEOUT_S = int(os.environ.get("HARE_TEST_TIMEOUT_S", "300"))
+MAX_TEST_FILES = 8
+TESTS_ON = _env("HARE_TESTS", "1") != "0"
+
+
+def affected_tests(diff: str) -> list[str]:
+    """Which test files a diff puts at risk, in a fixed order a reader can check:
+    every test file the diff touches, then the test file that sits next to a
+    changed module (`searchts/core.py` -> `tests/test_core.py`). Names are paths,
+    not guesses about what a change breaks."""
+    paths = [m.group(1) for m in re.finditer(r"^\+\+\+ b/(\S+)", diff or "", re.M)]
+    out: list[str] = []
+    for p in paths:
+        if p.startswith("tests/") and p.endswith(".py") and p not in out:
+            out.append(p)
+    for p in paths:
+        if not p.endswith(".py") or p.startswith("tests/"):
+            continue
+        cand = f"tests/test_{Path(p).stem}.py"
+        if cand not in out:
+            out.append(cand)
+    return out[:MAX_TEST_FILES]
+
+
+def _pytest_summary(out: str) -> str:
+    """pytest's own count line: `1269 passed, 4 skipped in 21.44s`, `2 failed in 9s`,
+    `no tests ran in 0.02s`. The last such line, which is the one for the run just
+    made and not for anything a fixture printed."""
+    for line in reversed((out or "").splitlines()):
+        line = line.strip()
+        if re.match(r"^\d+ (passed|failed|error|errors|skipped|xfailed|xpassed)\b", line) or "no tests ran" in line:
+            return line
+    return ""
+
+
+def _pytest_failure_tail(out: str, cap: int = 1_500) -> str:
+    """What a failed run printed, from the short summary down, bounded. Enough for a
+    model to judge whether the failure is the diff's, not the whole log."""
+    text = out or ""
+    m = re.search(r"^=+ short test summary info =+$", text, re.M)
+    return (text[m.start() :] if m else text[-cap // 2 :]).strip()[-cap:]
+
+
+def run_tests(files: list[str], root: str = "", timeout: int = 0) -> dict[str, Any]:
+    """Run the affected tests on the checked-out head and report what happened.
+
+    Never raises and never guesses. A run that cannot start is reported as `error`
+    with the reason, because "tests were not run" and "tests passed" must never
+    read the same way in a note whose whole promise is that its claims were
+    observed. `HARE_TESTS=0` turns the whole thing off and the note says so.
+    """
+    empty = {"state": "off", "files": [], "summary": "", "detail": "", "seconds": 0.0, "note": "HARE_TESTS=0"}
+    if not TESTS_ON:
+        return empty
+    base = Path(root or HEAD_DIR)
+    keep = [f for f in files if (base / f).is_file()]
+    if not keep:
+        return {"state": "off", "files": [], "summary": "", "detail": "", "seconds": 0.0, "note": "no affected test file in this diff"}
+    started = time.time()
+    argv = [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", *keep]
+    try:
+        proc = subprocess.run(  # noqa: S603 - fixed argv, no shell, on the Action's own checkout
+            argv, cwd=str(base), capture_output=True, text=True, timeout=timeout or TEST_TIMEOUT_S
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "state": "timeout", "files": keep, "summary": "", "detail": "",
+            "seconds": time.time() - started, "note": f"still running after {timeout or TEST_TIMEOUT_S}s, cut",
+        }
+    except (OSError, ValueError) as e:
+        return {"state": "error", "files": keep, "summary": "", "detail": "", "seconds": time.time() - started, "note": f"could not start: {str(e)[:120]}"}
+    out = f"{proc.stdout}\n{proc.stderr}"
+    summary = _pytest_summary(out) or "pytest said nothing about a result"
+    state = "pass" if proc.returncode == 0 else ("collect-error" if re.search(r"\berror\b", summary) else "fail")
+    return {
+        "state": state,
+        "files": keep,
+        "summary": summary,
+        "detail": "" if proc.returncode == 0 else _pytest_failure_tail(out),
+        "seconds": time.time() - started,
+        "note": "",
+    }
+
+
+def test_run_line(run: dict[str, Any], sha: str = "") -> str:
+    """One line of the checks fold, whether the run passed, failed or never ran.
+    Predictable on purpose: the shape says what was run before it says what it
+    said."""
+    state = str(run.get("state") or "off")
+    what = ", ".join(run.get("files") or []) or "no test file"
+    head = f"on `{sha[:7]}`" if sha else "on this head"
+    if state in {"off", "error", "timeout"}:
+        return f"- tests {head}: not run ({run.get('note') or state})"
+    secs = int(float(run.get("seconds") or 0))
+    return f"- tests {head}: {what} -> {run.get('summary') or state} ({secs}s)"
+
+
+def test_run_block(run: dict[str, Any]) -> str:
+    """The observed results, as the prompt section that replaces a guess."""
+    state = str(run.get("state") or "off")
+    if state in {"off", "error", "timeout"}:
+        return (
+            f"## What Hare ran on this head\n\nNothing: {run.get('note') or state}. "
+            "So no claim about a test's outcome has any evidence behind it. "
+            "Do not make one; say the test was not run."
+        )
+    lines = [f"pytest {' '.join(run.get('files') or [])} -> {run.get('summary') or state}"]
+    if run.get("detail"):
+        lines += ["", "```text", str(run["detail"]), "```"]
+    return (
+        "## What Hare ran on this head (observed, not inferred)\n\n"
+        + "\n".join(lines)
+        + "\n\nOnly the files above ran, and this is the result. A claim that a test breaks, or that it passes, "
+        "is only available for those files and only in the direction this line says. For any other test, say it was "
+        "not run. Do not contradict this block; if a failure below is not the diff's fault, say why instead of "
+        "dropping it."
+    )
 
 
 def _short_fail(part: str) -> str:
@@ -2678,13 +2848,21 @@ def ask_from(comment: str) -> str:
 LEDGER_PATH = os.environ.get("HARE_LEDGER", "docs/hare-ledger.json")
 
 
+def ledger_data() -> dict[str, Any]:
+    """docs/hare-ledger.json, or {} when there is none or it is unreadable."""
+    try:
+        data = json.loads(Path(LEDGER_PATH).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def ledger_block(diff: str) -> str:
     """What the ledger knows that bears on this diff: the owner's recent scores
     and earlier findings on these files, with their fate. Memory in the repo,
     not in a vendor (PLAN R2b). Empty when there is no ledger yet."""
-    try:
-        data = json.loads(Path(LEDGER_PATH).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    data = ledger_data()
+    if not data:
         return ""
     try:
         import hare_ledger
@@ -2703,6 +2881,97 @@ def ledger_block(diff: str) -> str:
         lines.append("Earlier findings on files in this diff. Do not raise a fixed or resolved one again unless the code regressed:")
         lines += [f"- {x}" for x in prior]
     return "\n".join(lines)
+
+
+def rejected_block(diff: str, fates: list[dict[str, str]]) -> str:
+    """The findings the owner has already ruled on, for the files in this diff.
+
+    Two sources, one section. The ledger knows what was rejected on other PRs; the
+    comments on this PR know what was rejected here, today, and the ledger run is
+    weekly, so on its own it is always behind. Before, the ledger held this and
+    the prompt never showed it, which is the whole of why #259's false "this test
+    breaks" came back at 23:23 and again at 01:12 after the owner killed it at
+    20:32: nothing in the prompt said the owner had already ruled on it, so the
+    model re-derived what it was told.
+    """
+    lines: list[str] = []
+    data = ledger_data()
+    if data:
+        try:
+            import hare_ledger
+        except ImportError:
+            hare_ledger = None  # type: ignore[assignment]
+        if hare_ledger is not None:
+            paths = {m.group(1) for m in re.finditer(r"^\+\+\+ b/(\S+)", diff or "", re.M)}
+            lines += hare_ledger.rejected_findings(data, paths)
+    for d in fates:
+        if str(d.get("fate") or "") not in ("wrong", "wontfix"):
+            continue
+        why = str(d.get("why") or "").strip()
+        lines.append(f"#{d.get('pr', '?')} `{d.get('loc')}` ({d.get('fate')}): " + (f"the owner said: {why}" if why else "no reason given"))
+    seen: set[str] = set()
+    uniq = [x for x in lines if not (x in seen or seen.add(x))]
+    if not uniq:
+        return ""
+    return (
+        "## Rejected findings (the owner has already ruled on these; they are on the files in this diff)\n\n"
+        + "\n".join(f"- {x}" for x in uniq[:10])
+        + "\n\nDo not raise one of these again. The Action drops any finding that matches one, by the claim and not "
+        "by the line, so a repeat costs a push and a review to find out it was already answered. If one of them is "
+        "still true because this diff changed that line or added the evidence it lacked, say which one and why in the "
+        "issue: new evidence is a finding, a repeat is not."
+    )
+
+
+def fates_of_pr(owner: str, repo: str, n: int, token: str) -> list[dict[str, str]]:
+    """`/hare fate` on this PR, from people who may rule a finding.
+
+    Read while the review runs rather than waiting for the weekly ledger: the owner
+    rejects a finding because it is wrong now, and on #259 the note that rejected it
+    and the two that re-raised it were 35 hours apart with a ledger rebuild in
+    between.
+    """
+    try:
+        comments = github_api("GET", f"/repos/{owner}/{repo}/issues/{n}/comments?per_page=100", token)
+    except RuntimeError as e:
+        print(f"hare: no PR comments: {str(e)[:120]}")
+        return []
+    try:
+        import hare_ledger
+    except ImportError:
+        return []
+    out: list[dict[str, str]] = []
+    for c in comments if isinstance(comments, list) else []:
+        if not isinstance(c, dict):
+            continue
+        who = str(((c.get("user") or {}).get("login")) or "")
+        if not is_fate_author(who, str(c.get("author_association") or "")):
+            continue
+        loc, fate, why = hare_ledger.fate_from(str(c.get("body") or ""))
+        if loc:
+            out.append({"loc": loc, "fate": fate, "why": why, "pr": str(n), "by": who, "at": str(c.get("created_at") or "")})
+    return out
+
+
+def drop_rejected(
+    findings: list[dict[str, Any]], fates: list[dict[str, str]]
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Findings the owner has already ruled on, and what ruled them out.
+
+    A fate only ever removes a finding, and a real finding is the one holding a
+    merge, so this runs before the verdict is computed: a rejected finding must not
+    hold a PR after it was rejected. The match is by identity, so a fate recorded
+    a line or two off the finding it meant still kills it.
+    """
+    try:
+        import hare_ledger
+    except ImportError:
+        return findings, []
+    rows = [{"loc": f"{f.get('path')}:{f.get('line')}", "issue": str(f.get("issue") or "")} for f in findings]
+    killed = hare_ledger.rejected_lines(rows, fates)
+    dropped: set[str] = set(killed)
+    kept = [f for f in findings if f"{f.get('path')}:{f.get('line')}" not in dropped]
+    return kept, killed
 
 
 def parse_old_findings(body: str) -> list[dict[str, str]]:
