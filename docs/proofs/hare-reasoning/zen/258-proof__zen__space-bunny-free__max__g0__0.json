@@ -1,0 +1,33 @@
+{
+ "case": "258-proof",
+ "pr": 258,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "max",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": "max",
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 10.9,
+ "steps": 1,
+ "answer_part": "text",
+ "reasoning_chars": 0,
+ "usage": {
+  "prompt_tokens": 1,
+  "completion_tokens": 731,
+  "completion_tokens_details": {
+   "reasoning_tokens": 0
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"The hare gets slower feet first. \ud83d\udc07\\n\\n1. **Chain order** OpenRouter and Nous now lead; Groq and Gemini drop to fallbacks.\\n2. **Comment** `build_provider_chain` says the ledger cannot rank hops yet, because its notes predate today's fixes.\\n3. **PLAN R1c** the failover line carries the same new order and the same correction.\\n4. **Tests** the fixed-order, no-key and per-hop-options asserts follow the new hops.\",\"aim\":\"Move the fast, second-answer hops (Groq, Gemini) below OpenRouter and Nous in Hare's failover chain, on the owner's call, and fix the reasoning comment that credited the ledger for an order the ledger never chose.\",\"case\":\"The diff is a one-line reorder plus its three test asserts and the two places that document the order, and every assert that named the old sequence was updated with it, so nothing is left half-migrated. What I cannot check from here is whether the slower hops actually hold up on a big diff: the call is a judgment call the owner made from watching two PRs, and the first live run is the next PR after this merges, which the body says.\",\"findings\":[{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":643,\"issue\":\"The comment above the assert still says \\\"OpenRouter's qwen leads, then Nous, then Gemini\\\" and never mentions Groq's new slot after Nous, so the two comment lines and the new one disagree about the middle of the chain.\",\"short\":\"Comment still says then Gemini and skips Groq's new slot.\",\"fix\":\"yes\",\"change\":\"Reword the comment to match the new order, including Groq.\",\"original\":\"    # Gemini is the fallback, not the default (owner's call, 2026-10-04): it is\\n    # fast and misses things. OpenRouter's qwen leads, then Nous, then Gemini.\",\"suggestion\":\"    # OpenRouter and Nous lead, the fast hops follow (owner's call, 2026-10-04):\\n    # Groq and Gemini answer in seconds and miss things, so they are fallbacks.\"},{\"sev\":\"skip\",\"path\":\"tests/test_hare_r1.py\",\"line\":694,\"issue\":\"The per-hop options test's key shadowing is unchanged, but the comment that said \\\"the earlier hops die the way the real ones do\\\" now has only one earlier hop: the fake dies on o1 and n1, so g1 answers last. Nothing breaks, but the phrase reads as if several hops precede the survivor.\",\"short\":\"Comment says earlier hops plural; only o1 and n1 die before g1 now.\",\"fix\":\"later\",\"change\":\"Reword the comment to say the first hops die, without the plural.\"},{\"sev\":\"skip\",\"path\":\"PLAN.md\",\"line\":259,\"issue\":\"The failover line is dated \\\"as of 2026-10-04 (#236, #247, #255, #258)\\\" and the new text lands after the fixes it describes, which also landed on 2026-10-04, so a reader cannot tell which of the two orders are in force.\",\"short\":\"As-of date and PR numbers were not bumped for the new order.\",\"fix\":\"later\",\"change\":\"Carry the date this order landed or point at the PR that set it, so the line is not read as the old order from the same day.\"}]}"
+}

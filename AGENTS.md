@@ -8,6 +8,7 @@ This is **not** a skill. Skills (`SKILL.md`) are how to *use* searchts (`read_ur
 - What already shipped: [`docs/plan-shipped.md`](docs/plan-shipped.md) and [`docs/freeze-log.md`](docs/freeze-log.md). Not the plan.
 - Commands and Python conventions: [`CLAUDE.md`](CLAUDE.md)
 - Who is who: [`NAMES.md`](NAMES.md)
+- How to prove the CLI works: [`.agents/skills/verify-searchts/`](.agents/skills/verify-searchts/SKILL.md)
 
 ## Where to write
 
@@ -23,6 +24,16 @@ A plan says what is true now and what is next. A log says what already happened.
 | Direction, not the task list | [`ROADMAP.md`](ROADMAP.md) |
 | What a user sees in a release | [`CHANGELOG.md`](CHANGELOG.md) |
 
+## Plans land on main
+
+A plan or an idea is not done until it is on `main`. Other agents read `main`, not a chat. Open the PR and merge it once the docs checks are green. Do not hold it for a later pass on the wording.
+
+Look at the open PRs first.
+
+- If one already edits the same lines, stack on that branch or wait. Do not merge a second copy over it.
+- Landing the plan does not merge a code PR that is still open. The rules can be on `main` while the code is still in review.
+- Do not rewrite a shipped box in `docs/plan-shipped.md` to match a new idea. The open rule goes in [`PLAN.md`](PLAN.md). One dated line goes in [`docs/freeze-log.md`](docs/freeze-log.md).
+
 ## Identity
 
 Free, open-source, **keyless** package for agents. Fetch a URL or admit you can't. Won by reliability and being easy to reach for, not by feature count. Do not cite "keyless" as a ban on clearing a DataDome script, or as "a hosted read can never exist" (**F18**).
@@ -34,6 +45,34 @@ Free, open-source, **keyless** package for agents. Fetch a URL or admit you can'
 3. **P4.6** — work that can sit >1s ticks on **stderr**. Never stdout. Never the MCP protocol. Plain stderr, not Rich, not loguru (`-v` is for loguru).
 4. **No connector framework** (**N4**). Share extractors stay fail-open modules. Known-host JSON (F5b) is the same pattern, not a plugin system.
 5. **Out of scope** unless the PR *is* that PLAN id: Solari (**F14**), a public hosted URL for the free CLI (**N2**), paid proxy pools as a default of the free CLI (**N1**), "beat Reddit." A DataDome device-check on the stealth rung is in scope, including one simple click. A bought IP is not part of that pull request. **F7** is the transcribe cookie flag. Do not cite it as "cookies can never be used by read."
+
+## Verification
+
+A test proves the code does what it says. It does not prove the product does what
+it says. Before you claim a fetch, a search, a transcription or a download works,
+drive it and keep the evidence: [`.agents/skills/verify-searchts/`](.agents/skills/verify-searchts/SKILL.md).
+
+The rules are short because the harness is a terminal.
+
+1. **Drive, do not describe.** Run the real command against the real network and
+   capture stdout, stderr and the exit code. "It should work" is not a result.
+   Read [`features/`](.agents/skills/verify-searchts/features/README.md) first:
+   one file per user-facing feature, each with the end state that proves it.
+2. **Prove the path a user takes.** `searchts read <url>`, not the function
+   behind it. A proxy for the thing under test proves the proxy.
+3. **A green exit code is not a proof.** Assert the payload: the JSON has the
+   keys, the file has the sentences, the count is greater than zero. Exiting `0`
+   having produced nothing is a failure.
+4. **The map rots. Re-drive it.** After changing what a command does, or the
+   ladder it climbs, or the channels `doctor` reports, drive that feature again
+   and update its file. A feature the app has and the map does not is drift in
+   the direction that hides work.
+5. **Fail loud is a behaviour worth proving.** When a drive cannot reach the
+   state, the proof is the non-zero exit, the empty stdout and the named reason,
+   not a workaround that makes the check pass.
+
+`docs/hare-next.md` carries the same rule for Hare's notes: a claim about a test
+is only made from a run that happened.
 
 ## R1 — Hare (`searchts-hare[bot]`)
 
@@ -57,7 +96,7 @@ gh pr comment <n> --body '/hare'
 
 If a Review with `<!-- searchts-r1-review -->` already exists on this SHA, the Action no-ops. Push a commit to re-review. `/hare` still retries after a `searchts-r1-needed` nag (no Review yet).
 
-**Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: OpenRouter then Nous then Groq then Gemini then Zen (#258: slow hops first, the fast ones are fallbacks) (fixed list in `scripts/hare_r1.py`, chain in docs/hare-next.md: Nemotron Lightning / Gemma, then Laguna / LongCat, then GPT-OSS, then Gemini 3.1 Flash-Lite / 3.5 Flash, then Zen free; Inkling left 2026-10-05, Space Bunny left OpenRouter and Nous the same day; thinking is off by default and `/hare deep` turns it on one notch; Gemini is the fallback, not the default). Before the hop, the codebase graph (`scripts/hare_graph.py`) adds uses of names and files the diff changes, from the trusted base checkout, text only: code, then workflows and config, then docs, capped per hop (Groq 4k, Gemini 40k, the rest 20k). The note says how much of that graph the model saw. Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs get the nag, never a model hop, including when `/hare` or `@hare` runs the job with secrets.
+**Trigger (R1c):** Action `hare / r1` on `opened` / `synchronize` / `/hare` (same-repo PRs). Brain: **Nous then OpenRouter then Groq then Gemini then Zen** (#258: slow hops first, the fast ones are fallbacks; Nous moved ahead of OpenRouter 2026-10-06) (fixed list in `scripts/hare_r1.py`, chain in docs/hare-next.md: Nous Step 5 / Laguna / Ling / LongCat, then OpenRouter Nemotron Ultra / Super / Lightning, then GPT-OSS, then Gemini 3.1 Flash-Lite / 3.5 Flash, then Zen free; Inkling left 2026-10-05, Space Bunny left OpenRouter and Nous the same day; thinking is off by default and `/hare deep` turns it on one notch; Gemini is the fallback, not the default). Before the hop, the codebase graph (`scripts/hare_graph.py`) adds uses of names and files the diff changes, from the trusted base checkout, text only: code, then workflows and config, then docs, capped per hop (Groq 4k, Gemini 40k, the rest 20k). The note says how much of that graph the model saw. Fail -> nag `<!-- searchts-r1-needed -->` (issue comment). Do not post a fake review. Intent from Check Runs (red required job = hold). Fork PRs get the nag, never a model hop, including when `/hare` or `@hare` runs the job with secrets.
 
 Hare posts **one GitHub Review** (v2, the shape locked on Hare Bot #221). Author is the bot. Local chat is not enough.
 

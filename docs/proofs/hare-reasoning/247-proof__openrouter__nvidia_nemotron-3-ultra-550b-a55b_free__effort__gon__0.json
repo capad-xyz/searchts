@@ -1,0 +1,48 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "openrouter",
+ "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
+ "mode": "effort",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "effort": "high",
+   "exclude": true
+  }
+ },
+ "error": "",
+ "usage": {
+  "prompt_tokens": 7504,
+  "completion_tokens": 968,
+  "total_tokens": 8472,
+  "cost": 0,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "cost_details": {
+   "upstream_inference_cost": 0,
+   "upstream_inference_prompt_cost": 0,
+   "upstream_inference_completions_cost": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 489,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 133,
+  "answer_chars": 1594,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "{\"effort\":\"low\",\"summary\":\"Model chain reorder: Gemini demoted to fallback. Quiet. Sensible.\\n\\n1. **Provider order** Groq \u2192 OpenRouter \u2192 Nous \u2192 Gemini \u2192 Zen.\",\"aim\":\"Move Gemini from second to fourth in the Hare review chain so OpenRouter's qwen and Nous run before it.\",\"case\":\"The diff is a single, well-scoped reorder with tests updated to match. No behavior change beyond the intended priority shift. Tests pass (1014 passed, 4 skipped). Safe to ship.\",\"findings\":[{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":1353,\"issue\":\"The comment says 'Gemini goes after OpenRouter and Nous' but the code order is groq, openrouter, nous, gemini, zen \u2014 which matches. The comment is accurate but could note that Groq stays first for the 413 fast-fail reason mentioned in the PR body.\",\"short\":\"Comment matches code; could mention Groq's 413 fast-fail rationale.\",\"fix\":\"later\",\"change\":\"Add a one-liner in the comment about Groq staying first for fast 413 handling.\",\"original\":\"    # Gemini goes after OpenRouter and Nous (owner's call, 2026-10-04): Flash-Lite\\n    # answers fast and misses things, so it is the fallback, not the default.\\n    # Groq stays first: it 413s on a big prompt in under a second, so it costs\\n    # nothing when it cannot take the diff.\",\"suggestion\":\"    # Gemini goes after OpenRouter and Nous (owner's call, 2026-10-04): Flash-Lite\\n    # answers fast and misses things, so it is the fallback, not the default.\\n    # Groq stays first: it 413s on a big prompt in under a second, so it costs\\n    # nothing when it cannot take the diff. (Fast 413 = cheap probe.)\"}]}"
+}

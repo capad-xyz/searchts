@@ -1,0 +1,33 @@
+{
+ "case": "245-proof",
+ "pr": 245,
+ "provider": "zen",
+ "model": "space-bunny-free",
+ "mode": "default",
+ "graph": "off",
+ "attempt": 0,
+ "request_options": {
+  "transport": "opencode run --pure --thinking --format json",
+  "variant": null,
+  "published_effort": [
+   "low",
+   "medium",
+   "high",
+   "xhigh",
+   "max"
+  ]
+ },
+ "error": "",
+ "seconds": 199.4,
+ "steps": 23,
+ "answer_part": "text",
+ "reasoning_chars": 71546,
+ "usage": {
+  "prompt_tokens": 50841,
+  "completion_tokens": 4982,
+  "completion_tokens_details": {
+   "reasoning_tokens": 18905
+  }
+ },
+ "answer": "{\"effort\":\"medium\",\"summary\":\"Three fixes to the bot's own rescue path, the part that runs when a review gets cut off. It used to trip over its own belt.\\n\\n1. **String walk** `repair_json` now asks `_walk` whether a string is still open instead of counting raw quotes.\\n2. **Restart guard** a continuation that restarts with `{` only wins when it carries more findings than the partial kept.\\n3. **Timeout line** the short failure line reads the seconds out of the error instead of always naming `LLM_TIMEOUT_SEC`.\",\"aim\":\"Make Hare's cut-answer rescue keep the findings it already holds: count strings with the escape walk, never let a short restart replace a long partial, and name the tier that actually timed out.\",\"case\":\"The escape-walk change is right, the bare `{` restart guard is right, and the timeout line is right; 78 of the tests stay green under a run here. Two things want a look first: the escape-walk test passes unchanged against the parent commit, so it does not prove the fix it was written for, and a restart behind a code fence still replaces the kept findings, which is exactly the shrink this diff says it removes. Both are small edits and the whole patch for each is attached to its row.\",\"findings\":[{\"sev\":\"real\",\"path\":\"tests/test_hare_r1.py\",\"line\":1036,\"issue\":\"The fixture has two escaped quotes around hi, an even count, so the cut text holds 34 raw quotes and the old `repair_json` returns valid JSON anyway. Run against the parent commit 7291fa7 this test passes unchanged, so it cannot fail.\",\"short\":\"Two escaped quotes, an even count, so this test passes on the pre-fix repair_json too: it proves nothing.\",\"fix\":\"yes\",\"change\":\"Give the fixture one escaped quote so the pre-fix code appends a stray one and the test fails.\",\"original\":\"    cut = '{\\\"summary\\\":\\\"S.\\\",\\\"findings\\\":[{\\\"sev\\\":\\\"skip\\\",\\\"path\\\":\\\"a.py\\\",\\\"line\\\":1,\\\"issue\\\":\\\"says \\\\\\\"hi\\\\\\\"\\\",\\\"short\\\":\\\"s\\\",\\\"fix\\\":\\\"later\\\",\\\"change\\\":\\\"c\\\"},{\\\"sev\\\":\\\"re'\\n    fixed = json.loads(hare_r1.repair_json(cut))\\n    assert fixed[\\\"findings\\\"][0][\\\"issue\\\"] == 'says \\\"hi\\\"' and len(fixed[\\\"findings\\\"]) == 1\",\"suggestion\":\"    cut = '{\\\"summary\\\":\\\"S.\\\",\\\"findings\\\":[{\\\"sev\\\":\\\"skip\\\",\\\"path\\\":\\\"a.py\\\",\\\"line\\\":1,\\\"issue\\\":\\\"the model said \\\\\\\"boom here\\\",\\\"short\\\":\\\"s\\\",\\\"fix\\\":\\\"later\\\",\\\"change\\\":\\\"c\\\"},{\\\"sev\\\":\\\"re'\\n    fixed = json.loads(hare_r1.repair_json(cut))\\n    assert fixed[\\\"findings\\\"][0][\\\"issue\\\"] == 'the model said \\\"boom here' and len(fixed[\\\"findings\\\"]) == 1\"},{\"sev\":\"real\",\"path\":\"scripts/hare_r1.py\",\"line\":840,\"issue\":\"The restart is recognised by its first byte. A fenced or one-line-prefaced restart does not start with `{`, so it falls into the continuation branch, and `extract_json` prefers the fenced block: the one-finding restart still replaces the kept findings and the fold even says a continuation finished it. Reproduced with a fenced tail here.\",\"short\":\"Guard keys on the first byte, so a fenced restart still replaces the kept findings; parse the tail instead.\",\"fix\":\"yes\",\"change\":\"Recognise the restart by parsing the tail and looking for a findings key, not by its first character.\",\"original\":\"            if tail.lstrip().startswith(\\\"{\\\"):\\n                # A restart, not a continuation. An 800-token restart cannot hold\\n                # the findings the cut kept, so it only wins if it holds more.\\n                restart = extract_json(tail)\\n                kept_obj = extract_json(repair_json(partial)) or {}\\n                if restart and len(restart.get(\\\"findings\\\") or []) > len(kept_obj.get(\\\"findings\\\") or []):\",\"suggestion\":\"            restart = extract_json(tail)\\n            if restart is not None and \\\"findings\\\" in restart:\\n                # A restart, not a continuation. An 800-token restart cannot hold\\n                # the findings the cut kept, so it only wins if it holds more.\\n                kept_obj = extract_json(repair_json(partial)) or {}\\n                if len(restart.get(\\\"findings\\\") or []) > len(kept_obj.get(\\\"findings\\\") or []):\"},{\"sev\":\"skip\",\"path\":\"scripts/hare_r1.py\",\"line\":603,\"issue\":\"`stack` and `open_str` from this `_walk` are both overwritten further down before anything reads them; only `seam` is used here.\",\"short\":\"Both values from this _walk are overwritten before use; only seam matters on this line.\",\"fix\":\"yes\",\"change\":\"Unpack the throwaway the way the other call sites do.\",\"original\":\"    stack, seam, open_str = _walk(text)\",\"suggestion\":\"    stack, seam, _ = _walk(text)\"}]}"
+}

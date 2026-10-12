@@ -1,0 +1,46 @@
+{
+ "case": "247-proof",
+ "pr": 247,
+ "provider": "nous",
+ "model": "poolside/laguna-s-2.1:free",
+ "mode": "off",
+ "graph": "on",
+ "attempt": 0,
+ "request_options": {
+  "reasoning": {
+   "enabled": false
+  }
+ },
+ "error": "no JSON in the answer",
+ "usage": {
+  "prompt_tokens": 7539,
+  "completion_tokens": 626,
+  "total_tokens": 8165,
+  "prompt_tokens_details": {
+   "cached_tokens": 0,
+   "cache_write_tokens": 0,
+   "audio_tokens": 0,
+   "video_tokens": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0,
+   "image_tokens": 0,
+   "audio_tokens": 0
+  },
+  "cost": 0,
+  "cost_details": {
+   "source": "nas_model_override",
+   "floor_applied": false,
+   "rate_source": "nas_model_override"
+  }
+ },
+ "stream": {
+  "reasoning_chunks": 0,
+  "answer_chunks": 620,
+  "answer_chars": 2223,
+  "finish_reason": "stop",
+  "cut": "",
+  "usage_reported": true
+ },
+ "answer": "Looking at this PR, the goal is to reorder the Hare R1 provider chain so Gemini becomes the fallback instead of the second hop.\n\n## Summary\n\nChain reorder: Groq \u2192 OpenRouter \u2192 Nous \u2192 Gemini \u2192 Zen. Gemini drops from second to fourth.\n\n1. **Provider chain** `scripts/hare_r1.py` swaps `gemini` and `openrouter` in the fixed order tuple, with an owner-call comment.\n2. **Tests** `tests/test_hare_r1.py` update the expected order and the `fake_complete` call assertions to match.\n\nCI on `abc1234`: green (per Action).\n\nIntent: make qwen/OpenRouter the default second hop and demote Gemini to fallback.\n\n### Findings\n\n#### \ud83d\udfe1 skip \u00b7 `scripts/hare_r1.py:1353`\n\n**Issue:** The comment says \"Groq stays first: it 413s on a big prompt in under a second, so it costs nothing when it cannot take the diff.\" That is a cost claim, not a correctness one, and it is not tested.\n\n**Fix:** no. Leave the rationale comment as-is; it is documentation of the owner's call.\n\n#### \ud83d\udfe1 skip \u00b7 `tests/test_hare_r1.py:643`\n\n**Issue:** The test comment repeats the owner-call date `2026-10-04` inline, duplicating the source comment.\n\n**Fix:** later. Drop the inline date in the test comment; the source comment already carries it.\n\n<details>\n<summary>\ud83d\udc30 checks & computer run</summary>\n\n- head `abc1234`\n- CI lint / typecheck / test \u2192 green\n- test-full / wheel-gate skipped by design\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) \u00b7 purpose: review and report \u00b7 `nous:poolside/laguna-s-2.1` | low |\n\nThe diff is internally consistent: the source tuple, the order test, and the `fake_complete` call test all move in lockstep. The `build_provider_chain` callers in the same file (L1468, L650, L658, L851, L855, L889, L893, L896) index by hop name, not position, so they are unaffected. PLAN.md L257 still reads \"Nous then OpenRouter then OpenCode Zen\" as the secret order, which is now stale relative to the chain order, but that line describes secret availability, not hop order, so it does not break.\n\nCase: ship. The change is a single logical reorder, tests are updated to match, and no caller depends on positional order. The only nit is a duplicated date comment in the test, which is cosmetic."
+}

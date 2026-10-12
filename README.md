@@ -50,7 +50,7 @@ The package you install is free and keyless. The fetch and the browser run on yo
 
 If no tier comes back with real content, an optional human-in-the-loop step opens a real browser so you can clear the page once and continue. That covers interactive CAPTCHAs and soft walls alike: a login page served as HTTP 200 is not a challenge, but it is still a page only a human gets past. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
 
-**What it won't do.** It will not pretend a wall page is the article. A login the user did not hand over still fails, with the reason. A DataDome device-check is not a permanent failure: the stealth browser is supposed to let that script finish, and to take a simple click (continue, a checkbox, a press-and-hold that is one action). A puzzle that asks a person to recognize images still stops. The package will not route you through a paid residential proxy by default. A release never claims a site reads until it does. `datadome.co` is still a fail on the current scorecard. That is a measurement, not a rule.
+**What it won't do.** It will not pretend a wall page is the article. A login the user did not hand over still fails, with the reason. Reusing a login for `read` is [F27](PLAN.md) and is not in this release. A DataDome device-check is not a permanent failure: the stealth browser is supposed to let that script finish, and to take a simple click (continue, a checkbox, a press-and-hold that is one action). A puzzle that asks a person to recognize images still stops. The package will not route you through a paid residential proxy by default. A release never claims a site reads until it does. `datadome.co` is still a fail on the current scorecard. That is a measurement, not a rule.
 
 ## AI-chat share links
 
@@ -203,7 +203,7 @@ Latest run: [docs/scorecard.md](https://github.com/capad-xyz/searchts/blob/main/
 Search works with no keys (DuckDuckGo). Everything else is optional, via `searchts configure` or a `.env` (see `.env.example`):
 
 - **Search providers**: Exa, Brave, Tavily API keys, or a self-hosted `SEARXNG_URL`, for more and better results.
-- **Transcription**: a Groq or OpenAI (Whisper) key, plus `ffmpeg` and `yt-dlp`. Login-gated video: `searchts transcribe URL --cookies-from-browser chrome` (opt-in; never used by `read`).
+- **Transcription**: a Groq or OpenAI (Whisper) key, plus `ffmpeg` and `yt-dlp`. Login-gated video: `searchts transcribe URL --cookies-from-browser chrome` (opt-in; `read` does not use it yet, [F27](PLAN.md)).
 - **GitHub token** for higher rate limits.
 
 Run `searchts doctor` to check what is configured and working.
