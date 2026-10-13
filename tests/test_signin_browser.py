@@ -128,6 +128,12 @@ def test_the_signin_window_closes_even_when_the_block_raises(no_browser, monkeyp
 # ── the wait for the person, which was missing entirely ─────────────────────
 
 
+def _rec():
+    from searchts.session_cookies import CookieRecord
+
+    return CookieRecord("session", "v", ".example.com")
+
+
 def test_the_person_is_asked_before_any_cookie_is_read(monkeypatch):
     """The read must not happen until the wait has happened.
 
@@ -141,15 +147,14 @@ def test_the_person_is_asked_before_any_cookie_is_read(monkeypatch):
     """
     order = []
     monkeypatch.setattr(sb, "_read_after_signin",
-                        lambda port, url, host: order.append("read") or [])
+                        lambda port, url, host: order.append("read") or [_rec()])
     monkeypatch.setattr(sb, "wait_for_the_person",
                         lambda site, *, browser: order.append("wait"))
     monkeypatch.setattr(sb, "signin_window",
                         lambda site, **k: _nullcontext(("profile", 1234)))
     monkeypatch.setattr(sb, "_wipe_one", lambda profile: None)
 
-    with pytest.raises(CookieReadError):
-        sb.signin("https://example.com", browser="chrome")
+    sb.signin("https://example.com", browser="chrome")
 
     assert order == ["wait", "read"], f"got {order}, expected the wait before the read"
 
