@@ -416,10 +416,17 @@ There is no web deploy target. `searchts` ships as a Python package.
 - **Config file beats environment variable.** `Config.get` checks
   `~/.searchts/config.yaml` first. If someone once ran `searchts configure
   groq-key ...`, exporting `GROQ_API_KEY` will not change anything.
-- **Four knobs that do nothing.** `REDDIT_PROXY` (in `.env.example`, no code
-  reads it), config `proxy` (`cli.py` even comments "nothing reads this key at
-  runtime"), `youtube_cookies_from` (written, never read), and `github_token`
+- **Three knobs that do nothing.** `REDDIT_PROXY` (in `.env.example`, no code
+  reads it), `youtube_cookies_from` (written, never read), and `github_token`
   (stored and reported by `doctor`, never sent in a request).
+- **Config `proxy` used to be one of those four, and no longer is.** This entry
+  used to quote a `cli.py` comment saying "nothing reads this key at runtime".
+  That comment is gone from the code and `_read_command_proxy` resolves the
+  `--proxy` flag first and the saved value second, so the key is now
+  load-bearing for **every** `read`, not just ones that ask for it. If you set
+  it back when it was inert, your reads have been going through it since. Set
+  it with `searchts configure proxy <url>`; `--proxy` still overrides it for a
+  single read.
 - **Never run `ruff format`.** `CLAUDE.md` and `CONTRIBUTING.md` both say so:
   the tree is deliberately not format-clean and it would rewrite most files.
   Only `ruff check` is a gate.
