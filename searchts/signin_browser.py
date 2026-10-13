@@ -109,9 +109,13 @@ def signin_window(
     this profile, so binding anything wider would put it on the network.
 
     ``timeout_s`` bounds how long to wait for the debugger port to answer, not
-    how long the user has to sign in -- that is unbounded and is the user's to
-    take. Naming the two apart matters, because a single "timeout" on this
-    function used to read as though the sign-in itself could be cut short.
+    how long the user has to sign in. The two are deliberately different: the
+    browser failing to start is a fault worth reporting, and a person signing
+    in is not a timeout. ``wait_for_the_person`` is where that unbounded wait
+    actually happens, called from :func:`signin` before any cookie is read.
+    Naming the two apart matters, because a single "timeout" on this function
+    used to read as though the sign-in itself could be cut short -- and, while
+    the wait was missing entirely, it was not merely cut short but absent.
 
     The profile is *not* deleted here. The caller reads the cookies out of it
     and then removes it, because a sign-in that failed has nothing worth
@@ -166,6 +170,11 @@ def signin(
     url = site if "://" in site else "https://" + site
 
     with signin_window(site, browser=browser) as (profile, port):
+        # Before the read, not after. The cookies are whatever the page set by
+        # the time we look, so asking afterwards would already be too late: a
+        # sign-in that finished while we read is invisible, and a sign-in that
+        # has not happened looks exactly the same as one that has.
+        wait_for_the_person(site, browser=browser)
         records = _read_after_signin(port, url, host)
     # The profile has served its purpose either way. A profile left behind is a
     # login on disk that nobody agreed to keep.
@@ -190,6 +199,42 @@ def _wipe_one(profile: str) -> None:
         shutil.rmtree(profile, ignore_errors=False)
     except (OSError, shutil.Error):
         pass
+
+
+def wait_for_the_person(site: str, *, browser: str) -> None:
+    """Block until the person says they have signed in, or refuse.
+
+    This is the wait `signin_window`'s docstring promises when it says the time
+    to sign in "is unbounded and is the user's to take". It was not there at
+    all: the window opened, the cookies were read immediately, and the window
+    closed in about two seconds. A person cannot type a password in two seconds,
+    so the flow read the guest cookies the sign-in page sets on its own and
+    reported the result as a sign-in.
+
+    Refuses rather than reading anyway when stdin is not a terminal, because
+    there is no way to ask. That matters for MCP in particular, where stdin is
+    the JSON-RPC channel: an `input()` there would eat protocol messages, and a
+    piped script cannot complete a human sign-in at all. Both get a sentence
+    saying what to do instead.
+    """
+    import sys
+
+    if not (hasattr(sys.stdin, "isatty") and sys.stdin.isatty()):
+        raise CookieReadError(
+            f"signing in to {site} has to wait for you, and there is no terminal "
+            f"here to wait in. Run it from a terminal "
+            f"(`searchts login signin {site}`), or read the site with "
+            f"`--cookies-from-browser {browser}` instead, which copies a login you "
+            f"already have."
+        )
+    print()
+    print(f"Sign in to {site} in the {browser} window above.")
+    print("This waits for you. Press Enter once you are signed in, or close the")
+    print("window and press Enter to give up.")
+    try:
+        input("  press Enter when you are signed in: ")
+    except EOFError:
+        print("  no input available, giving up.", flush=True)
 
 
 def _read_after_signin(port: int, url: str, host: str) -> List[CookieRecord]:

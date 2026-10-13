@@ -12,7 +12,9 @@ assert on what got forwarded, which is the only thing the review was about.
 from __future__ import annotations
 
 import inspect
+import io
 import sys
+from contextlib import nullcontext as _nullcontext
 from pathlib import Path
 
 import pytest
@@ -20,6 +22,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from searchts import signin_browser as sb
+from searchts.session_cookies import CookieReadError
 
 
 class _FakeLaunched:
@@ -120,6 +123,65 @@ def test_the_signin_window_closes_even_when_the_block_raises(no_browser, monkeyp
         with sb.signin_window("example.com", browser="chrome"):
             raise RuntimeError("boom")
     assert closed == [True]
+
+
+# ── the wait for the person, which was missing entirely ─────────────────────
+
+
+def test_the_person_is_asked_before_any_cookie_is_read(monkeypatch):
+    """The read must not happen until the wait has happened.
+
+    This is the defect the running of it found. `signin` yielded as soon as the
+    debugger port answered and read straight away, so the window opened and
+    closed in 2.1 s and the flow reported whatever guest cookies the sign-in
+    page had set on its own as though a person had signed in.
+
+    Order is the whole assertion: a wait that ran *after* the read would leave
+    the reported bug in place while looking like a fix.
+    """
+    order = []
+    monkeypatch.setattr(sb, "_read_after_signin",
+                        lambda port, url, host: order.append("read") or [])
+    monkeypatch.setattr(sb, "wait_for_the_person",
+                        lambda site, *, browser: order.append("wait"))
+    monkeypatch.setattr(sb, "signin_window",
+                        lambda site, **k: _nullcontext(("profile", 1234)))
+    monkeypatch.setattr(sb, "_wipe_one", lambda profile: None)
+
+    with pytest.raises(CookieReadError):
+        sb.signin("https://example.com", browser="chrome")
+
+    assert order == ["wait", "read"], f"got {order}, expected the wait before the read"
+
+
+def test_a_non_terminal_refuses_instead_of_reading_anyway(monkeypatch):
+    """No terminal means no way to ask, so it must not pretend to have asked.
+
+    The MCP server is the case that matters: its stdin is the JSON-RPC channel,
+    so an `input()` there would eat protocol messages. A piped script cannot
+    complete a human sign-in either. Both get a sentence rather than a cookie.
+    """
+    read = []
+    monkeypatch.setattr(sys, "stdin", io.StringIO())  # isatty() is False
+    monkeypatch.setattr(sb, "_read_after_signin", lambda *a: read.append(a) or [])
+
+    with pytest.raises(CookieReadError) as exc:
+        sb.wait_for_the_person("https://example.com", browser="zen")
+
+    assert read == []
+    assert "terminal" in str(exc.value)
+    assert "cookies-from-browser" in str(exc.value)
+
+
+def test_a_terminal_waits_for_the_person(monkeypatch):
+    """With a terminal, the wait blocks until they press Enter."""
+
+    class _Tty(io.StringIO):
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(sys, "stdin", _Tty("\n"))
+    sb.wait_for_the_person("https://example.com", browser="zen")  # returns
 
 
 # ── the third finding: the default's meaning was not written down ───────────
