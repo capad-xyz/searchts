@@ -15,7 +15,6 @@ All notable changes to searchts are documented here. This project follows semant
 ### Fixed
 
 * **hare:** an answer a reader can predict, every claim observed ([#368](https://github.com/capad-xyz/searchts/issues/368)) ([456569b](https://github.com/capad-xyz/searchts/commit/456569b3d7c081558e6f85e4f781f703e8b2b0f0))
-* **login:** wait for the person to sign in, or refuse ([934ec30](https://github.com/capad-xyz/searchts/commit/934ec303f5dcdf5c23fc0d59fdce2ce700219bff))
 * **login:** wait for the person to sign in, or refuse ([#372](https://github.com/capad-xyz/searchts/issues/372)) ([934ec30](https://github.com/capad-xyz/searchts/commit/934ec303f5dcdf5c23fc0d59fdce2ce700219bff))
 
 ## [0.14.1](https://github.com/capad-xyz/searchts/compare/v0.14.0...v0.14.1) (2026-10-11)
