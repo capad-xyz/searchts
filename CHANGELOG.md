@@ -2,6 +2,21 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.15.0](https://github.com/capad-xyz/searchts/compare/v0.14.1...v0.15.0) (2026-10-13)
+
+
+### Added
+
+* **cookies:** read a logged-in page with your own session, host-fenced ([#349](https://github.com/capad-xyz/searchts/issues/349)) ([b3c439e](https://github.com/capad-xyz/searchts/commit/b3c439e8ea71ab561a319ec0f637b3d4fdec8412))
+* **hare:** reasoning on, bounded by four caps, measured on five PRs ([#359](https://github.com/capad-xyz/searchts/issues/359)) ([3bcf85a](https://github.com/capad-xyz/searchts/commit/3bcf85a68159b6d57bb96aa3bb31714aab777581))
+* **login:** the four states of a logged-in read, and keep or kill ([#365](https://github.com/capad-xyz/searchts/issues/365)) ([b38d42c](https://github.com/capad-xyz/searchts/commit/b38d42ceb286e6de8592daf38031ae154b9d47e4))
+
+
+### Fixed
+
+* **hare:** an answer a reader can predict, every claim observed ([#368](https://github.com/capad-xyz/searchts/issues/368)) ([456569b](https://github.com/capad-xyz/searchts/commit/456569b3d7c081558e6f85e4f781f703e8b2b0f0))
+* **login:** wait for the person to sign in, or refuse ([#372](https://github.com/capad-xyz/searchts/issues/372)) ([934ec30](https://github.com/capad-xyz/searchts/commit/934ec303f5dcdf5c23fc0d59fdce2ce700219bff))
+
 ## [0.14.1](https://github.com/capad-xyz/searchts/compare/v0.14.0...v0.14.1) (2026-10-11)
 
 
