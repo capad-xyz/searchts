@@ -201,6 +201,13 @@ def _run():
         help="Read YOUR browser's cookies for this site only (opt-in)",
     )
     p_read.add_argument(
+        "--yes",
+        action="store_true",
+        help="Approve copying cookies out of YOUR browser, this session only. "
+             "Without it --cookies-from-browser is refused, because the copy "
+             "is never silent.",
+    )
+    p_read.add_argument(
         "--cookies",
         metavar="PATH",
         help="Read a searchts-owned cookie file for this site only (opt-in)",
@@ -302,6 +309,62 @@ def _run():
     p_skill_install.add_argument("--dir", dest="dir", default=None,
                                  help="Target commands directory (default: ~/.claude/commands)")
 
+    # ── login ──
+    p_login = sub.add_parser(
+        "login",
+        parents=[_verbose],
+        help="Manage which site logins searchts keeps, and which it copied this session",
+    )
+    login_sub = p_login.add_subparsers(dest="login_command")
+
+    login_sub.add_parser(
+        "list", parents=[_verbose],
+        help="Show kept sites, this session's copies, and any scratch left over",
+    )
+
+    p_login_keep = login_sub.add_parser(
+        "keep", parents=[_verbose],
+        help="Keep one site's login in the searchts store",
+    )
+    p_login_keep.add_argument("url", help="The site whose login to keep")
+    p_login_keep.add_argument(
+        "--cookies-from-browser", default="", metavar="BROWSER",
+        help="Copy from this Firefox-family browser, then keep the site (opt-in)",
+    )
+
+    p_login_kill = login_sub.add_parser(
+        "kill", parents=[_verbose],
+        help="Delete searchts's copy of one site's login",
+    )
+    p_login_kill.add_argument("url", help="The site to forget")
+    p_login_kill.add_argument(
+        "--also-browser", action="store_true",
+        help="Also delete that site's cookies in your own Firefox/Chrome. "
+             "Off by default: those are yours, and searchts does not delete a "
+             "login you did not ask it to.",
+    )
+
+    p_login_signin = login_sub.add_parser(
+        "signin", parents=[_verbose],
+        help="Sign in once for a site in a browser searchts opens",
+    )
+    p_login_signin.add_argument("url", help="The site to sign in to")
+    p_login_signin.add_argument(
+        "--browser", default="chrome",
+        help="Which browser searchts opens (default: chrome)",
+    )
+    p_login_signin.add_argument(
+        "--yes", action="store_true",
+        help="Keep the login after signing in. Without this, signing in only "
+             "serves this one read and nothing is kept.",
+    )
+
+    login_sub.add_parser(
+        "purge-scratch", parents=[_verbose],
+        help="Delete every scratch copy. This runs on its own at the end of a "
+             "read anyway; this is for cleaning up after a killed process",
+    )
+
     # ── check-update ──
     # ── transcribe ──
     p_tr = sub.add_parser("transcribe", parents=[_verbose],
@@ -392,6 +455,8 @@ def _run():
         _cmd_uninstall(args)
     elif args.command == "mcp":
         _cmd_mcp(args)
+    elif args.command == "login":
+        _cmd_login(args)
     elif args.command == "skill":
         _cmd_skill(args)
     elif args.command == "transcribe":
@@ -1712,6 +1777,13 @@ def _cmd_read(args):
         # is the whole question.
         if e.hint:
             print(f"  hint: {e.hint}", file=sys.stderr)
+        # A login wall on an anonymous read is the one failure where the
+        # reason is not the whole answer: the page exists, it is just
+        # behind a login. Naming the commands here is what turns a wall into
+        # something an agent can act on, and it costs one line on a path
+        # that has already failed.
+        if any("login-wall" in why for _, why in e.attempts):
+            _print_login_wall_hint(args.url)
         sys.exit(1)
 
     # Surface prompt-injection findings to stderr so stdout stays clean content.
@@ -1781,33 +1853,103 @@ def _read_command_proxy(args):
 
 
 def _read_command_cookies(args):
-    """Resolve opt-in cookies for one read, reporting only safe provenance.
+    """Resolve cookies for one read, reporting only safe provenance.
 
-    A thin wrapper: the rules live in ``session_cookies.resolve_cookies`` so
-    the MCP tool resolves the same jar, with the same scoping and the same
-    messages. What is added here is the CLI's own behaviour around it -- report
-    where the cookies came from without naming a value, and exit non-zero when
-    there is nothing to send.
+    The rules live in ``login_store`` so the read path, the ``login`` verbs and
+    the MCP tool cannot reach different conclusions about the same site.
+
+    Two routes, and the difference is whether the user asked for a browser:
+
+    * No browser named. The store decides. A kept site is used with no prompt
+      at all, which is the entire point of keeping it. A site that is not kept
+      is *not* silently escalated: read falls back to anonymous and, if that
+      hits a login, the failure names the exact ``login`` command to run.
+    * A browser named. That is the user reaching for a login that is not kept,
+      so it is the copy route, and the session's one approval is required. It
+      is asked for exactly here rather than per URL.
     """
-    from searchts.session_cookies import CookieReadError, resolve_cookies
+    from searchts.login_store import (
+        SessionConsentNeeded,
+        grant_session_copy,
+        host_of,
+        prepare,
+    )
+    from searchts.session_cookies import CookieReadError
+
+    browser = getattr(args, "cookies_from_browser", None) or ""
+    cookie_file = getattr(args, "cookies", None) or ""
+    cdp_port = getattr(args, "cdp_port", None)
+
+    # Explicit, non-browser sources stay exactly as they were: a file or a port
+    # is already the user pointing at something specific.
+    if cookie_file or cdp_port:
+        from searchts.session_cookies import resolve_cookies
+
+        try:
+            records = resolve_cookies(
+                args.url, cookies=cookie_file,
+                cookies_from_browser=browser, cdp_port=cdp_port,
+            )
+        except CookieReadError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"could not read cookies: {e}", file=sys.stderr)
+            sys.exit(1)
+        if not records:
+            return None
+        print(f"cookies: {_cookie_provenance(args, len(records))}", file=sys.stderr)
+        return records
+
+    # No explicit source: let the state machine decide what this site is.
+    host = host_of(args.url)
+
+    # `--yes` is the only way this process grants itself the copy approval.
+    # It is deliberately explicit: consent is recorded per PID, so a grant
+    # cannot outlive the run that the user approved, and there is no ambient
+    # "always allow" that would survive the next terminal. The grant happens
+    # here, inside this process, because that is what the PID scoping means.
+    if browser and getattr(args, "yes", False):
+        grant_session_copy()
 
     try:
-        records = resolve_cookies(
-            args.url,
-            cookies=getattr(args, "cookies", None) or "",
-            cookies_from_browser=getattr(args, "cookies_from_browser", None) or "",
-            cdp_port=getattr(args, "cdp_port", None),
-        )
+        if browser:
+            # Whether this browser *can* be read is settled before the consent
+            # question, not after. A Chromium cookie file is locked, so asking
+            # the user to approve a copy that cannot happen is a question whose
+            # answer does not matter, and it burns the one approval the session
+            # was going to get for a site that could have used it.
+            source = prepare(args.url, browser=browser)
+        else:
+            source = prepare(args.url)
+    except SessionConsentNeeded as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(3)
     except CookieReadError as e:
+        # A site that is not kept and has nothing to copy is not an error
+        # here. An anonymous read is still a valid read; only a login wall
+        # will make the user care, and that names the command to run.
+        if not browser:
+            return None
         print(str(e), file=sys.stderr)
         sys.exit(1)
-    except Exception as e:  # CDP clients can expose non-CookieReadError failures.
+    except Exception as e:
         print(f"could not read cookies: {e}", file=sys.stderr)
         sys.exit(1)
-    if not records:
+
+    if not source or not getattr(source, "count", 0):
         return None
-    print(f"cookies: {_cookie_provenance(args, len(records))}", file=sys.stderr)
-    return records
+    label = getattr(source, "via", "") or "login"
+    print(f"cookies: {label} -> {source.count} cookies for {args.url}", file=sys.stderr)
+    if source.via == "owned store":
+        print(f"{host} was already kept; no browser opened.", file=sys.stderr)
+    else:
+        print(
+            "copied for this session only, not kept. "
+            f"`searchts login kill {host}` removes any saved login.",
+            file=sys.stderr,
+        )
+    return source.cookies
 
 
 def _cookie_provenance(args, count):
@@ -1818,6 +1960,162 @@ def _cookie_provenance(args, count):
     if getattr(args, "cookies", None):
         return f"file {args.cookies} -> {count} cookies for {args.url}"
     return f"browser ({args.cookies_from_browser}) -> {count} cookies for {args.url}"
+
+
+def _cmd_login(args):
+    """Keep, kill, list, and sign in. The verbs a logged-in read moves through.
+
+    Every path here reports provenance and never a cookie value. The ordering is
+    ``login_store``'s: this function decides nothing about what is allowed, so
+    the CLI and the MCP tool cannot reach different conclusions about the same
+    site.
+    """
+    from searchts.login_store import (
+        SessionConsentNeeded,
+        audit,
+        host_of,
+        keep,
+        kill,
+        purge_scratch,
+    )
+    from searchts.session_cookies import CookieReadError, for_site
+
+    action = getattr(args, "login_command", None) or "list"
+
+    if action == "list":
+        a = audit()
+        kept_sites = a.kept
+        if not kept_sites:
+            print("No site logins are kept. Nothing is stored between reads.")
+        else:
+            print("Kept (searchts's own store):")
+            for host, info in kept_sites.items():
+                extra = f" (from {info['browser']})" if info.get("browser") else ""
+                print(f"  {host}: {info['cookies']} cookies{extra}")
+        if a.session_copy_granted:
+            copied = a.session_copied_sites
+            print(f"\nThis session may copy logins. Copied so far: {', '.join(copied) or 'none'}.")
+        if a.scratch:
+            print(
+                f"\nScratch copies present: {len(a.scratch)} "
+                f"(deleted at the end of a read)"
+            )
+        sys.exit(0)
+
+    if action == "purge-scratch":
+        gone = purge_scratch()
+        print(f"Deleted {len(gone)} scratch copy/copies.")
+        sys.exit(0)
+
+    if action == "kill":
+        host = host_of(args.url)
+        if not host:
+            print(f"{args.url!r} is not a site searchts can file a login under.", file=sys.stderr)
+            sys.exit(2)
+        killed = kill(args.url, browser_copies=bool(args.also_browser))
+        print(killed.why)
+        sys.exit(0)
+
+    if action == "keep":
+        host = host_of(args.url)
+        if not host:
+            print(f"{args.url!r} is not a site searchts can file a login under.", file=sys.stderr)
+            sys.exit(2)
+        browser = getattr(args, "cookies_from_browser", "") or ""
+        if not browser:
+            print(
+                f"Nothing to keep: pass --cookies-from-browser <browser> to copy "
+                f"{host} first, or use `searchts login signin {args.url}`.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        try:
+            # Copying is not keeping, so the session's one approval is still
+            # required here. `login keep` does not become a way around it.
+            from searchts.login_store import require_copy_consent
+
+            require_copy_consent(args.url)
+            source = for_site(args.url, browser)
+        except SessionConsentNeeded as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(3)
+        except CookieReadError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+        out = keep(args.url, source.cookies, browser=browser)
+        print(out.why)
+        sys.exit(0)
+
+    if action == "signin":
+        from searchts.login_store import host_of as _host
+        from searchts.signin_browser import signin
+
+        host = _host(args.url)
+        if not host:
+            print(f"{args.url!r} is not a site searchts can file a login under.", file=sys.stderr)
+            sys.exit(2)
+        try:
+            source = signin(args.url, browser=args.browser)
+        except CookieReadError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+        # Not "Signed in to X". Nothing here has verified that a sign-in
+        # happened: a browser that loads the sign-in page sets guest cookies
+        # (bcookie, lidc, __cf_bm) before anyone types anything, and counting
+        # host-matching cookies as proof of authentication reported a success
+        # for a sign-in that never occurred. This says what was observed. The
+        # read is a separate command, so it cannot be pointed at from here --
+        # the point is that only a read can settle it, not that one is coming.
+        print(
+            f"read {source.count} cookie(s) for {host} from the sign-in browser "
+            f"({source.via}). If no sign-in happened these are guest cookies, "
+            f"and only a later read of {host} can tell the difference."
+        )
+        if args.yes:
+            kept_login = keep(args.url, source.cookies, browser=args.browser)
+            print(kept_login.why)
+        else:
+            print(
+                "Nothing kept. The next logged-in read of "
+                f"{host} asks again. Pass --yes to keep it."
+            )
+        sys.exit(0)
+
+    print(f"unknown login action {action!r}", file=sys.stderr)
+    sys.exit(2)
+
+
+def _print_login_wall_hint(url: str) -> None:
+    """On a login wall, name the two commands that can get past it.
+
+    Printed only when a rung actually reported ``login-wall``, so it never
+    appears on a page that merely embeds a sign-in link, and never on a read
+    that already carried cookies -- in that case ``unlocker`` has its own
+    ``hint`` naming the real cause, and two competing explanations would be
+    worse than one.
+    """
+    from searchts.login_store import host_of, kept
+
+    host = host_of(url)
+    if not host:
+        return
+    if kept(url):
+        # Already kept and still a wall: the saved login is stale, so keeping
+        # is not the fix and suggesting it would waste the user's time.
+        print(
+            f"  {host} is already in the searchts store and still returned a "
+            f"login page, so that saved login has expired. Sign in again: "
+            f"`searchts login kill {host}` then "
+            f"`searchts login signin {url}`.",
+            file=sys.stderr,
+        )
+        return
+    print(
+        f"  {host} is behind a login. Two ways past it, your call:\n"
+        f"    searchts login signin {url}          sign in once in a browser searchts opens\n"
+        f"    searchts read {url} --cookies-from-browser firefox   copy from a browser you already signed into",
+        file=sys.stderr,
+    )
 
 
 def _cmd_get(args):

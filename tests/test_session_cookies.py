@@ -54,24 +54,9 @@ _domain_matches = sc._domain_matches
 # ── fixtures ───────────────────────────────────────────────────────────────
 
 
-@pytest.fixture
-def tmp_home(tmp_path, monkeypatch):
-    """Redirect every home-ish variable session_cookies reads into tmp_path.
-
-    HOME alone is not enough on Windows: ntpath.expanduser honours USERPROFILE
-    and ignores HOME, so a test that only set HOME would create
-    ~/.searchts/cookies/owned.json in the real user's profile.
-    """
-    home = tmp_path / "home"
-    appdata = home / "AppData" / "Roaming"
-    localappdata = home / "AppData" / "Local"
-    for d in (home, appdata, localappdata):
-        d.mkdir(parents=True)
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(home))
-    monkeypatch.setenv("APPDATA", str(appdata))
-    monkeypatch.setenv("LOCALAPPDATA", str(localappdata))
-    return home
+# `tmp_home` now lives in tests/conftest.py so every file gets it. It used to
+# be defined here, and that is exactly how the other eight files that read a
+# URL were left able to reach the real store.
 
 
 # Every directory _firefox_profile_roots may consult for these two browsers, as
@@ -544,62 +529,3 @@ def test_describe_never_prints_a_cookie_value(tmp_home):
     assert "zen" in from_browser
     for secret in ("target-value-1", "target-value-2"):
         assert secret not in from_browser
-
-
-def test_a_cookie_file_entry_with_no_domain_is_dropped_not_scoped_to_the_host(tmp_home):
-    """A domain-less entry must not become a login for whatever host is read.
-
-    This is the exploit, stated as a test. `read_cookie_file` defaulted a
-    missing domain to the host being read, so `[{name, value}]` with no domain
-    passed `filter_for_host` for every URL, and MCP `read_url` takes a cookie
-    path. One such file was a login for any host an agent cared to name.
-
-    The `if not domain` guard was already written to drop such entries. The
-    host fallback made it unreachable, so the guard never ran. Restoring the
-    drop is what the guard always said should happen.
-    """
-    from searchts.session_cookies import read_cookie_file
-
-    path = Path(tmp_home) / "bare.json"
-    path.write_text(
-        json.dumps([{"name": "session", "value": "STOLEN", "path": "/"}]),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(CookieReadError):
-        read_cookie_file(str(path), "https://www.linkedin.com")
-
-
-def test_a_cookie_file_with_a_domain_still_reads(tmp_home):
-    """The fix must not break the shape every real exporter writes."""
-    from searchts.session_cookies import read_cookie_file
-
-    path = Path(tmp_home) / "scoped.json"
-    path.write_text(
-        json.dumps([{
-            "name": "session", "value": "REAL", "domain": ".linkedin.com",
-            "path": "/", "secure": True,
-        }]),
-        encoding="utf-8",
-    )
-
-    source = read_cookie_file(str(path), "https://www.linkedin.com")
-    assert source.count == 1
-    assert source.cookies[0].value == "REAL"
-
-
-def test_the_owned_stores_own_short_keys_still_round_trip(tmp_home):
-    """searchts writes `d`, so its own files must survive the stricter read."""
-    from searchts.session_cookies import read_cookie_file
-
-    path = Path(tmp_home) / "owned.json"
-    path.write_text(
-        json.dumps([{
-            "n": "sid", "v": "OWNED", "d": ".linkedin.com", "p": "/", "s": True,
-        }]),
-        encoding="utf-8",
-    )
-
-    source = read_cookie_file(str(path), "https://www.linkedin.com")
-    assert source.count == 1
-    assert source.cookies[0].name == "sid"

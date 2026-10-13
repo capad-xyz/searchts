@@ -81,6 +81,13 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I"]
 ignore = ["E501"]
+# W292 (no newline at end of file) is enforced from 33bb516. Only that one
+# rule is added: enabling all of W also turns up W293 in cookie_extract.py,
+# which is not this branch's business. The six files below already ended
+# mid-line before this branch and are left alone rather than folded into an
+# unrelated change; they are tracked, not endorsed.
+per-file-ignores = { "searchts/paging.py" = ["W292"], "tests/test_caps.py" = ["W292"], "tests/test_dogfood.py" = ["W292"], "tests/test_hare_hb3.py" = ["W292"], "tests/test_mcp_next_url.py" = ["W292"], "tests/test_paging.py" = ["W292"] }
+extend-select = ["W292"]
 
 [tool.mypy]
 python_version = "3.10"
