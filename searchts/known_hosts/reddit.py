@@ -418,8 +418,13 @@ _BATCH_PATH_RE = re.compile(
 
 
 def _host_of(url: str) -> str:
+    """The lowercased host of ``url``: no port, no userinfo, no trailing dot.
+
+    ``netloc`` carried all three, so ``www.reddit.com:443``, ``user@www.reddit.com``
+    and ``www.reddit.com.`` (the same host) each fell out of every Reddit check.
+    """
     try:
-        return (urllib.parse.urlsplit(url or "").netloc or "").lower()
+        return (urllib.parse.urlsplit(url or "").hostname or "").lower().rstrip(".")
     except Exception:  # noqa: BLE001 - a malformed URL is simply not a Reddit page
         return ""
 
@@ -449,7 +454,8 @@ def is_reddit_url(url: str) -> bool:
     Reddit pages too, and those are where the "Prove your humanity" interstitial
     was measured.
     """
-    return _host_of(url) in REDDIT_HOSTS
+    host = _host_of(url)
+    return host == "reddit.com" or host.endswith(".reddit.com")
 
 
 def hop_needs_browser(url: str, reasons) -> bool:

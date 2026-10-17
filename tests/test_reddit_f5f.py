@@ -1301,3 +1301,36 @@ def test_a_row_key_that_looks_like_a_page_url_does_not_end_the_walk(monkeypatch)
     monkeypatch.setattr(unlocker, "fetch", lambda url, **kw: pages[url])
     got = unlocker.read_items(a, 2, use_memory=False)
     assert [p.final_url for p in got] == [a, b]
+
+
+def test_is_reddit_url_reads_the_host_not_the_netloc():
+    """Port, userinfo, a trailing dot and a regional subdomain are still Reddit."""
+    for url in (
+        "https://www.reddit.com:443/r/MachineLearning/hot/",
+        "https://user@www.reddit.com/r/MachineLearning/hot/",
+        "https://user:pw@old.reddit.com:443/r/x/",
+        "https://www.reddit.com./r/MachineLearning/hot/",
+        "https://REDDIT.COM/r/x/",
+        "https://reddit.com/",
+        "https://m.reddit.com/r/x/",
+        "https://de.reddit.com/r/x/",
+    ):
+        assert reddit.is_reddit_url(url), url
+    # The listing check shares the host read, so a port no longer hides a feed.
+    assert reddit.is_reddit_listing_url("https://www.reddit.com:443/r/MachineLearning/hot/")
+
+
+def test_is_reddit_url_still_refuses_lookalikes_and_userinfo_tricks():
+    for url in (
+        "https://notreddit.com/r/x/",
+        "https://reddit.com.evil.test/r/x/",
+        "https://www.reddit.com.evil.test/r/x/",
+        "https://evilreddit.com/",
+        "https://www.reddit.com@evil.test/r/x/",
+        "https://www.reddit.com:443@evil.test/",
+        "https://evil.test/?u=https://www.reddit.com/",
+        "https://evil.test/www.reddit.com/",
+        "",
+        "not a url",
+    ):
+        assert not reddit.is_reddit_url(url), url
