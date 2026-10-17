@@ -2757,6 +2757,9 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     want = limits.items
     asked = max(1, int(items or 1))
     seen = set()
+    # Row keys are a different namespace from page URLs: one set for both let a
+    # row whose key was a later page's URL end the walk as a "loop".
+    seen_rows: set = set()
     out: List[FetchResult] = []
     current = url
     got = 0
@@ -2809,7 +2812,7 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
                 broke = True
                 break
         out.append(result)
-        added = _rows_added(result, seen)
+        added = _rows_added(result, seen_rows)
         got += added
         repeats += (len(result.index_keys) - added) if result.index_keys is not None else 0
         nxt = result.next_url

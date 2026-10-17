@@ -1280,3 +1280,24 @@ def test_a_hop_retry_that_is_not_attempted_leaves_the_error_alone(monkeypatch):
     err = unlocker.UnlockerError(BATCH, [("curl_cffi", "403")])
     assert unlocker._retry_hop_on_browser(BATCH, err, {}) is None
     assert err.attempts == [("curl_cffi", "403")]
+
+
+def test_a_row_key_that_looks_like_a_page_url_does_not_end_the_walk(monkeypatch):
+    """Row keys and page URLs are separate sets in read_items.
+
+    Page one has a row whose key is the URL of page two. With one shared set the
+    walk reads that URL as "already seen", calls it a loop and stops one page
+    short.
+    """
+    a, b = "https://site.test/feed", "https://site.test/feed?after=2"
+    pages = {
+        a: unlocker.FetchResult(
+            "curl_cffi", "x " * 300, 200, final_url=a, next_url=b, index_keys=[b]
+        ),
+        b: unlocker.FetchResult(
+            "curl_cffi", "y " * 300, 200, final_url=b, index_keys=["row-2"]
+        ),
+    }
+    monkeypatch.setattr(unlocker, "fetch", lambda url, **kw: pages[url])
+    got = unlocker.read_items(a, 2, use_memory=False)
+    assert [p.final_url for p in got] == [a, b]
