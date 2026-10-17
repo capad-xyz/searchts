@@ -1215,6 +1215,53 @@ def _raised_body(exc: BaseException) -> str:
     return body[:_VENDOR_WALL_SCAN]
 
 
+#: ``page.content()`` serializes the light DOM only. A web component that
+#: renders into an open shadow root (MDN's ``<mdn-code-example>`` holds every
+#: code sample of a reference page that way) vanishes from it the moment the
+#: component upgrades, leaving an empty custom element where the text was. This
+#: copies each host's shadow tree into a marked ``<div>`` inside the host, so the
+#: serialization carries it. Only hosts with nothing of their own in the light
+#: DOM get one: a slotted host's light children are already serialized and a
+#: copy would print them twice. Markers from an earlier call are removed first,
+#: so calling it again after the page changed never stacks copies.
+_INLINE_SHADOW_JS = """() => {
+  const MARK = 'data-searchts-shadow';
+  const SKIP = new Set(['STYLE', 'SCRIPT', 'LINK', 'SLOT', 'TEMPLATE']);
+  let copied = 0;
+  const visit = (root) => {
+    for (const old of root.querySelectorAll('[' + MARK + ']')) old.remove();
+    for (const host of Array.from(root.querySelectorAll('*'))) {
+      const sr = host.shadowRoot;
+      if (!sr) continue;
+      visit(sr);
+      if (host.children.length || (host.textContent || '').trim()) continue;
+      const box = document.createElement('div');
+      box.setAttribute(MARK, '');
+      for (const child of Array.from(sr.childNodes)) {
+        if (child.nodeType === 1 && SKIP.has(child.tagName)) continue;
+        box.appendChild(child.cloneNode(true));
+      }
+      if (box.childNodes.length) { host.appendChild(box); copied++; }
+    }
+  };
+  visit(document);
+  return copied;
+}"""
+
+
+def _inline_shadow_roots(page) -> int:
+    """Copy open shadow-root content into the light DOM; how many hosts got one.
+
+    Never raises: a page that will not answer (mid-navigation, closed) has
+    nothing to copy, and ``page.content()`` right after reports that failure
+    with its own retry and its own error.
+    """
+    try:
+        return int(page.evaluate(_INLINE_SHADOW_JS) or 0)
+    except Exception:  # noqa: BLE001 - the caller's content() owns the failure
+        return 0
+
+
 def _page_content(
     page,
     retries: int = _NAV_CONTENT_RETRIES,
@@ -1232,6 +1279,7 @@ def _page_content(
         _stderr_tick("waiting for navigation to finish…", progress)
     for i in range(max(1, retries)):
         try:
+            _inline_shadow_roots(page)
             return page.content()
         except Exception as e:  # noqa: BLE001
             if not _is_nav_race(e):
@@ -1640,6 +1688,11 @@ class _ExpandSink:
     def __init__(self, max_clicks: int = 8):
         self.max_clicks = max_clicks
         self._details = 0
+        #: Text the markup half measured (extract after minus before), and
+        #: whether any rung that opened sections did not measure it. One
+        #: unmeasured rung makes the total unknown, which reads as "opened".
+        self._added = 0
+        self._unmeasured = False
         self._clicks = 0
         self._clicked: List[str] = []
         self._buttons = 0
@@ -1654,6 +1707,12 @@ class _ExpandSink:
         self.ran = True
         self._reports.append(report)
         self._details += getattr(report, "details", 0)
+        if getattr(report, "details", 0):
+            added = getattr(report, "added_chars", None)
+            if added is None:
+                self._unmeasured = True
+            else:
+                self._added += added
         self._clicks += getattr(report, "clicks", 0)
         self._clicked.extend(getattr(report, "clicked", []) or [])
         self._buttons += getattr(report, "buttons", 0)
@@ -1703,6 +1762,8 @@ class _ExpandSink:
         return Report(
             html="",
             details=self._details,
+            added_chars=(None if self._unmeasured or not self._details
+                         else self._added),
             clicks=self._clicks,
             clicked=list(self._clicked),
             buttons=self._buttons,
@@ -2204,7 +2265,15 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 rep = _expand.expand_html(body)
                 if rep.html != body:
                     body = rep.html
-                    text = html_to_text(body, url) if backend != "Jina Reader" else text
+                    if backend != "Jina Reader":
+                        opened_text = html_to_text(body, url)
+                        # Measured, so the note says what the rewrite really
+                        # did. And never trade text for text: an extract that
+                        # came out shorter with the folds open keeps the one
+                        # the read already had.
+                        rep.added_chars = len(opened_text) - len(text)
+                        if rep.added_chars > 0:
+                            text = opened_text
                 expand_sink.add(rep)
             # Login-wall on the extract only (raw HTML often has a sign-in modal).
             # `final_url` rides along: a redirect onto /login is the wall, even
@@ -2671,8 +2740,13 @@ def _note_walk_capped(
     """
     from searchts import sanitize
 
-    got = f"asked for {asked}, got {got_pages}"
-    got = f"{rows}, {got}" if rows else got
+    if rows:
+        # A row walk: ``asked`` is rows here, not pages, so "asked for 70, got
+        # 5" set a row count beside a page count. Rows against the ceiling that
+        # applied, and the pages as pages.
+        got = f"{rows}, stopped after {got_pages} page{'s' if got_pages != 1 else ''}"
+    else:
+        got = f"asked for {asked}, got {got_pages}"
     note = sanitize.scrub(f"[pages: {got}. The next page is {nxt}]", redact=True)
     last.warnings = list(last.warnings or []) + note.findings
     last.text = (last.text or "").rstrip() + f"\n\n{note.text}"
@@ -2683,6 +2757,16 @@ _MAX_ITEMS = 300
 # "1. [". Matching only the unordered form counted every ordered list as zero
 # rows, so --items walked the whole page cap and reported nothing.
 _ITEM_LINE = re.compile(r"(?m)^(?:-|\d+\.)\s+\[")
+# A table-shaped feed (Discourse's /latest, a forum index, a ranking) extracts
+# to one pipe row per item, not to a list. Matching only list lines counted
+# every one of those rows as zero, so `--items` and the user's ceiling never
+# saw a row, and the walk ran to the page cap. A row counts when it carries a
+# link: the header and the `| --- |` rule do not, and a table of plain data is
+# not a list of things to open.
+_TABLE_ROW = re.compile(r"(?m)^[ \t]*\|[^\n]*\]\(https?://")
+# A link target on a row: with the row's words, its identity across the scroll
+# and the pages that follow it (see _row_key).
+_ROW_LINK = re.compile(r"\]\((https?://[^)\s]+)\)")
 
 
 def _is_refusal(err: UnlockerError) -> bool:
@@ -2711,7 +2795,57 @@ def _note_walk_stopped(last: "FetchResult", url: str, err: UnlockerError) -> Non
 
 def item_count(text: str) -> int:
     """Index rows already rendered as markdown links."""
-    return len(_ITEM_LINE.findall(text or ""))
+    text = text or ""
+    return len(_ITEM_LINE.findall(text)) + len(_TABLE_ROW.findall(text))
+
+
+def _row_key(line: str) -> tuple:
+    """What makes a row the same row: every link on it, and its words.
+
+    The first link alone is not enough. A table whose first column is an author
+    or a category puts the same link at the head of many distinct rows, and one
+    seen row then took every later row that shared it. The whole line is too
+    much: reply, view and age columns drift between the scroll and the page
+    walk, and a row that only changed its count is still the same row. So the
+    key is all the row's link targets plus its words, with every token that
+    carries a digit (a count, an age, ``2h``, ``1.2k``) left out.
+    """
+    links = tuple(_ROW_LINK.findall(line))
+    words = tuple(
+        t
+        for t in re.split(r"[\s|\[\]()]+", _ROW_LINK.sub("]", line))
+        if t and not any(c.isdigit() for c in t)
+    )
+    return links, words
+
+
+def _row_keys(text: str) -> set:
+    """The key of every row in ``text``, for :func:`_drop_repeated_rows`."""
+    keys = set()
+    for line in (text or "").splitlines():
+        if (_ITEM_LINE.match(line) or _TABLE_ROW.match(line)) and _ROW_LINK.search(line):
+            keys.add(_row_key(line))
+    return keys
+
+
+def _drop_repeated_rows(text: str, seen: set) -> str:
+    """``text`` without the rows already in ``seen`` (see :func:`_row_keys`).
+
+    A list row drags its indented byline and snippet lines with it; a table row
+    is one line. Everything that is not a repeated row stays byte for byte.
+    """
+    out: List[str] = []
+    skipping = False
+    for line in (text or "").splitlines():
+        is_row = bool(_ITEM_LINE.match(line) or _TABLE_ROW.match(line))
+        if is_row:
+            skipping = bool(_ROW_LINK.search(line) and _row_key(line) in seen)
+        elif skipping and line.strip() and not line.startswith((" ", "\t")):
+            skipping = False
+        if skipping:
+            continue
+        out.append(line)
+    return "\n".join(out)
 
 
 def _rows_added(result: "FetchResult", seen: set) -> int:
@@ -2826,7 +2960,9 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         if out and got < want and out[-1].next_url and not broke:
             _note_walk_capped(
                 out[-1], len(out), asked, out[-1].next_url,
-                rows=f"{got} rows of {asked}" if got else "no rows",
+                # `want` is the ceiling that applied, not the unclamped ask:
+                # the clamp note on page one already names the difference.
+                rows=f"{got} rows of {want}" if got else "no rows",
             )
     if not out:
         return out
@@ -2884,12 +3020,23 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
                 "the feed without it to scroll]"
             ), None
         else:
-            note, rep = _scroll_feed(url, want - got, limits,
+            # The scroll starts at the top of the feed, so it is asked for the
+            # rows wanted in all, not for what the page walk left over: it
+            # re-reads the rows the walk already has, and asking for the
+            # remainder ended it early or handed back rows the walk repeated.
+            note, rep = _scroll_feed(url, want, limits,
                                      relay_only=not _has_markup(out[0]))
         if note:
             extra += f"\n\n{note}"
         if rep is not None and rep.stop != "not-a-feed" and rep.html:
             out[0] = _scrolled(out[0], rep, url, kwargs)
+            # The scrolled page one is the feed from the top, so the later
+            # pages of the walk (the same feed, a window further down) repeat
+            # its rows. Each row is returned once, in the place it came first.
+            seen = _row_keys(out[0].text)
+            for later in out[1:]:
+                later.text = _drop_repeated_rows(later.text, seen)
+                seen |= _row_keys(later.text)
     if extra:
         first = out[0]
         first.text = (first.text or "").rstrip() + extra

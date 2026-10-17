@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 
@@ -773,3 +774,152 @@ def test_lookalike_hosts_are_not_treated_as_bing(url):
 def test_bing_and_its_subdomains_are_decoded(url):
     assert more._clean_item_url(url) == "https://pypi.org/project/searchts/"
 
+
+
+# ── #378: a table-shaped feed has rows, and the ceiling counts them ─────────
+
+
+def _table_page(start: int, n: int = 30) -> str:
+    """The shape Discourse's /latest extracts to: one table row per topic."""
+    head = "| Topic | Replies | Views |\n| --- | --- | --- |\n"
+    rows = "\n  \n".join(
+        f"        | [Topic {i}](https://forum.example/t/topic-{i}/{i}) |   "
+        f"[{i % 7}](https://forum.example/t/topic-{i}/{i}/1)    | {i * 3} |"
+        for i in range(start, start + n)
+    )
+    return head + rows
+
+
+def _table_walk(monkeypatch, calls):
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        calls.append(p)
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_table_page(p * 30), status=200, final_url=url,
+            next_url=f"https://forum.example/latest?page={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+
+
+def test_item_count_counts_table_rows_that_carry_a_link():
+    assert unlocker.item_count(_table_page(0, 30)) == 30
+    # The header and the separator are not rows, and a table with no link in it
+    # is data, not a list of things to open.
+    assert unlocker.item_count("| a | b |\n| --- | --- |\n| 1 | 2 |") == 0
+
+
+def test_a_table_feed_stops_the_walk_at_the_rows_asked_for(monkeypatch):
+    calls = []
+    _table_walk(monkeypatch, calls)
+    got = unlocker.read_items("https://forum.example/latest?page=0", 50)
+    # 30 rows after page one, 60 after page two: the third page is never asked
+    # for. It used to walk all five because every table row counted as zero.
+    assert calls == [0, 1]
+    assert len(got) == 2
+    assert "[pages:" not in got[-1].text
+
+
+def test_the_ceiling_stops_a_table_feed_and_the_notes_agree(monkeypatch):
+    calls = []
+    _table_walk(monkeypatch, calls)
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "20")
+    got = unlocker.read_items("https://forum.example/latest?page=0", 90)
+    assert calls == [0], "the ceiling is 20 and page one already holds 30 rows"
+    assert "[items: asked for 90, the ceiling is 20]" in got[0].text
+    assert "asked for 90, got" not in "".join(p.text for p in got)
+
+
+def test_a_capped_row_walk_reports_rows_against_the_effective_ceiling(monkeypatch):
+    calls = []
+    _table_walk(monkeypatch, calls)
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "200")
+    got = unlocker.read_items("https://forum.example/latest?page=0", 300)
+    text = got[-1].text
+    # 5 pages of 30 rows against a ceiling of 200: the sentence must say rows
+    # and pages as what they are, not "asked for 300, got 5".
+    assert "150 rows of 200" in text
+    assert "5 pages" in text
+    assert "asked for 300, got 5" not in text
+
+
+def test_scroll_rows_are_not_repeated_by_the_pages_walk(monkeypatch):
+    calls = []
+    _table_walk(monkeypatch, calls)
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "300")
+
+    # The scroll starts from the top of the same feed, so its rows are the rows
+    # the next pages carry. 200 rows from the scroll must replace page one and
+    # the pages the walk already read must not repeat any of them.
+    scrolled = "\n\n".join(
+        # The same row the walk renders, with the counts a later read finds
+        # drifted: a row that only changed its views is still the same row.
+        f"        | [Topic {i}](https://forum.example/t/topic-{i}/{i}) |   "
+        f"[{i % 7 + 1}](https://forum.example/t/topic-{i}/{i}/1)    | {i * 3 + 9} |"
+        for i in range(0, 200)
+    )
+    asked = []
+
+    class Rep:
+        stop = "end"
+        html = "<html></html>"
+
+    def fake_scroll(url, want, limits, **k):
+        asked.append(want)
+        return "[scroll: 200 list row(s) after 5 scroll step(s); the page stopped growing]", Rep()
+
+    monkeypatch.setattr(unlocker, "_scroll_feed", fake_scroll)
+    monkeypatch.setattr(
+        unlocker, "_scrolled",
+        lambda old, rep, url, kw: unlocker.FetchResult(
+            backend="scroll:curl_cffi", text=scrolled, status=200, final_url=url),
+    )
+    got = unlocker.read_items("https://forum.example/latest?page=0", 300)
+    links = []
+    for p in got:
+        links += re.findall(r"\]\((https://forum\.example/t/topic-\d+/\d+)\)", p.text)
+    assert len(links) == len(set(links)), "a row was returned twice"
+    assert len(set(links)) == 200
+    # The scroll starts at the top of the feed, so it is asked for the rows
+    # wanted in all, not what the page walk left over: asking for the
+    # remainder is how it came back with rows the walk already had.
+    assert asked == [300]
+
+
+def test_repeated_list_rows_take_their_byline_and_nothing_else_with_them():
+    page = (
+        "# Index\n\n"
+        "- [Seen](https://e.test/seen)\n  by someone, 2h\n  a snippet of the seen row\n\n"
+        "- [Fresh](https://e.test/fresh)\n  by another, 3h\n\n"
+        "Closing paragraph that is not a row.\n"
+        "[pages: 2 rows of 5, stopped after 1 page. The next page is https://e.test/?p=2]"
+    )
+    seen = unlocker._row_keys("- [Seen](https://e.test/seen)\n  by someone, 2h\n")
+    out = unlocker._drop_repeated_rows(page, seen)
+    assert "Seen" not in out and "a snippet of the seen row" not in out
+    assert "- [Fresh](https://e.test/fresh)\n  by another, 3h" in out
+    assert "Closing paragraph that is not a row." in out
+    assert "[pages: 2 rows of 5" in out
+    # Nothing seen: byte for byte what came in.
+    assert unlocker._drop_repeated_rows(page, set()) == page
+
+
+def test_table_rows_that_share_a_first_link_are_not_one_row():
+    # A table whose first column is an author link: every row starts with the
+    # same link, so keying on the first link dropped them all once one was seen.
+    head = "| Who | Topic |\n| --- | --- |\n"
+    page1 = head + "| [alice](https://e.test/u/alice) | [One](https://e.test/t/1) |\n"
+    page2 = (
+        head
+        + "| [alice](https://e.test/u/alice) | [One](https://e.test/t/1) |\n"
+        + "| [alice](https://e.test/u/alice) | [Two](https://e.test/t/2) |\n"
+        + "| [alice](https://e.test/u/alice) | [Three](https://e.test/t/3) |\n"
+        + "| [bob](https://e.test/u/bob) | [Four](https://e.test/t/4) |\n"
+    )
+    out = unlocker._drop_repeated_rows(page2, unlocker._row_keys(page1))
+    assert "[One]" not in out, "the row seen on page one came back"
+    for kept in ("[Two]", "[Three]", "[Four]"):
+        assert kept in out, f"{kept} was dropped with a row it only shares a link with"
+    assert out.startswith(head)
+    # A page that is nothing but repeats keeps its header and loses its row.
+    assert unlocker._drop_repeated_rows(page1, unlocker._row_keys(page1)).strip() == head.strip()

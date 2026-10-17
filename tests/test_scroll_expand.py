@@ -789,3 +789,129 @@ def test_an_expand_read_whose_browser_failed_says_the_browser_failed(monkeypatch
     assert got.backend == "curl_cffi"
     assert "the browser could not open this page" in got.text
     assert "x-searchts-expand-deferred" in (got.headers or {})
+
+
+# ── #379: --expand only adds text; a note says what actually happened ─────────
+
+#: Shaped like MDN's code samples: the served markup holds the sample in a
+#: plain <div><pre>, and the page's script swaps that for a custom element that
+#: renders the same sample into an open shadow root. ``page.content()`` then
+#: serializes an empty element, which is how a re-read after ``--expand`` lost
+#: every code block while the read without it kept them.
+SHADOW_PAGE = """<!doctype html><html><body><main><h1>Reference</h1>
+<p>Some prose about the element that is long enough to look like an article.</p>
+<details><summary>Attributes</summary><p>The open attribute is boolean.</p></details>
+<sample-box id="s1"></sample-box>
+<sample-box id="s2"></sample-box>
+<sample-box id="slotted"><pre>slotted light code stays once</pre></sample-box>
+<script>
+class SampleBox extends HTMLElement {
+  connectedCallback() {
+    const root = this.attachShadow({mode: 'open'});
+    const n = this.id;
+    root.innerHTML = '<style>pre{color:red}</style><pre><code>code of ' + n + '</code></pre><slot></slot>';
+  }
+}
+customElements.define('sample-box', SampleBox);
+</script></main></body></html>"""
+
+
+def _chromium_page():
+    sync = pytest.importorskip("patchright.sync_api")
+    pw = sync.sync_playwright().start()
+    try:
+        browser = pw.chromium.launch(headless=True)
+    except Exception as e:  # noqa: BLE001 - no Chromium installed: not this test's failure
+        pw.stop()
+        pytest.skip(f"no Chromium to drive: {e}")
+    return pw, browser, browser.new_page()
+
+
+def test_shadow_root_content_is_in_the_captured_html():
+    pw, browser, page = _chromium_page()
+    try:
+        page.set_content(SHADOW_PAGE)
+        assert page.evaluate("document.querySelectorAll('pre').length") == 1, \
+            "the fixture must hide the samples in shadow roots"
+        html = unlocker._page_content(page)
+        assert "code of s1" in html and "code of s2" in html
+        # Slotted light content is already serialized: it must not be doubled.
+        assert html.count("slotted light code stays once") == 1
+        # And a second capture, after the page changed, does not stack copies.
+        page.evaluate("document.querySelector('details').open = true")
+        again = unlocker._page_content(page)
+        assert again.count("code of s1") == 1
+        text = unlocker.html_to_text(again, "https://example.org/ref")
+        assert "code of s1" in text
+    finally:
+        browser.close()
+        pw.stop()
+
+
+def test_expand_does_not_remove_what_the_same_read_had_without_it():
+    pw, browser, page = _chromium_page()
+    try:
+        page.set_content(SHADOW_PAGE)
+        plain = unlocker.html_to_text(unlocker._page_content(page), "https://example.org/ref")
+        expand.open_details_in_page(page)
+        expanded = unlocker.html_to_text(unlocker._page_content(page), "https://example.org/ref")
+        for needle in ("code of s1", "code of s2", "slotted light code stays once"):
+            assert needle in plain
+            assert needle in expanded, f"--expand lost {needle!r}"
+        assert "The open attribute is boolean." in expanded
+    finally:
+        browser.close()
+        pw.stop()
+
+
+def test_the_capture_asks_for_shadow_content_before_it_reads(monkeypatch):
+    # No browser needed: the order of the two page calls is the contract.
+    calls = []
+
+    class Page:
+        def evaluate(self, js):
+            calls.append("evaluate")
+            return 2
+
+        def content(self):
+            calls.append("content")
+            return "<html></html>"
+
+    assert unlocker._page_content(Page()) == "<html></html>"
+    assert calls == ["evaluate", "content"]
+
+    class Dead(Page):
+        def evaluate(self, js):
+            raise RuntimeError("Execution context was destroyed")
+
+    # A page that will not run the script still gets its content() call, and
+    # the failure that matters (navigating) is that call's to report.
+    assert unlocker._page_content(Dead()) == "<html></html>"
+
+
+def test_expand_on_curl_says_when_opening_added_no_text(monkeypatch):
+    # Seven closed <details>, but the extractor already reads their text: the
+    # fixture's extract is byte-identical with and without the rewrite. The note
+    # used to say "7 <details> section(s) opened" as if text had come out of it.
+    html = load("mdn_closed_details.html")
+    monkeypatch.setattr(unlocker, "jina_enabled", lambda: False)
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi",
+                        lambda url, timeout=30: (200, html, url, {}))
+    monkeypatch.setattr(scroll, "browser_available", lambda: False)
+    got = unlocker.fetch("https://developer.mozilla.org/en-US/docs/x",
+                         backends=["curl_cffi"], expand=True, use_memory=False)
+    note = next(line for line in got.text.splitlines() if line.startswith("[expand:"))
+    assert "7" in note
+    assert "already" in note and "no text" in note
+    assert "section(s) opened" not in note
+
+
+def test_the_expand_note_reports_text_it_really_added():
+    rep = expand.Report(html="x", details=3, added_chars=412)
+    assert "3 <details> section(s) opened" in rep.note()
+    assert "+412 chars" in rep.note()
+    # The browser half presses a live DOM and does not measure: its wording is
+    # unchanged, because there "opened" is what happened.
+    live = expand.Report(html="x", details=3)
+    assert "3 <details> section(s) opened" in live.note()
+    assert "already" not in live.note() and "+" not in live.note()
