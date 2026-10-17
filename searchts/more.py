@@ -1343,10 +1343,6 @@ def summary(found: List[More]) -> str:
 
 #: Below this a structured body is a teaser, not the page's text.
 _STRUCTURED_MIN_CHARS = 400
-#: The data has to be this much bigger than the extract to replace it. A plain
-#: article's ``articleBody`` is the same text the extractor already formatted,
-#: so without a margin the swap would trade Markdown for a flat blob.
-_STRUCTURED_MARGIN = 1.1
 _LD_SCRIPT_RE = re.compile(
     r"<script[^>]*type\s*=\s*[\"']application/ld\+json[\"'][^>]*>(.*?)</script\s*>",
     re.I | re.S,
