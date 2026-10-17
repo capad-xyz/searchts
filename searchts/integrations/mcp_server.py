@@ -79,7 +79,16 @@ READ_URL_DESCRIPTION = (
     "version bump and existing keys keep their meaning, so read the fields you "
     "need and ignore the rest rather than validating against a fixed key set. "
     "No note does not "
-    "prove the page is complete. If the page is behind a login and the user "
+    "prove the page is complete. Three parameters are intent only and never "
+    "mechanics: 'max_pages' asks for more of a paginated list, 'max_items' asks "
+    "for more list rows (next-page links first, then scrolling when that is the "
+    "only way the list grows), and 'expand' opens closed <details> and buttons "
+    "labelled read/show/see more. Each is capped by the user's own ceiling "
+    "(SEARCHTS_MAX_PAGES, SEARCHTS_MAX_ITEMS, SEARCHTS_MAX_EXPAND_CLICKS), "
+    "which you cannot raise; ask for less than the ceiling, and a request over "
+    "it comes back clamped with a note saying so. 'expand' never follows a "
+    "link, a form or a sign-in, and a 'continue reading' paywall is named "
+    "rather than opened. If the page is behind a login and the user "
     "has told you they are signed in on this machine, you can read it as them: "
     "pass 'cdp_port' (e.g. '9222', a debugger port the user already opened on "
     "their own browser), or 'cookies_from_browser' (e.g. 'firefox', 'zen') for "
@@ -154,6 +163,7 @@ def create_server():
         max_items: int = 0,
         cursor: str = "",
         page_items: int = 0,
+        expand: bool = False,
         cookies: str = "",
         cookies_from_browser: str = "",
         cdp_port: str = "",
@@ -166,7 +176,8 @@ def create_server():
         # making progress while a slow browser render is pending (P3.10).
         return await asyncio.to_thread(
             read_url, url, max_pages, max_items, cursor, page_items,
-            cookies, cookies_from_browser, cdp_port, proxy, proxy_trusted,
+            expand, cookies, cookies_from_browser, cdp_port, proxy,
+            proxy_trusted,
         )
 
     @mcp.tool(name="web_search", description=WEB_SEARCH_DESCRIPTION)
@@ -520,6 +531,7 @@ def read_url(
     max_items: int = 0,
     cursor: str = "",
     page_items: int = 0,
+    expand: bool = False,
     cookies: str = "",
     cookies_from_browser: str = "",
     cdp_port: str = "",
@@ -558,6 +570,12 @@ def read_url(
     Chromium login is read; ``cookies_from_browser`` reads a Firefox-family
     profile off disk. A read that carries cookies and still lands on a login
     page says so in the error instead of reporting a wall three times.
+
+    F23d/F23e: ``expand`` is the third intent knob, beside ``max_pages`` and
+    ``max_items``, and all three are capped by the user's own ceiling in
+    ``searchts.knobs``. The agent asks up to it and cannot raise it; a request
+    over it is clamped and the note says so, in the same ``text`` the rest of
+    the findings land in. The names are the CLI's names.
     """
     from searchts import paging, sanitize, ssrf, unlocker
 
@@ -640,6 +658,11 @@ def read_url(
     if proxy:
         extra["proxy"] = proxy
         extra["proxy_trusted"] = bool(proxy_trusted)
+    if expand:
+        # F23d, passed only when asked. The click ceiling comes from the
+        # user's policy inside fetch; this parameter is the intent, not the
+        # mechanics, and there is no parameter for "how far".
+        extra["expand"] = True
     try:
         if max_items:
             pages = unlocker.read_items(url, max_items, **extra)

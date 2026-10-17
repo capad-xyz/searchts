@@ -631,7 +631,11 @@ def test_a_feed_without_a_next_link_says_to_install_the_browser(monkeypatch):
         )
 
     monkeypatch.setattr(unlocker, "fetch", fake)
-    monkeypatch.setattr(unlocker, "_browser_installed", lambda: False)
+    # F23c: the answer is still "install the browser", but the gate moved from
+    # this module to the one that owns the scroll, so that is where it is stubbed.
+    from searchts import scroll as scroll_mod
+
+    monkeypatch.setattr(scroll_mod, "browser_available", lambda: False)
     got = unlocker.read_items("https://example.org/feed", 20)
     assert "searchts install --browser" in got[-1].text
 
