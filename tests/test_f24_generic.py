@@ -696,7 +696,67 @@ def test_the_media_note_is_carried_on_the_read(monkeypatch):
     assert "media" in more.summary(more.detect(html, URL, _kept(40)))
 
 
-# ── the login wall hint says the browser tier is sent no cookies ─────────────
+# ── the two hints: a login wall, and a page only a browser can read ───────────
+
+
+def _app_shell_page() -> str:
+    return (
+        "<html><body><noscript>You need to enable JavaScript to run this app.</noscript>"
+        '<div id="root"></div><script src="/static/js/main.js"></script>'
+        "<script>window.__NEXT_DATA__ = {};</script></body></html>"
+    )
+
+
+def test_a_shell_that_serves_no_text_is_named_as_a_js_app(monkeypatch):
+    from searchts import scroll
+
+    monkeypatch.setattr(scroll, "browser_available", lambda: False)
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi", lambda url, **kw: (200, _app_shell_page(), url, {})
+    )
+    with pytest.raises(unlocker.UnlockerError) as raised:
+        unlocker.fetch(
+            "https://example.org/app/post/1", backends=["curl_cffi"],
+            use_memory=False, progress=False,
+        )
+    hint = raised.value.hint
+    assert "this page is a JS app" in hint
+    assert "no cookies" in hint
+    assert "searchts install --browser" in hint
+
+
+def test_the_js_app_hint_does_not_claim_a_browser_is_the_fix_when_one_ran(monkeypatch):
+    from searchts import scroll
+
+    monkeypatch.setattr(scroll, "browser_available", lambda: True)
+    hint = unlocker._app_shell_hint()
+    assert "did not manage this page either" in hint
+    assert "install --browser" not in hint
+
+
+@pytest.mark.parametrize(
+    "body, text",
+    [
+        ("<html><body><p>Short but whole.</p></body></html>", "Short but whole."),
+        ("<html><body><main>" + _prose(4) + "</main></body></html>", _kept(4)),
+        ("", ""),
+    ],
+)
+def test_a_thin_page_that_is_not_an_app_is_not_called_one(body, text):
+    assert unlocker._is_app_shell(body, text) is False
+
+
+def test_a_thin_read_that_is_not_an_app_gets_no_hint(monkeypatch):
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda url, **kw: (200, "<html><body><p>Only this.</p></body></html>", url, {}),
+    )
+    with pytest.raises(unlocker.UnlockerError) as raised:
+        unlocker.fetch(
+            "https://example.org/page", backends=["curl_cffi"], use_memory=False
+        )
+    assert "JS app" not in raised.value.hint
 
 
 def test_the_cookie_hint_says_the_browser_tier_gets_no_cookies(monkeypatch):

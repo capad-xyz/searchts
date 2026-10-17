@@ -972,6 +972,7 @@ _APP_STATE_MARKERS = (
     "__NEXT_DATA__", "__NUXT__", "__INITIAL_STATE__", "__APOLLO_STATE__",
     "__PRELOADED_STATE__", "__remixContext", "__sveltekit",
 )
+_SCRIPTISH_RE = re.compile(r"(?is)<(script|style)\b[^>]*>.*?</\1\s*>")
 _NEEDS_JS = re.compile(
     r"\b(?:enable|turn on|requires?|needs?)\s+javascript\b"
     r"|\bjavascript\s+(?:is\s+)?(?:required|disabled|needed|off)\b",
@@ -989,6 +990,46 @@ def _plain_len(markdown: str) -> int:
     from searchts.more import plain_len
 
     return plain_len(markdown)
+
+
+#: Below this the served markup has no text in it at all.
+_APP_SHELL_MAX_CHARS = 60
+
+
+def _is_app_shell(html: str, text: str) -> bool:
+    """True when the markup ships no text and says a client app drew the page.
+
+    Measured on a real video page: 1.4 MB of HTML, 225 characters of visible
+    text, no media URL anywhere in the served markup, and a mount node with
+    nothing in it. A read like that is not a thin article, it is a page this
+    address never sends, and the only rung that can change it is the browser.
+
+    The tests are the page's own, not the host's: no text, and one of the
+    shapes an app leaves behind (its state in a script, an empty mount node, a
+    "enable JavaScript" notice, a module script).
+    """
+    if not html or _plain_len(text) >= _APP_SHELL_MAX_CHARS:
+        return False
+    if any(marker in html for marker in _APP_STATE_MARKERS):
+        return True
+    visible = _SCRIPTISH_RE.sub(" ", html)
+    if _NEEDS_JS.search(visible):
+        return True
+    try:
+        import lxml.html
+
+        doc = lxml.html.fromstring(re.sub(r"^\s*<\?xml[^>]*\?>", "", html))
+    except Exception:  # noqa: BLE001 - HTML we cannot parse is not one we can call an app
+        return False
+    for el in doc.iter():
+        if not isinstance(el.tag, str):
+            continue
+        if (el.get("id") or "").strip().lower() in _APP_ROOT_IDS:
+            if len(re.sub(r"\s+", " ", el.text_content() or "").strip()) < _APP_SHELL_MAX_CHARS:
+                return True
+        if el.tag.lower() == "script" and (el.get("type") or "").strip().lower() == "module":
+            return True
+    return False
 
 
 def whole_short_page(html: str, text: str) -> bool:
@@ -2123,6 +2164,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     #: geo.captcha-delivery.com from a real Chromium. Skipping the rung there
     #: hides the only answer that names the wall.
     browser_would_differ = False
+    #: A rung served markup with no text in it and the signs of a client app.
+    #: Only the browser can read such a page, and the browser is sent no
+    #: cookies, so the one sentence worth saying is about the rung and the
+    #: fence rather than about a thin article.
+    app_shell = False
     #: F23d: a clean curl win we stepped over to let the browser try to open the
     #: folds. If the browser cannot be run, or fails, this read is still good
     #: and saying so beats failing on a page we already read. `allow_thin` is
@@ -2374,6 +2420,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 )
             # Real but thin (e.g. JS-rendered or genuinely short): keep as a
             # fallback and escalate in case a richer backend renders more.
+            if body and not app_shell:
+                app_shell = _is_app_shell(body, text)
             attempts.append((backend, f"thin-{len(text)}b"))
             _tick(f"  {backend}: thin-{len(text)}b")
             if backend == remembered:
@@ -2548,11 +2596,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             ]
         return _with_auth(deferred)
 
-    raise UnlockerError(url, attempts, _final_hint(cookie_header, attempts, url))
+    raise UnlockerError(
+        url, attempts, _final_hint(cookie_header, attempts, url, app_shell=app_shell)
+    )
 
 
 def _final_hint(
-    cookie_header: str, attempts: List[Tuple[str, str]], url: str
+    cookie_header: str, attempts: List[Tuple[str, str]], url: str,
+    app_shell: bool = False,
 ) -> str:
     """The one sentence that says what to do next, when the reasons do not.
 
@@ -2572,6 +2623,8 @@ def _final_hint(
     cookie = _cookie_login_hint(cookie_header, attempts)
     if cookie:
         return cookie
+    if app_shell:
+        return _app_shell_hint()
     from searchts.known_hosts import reddit as _reddit
 
     fallback = ""
@@ -2587,6 +2640,31 @@ def _final_hint(
         if note:
             return note
     return fallback
+
+
+def _app_shell_hint() -> str:
+    """The one sentence for a page the address only ever sends to a browser.
+
+    Two facts, and both of them are needed. The markup carries no text, so no
+    rung that speaks HTTP can do better. And the browser rung is sent no
+    cookies, which is the fence that keeps a cookie from reaching a third
+    party, so "sign in and the browser will read it" is not a plan here. What
+    the browser can do is render the page, and the command to install it is
+    what is actually missing when it is not there.
+    """
+    from searchts import scroll as _scroll
+
+    if _scroll.browser_available():
+        return (
+            "this page is a JS app: the markup it served carries no text, so "
+            "only the browser tier can read it, and that tier is sent no "
+            "cookies. The browser rung did not manage this page either."
+        )
+    return (
+        "this page is a JS app: the markup it served carries no text, so only "
+        "the browser tier can read it, and that tier is sent no cookies, so "
+        "there is no rung left that can. Run: searchts install --browser"
+    )
 
 
 def _cookie_login_hint(
