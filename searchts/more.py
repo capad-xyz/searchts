@@ -9,7 +9,9 @@ structured entry for ``--json`` / MCP.
 Also keeps accordion and tab text through extraction (``prepare_panels``):
 Trafilatura drops ``<button>`` labels (the questions) and inline
 ``display:none`` panels (the answers). ``tidy_markdown`` puts headings and
-code fences back on their own lines after extraction.
+code fences back on their own lines after extraction, and
+:func:`space_after_inline` puts back a space the extractor drops next to
+inline code or bold.
 
 No note is not a promise that the page is complete. These are page signals,
 not per-host code (Reddit keeps its own ring in ``known_hosts``).
@@ -388,7 +390,67 @@ def tidy_markdown(markdown: str) -> str:
             _own_line(heading.group(2))
             continue
         out.append(line)
+    return space_after_inline("\n".join(out))
+
+
+#: An inline code span or a bold run: the two things an extractor can leave
+#: glued to the word next to them. ``searchts`read`` comes from markup with no
+#: whitespace node between the ``<code>`` and the text; the tags are real and
+#: the space is not. Measured on real extracts from docs pages and wikis.
+_TOKEN_RE = re.compile(r"(`+[^`\n]*`+|\*\*|__)")
+
+
+def space_after_inline(markdown: str) -> str:
+    """Put back the space an extractor drops next to inline code or bold.
+
+    One pass per line, over the inline code spans and the bold runs only:
+
+    - a **closing** code span followed immediately by a word gets a space
+      (``searchts`read`` -> ``searchts` read``). The span is left byte for
+      byte: the space belongs between the span and the word, never inside the
+      code.
+    - a bold run gets a space after it when it closes and a word follows
+      (``**bold**text`` -> ``**bold** text``), and not when it opens one
+      (``**bold** more`` is already right and stays as it is).
+
+    Never inside a fenced block. A fence is code the page wrote on purpose and
+    is left exactly as it is, which is also why a code sample that really does
+    read ``foo``bar`` is not "repaired".
+    """
+    if not markdown or not _TOKEN_RE.search(markdown):
+        return markdown
+    lines = markdown.split("\n")
+    out: List[str] = []
+    fenced = False
+    for line in lines:
+        fence = _FENCE_LINE_RE.match(line)
+        if fenced:
+            out.append(line)
+            if fence and _indent(fence.group(1)) <= 3:
+                fenced = False
+            continue
+        if fence:
+            fenced = True
+            out.append(line)
+            continue
+        out.append(_space_line(line))
     return "\n".join(out)
+
+
+def _space_line(line: str) -> str:
+    out: List[str] = []
+    pos = 0
+    bold_open = False
+    for m in _TOKEN_RE.finditer(line):
+        out.append(line[pos : m.start()])
+        token = m.group(0)
+        glued = line[m.end() : m.end() + 1].isalnum()
+        out.append(token + (" " if glued and (token.startswith("`") or bold_open) else ""))
+        if not token.startswith("`"):
+            bold_open = not bold_open
+        pos = m.end()
+    out.append(line[pos:])
+    return "".join(out)
 
 
 # ── detection ───────────────────────────────────────────────────────────────

@@ -280,3 +280,56 @@ def test_the_note_counts_every_fold_on_the_page():
     ]
 
 
+# ── F24d: the space next to inline code or bold ──────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "before, after",
+    [
+        ("Run `searchts`read a page.", "Run `searchts` read a page."),
+        ("Use `a`and `b`or it.", "Use `a` and `b` or it."),
+        ("Set `--items`for the count.", "Set `--items` for the count."),
+        ("**bold**text follows.", "**bold** text follows."),
+        ("__bold__text follows.", "__bold** text follows.".replace("__bold**", "__bold__")),
+        ("**bold** and `code`x", "**bold** and `code` x"),
+    ],
+)
+def test_a_missing_space_comes_back(before, after):
+    assert more.space_after_inline(before) == after
+
+
+@pytest.mark.parametrize(
+    "same",
+    [
+        "**bold** and more",
+        "`code` alone",
+        "`code`. And `code`, and `code`;",
+        "plain prose with no inline markup at all",
+        "a `code` span\n\non its own line",
+        "`x`**bold**",
+        "",
+    ],
+)
+def test_text_that_is_already_right_is_left_alone(same):
+    assert more.space_after_inline(same) == same
+
+
+def test_code_inside_a_fence_is_never_touched():
+    """A fence is code the page wrote on purpose, glued or not."""
+    fenced = "text\n\n```python\nfoo`bar and x**y\n```\n\nafter `x`y"
+    out = more.space_after_inline(fenced)
+    assert "foo`bar and x**y" in out
+    assert "after `x` y" in out
+
+
+def test_a_code_span_is_never_edited_from_the_inside():
+    assert more.space_after_inline("`foo bar`baz") == "`foo bar` baz"
+    assert more.space_after_inline("`foo  bar`x") == "`foo  bar` x"
+
+
+def test_the_extract_path_runs_the_fix():
+    html = (
+        "<html><body><main><p>Run <code>searchts</code>read a page and it works."
+        + _prose(6) + "</p></main></body></html>"
+    )
+    assert "`searchts` read" in unlocker.html_to_text(html, URL)
