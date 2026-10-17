@@ -176,7 +176,6 @@ def create_server():
         cdp_port: str = "",
         proxy: str = "",
         proxy_trusted: bool = False,
-        expand: int = 0,
     ) -> str:
         # The stealth-browser rung is sync Playwright work that refuses to run
         # on a running asyncio loop. ``asyncio.to_thread`` runs it in a worker
@@ -545,7 +544,6 @@ def read_url(
     cdp_port: str = "",
     proxy: str = "",
     proxy_trusted: bool = False,
-    expand: int = 0,
 ) -> str:
     """Fetch `url` via the unlocker and return a JSON source-receipt + markdown.
 

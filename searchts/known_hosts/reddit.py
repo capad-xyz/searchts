@@ -1077,18 +1077,31 @@ def _parse_shreddit_comments(html: str) -> List[Dict[str, str]]:
 #: Comment bodies shorter than this are chrome, not a comment.
 _COMMENT_MIN_CHARS = 8
 
-#: Comments kept in one thread by default. Reddit reports how many exist, so the
-#: shortfall is always printed; this only bounds the payload.
+#: Comments kept in one thread when the caller did not ask to expand. This is the
+#: product's own bound for a plain read, not a user policy: the user's is
+#: ``SEARCHTS_MAX_ITEMS`` (see :func:`_comment_ceiling`), and a lower one wins.
+#: Reddit reports how many comments exist, so the shortfall is always printed;
+#: this only bounds the payload.
 _MAX_COMMENTS = 30
 
-#: Cap when the caller asked for deeper comments (``--expand``). The browser
-#: reached 127 of 195 on a real 195-comment thread, so 200 is generous, and the
-#: leftover is still named rather than dropped.
-_MAX_COMMENTS_EXPANDED = 200
 
-#: Rounds of opening Reddit's "more replies" controls. Each round is ~3 s and a
-#: stalled round is how "Reddit has nothing more" is detected.
-_MAX_EXPAND_ROUNDS = 8
+def _comment_ceiling(expand: bool = False) -> int:
+    """How many comments this read may print. The knobs answer (F23e).
+
+    A plain read is bounded by the product's own :data:`_MAX_COMMENTS`; asking to
+    ``--expand`` raises that to the user's ``items`` ceiling, because comments are
+    the rows of a thread and ``--items`` is what the user caps rows with. Either
+    way a user who lowers ``SEARCHTS_MAX_ITEMS`` gets fewer, never more: a knob
+    is a maximum, and nothing here reads above it.
+
+    Resolved only on the paths that need it, so an ordinary read pays no config
+    read. A broken config is answered by the built-in default, never an error
+    (:mod:`searchts.knobs` swallows it for exactly this reason).
+    """
+    from searchts import knobs
+
+    ceiling = max(1, int(knobs.resolve().items))
+    return ceiling if expand else min(_MAX_COMMENTS, ceiling)
 
 #: Where Reddit hides the rest of a thread. A ``faceplate-partial`` that answers
 #: a POST with a minted cursor; clicking it is what loads the next layer.
@@ -1230,18 +1243,26 @@ def parse_reddit_thread_html(
     return "\n".join(lines).strip()
 
 
-def expand_more(page, want: int) -> None:
+def expand_more(page, want: int, clicks: int = 8, tick=None) -> None:
     """Open Reddit's own "more replies" controls until the page holds ``want``
     comments, or Reddit stops giving more.
 
-    Only ever called when the caller asked for deeper comments (F5f, opt-in
-    ``--expand``). Each round scrolls every ``more-comments-partial`` into view
-    and clicks it, which is what the page does for a person; it stops on the
-    wanted count, on a round that added nothing (Reddit's "no more" answer), or
-    on the round cap, and never raises. P4.6: no printing here, the caller ticks.
+    Only ever called when the caller asked for deeper comments (F5f, riding the
+    opt-in ``--expand`` bool from F23d). Each round scrolls every
+    ``more-comments-partial`` into view and clicks it, which is what the page does
+    for a person; it stops on the wanted count, on a round that added nothing
+    (Reddit's "no more" answer), or on the round cap, and never raises.
+
+    ``want`` is the caller's comment ceiling (:func:`_comment_ceiling`) and
+    ``clicks`` is the press budget the knobs resolved
+    (``SEARCHTS_MAX_EXPAND_CLICKS``). Neither number lives here: the ring owns the
+    selectors, the knobs own the budget. ``tick`` is the caller's stderr
+    narrator; each round waits on the network, so a loop that can sit for many
+    seconds says so (P4.6). Nothing is printed from inside this loop.
     """
     want = max(1, int(want or 1))
-    for _ in range(_MAX_EXPAND_ROUNDS):
+    clicks = max(1, int(clicks or 1))
+    for round_no in range(1, clicks + 1):
         try:
             html = page.content()
         except Exception:  # noqa: BLE001 - a mid-navigation page is not a reason to fail a read
@@ -1253,6 +1274,11 @@ def expand_more(page, want: int) -> None:
         )
         if not controls:
             return
+        if tick is not None:
+            tick(
+                f"  reddit: opening {len(controls)} more-replies control(s) "
+                f"(round {round_no} of {clicks})"
+            )
         before = len(html)
         for control in controls:
             try:
@@ -1675,14 +1701,17 @@ def _more(kind: str, note: str, url: str = "") -> Dict[str, str]:
     return out
 
 
-def extract_page(url: str, html: str, expand: int = 0) -> Optional[RedditPage]:
+def extract_page(url: str, html: str, expand: bool = False) -> Optional[RedditPage]:
     """Render an already-downloaded Reddit page, or name the wall it is.
 
-    ``expand`` is the caller's intent (F5f ``--expand``): it only raises the
-    comment ceiling for a thread, because opening Reddit's "more replies"
-    controls is the browser's job, not this function's. JSON URLs return None:
-    they belong to :func:`extract_known`, and a URL this does not recognise is
-    not a Reddit page, so the ladder owns it unchanged (fail-open).
+    ``expand`` is the caller's intent (F5f, riding F23d's ``--expand`` **bool**):
+    it raises this thread's comment ceiling to the user's ``items`` knob. It does
+    not say how many, because nothing here counts - the ring owns the selectors,
+    :mod:`searchts.knobs` owns the numbers. Opening Reddit's "more replies"
+    controls is the browser's job, not this function's; see
+    :func:`unlocker._expand_known_host`. JSON URLs return None: they belong to
+    :func:`extract_known`, and a URL this does not recognise is not a Reddit
+    page, so the ladder owns it unchanged (fail-open).
     """
     state = page_state(url, html)
     if state and state != _STATE_ARCHIVED:
@@ -1753,10 +1782,8 @@ def _listing_page(url: str, html: str, batch: bool) -> Optional[RedditPage]:
     return page
 
 
-def _thread_page(url: str, html: str, expand: int) -> Optional[RedditPage]:
-    want = max(0, int(expand or 0))
-    cap = min(max(1, want), _MAX_COMMENTS_EXPANDED) if want else _MAX_COMMENTS
-    md = parse_reddit_thread_html(html, url, max_comments=cap)
+def _thread_page(url: str, html: str, expand: bool) -> Optional[RedditPage]:
+    md = parse_reddit_thread_html(html, url, max_comments=_comment_ceiling(bool(expand)))
     if not md:
         # No titled post in a page that was fetched as a thread URL is not a
         # state Reddit named; it is a page this parse could not read (a bot
@@ -1771,14 +1798,6 @@ def _thread_page(url: str, html: str, expand: int) -> Optional[RedditPage]:
             page.more.append(_more("partial", line))
         elif line.startswith("[removed:"):
             page.more.append(_more("removed", line))
-    if want and cap < want:
-        page.more.append(
-            _more(
-                "count",
-                f"[items: asked to expand to {want} comments, the ceiling is "
-                f"{_MAX_COMMENTS_EXPANDED}]",
-            )
-        )
     return page
 
 

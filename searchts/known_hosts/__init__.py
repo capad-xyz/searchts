@@ -92,7 +92,9 @@ def extract(url: str) -> Optional[KnownResult]:
     return None
 
 
-def expand_page(page, url: str, html: str, want: int) -> Optional[str]:
+def expand_page(
+    page, url: str, html: str, want: int, clicks: int, tick=None
+) -> Optional[str]:
     """Open what a known host's own page hides behind controls; None if none.
 
     F5f. Some sites serve the first window of a document and keep the rest
@@ -100,6 +102,13 @@ def expand_page(page, url: str, html: str, want: int) -> Optional[str]:
     them needs the live page, so this is the one place the ring meets a browser:
     the caller passes the page, the ring owns the selectors, and the return is
     the fullest HTML seen.
+
+    ``want`` and ``clicks`` are budgets, and they arrive from the knobs
+    (:mod:`searchts.knobs`), never from a flag: ``want`` is how many rows the
+    read may print, ``clicks`` how many presses the loop may spend. ``tick`` is
+    the caller's stderr narrator, passed straight through so a host's loop obeys
+    P4.6 without this file printing anything. A host module that has no opener of
+    its own contributes nothing and returns None.
 
     None means "this host has nothing of its own to open", which is not a
     failure: the caller keeps the HTML it had. The generic path (accordions,
@@ -113,9 +122,11 @@ def expand_page(page, url: str, html: str, want: int) -> Optional[str]:
         mod = sys.modules.get(getattr(fn, "__module__", "") or "")
         opener = getattr(mod, "expand_more", None)
         if callable(opener):
-            opener(page, want)
+            opener(page, want, clicks, tick)
             return page.content()
         return None
+    return None
+    return None
     return None
 
 

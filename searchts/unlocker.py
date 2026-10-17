@@ -1284,7 +1284,6 @@ def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:
 
 def _fetch_stealth(
     url: str, timeout: int = 60, progress: Optional[bool] = None,
-<<<<<<< HEAD
     proxy: Optional[Dict[str, Any]] = None,
     expand: bool = False, expand_sink: Optional["_ExpandSink"] = None,
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
@@ -1384,13 +1383,6 @@ def _fetch_stealth_impl(
             # Let a JS app hydrate before judging the page; otherwise an SPA
             # comes back as a near-empty shell and reads as "thin".
             html = _await_hydration(page, html, progress=want_tick)
-            # F5f: only when the caller asked for more than the page served
-            # first. The known-host ring owns the selectors (Reddit's own "more
-            # replies" controls); an unknown host is left exactly as it was,
-            # which is what F23d's generic expand will do instead.
-            if expand:
-                _stderr_tick("expanding what the page loaded first…", want_tick)
-                html = _expand_known_host(page, url, html, expand, want_tick)
             # Wait (bounded) for a managed JS challenge to auto-resolve.
             waited = 0
             while waited < 15000 and looks_blocked(200, html) == "challenge":
@@ -1420,15 +1412,26 @@ def _fetch_stealth_impl(
                 opened = _expand_mod.open_details_in_page(page)
                 if opened:
                     html = _page_content(page, progress=want_tick)
-                report = _expand_mod.click_in_page(
-                    page, expand_sink.max_clicks if expand_sink else 8
-                )
+                clicks = expand_sink.max_clicks if expand_sink else 8
+                report = _expand_mod.click_in_page(page, clicks)
                 report.details = opened
                 report.pin_paywall(_page_content(page, progress=False))
                 if expand_sink is not None:
                     expand_sink.add(report)
                 elif report.note():
                     html = _page_content(page, progress=False)
+                # F5f: a known host's own controls, on top of the generic pass.
+                # Reddit serves the first window of a thread and keeps the rest
+                # behind its ``more-comments-partial``, which the generic
+                # read/show/see-more words never match. The selectors stay in the
+                # one ring file that already knows the host, and the row budget
+                # comes from the knobs, so nothing here decides a number.
+                host_html = _expand_known_host(
+                    page, url, html, clicks,
+                    lambda msg: _stderr_tick(msg, want_tick),
+                )
+                if host_html != html:
+                    html = host_html
             # If the challenge cleared, the real status is 200 regardless of the
             # initial challenge response; otherwise keep the original status.
             status = 200 if looks_blocked(200, html) is None else init_status
@@ -1446,7 +1449,9 @@ def _fetch_stealth_impl(
             browser.close()
 
 
-def _expand_known_host(page, url: str, html: str, want: int, progress: bool) -> str:
+def _expand_known_host(
+    page, url: str, html: str, clicks: int, tick=None
+) -> str:
     """Let a known host open what its own page hides behind controls (F5f).
 
     Reddit serves the first window of a thread and keeps the rest behind its
@@ -1456,14 +1461,27 @@ def _expand_known_host(page, url: str, html: str, want: int, progress: bool) -> 
     a routing decision and never a silent one: only ``expand`` reaches here, and
     only after the caller asked.
 
+    ``clicks`` is the press budget the caller already resolved from
+    ``SEARCHTS_MAX_EXPAND_CLICKS`` (the same number the generic pass spent, so a
+    read has one click budget and not two). ``want`` is the row ceiling,
+    ``SEARCHTS_MAX_ITEMS``: a comment is a row, and the user caps rows there.
+    Both are read from :mod:`searchts.knobs` and never written here.
+
+    ``tick`` is the caller's stderr narrator (P4.6): each round of opening Reddit's
+    controls waits on the network, and a loop that can sit for many seconds has to
+    say so on the way. It is None when the caller wants silence.
+
     Returns the fullest HTML seen, or the input unchanged when nothing loaded.
     """
     try:
+        from searchts import knobs
         from searchts.known_hosts import expand_page
+
+        limits = knobs.resolve()
     except Exception:  # noqa: BLE001 - the ring must never break the ladder
         return html
     try:
-        return expand_page(page, url, html, want) or html
+        return expand_page(page, url, html, limits.items, clicks, tick) or html
     except Exception:  # noqa: BLE001 - a failed expand is a shorter read, not a failure
         return html
 
@@ -2083,7 +2101,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 # banned, quarantined, gone or NSFW page never comes back as
                 # navigation chrome wearing a URL.
                 reddit_hit = _reddit_listing.extract_page(
-                    url, body, expand=(expand if backend == "stealth-browser" else 0)
+                    url, body,
+                    # Only the rung that opened controls gets the raised ceiling.
+                    # The same HTML from curl has them shut, so a higher cap
+                    # there would print a promise the page cannot keep.
+                    expand=bool(expand and backend == "stealth-browser"),
                 )
                 if reddit_hit is not None:
                     if reddit_hit.failure:
@@ -2321,7 +2343,6 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     if allow_thin and best is not None:
         return _with_auth(best)
 
-<<<<<<< HEAD
     if deferred is not None:
         # Every rung after the one we stepped over failed, including the
         # browser that was asked to open the folds. The page was read; only
@@ -2602,9 +2623,15 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     got = 0
     repeats = 0
     broke = False
+    looped = False
     for i in range(limits.pages):
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
+            # The cursor pointed at a page this walk already read. A list that
+            # never grows is the one case where a second pass cannot help, and
+            # saying so is the difference between "asked 300, got 11" and a lie
+            # about the list ending there.
+            looped = True
             break
         seen.add(key)
         call = dict(kwargs)
@@ -2656,6 +2683,15 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         return out
     last = out[-1]
     extra = ""
+    if looped and got < want:
+        # F5f. Reddit's own feed cursor (``/svc/shreddit/…?after=…``) hands back
+        # a batch the walk has already read when the feed has stopped moving, and
+        # a walk that stops there says nothing. Named on page one, with the count.
+        extra += (
+            f"\n\n[items: {got} new rows of the {asked} asked for. The feed's own "
+            "cursor pointed back at a page this walk had already read, so the "
+            "walk stopped there; the rows it did not have were never served]"
+        )
     if repeats:
         # The feed cursor handed back rows we already had. Saying so is the whole
         # point of counting new rows: a count that included them would claim to

@@ -63,7 +63,7 @@ def fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def page(url: str, name: str, expand: int = 0):
+def page(url: str, name: str, expand: bool = False):
     return reddit.extract_page(url, fixture(name), expand=expand)
 
 
@@ -178,22 +178,46 @@ def test_thread_default_cap_and_the_expand_cap():
     default = page(THREAD, "reddit_thread_expanded.html")
     assert default.markdown.count(" pts)") == 30
     assert "[truncated: 1 more comments in the page were cut at the 30-comment cap]" in default.markdown
-    # Asking for more raises the cap, so the 31st comment is there.
-    expanded = page(THREAD, "reddit_thread_expanded.html", expand=200)
+    # Asking for more raises the cap to the user's items ceiling, so the 31st
+    # comment is there and nothing says it was cut.
+    expanded = page(THREAD, "reddit_thread_expanded.html", expand=True)
     assert expanded.markdown.count(" pts)") == 31
     assert "[truncated:" not in expanded.markdown
 
 
-def test_expand_asks_for_more_comments_than_the_cap_allows_and_says_so():
-    p = page(THREAD, "reddit_thread_expanded.html", expand=5000)
-    notes = "\n".join(m["note"] for m in p.more)
-    assert "[items: asked to expand to 5000 comments, the ceiling is 200]" in notes
-    assert p.markdown.count(" pts)") == 31
+def test_the_comment_ceiling_is_the_items_knob_and_never_above_it(monkeypatch):
+    """F23e: a comment is a row, so ``SEARCHTS_MAX_ITEMS`` is what caps it.
+
+    Both directions matter. A raised ceiling lets ``--expand`` reach every comment
+    the browser opened, and a lowered one is the user saying "fewer rows", which
+    the plain read obeys too. The default read is still bounded by the product's
+    own 30, which is why lowering to 12 cuts it and raising does not.
+    """
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "300")
+    assert reddit._comment_ceiling(expand=True) == 300
+    assert reddit._comment_ceiling(expand=False) == reddit._MAX_COMMENTS
+
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "12")
+    assert reddit._comment_ceiling(expand=False) == 12
+    assert reddit._comment_ceiling(expand=True) == 12
+
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "12")
+    md = page(THREAD, "reddit_thread_expanded.html", expand=True).markdown
+    assert md.count(" pts)") == 12
+    assert "[truncated: 19 more comments in the page were cut at the 12-comment cap]" in md
+    # And the note the ceiling buys is named on the read, not left to be found.
+    kinds = [m["kind"] for m in page(THREAD, "reddit_thread_expanded.html", expand=True).more]
+    assert "count" in kinds
+
+
+def test_a_broken_items_knob_falls_back_to_the_default_instead_of_failing(monkeypatch):
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "not-a-number")
+    assert reddit._comment_ceiling(expand=True) == 300
 
 
 def test_thread_always_says_how_many_comments_reddit_reports():
     for name in ("reddit_thread_first_window.html", "reddit_thread_expanded.html"):
-        md = page(THREAD, name, expand=200).markdown
+        md = page(THREAD, name, expand=True).markdown
         assert "[partial: Reddit reports 195 comments;" in md
 
 
@@ -227,9 +251,82 @@ def test_expand_more_clicks_until_quiet_and_never_raises():
             self.log.append(f"wait:{ms}")
 
     p = Page()
-    reddit.expand_more(p, 50)
+    reddit.expand_more(p, 50, clicks=4)
     assert p.log.count("wait:3000") == 1, "a stalled round must stop the walk"
     assert p.log.count("scroll") == 2, "one scroll and one click per control"
+
+
+def test_expand_more_never_spends_more_than_the_click_budget():
+    """The rounds come from the knob, so a lower budget is fewer waits."""
+    class Control:
+        def scroll_into_view_if_needed(self, timeout=None):
+            pass
+
+        def click(self, timeout=None, force=None):
+            pass
+
+    class Page:
+        """Every round adds a comment, so only the budget can stop it."""
+
+        def __init__(self):
+            self.html = ""
+            self.waits = 0
+
+        def _grow(self):
+            self.html += (
+                "<shreddit-comment author=a><div slot='comment'>a comment body "
+                f"{self.waits} here</div></shreddit-comment>"
+            )
+
+        def content(self):
+            return self.html
+
+        def query_selector_all(self, selector):
+            self._grow()
+            return [Control()]
+
+        def wait_for_timeout(self, ms):
+            self.waits += 1
+
+    p = Page()
+    reddit.expand_more(p, 999, clicks=3)
+    assert p.waits == 3, "the click ceiling is the loop's stop, not a constant"
+
+    tight = Page()
+    reddit.expand_more(tight, 999, clicks=1)
+    assert tight.waits == 1
+
+
+def test_expand_more_ticks_each_round_on_the_callers_stderr_budget():
+    """P4.6: a loop that waits on the network says so, through the caller."""
+    class Control:
+        def scroll_into_view_if_needed(self, timeout=None):
+            pass
+
+        def click(self, timeout=None, force=None):
+            pass
+
+    class Page:
+        def __init__(self):
+            self.html = ""
+
+        def content(self):
+            return self.html
+
+        def query_selector_all(self, selector):
+            self.html += (
+                "<shreddit-comment author=a><div slot='comment'>another body "
+                "here</div></shreddit-comment>"
+            )
+            return [Control()]
+
+        def wait_for_timeout(self, ms):
+            pass
+
+    said: list = []
+    reddit.expand_more(Page(), 999, clicks=3, tick=said.append)
+    assert len(said) == 3
+    assert "more-replies control(s) (round 1 of 3)" in said[0]
 
 
 def test_expand_more_stops_at_the_count_it_was_asked_for():
@@ -471,6 +568,12 @@ def test_a_quarantine_names_the_browser_as_the_next_step(monkeypatch):
 
 
 def test_items_counts_new_rows_only_and_says_when_the_feed_repeated_one(monkeypatch):
+    """A feed cursor that hands back old rows must not inflate the count.
+
+    The note lands on **page one**: that is the page every caller reads
+    (``--json``'s ``text``, the MCP envelope, the CLI's stdout), so a count
+    correction anywhere else is a correction nobody sees.
+    """
     _no_reddit_json(monkeypatch)
     batch_html = fixture("reddit_feed_batch.html")
     monkeypatch.setattr(
@@ -492,24 +595,29 @@ def test_items_counts_new_rows_only_and_says_when_the_feed_repeated_one(monkeypa
         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no browser")),
     )
     got = unlocker.read_items(LISTING, 300, use_memory=False)
-    last = got[-1].text
-    assert "were not counted twice" in last
+    first = got[0].text
     # 3 unique rows from the first page, then the same 8 rows a second time:
     # 11 read, 8 of them already had.
-    assert "11 new rows; 8 the feed handed back again" in last
+    assert "11 new rows; 8 the feed handed back again" in first
+    assert "were not counted twice" in first
+    # Asking for 300 and getting 11 is not the list ending, and the read says so:
+    # the batch's own cursor pointed back at the batch.
+    assert "cursor pointed back at a page this walk had already read" in first
 
 
-def test_expand_reaches_only_the_browser_rung(monkeypatch):
-    """The intent reaches the rung that has a page, and raises the comment cap.
+def test_expand_escalates_to_the_browser_and_raises_the_comment_cap(monkeypatch):
+    """``--expand`` gets a read to the rung that has a page, and says what it got.
 
-    curl answers this URL on a machine Reddit does not challenge, so the read
-    stops there and nothing is expanded. That is the fence working: the flag is
-    an intent the browser honours, not a reason to skip ahead to it.
+    Two rungs, two facts. An unasked read stops at curl and the browser is never
+    launched, because clicking is not an unasked-for read's job. An asked read
+    escalates to the browser (F23d: a window with the folds shut is the failure
+    the flag exists to remove), the intent reaches it, and the thread comes back
+    with the raised ceiling rather than the 30-comment default.
     """
     _no_reddit_json(monkeypatch)
     seen = {}
 
-    def stealth(url, timeout=60, progress=None, expand=0, **kw):
+    def stealth(url, timeout=60, progress=None, expand=False, **kw):
         seen["expand"] = expand
         return 200, fixture("reddit_thread_expanded.html"), url, {}
 
@@ -517,25 +625,55 @@ def test_expand_reaches_only_the_browser_rung(monkeypatch):
         unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (200, "curl " * 400, url, {})
     )
     monkeypatch.setattr(unlocker, "_fetch_stealth", stealth)
-    res = unlocker.fetch(
-        THREAD, backends=["curl_cffi", "stealth-browser"], use_memory=False, expand=120
+
+    # Not asked: curl wins, the browser rung never runs, so it gets no keyword.
+    quiet = unlocker.fetch(
+        THREAD, backends=["curl_cffi", "stealth-browser"], use_memory=False
     )
-    assert res.backend == "curl_cffi"
+    assert quiet.backend == "curl_cffi"
     assert "expand" not in seen, "a rung that never ran gets no intent"
 
-    # Now make curl unable to read the page, so the browser rung carries it.
-    monkeypatch.setattr(
-        unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (403, "nope", url, {})
-    )
     seen.clear()
     res = unlocker.fetch(
-        THREAD, backends=["curl_cffi", "stealth-browser"], use_memory=False, expand=120
+        THREAD, backends=["curl_cffi", "stealth-browser"], use_memory=False, expand=True
     )
-    assert seen["expand"] == 120
+    assert seen["expand"] is True
     assert res.backend == "stealth-browser"
     # The thread parse ran with the raised cap: no 30-comment truncation note.
     assert res.text.count(" pts)") == 31
     assert "[truncated:" not in res.text
+
+
+def test_the_known_host_expand_budget_is_the_knob_not_a_constant(monkeypatch):
+    """F5f's budgets are ``SEARCHTS_MAX_EXPAND_CLICKS`` / ``_MAX_ITEMS``."""
+    _no_reddit_json(monkeypatch)
+    asked = []
+
+    import searchts.known_hosts as ring
+
+    def spy(page, url, html, want, clicks, tick=None):
+        asked.append((url, want, clicks))
+        return html
+
+    monkeypatch.setattr(ring, "expand_page", spy)
+    monkeypatch.setenv("SEARCHTS_MAX_EXPAND_CLICKS", "3")
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "77")
+
+    class Page:
+        def content(self):
+            return "<html><body>hi</body></html>"
+
+    unlocker._expand_known_host(Page(), THREAD, "<html>a</html>", clicks=3)
+    assert asked == [(THREAD, 77, 3)], asked
+
+    # A host the ring does not know is left alone: no click, no change, no error.
+    class Other:
+        def content(self):
+            return "<html><body>hi</body></html>"
+
+    assert unlocker._expand_known_host(
+        Other(), "https://example.test/post", "<html>a</html>", clicks=2
+    ) == "<html>a</html>"
 
 
 def test_no_expand_means_the_browser_rung_is_called_exactly_as_before(monkeypatch):

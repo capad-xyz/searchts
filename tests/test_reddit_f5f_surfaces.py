@@ -3,9 +3,10 @@
 
 The knobs an agent may set (F23e's shape) reach Reddit the same way on both
 surfaces: ``--items`` / ``max_items`` follow the cursor the page printed, and
-``--expand`` / ``expand`` is opt-in and off by default. This file is about the
-wiring, not the parsing: the parsing is in ``test_reddit_f5f.py`` against saved
-pages.
+``--expand`` / ``expand`` is the opt-in bool and off by default. F5f rides F23d's
+bool rather than adding an int: how many comments or clicks that means comes
+from the knobs, not from the flag. This file is about the wiring, not the
+parsing: the parsing is in ``test_reddit_f5f.py`` against saved pages.
 """
 
 from __future__ import annotations
@@ -51,9 +52,9 @@ def _run_cli(argv):
         sys.argv = saved
 
 
-def test_read_takes_expand_and_it_is_zero_by_default(monkeypatch):
-    assert _read_kwargs(monkeypatch, ["read", THREAD]).get("expand") is None
-    assert _read_kwargs(monkeypatch, ["read", THREAD, "--expand", "80"])["expand"] == 80
+def test_read_takes_expand_and_it_is_false_by_default(monkeypatch):
+    assert _read_kwargs(monkeypatch, ["read", THREAD]).get("expand") is False
+    assert _read_kwargs(monkeypatch, ["read", THREAD, "--expand"])["expand"] is True
     # Clicking things is never what an unasked-for read does.
 
 
@@ -79,8 +80,8 @@ def test_read_items_and_expand_travel_together(monkeypatch):
         return [unlocker.FetchResult("curl_cffi", "- **[a](https://x.test/a)**", 200, final_url=url)]
 
     monkeypatch.setattr(unlocker, "read_items", fake_read_items)
-    _run_cli(["read", LISTING, "--items", "40", "--expand", "5"])
-    assert seen["items"] == 40 and seen["expand"] == 5
+    _run_cli(["read", LISTING, "--items", "40", "--expand"])
+    assert seen["items"] == 40 and seen["expand"] is True
 
 
 def test_mcp_expand_reaches_the_read_only_when_asked(monkeypatch):
@@ -95,8 +96,8 @@ def test_mcp_expand_reaches_the_read_only_when_asked(monkeypatch):
         ]
 
     monkeypatch.setattr(unlocker, "read_pages", fake_read_pages)
-    mcp_server.read_url(THREAD, expand=90)
-    assert seen["expand"] == 90
+    mcp_server.read_url(THREAD, expand=True)
+    assert seen["expand"] is True
     seen.clear()
     mcp_server.read_url(THREAD)
     assert "expand" not in seen
