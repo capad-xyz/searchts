@@ -852,7 +852,10 @@ def test_scroll_rows_are_not_repeated_by_the_pages_walk(monkeypatch):
     # the next pages carry. 200 rows from the scroll must replace page one and
     # the pages the walk already read must not repeat any of them.
     scrolled = "\n\n".join(
-        f"        | [Topic {i}](https://forum.example/t/topic-{i}/{i}) |   | {i} |"
+        # The same row the walk renders, with the counts a later read finds
+        # drifted: a row that only changed its views is still the same row.
+        f"        | [Topic {i}](https://forum.example/t/topic-{i}/{i}) |   "
+        f"[{i % 7 + 1}](https://forum.example/t/topic-{i}/{i}/1)    | {i * 3 + 9} |"
         for i in range(0, 200)
     )
     asked = []
@@ -891,10 +894,32 @@ def test_repeated_list_rows_take_their_byline_and_nothing_else_with_them():
         "Closing paragraph that is not a row.\n"
         "[pages: 2 rows of 5, stopped after 1 page. The next page is https://e.test/?p=2]"
     )
-    out = unlocker._drop_repeated_rows(page, {"https://e.test/seen"})
+    seen = unlocker._row_keys("- [Seen](https://e.test/seen)\n  by someone, 2h\n")
+    out = unlocker._drop_repeated_rows(page, seen)
     assert "Seen" not in out and "a snippet of the seen row" not in out
     assert "- [Fresh](https://e.test/fresh)\n  by another, 3h" in out
     assert "Closing paragraph that is not a row." in out
     assert "[pages: 2 rows of 5" in out
     # Nothing seen: byte for byte what came in.
     assert unlocker._drop_repeated_rows(page, set()) == page
+
+
+def test_table_rows_that_share_a_first_link_are_not_one_row():
+    # A table whose first column is an author link: every row starts with the
+    # same link, so keying on the first link dropped them all once one was seen.
+    head = "| Who | Topic |\n| --- | --- |\n"
+    page1 = head + "| [alice](https://e.test/u/alice) | [One](https://e.test/t/1) |\n"
+    page2 = (
+        head
+        + "| [alice](https://e.test/u/alice) | [One](https://e.test/t/1) |\n"
+        + "| [alice](https://e.test/u/alice) | [Two](https://e.test/t/2) |\n"
+        + "| [alice](https://e.test/u/alice) | [Three](https://e.test/t/3) |\n"
+        + "| [bob](https://e.test/u/bob) | [Four](https://e.test/t/4) |\n"
+    )
+    out = unlocker._drop_repeated_rows(page2, unlocker._row_keys(page1))
+    assert "[One]" not in out, "the row seen on page one came back"
+    for kept in ("[Two]", "[Three]", "[Four]"):
+        assert kept in out, f"{kept} was dropped with a row it only shares a link with"
+    assert out.startswith(head)
+    # A page that is nothing but repeats keeps its header and loses its row.
+    assert unlocker._drop_repeated_rows(page1, unlocker._row_keys(page1)).strip() == head.strip()

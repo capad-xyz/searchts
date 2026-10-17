@@ -2518,8 +2518,8 @@ _ITEM_LINE = re.compile(r"(?m)^(?:-|\d+\.)\s+\[")
 # link: the header and the `| --- |` rule do not, and a table of plain data is
 # not a list of things to open.
 _TABLE_ROW = re.compile(r"(?m)^[ \t]*\|[^\n]*\]\(https?://")
-# The first link on a row: the identity of the row across the scroll and the
-# pages that follow it.
+# A link target on a row: with the row's words, its identity across the scroll
+# and the pages that follow it (see _row_key).
 _ROW_LINK = re.compile(r"\]\((https?://[^)\s]+)\)")
 
 
@@ -2553,19 +2553,37 @@ def item_count(text: str) -> int:
     return len(_ITEM_LINE.findall(text)) + len(_TABLE_ROW.findall(text))
 
 
+def _row_key(line: str) -> tuple:
+    """What makes a row the same row: every link on it, and its words.
+
+    The first link alone is not enough. A table whose first column is an author
+    or a category puts the same link at the head of many distinct rows, and one
+    seen row then took every later row that shared it. The whole line is too
+    much: reply, view and age columns drift between the scroll and the page
+    walk, and a row that only changed its count is still the same row. So the
+    key is all the row's link targets plus its words, with every token that
+    carries a digit (a count, an age, ``2h``, ``1.2k``) left out.
+    """
+    links = tuple(_ROW_LINK.findall(line))
+    words = tuple(
+        t
+        for t in re.split(r"[\s|\[\]()]+", _ROW_LINK.sub("]", line))
+        if t and not any(c.isdigit() for c in t)
+    )
+    return links, words
+
+
 def _row_keys(text: str) -> set:
-    """First link of every row in ``text``: what makes a row the same row."""
+    """The key of every row in ``text``, for :func:`_drop_repeated_rows`."""
     keys = set()
     for line in (text or "").splitlines():
-        if _ITEM_LINE.match(line) or _TABLE_ROW.match(line):
-            m = _ROW_LINK.search(line)
-            if m:
-                keys.add(m.group(1))
+        if (_ITEM_LINE.match(line) or _TABLE_ROW.match(line)) and _ROW_LINK.search(line):
+            keys.add(_row_key(line))
     return keys
 
 
 def _drop_repeated_rows(text: str, seen: set) -> str:
-    """``text`` without the rows whose link is already in ``seen``.
+    """``text`` without the rows already in ``seen`` (see :func:`_row_keys`).
 
     A list row drags its indented byline and snippet lines with it; a table row
     is one line. Everything that is not a repeated row stays byte for byte.
@@ -2575,8 +2593,7 @@ def _drop_repeated_rows(text: str, seen: set) -> str:
     for line in (text or "").splitlines():
         is_row = bool(_ITEM_LINE.match(line) or _TABLE_ROW.match(line))
         if is_row:
-            m = _ROW_LINK.search(line)
-            skipping = bool(m and m.group(1) in seen)
+            skipping = bool(_ROW_LINK.search(line) and _row_key(line) in seen)
         elif skipping and line.strip() and not line.startswith((" ", "\t")):
             skipping = False
         if skipping:
