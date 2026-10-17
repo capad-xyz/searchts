@@ -30,27 +30,23 @@ Do not build:
 
 What a read still does not do.
 
-- [ ] **F5f** Reddit, the rest. **0.15.** Same known-host ring, still fail-open, still **N7**. Next-page cursor on top of **F23c**. Deeper comments on top of **F23d**. Private, NSFW, quarantined, and removed pages each fail with their own note. Profiles and search are cards or a loud failure. Tests use saved pages. The browser stays required.
-- [ ] **F23c** Scroll, the part that is not done. Curl already follows a next-batch URL for list rows (`--items`, `max_items`, ceiling `SEARCHTS_MAX_ITEMS`). What is left is a list that only grows by scrolling: probe first, copy rows each step so unmounted rows still count, click a stalled "Load more", stop at N or after two empty steps or on a wall, and say why. No browser: say `searchts install --browser`. **0.15.**
-- [ ] **F23d** `--expand` / MCP `expand`. **0.15.** Off on unknown sites. Opt-in opens `<details>` and buttons labelled read, show, or see more. Never links, forms, or sign-in. A news "continue reading" is a paywall: name it, do not work around it. Known hosts keep their own selectors.
-- [ ] **F23e** The knobs for that. **0.15.** Flags and MCP take intent only: pages, items, expand. The user sets the ceilings. The agent can ask up to the ceiling and cannot raise it. A clamped request says so. Same names everywhere.
+- [ ] **F5f** Reddit, the rest. **Next.** Same known-host ring, still fail-open, still **N7**. Next-page cursor on top of **F23c**. Deeper comments on top of **F23d**. Private, NSFW, quarantined, and removed pages each fail with their own note. Profiles and search are cards or a loud failure. Tests use saved pages. The browser stays required.
+- [ ] **F23c** Scroll, the part that is not done. Curl already follows a next-batch URL for list rows (`--items`, `max_items`, ceiling `SEARCHTS_MAX_ITEMS`). What is left is a list that only grows by scrolling: probe first, copy rows each step so unmounted rows still count, click a stalled "Load more", stop at N or after two empty steps or on a wall, and say why. No browser: say `searchts install --browser`. **Next.**
+- [ ] **F23d** `--expand` / MCP `expand`. **Next.** Off on unknown sites. Opt-in opens `<details>` and buttons labelled read, show, or see more. Never links, forms, or sign-in. A news "continue reading" is a paywall: name it, do not work around it. Known hosts keep their own selectors.
+- [ ] **F23e** The knobs for that. **Next.** Flags and MCP take intent only: pages, items, expand. The user sets the ceilings. The agent can ask up to the ceiling and cannot raise it. A clamped request says so. Same names everywhere.
 - [ ] **F24** The same fidelity on a site we do not special-case. **0.15 or later.** Signals in the page, not a new host router (**N4**).
   - [ ] **F24a** Images, video, and embeds in the main content, with URLs, or "media present, not resolved."
   - [ ] **F24b** JSON-LD and app state already in the page (`articleBody`, FAQ, discussion, `__NEXT_DATA__`), before the extractor. No second request.
   - [ ] **F24c** One context line: site, section, author, date, from metadata.
   - [ ] **F24d** A space that the extractor drops next to inline code or bold. Never inside code.
 - [ ] **F21b** Put a dropped side panel back, once a saved page exists (a hackathon page or a job application, not a screenshot). Keep question text in a form. Never field values or hidden inputs. **F21a**, **F21c**, and **F21d** already shipped.
-- [ ] **F22c** A link pasted inside `[...]` or `<...>` is read as the link, or the error says it is not a URL. Today `read "[https://…]"` dies with "scheme '://' is not allowed".
-- [ ] Bing result redirects decode only on `bing.com` and its subdomains. A lookalike host stays as written.
 - [ ] **F19b** Two installs. `pip install -U` can update one Python while `searchts` on PATH is another, so `--version` stays old. Doctor names every `searchts` on PATH and says which one this process is not.
 - [ ] **P3.7d** Three walled rows (`linkedin-feed`, `g2-cloudflare`, `datadome-co`) have no phrase from the real page, because no read has reached it, so they cannot pass. Add each phrase from a real read, then rerun to refresh `docs/scorecard.md`, which still has no where-it-ran line.
-- [ ] **F27** Logged-in `read`. Not built. Same order locally and on a remote browser. Sign-in is the next step when there is nothing to copy, not a replacement for a login that already exists. A user who refuses the copy can still sign in fresh. Do not impersonate `chrome.exe`, and do not decrypt a locked cookie file. A debug port is only on a browser searchts started after a yes, and only for the site in the command. No vendor and no price in this file.
-  - **Already kept.** The next `read` of that site uses what was kept. The user's Chrome does not open.
-  - **Not kept, and a browser on the machine has the login.** One yes per session covers copying the sites that session actually reads. After that yes, the agent does not ask per URL. It does not get every cookie on the machine, and it does not get a site that session never opens. Firefox, Zen, and LibreWolf are a cookie-file read. Chrome is a second window beside the one already open, because the cookie file is locked and a second launch does not attach to the running window. The scratch folder is deleted when the read finishes, even if the copy failed. Say so when the copy fails. Do not pretend it connected.
-  - **Not kept, and there is nothing to copy.** Local: the user signs in once in searchts's own browser. Remote: the user signs in once in the remote window. That sign-in is the approval. Nothing is copied off the PC.
-  - **Keep.** After the read works, if the site is not already kept, ask once: keep this site's login for next time? A yes on local writes only that site into searchts's store. A yes on remote leaves it on the remote profile and does not also write a cookie file on the PC. A no keeps nothing, and the next logged-in read starts again.
-  - **Kill.** Deletes searchts's copy, if one exists, and the remote profile's copy of that site. It does not touch the cookies in the user's normal browser unless they said to delete those too. The scratch folder is deleted every time, kept or not.
-  - **Remote** is the same order. No vendor is chosen. A cloud browser with a saved profile is the shape. A compute-sandbox credit is not that product. `read` still tries the local ladder first. The remote call happens only when the user asked for a logged-in or walled page and an account for that driver exists. If it is ever sold, it is **F18**.
+- [ ] **F27** Logged-in `read`, the remote half. The local half shipped in 0.15.0 ([`docs/freeze-log.md`](docs/freeze-log.md)). What is left is the same order on a remote browser. Sign-in is the next step when there is nothing to copy, not a replacement for a login that already exists. Do not impersonate `chrome.exe`, and do not decrypt a locked cookie file. A debug port is only on a browser searchts started after a yes, and only for the site in the command. No vendor and no price in this file.
+  - **Sign-in.** The user signs in once in the remote window. That sign-in is the approval. Nothing is copied off the PC.
+  - **Keep.** After the read works, if the site is not already kept, ask once: keep this site's login for next time? A yes leaves it on the remote profile and does not also write a cookie file on the PC. A no keeps nothing, and the next logged-in read starts again.
+  - **Kill.** Deletes the remote profile's copy of that site, and searchts's local copy if one exists. It does not touch the cookies in the user's normal browser unless they said to delete those too.
+  - **Driver.** No vendor is chosen. A cloud browser with a saved profile is the shape. A compute-sandbox credit is not that product. `read` still tries the local ladder first. The remote call happens only when the user asked for a logged-in or walled page and an account for that driver exists. If it is ever sold, it is **F18**.
 
 ## When something forces it
 
@@ -83,7 +79,3 @@ Not this product:
 
 - [ ] **F15** Hare, for other repos. [`docs/hare-next.md`](docs/hare-next.md).
 - [ ] **F16** A disposable remote workspace. After **F15** is a real question, not a side path on this one.
-
-## Housekeeping
-
-- [ ] **P1.4** The old box is still open. The text says the 0.10 fail-loud slice shipped and **U1** was answered. Tick it, or write the one thing that is actually left. Do not rebuild it.

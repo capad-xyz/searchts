@@ -2,6 +2,10 @@
 
 Independent adversarial review of the new authenticated-read ("cookie") capability.
 
+> Status: a snapshot from before 0.15.0, which shipped logged-in `read` (#349,
+> #365, #372). It does not review the `login` store, `login signin` or the
+> sign-in browser. One claim, about `save_owned_site`, is corrected below.
+
 Scope: `searchts/session_cookies.py`, the `cookies` parameter on
 `unlocker.fetch()`, `searchts/cdp_profile.py`, and their CLI wiring in
 `cli.py`. Threat model: an agent reads pages using the user's own browser
@@ -61,8 +65,11 @@ consent-gated, and cookies are never on by default.
   deliver cookies through the curl cookie engine (`COOKIELIST`, which is
   domain-scoped by construction) instead of a raw header, so the scoping
   invariant holds even if redirect handling changes.
-- `save_owned_site` currently has no production caller (tests only), so the
-  owned store is never written by the CLI today; `for_site()` reads it.
+- `save_owned_site` had no production caller (tests only) in the snapshot
+  reviewed, so the owned store was never written by the CLI; `for_site()` reads
+  it. Since 0.15.0 `login_store.keep` calls it (`login_store.py:378`), so
+  `searchts login signin` and `login keep` now write that store. That path is
+  not covered by this review.
 - On Windows the `0600`/`0700` chmod calls are skipped (`os.name == "nt"`);
   the file instead inherits the user-profile ACL. Tests do not assert the
   Windows ACL, only the POSIX mode.

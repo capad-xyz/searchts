@@ -29,10 +29,10 @@ especially [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont)).
 - **PDF & document reading** — first-class handling for PDF/document URLs.
 - **Result caching** — optional content cache for repeat reads of the same URL.
 - **Sitemap / small multi-page crawl** — read a handful of related pages in one call.
-- **Logged-in read** — copy a login that already exists, or sign in once when it does not. Not shipped. [PLAN F27](PLAN.md). No vendor.
+- **Logged-in read on a remote browser** — the local half shipped in 0.15.0 (copy a login that already exists, or sign in once when it does not). The remote half is not shipped. [PLAN F27](PLAN.md). No vendor.
 
 ## Not planned
 
 - Paid-proxy pools and keyed commercial unlockers as defaults of the free package. A hosted
   read is a separate product ([PLAN.md](PLAN.md) **F18**), not a default here, and not a standing
-  "never". A logged-in read is [F27](PLAN.md), not shipped, and names no vendor. See [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont).
+  "never". A logged-in read is [F27](PLAN.md): the local half shipped in 0.15.0, the remote half is not shipped, and neither names a vendor. See [what we merge](CONTRIBUTING.md#what-we-merge-and-what-we-dont).

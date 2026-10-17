@@ -25,11 +25,12 @@ uvx --from "searchts[mcp]" searchts -v read https://en.wikipedia.org/wiki/Ada_Lo
 - `searchts read <url>` — Markdown via curl_cffi → Jina → stealth-browser
 - `searchts search "<query>"` — keyless DuckDuckGo (+ optional SearXNG/Exa/Brave/Tavily)
 - `searchts transcribe <url>` — subtitles-first
+- `searchts login signin <url>` — sign in once for a site that is behind a login (also `login keep`, `kill`, `list`)
 - `searchts grab` / `searchts get` — assets
 - `searchts doctor` — **read-only** health (does not install skills)
 - `searchts mcp serve` / `searchts skill install`
 
-MCP tools: `read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`.
+MCP tools: `read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_kill`.
 
 ## Not this product
 
