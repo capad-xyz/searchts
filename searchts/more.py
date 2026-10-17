@@ -890,32 +890,30 @@ def plain_len(markdown: str) -> int:
     return len(re.sub(r"\s+", " ", t).strip())
 
 
-def page_text_chars(doc, enough: int = 0) -> int:
-    """The page's own content in characters: the largest of its content regions.
+def content_region(doc):
+    """``(element, characters)`` for the page's own content region.
 
     ``main``, ``article`` and ``role=main`` are the same claim three ways, and a
     page may use one, two or none of them, so the largest is taken rather than
     the first. Chrome inside a region is dropped, and nothing is mutated: the
     same document still has to be right for every other finding.
-
-    ``enough`` stops the walk once a region has that many characters. It is a
-    ceiling on work, not an answer: a caller that only wants to know whether
-    the page is far bigger than the read passes the number it cares about, and
-    a larger region can only lower the share.
     """
-    best = 0
+    best, best_n = None, 0
     if doc is None:
-        return 0
+        return None, 0
     for xp in (".//main", ".//article", "//*[@role='main']", ".//body"):
         for el in doc.xpath(xp)[:1]:
             n = _content_chars(el)
-            if n > best:
-                best = n
-            if best >= enough:
-                return best
-    if best:
-        return best
-    return _content_chars(doc)
+            if n > best_n:
+                best, best_n = el, n
+    if best is None:
+        return doc, _content_chars(doc)
+    return best, best_n
+
+
+def page_text_chars(doc) -> int:
+    """The page's own content in characters, for callers that only want a count."""
+    return content_region(doc)[1]
 
 
 def _stops_mid_sentence(text: str) -> bool:
@@ -934,7 +932,7 @@ def _stops_mid_sentence(text: str) -> bool:
     return bool(re.search(r"[A-Za-z0-9,'’-]$", last))
 
 
-def short_read(doc, text: str) -> Optional[More]:
+def short_read(doc, text: str, region=None) -> Optional[More]:
     """The read kept far less of the page than the page holds. Names both numbers.
 
     A list page rebuilt from its own HTML, an article whose related links
@@ -945,11 +943,12 @@ def short_read(doc, text: str) -> Optional[More]:
 
     This is a note and never a refusal. The read is real text; the claim is
     only that a person opening the page sees more of it, and how much more.
+
+    ``region`` is ``content_region(doc)`` when the caller already has it, so a
+    read that asks for several things about the same page walks it once.
     """
     kept = plain_len(text)
-    # A larger region can only lower the share, so the walk can stop as soon as
-    # this one is big enough to be worth a note. See `page_text_chars`.
-    have = page_text_chars(doc, enough=int(kept / _GAP_MIN_KEEP + _GAP_MIN_LOST))
+    have = (region or content_region(doc))[1]
     lost = have - kept
     if have < _GAP_MIN_REGION_CHARS or kept >= _GAP_MIN_KEEP * have or lost < _GAP_MIN_LOST:
         return None
@@ -965,6 +964,95 @@ def short_read(doc, text: str) -> Optional[More]:
         f"({share}%); {lost:,} characters are in blocks this read did not "
         f"return{tail}]",
     )
+
+
+# ── F24a: the media in the main content ───────────────────────────────────────
+
+#: How many URLs one note may carry. A product page has ninety images and an
+#: agent needs to know they are there, not to read ninety URLs.
+_MEDIA_MAX_LISTED = 4
+#: A "URL" this long is a data URI or an inline blob, not an address.
+_MEDIA_MAX_URL = 300
+_MEDIA_URL_ATTRS = (
+    "src", "data-src", "data-original", "data-lazy-src", "data-srcset", "srcset", "data", "poster",
+)
+#: ``source`` is absent on purpose: it is a child of ``video`` and of
+#: ``picture``, so counting it tripled the images on a measured front page (658
+#: sources against 112 pictures) and told a reader nothing true.
+_MEDIA_TAGS = {"img": "image", "video": "video", "audio": "audio", "iframe": "embed",
+               "embed": "embed", "object": "embed"}
+_MEDIA_HIDDEN_RE = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.I)
+
+
+def _is_hidden(el) -> bool:
+    """Not shown to anyone: a tracking frame, a hidden player, a lazy placeholder."""
+    if el.get("hidden") is not None or (el.get("aria-hidden") or "").lower() == "true":
+        return True
+    if _MEDIA_HIDDEN_RE.search(el.get("style") or ""):
+        return True
+    for attr in ("width", "height"):
+        value = (el.get(attr) or "").strip().rstrip("px")
+        if value.isdigit() and int(value) <= 2:
+            return True
+    return False
+
+
+def _media_url(el, base: str = "") -> str:
+    for attr in _MEDIA_URL_ATTRS:
+        raw = (el.get(attr) or "").strip()
+        if not raw:
+            continue
+        # A srcset is a list of candidates; the last is normally the largest.
+        url = raw.split(",")[-1].strip().split(" ")[0].strip()
+        if url.lower().startswith(("data:", "javascript:", "about:", "blob:", "#")):
+            continue  # an inline blob, not an address anyone can fetch
+        if len(url) > _MEDIA_MAX_URL:
+            continue
+        if base and not url.startswith(("http://", "https://")):
+            url = urljoin(base, url)  # protocol-relative or root-relative
+        return url
+    return ""
+
+
+def media_note(region, base: str = "") -> Optional[More]:
+    """The images, video and embeds in the main content, by URL.
+
+    F24a. A read returns text, so a photo essay comes back as its captions and
+    an embedded video as nothing at all; both are real content the page holds.
+    The note lists the addresses the markup already carries and never fetches
+    one, and a page whose media has no address to give says so in the words
+    PLAN.md uses rather than pretending there is none.
+    """
+    if region is None:
+        return None
+    counts: Dict[str, int] = {}
+    urls: List[str] = []
+    try:
+        nodes = region.xpath(".//img | .//video | .//iframe | .//embed | .//object | .//audio")
+    except Exception:  # noqa: BLE001 - an unparsable region has no media to name
+        return None
+    for el in nodes:
+        if _in_chrome(el):
+            continue
+        kind = _MEDIA_TAGS.get(el.tag.lower() if isinstance(el.tag, str) else "")
+        if not kind or _is_hidden(el):
+            continue
+        counts[kind] = counts.get(kind, 0) + 1
+        if len(urls) < _MEDIA_MAX_LISTED:
+            url = _media_url(el, base)
+            if url and url not in urls:
+                urls.append(url)
+    if not counts:
+        return None
+    total = sum(counts.values())
+    said = ", ".join(
+        f"{counts[k]} {_plural(counts[k], k, k + 's')}" for k in ("image", "video", "audio", "embed") if k in counts
+    )
+    if not urls:
+        return More("media", f"[media: {said} in the main content; media present, not resolved]")
+    listed = ", ".join(urls)
+    rest = f", and {total - len(urls)} more" if total > len(urls) else ""
+    return More("media", f"[media: {said} in the main content: {listed}{rest}]")
 
 
 def detect(html: str, url: str, text: str) -> List[More]:
@@ -1016,9 +1104,13 @@ def detect(html: str, url: str, text: str) -> List[More]:
             found.append(More("list", f"[partial: the page lists {total} items; this read kept {kept}]"))
         for said in _counts(doc):
             found.append(More("count", f"[page says: {said}]"))
-        short = short_read(doc, text)
+        region = content_region(doc)
+        short = short_read(doc, text, region=region)
         if short:
             found.append(short)
+        seen_media = media_note(region[0], base)
+        if seen_media:
+            found.append(seen_media)
         found.extend(left_out(doc, text))
     except Exception:  # noqa: BLE001 - a detection bug must never fail a read
         return found
@@ -1236,7 +1328,8 @@ def annotate(text: str, found: List[More]) -> str:
 
 def summary(found: List[More]) -> str:
     """Short stderr tick, e.g. ``more: next page, folded``."""
-    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read", "context": "context"}
+    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read", "context": "context",
+           "media": "media"}
     seen: List[str] = []
     for m in found:
         name = names.get(m.kind, m.kind)

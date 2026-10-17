@@ -595,3 +595,101 @@ def test_a_data_field_that_is_a_list_gives_its_first_name():
         "</main>", f'<script type="application/ld+json">{payload}</script></main>'
     )
     assert _context(html) == "[page: A Wire · U.S. News · 2026-10-17]"
+
+
+# ── F24a: the media in the main content ───────────────────────────────────────
+
+
+def _media_note(inner: str, base: str = URL) -> str:
+    html = f"<html><body><main><h1>A page</h1>{_prose(40)}{inner}</main></body></html>"
+    notes = [m.note for m in more.detect(html, base, _kept(40)) if m.kind == "media"]
+    return notes[0] if notes else ""
+
+
+def test_media_in_the_content_is_listed_with_its_addresses():
+    note = _media_note(
+        '<figure><img src="/img/one.jpg" alt="One"><figcaption>One</figcaption></figure>'
+        '<iframe src="https://player.example.org/v/1"></iframe>'
+        '<video src="/clip/two.mp4"></video>'
+    )
+    assert note == (
+        "[media: 1 image, 1 video, 1 embed in the main content: "
+        "https://example.org/img/one.jpg, https://player.example.org/v/1, "
+        "https://example.org/clip/two.mp4]"
+    )
+
+
+def test_a_lazy_image_is_found_wherever_the_address_is():
+    note = _media_note('<img data-src="https://cdn.example.org/lazy.jpg" alt="">')
+    assert "https://cdn.example.org/lazy.jpg" in note
+
+
+def test_a_srcset_gives_its_largest_candidate():
+    note = _media_note('<img srcset="/a.jpg 480w, /b.jpg 800w" alt="Two">')
+    assert "https://example.org/b.jpg" in note
+    assert "a.jpg" not in note
+
+
+def test_a_protocol_relative_address_becomes_a_full_one():
+    note = _media_note('<img src="//cdn.example.org/x.jpg" alt="">')
+    assert "https://cdn.example.org/x.jpg" in note
+
+
+def test_media_nobody_can_see_is_not_media_in_the_content():
+    note = _media_note(
+        '<iframe src="https://tracker.example.org/ns.html" style="display:none"></iframe>'
+        '<img src="/pixel.gif" width="1" height="1">'
+        '<video src="/clip.mp4" hidden></video>'
+    )
+    assert note == ""
+
+
+def test_media_in_page_chrome_is_not_the_content():
+    html = (
+        "<html><body><header><img src='/logo.svg' alt='Logo'></header>"
+        f"<main><h1>A page</h1>{_prose(40)}<img src='/in-main.jpg' alt='In main'></main></body></html>"
+    )
+    notes = [m.note for m in more.detect(html, URL, _kept(40)) if m.kind == "media"]
+    assert len(notes) == 1 and "in-main.jpg" in notes[0] and "logo.svg" not in notes[0]
+
+
+def test_a_picture_does_not_count_its_sources_as_more_images():
+    """Measured: 658 ``source`` children against 112 pictures on a front page."""
+    html = _media_note(
+        "<picture><source srcset='/a.webp 1x'><source srcset='/b.webp 2x'>"
+        '<img src="/a.png" alt="A"></picture><video src="/clip.mp4"><source src="/clip.webm"></video>'
+    )
+    assert html == (
+        "[media: 1 image, 1 video in the main content: "
+        "https://example.org/a.png, https://example.org/clip.mp4]"
+    )
+
+
+def test_media_with_no_address_says_it_is_not_resolved():
+    html = (
+        "<html><body><main><h1>A page</h1>"
+        f"{_prose(40)}<iframe></iframe><img alt='A picture with no source at all'></main></body></html>"
+    )
+    notes = [m.note for m in more.detect(html, URL, _kept(40)) if m.kind == "media"]
+    assert notes == ["[media: 1 image, 1 embed in the main content; media present, not resolved]"]
+
+
+def test_a_page_with_no_media_has_no_media_note():
+    assert _media_note("<p>Words only.</p>") == ""
+
+
+def test_the_note_never_lists_more_than_four_addresses():
+    images = "".join(f'<img src="/img/{i}.jpg" alt="Image {i}">' for i in range(30))
+    note = _media_note(images)
+    assert note.count("https://example.org/img/") == 4
+    assert note.endswith("and 26 more]")
+    assert "[media: 30 images" in note
+
+
+def test_the_media_note_is_carried_on_the_read(monkeypatch):
+    html = f"<html><body><main><h1>A page</h1>{_prose(40)}<img src='/photo.jpg' alt='A photo'></main></body></html>"
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", lambda url, **kw: (200, html, url, {}))
+    result = unlocker.fetch(URL, backends=["curl_cffi"], use_memory=False)
+    assert "[media: 1 image in the main content: https://example.org/photo.jpg]" in result.text
+    assert [m["kind"] for m in result.more if m["kind"] == "media"]
+    assert "media" in more.summary(more.detect(html, URL, _kept(40)))
