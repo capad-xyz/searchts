@@ -84,7 +84,7 @@ Preconditions:
 
 ### The ceilings
 
-- **Clamp.** Run `SEARCHTS_MAX_ITEMS=20 .venv/bin/python -m searchts read https://meta.discourse.org/latest --items 90 --json > artifacts/read/clamp.json 2> artifacts/read/clamp.err`. The object carries a `text` containing `[items: asked for 90, the ceiling is 20]`, and the row count in the text is at most 20.
+- **Clamp.** Run `SEARCHTS_MAX_ITEMS=20 .venv/bin/python -m searchts read https://meta.discourse.org/latest --items 90 --json > artifacts/read/clamp.json 2> artifacts/read/clamp.err`. The object carries a `text` containing `[items: asked for 90, the ceiling is 20]`, and the `[scroll:` line says it stopped at the 20 rows asked for. The ceiling stops further walking and scrolling; it does not trim rows page one already held (the saved drive had 30).
 - **The note lands on page one.** Assert the note is inside `text`, not only in
   `warnings`. The CLI prints the text of the first page and the MCP envelope
   carries it in `text`, so a note on the last page is a note nobody reads.
@@ -105,6 +105,7 @@ Preconditions:
   runs. Read the `[scroll:` line, not `item_count`, to know how many rows came
   back.
 - `--items` and `--pages` together use `--items` and warn on stderr.
+- A `--items` read that carries `--proxy` or cookies never scrolls: the scroll's own Chromium would carry neither. The text ends `[scroll: not run. ...]`.
 - `--expand` needs a browser for a button, and the button may not be there yet.
   "nothing on the rendered page answered" after a press succeeded earlier on the
   same URL is hydration, not a regression. Re-drive before believing it.
