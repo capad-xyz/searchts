@@ -2348,24 +2348,18 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             hop = private_hop(url, final_url or url)
             page_hit = None
             text = ""
-            said = False
-            if hop:
-                attempts.append(("human-browser", hop))
-                _tick(f"  human-browser: {hop}")
-                text = ""
-            else:
+            if not hop:
                 # F5c/F5f: listing, batch, thread, profile or search (human
                 # rung). Wins even if short, and even when an earlier rung left
                 # a longer thin `best`. A page that is a wall reports itself, so
                 # a private or quarantined community never reads as its nav bar.
+                # A wall is not ticked here: one rung says its one reason, below,
+                # so the page's own name cannot be answered by "empty-extract"
+                # underneath it.
                 try:
                     page_hit = _reddit_listing.extract_page(url, html)
                     if page_hit is not None:
-                        if page_hit.failure:
-                            attempts.append(("human-browser", page_hit.failure))
-                            _tick(f"  human-browser: {page_hit.failure}")
-                            said = True
-                        else:
+                        if not page_hit.failure:
                             _tick(page_hit.label)
                             text = page_hit.markdown
                     if not text and page_hit is None:
@@ -2396,13 +2390,19 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 best = human
                 attempts.append(("human-browser", f"thin-{len(text)}b"))
                 _tick(f"  human-browser: thin-{len(text)}b")
-            elif not hop and not said:
-                # A rung gets one line. The wall this page is was already said
-                # above (its own name, not "empty-extract"), and saying it twice
-                # made one rung read as two failures: the second line is a lie
-                # about the page, which was not empty, it was refused.
-                if human_error:
+            else:
+                # One rung, one line. The reason is decided here and nowhere
+                # else: a page that is a wall is named by that wall, and the
+                # generic "nothing came out" answer cannot be printed under it.
+                # Printing both made one rung read as two failures, and the
+                # second was a lie about the page: it was not empty, it was
+                # refused.
+                if hop:
+                    why = hop
+                elif human_error:
                     why = human_error
+                elif page_hit is not None and page_hit.failure:
+                    why = page_hit.failure
                 elif not text:
                     why = "empty-extract"
                 elif wall is not None:

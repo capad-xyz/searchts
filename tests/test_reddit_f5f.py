@@ -952,6 +952,75 @@ def test_the_known_host_expand_budget_is_the_knob_not_a_constant(monkeypatch):
     ) == "<html>a</html>"
 
 
+def test_the_wider_reddit_gate_presses_nothing_where_there_is_no_control():
+    """Asking a Reddit page that has no "more replies" costs nothing.
+
+    The expand now answers to ``is_reddit_url`` (every Reddit host) instead of the
+    ``.json`` ring's ``PATTERN``, so the selectors are consulted on a listing, a
+    profile and a search too. Only threads carry the control - across every saved
+    Reddit fixture the markup appears in the two thread pages and nowhere else -
+    and this pins that asking changes nothing a caller can see: no press, no tick,
+    the same HTML back.
+    """
+    asked = []
+
+    class Page:
+        def __init__(self, html):
+            self.html = html
+
+        def content(self):
+            return self.html
+
+        def query_selector_all(self, selector):
+            asked.append(selector)
+            return []
+
+    ticks = []
+    html = fixture("reddit_search.html")
+    out = unlocker._expand_known_host(
+        Page(html), SEARCH, "<html>a</html>", clicks=3, tick=ticks.append
+    )
+    assert out == html
+    assert asked, "the host's own selectors were never consulted"
+    assert ticks == [], ticks
+
+
+def test_a_reddit_lookalike_gets_neither_the_expand_nor_the_browser_retry():
+    """Both host checks answer on the real host, not on a name that starts alike.
+
+    The cursor's ``src`` travels as a ``next_url`` an agent can act on, so
+    ``www.reddit.com.evil.test`` is the shape this has to refuse. It gets no
+    "more replies" press, and a walled-off hop on it is not worth a browser
+    launch.
+    """
+    class Never:
+        def content(self):
+            raise AssertionError("a lookalike host was asked for its content")
+
+        def query_selector_all(self, _selector):
+            raise AssertionError("a lookalike host was asked for its controls")
+
+    for url in (
+        "https://www.reddit.com.evil.test/r/MachineLearning/hot/",
+        "https://notreddit.com/r/MachineLearning/hot/",
+        "https://reddit.com.evil.test/svc/shreddit/community-more-posts/hot/?after=x",
+        "https://evil.test/svc/shreddit/community-more-posts/hot/?after=x",
+    ):
+        assert not reddit.is_reddit_url(url), url
+        assert not reddit.hop_needs_browser(
+            url, [("curl_cffi", "reddit-challenge")]
+        ), url
+        assert unlocker._expand_known_host(
+            Never(), url, "<html>a</html>", clicks=2
+        ) == "<html>a</html>", url
+        assert (
+            unlocker._retry_hop_on_browser(
+                url, unlocker.UnlockerError(url, [("curl_cffi", "challenge")]), {}
+            )
+            is None
+        ), url
+
+
 def test_the_ring_declares_no_hook_beyond_pattern_and_extract_known():
     """N4: the ring is a ring, not a plugin framework (the hooks are gone).
 
