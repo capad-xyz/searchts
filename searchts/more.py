@@ -2,8 +2,9 @@
 
 Detection only. No extra requests and no clicks: the page HTML we already
 have is checked for a next page, a feed, folded text, a list the extractor
-mostly dropped, and counts the page states. Each finding becomes a short
-bracketed note under the text and a structured entry for ``--json`` / MCP.
+mostly dropped, how much of the page's own text the read kept, and counts the
+page states. Each finding becomes a short bracketed note under the text and a
+structured entry for ``--json`` / MCP.
 
 Also keeps accordion and tab text through extraction (``prepare_panels``):
 Trafilatura drops ``<button>`` labels (the questions) and inline
@@ -754,6 +755,146 @@ def left_out(doc, text: str) -> List[More]:
     return out
 
 
+# ── F24: how much of the page this read actually kept ────────────────────────
+
+#: Below this a share means nothing: a 900-character page read down to 300 is a
+#: page, not a thin read. Measured over 26 unknown hosts, the first page where
+#: the numbers mean something is around 3,000 characters of the page's own text.
+_GAP_MIN_REGION_CHARS = 3_000
+#: The read keeps less than this share of that text. A read is allowed to drop
+#: ad slots, captions and chrome inside the content region; measured, a complete
+#: read on this corpus keeps 60-100% of it.
+_GAP_MIN_KEEP = 0.55
+#: ...and leaves at least this many characters behind. Without it, a ratio on a
+#: small page is a rounding error wearing a percentage.
+_GAP_MIN_LOST = 2_000
+#: A last line shorter than this cannot be "cut mid-sentence": it is a heading,
+#: a byline or a one-word footer.
+_TAIL_MIN_CHARS = 60
+
+#: Chrome, plus ``nav``: everything around the content rather than in it. Kept
+#: separate from :func:`_in_chrome` on purpose, so measuring the page's own text
+#: cannot change which controls count as folds.
+_CONTENT_SKIP_TAGS = _CHROME_TAGS | {"nav"}
+
+
+def _content_chars(el) -> int:
+    """Visible characters under ``el``, with the page's chrome left out."""
+    parts: List[str] = []
+
+    def walk(node) -> None:
+        tag = node.tag.lower() if isinstance(node.tag, str) else ""
+        if tag in _SKIP_TEXT_TAGS or not isinstance(node.tag, str):
+            if node.tail:
+                parts.append(node.tail)
+            return
+        if tag in _CONTENT_SKIP_TAGS or (node.get("role") or "").lower() in _CHROME_ROLES:
+            if node.tail:
+                parts.append(node.tail)
+            return
+        if _SIDE_CLASS.search(node.get("class") or ""):
+            if node.tail:
+                parts.append(node.tail)
+            return
+        if node.text:
+            parts.append(node.text)
+        for child in node:
+            walk(child)
+        if node.tail:
+            parts.append(node.tail)
+
+    walk(el)
+    return len(_norm(" ".join(parts)))
+
+
+def plain_len(markdown: str) -> int:
+    """Visible length of an extract: link targets and Markdown marks do not count.
+
+    Shared with the extractor's own recall gate so "how much of this page is
+    this read" means the same thing on both sides of the comparison.
+    """
+    t = re.sub(r"\]\([^)]*\)", "]", markdown or "")
+    t = re.sub(r"[\[\]#*_>`|]", "", t)
+    return len(re.sub(r"\s+", " ", t).strip())
+
+
+def page_text_chars(doc, enough: int = 0) -> int:
+    """The page's own content in characters: the largest of its content regions.
+
+    ``main``, ``article`` and ``role=main`` are the same claim three ways, and a
+    page may use one, two or none of them, so the largest is taken rather than
+    the first. Chrome inside a region is dropped, and nothing is mutated: the
+    same document still has to be right for every other finding.
+
+    ``enough`` stops the walk once a region has that many characters. It is a
+    ceiling on work, not an answer: a caller that only wants to know whether
+    the page is far bigger than the read passes the number it cares about, and
+    a larger region can only lower the share.
+    """
+    best = 0
+    if doc is None:
+        return 0
+    for xp in (".//main", ".//article", "//*[@role='main']", ".//body"):
+        for el in doc.xpath(xp)[:1]:
+            n = _content_chars(el)
+            if n > best:
+                best = n
+            if best >= enough:
+                return best
+    if best:
+        return best
+    return _content_chars(doc)
+
+
+def _stops_mid_sentence(text: str) -> bool:
+    """True when the extract's last line stops in the middle of a thought.
+
+    False positives are everywhere: a byline ends with a date, a footer ends
+    with a product name, a list ends with a link. So the line has to be long
+    enough to be a sentence and end on a bare word or comma.
+    """
+    lines = [ln for ln in (text or "").rstrip().split("\n") if ln.strip()]
+    if not lines:
+        return False
+    last = lines[-1].rstrip().rstrip("`*~ ").strip()
+    if len(last) < _TAIL_MIN_CHARS:
+        return False
+    return bool(re.search(r"[A-Za-z0-9,'’-]$", last))
+
+
+def short_read(doc, text: str) -> Optional[More]:
+    """The read kept far less of the page than the page holds. Names both numbers.
+
+    A list page rebuilt from its own HTML, an article whose related links
+    swallowed the body, a shell that came back as prose: three different
+    failures, one honest way to say it. The extract is compared against the
+    page's own content region with the chrome out, because a page whose nav is
+    longer than its article has not lost content to the extractor.
+
+    This is a note and never a refusal. The read is real text; the claim is
+    only that a person opening the page sees more of it, and how much more.
+    """
+    kept = plain_len(text)
+    # A larger region can only lower the share, so the walk can stop as soon as
+    # this one is big enough to be worth a note. See `page_text_chars`.
+    have = page_text_chars(doc, enough=int(kept / _GAP_MIN_KEEP + _GAP_MIN_LOST))
+    lost = have - kept
+    if have < _GAP_MIN_REGION_CHARS or kept >= _GAP_MIN_KEEP * have or lost < _GAP_MIN_LOST:
+        return None
+    share = round(100.0 * kept / have)
+    tail = (
+        "; the last line also stops mid-sentence"
+        if _stops_mid_sentence(text)
+        else ""
+    )
+    return More(
+        "share",
+        f"[kept {kept:,} of {have:,} characters of the page's own text "
+        f"({share}%); {lost:,} characters are in blocks this read did not "
+        f"return{tail}]",
+    )
+
+
 def detect(html: str, url: str, text: str) -> List[More]:
     """Findings for one read: the page HTML, its URL, and the extracted text."""
     doc = _parse(html)
@@ -798,6 +939,9 @@ def detect(html: str, url: str, text: str) -> List[More]:
             found.append(More("list", f"[partial: the page lists {total} items; this read kept {kept}]"))
         for said in _counts(doc):
             found.append(More("count", f"[page says: {said}]"))
+        short = short_read(doc, text)
+        if short:
+            found.append(short)
         found.extend(left_out(doc, text))
     except Exception:  # noqa: BLE001 - a detection bug must never fail a read
         return found
@@ -1015,7 +1159,7 @@ def annotate(text: str, found: List[More]) -> str:
 
 def summary(found: List[More]) -> str:
     """Short stderr tick, e.g. ``more: next page, folded``."""
-    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out"}
+    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read"}
     seen: List[str] = []
     for m in found:
         name = names.get(m.kind, m.kind)

@@ -955,10 +955,15 @@ _NEEDS_JS = re.compile(
 
 
 def _plain_len(markdown: str) -> int:
-    """Visible length of an extract: link targets and Markdown marks do not count."""
-    t = re.sub(r"\]\([^)]*\)", "]", markdown or "")
-    t = re.sub(r"[\[\]#*_>`|]", "", t)
-    return len(re.sub(r"\s+", " ", t).strip())
+    """Visible length of an extract: link targets and Markdown marks do not count.
+
+    The definition lives in :mod:`searchts.more`, because F24 compares this
+    number against the page's own text and the two sides have to mean the same
+    thing.
+    """
+    from searchts.more import plain_len
+
+    return plain_len(markdown)
 
 
 def whole_short_page(html: str, text: str) -> bool:
