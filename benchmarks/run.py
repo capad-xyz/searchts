@@ -1,7 +1,7 @@
 """Run the unlocker benchmark and print a scorecard.
 
     python -m benchmarks.run [--json] [--out DIR] [--cases FILE] [--suite SUITE]
-                             [--plain]
+                             [--plain] [--where NOTE]
 
 The scoring/rendering helpers take plain dicts so they can be unit-tested without
 touching the network (see tests/test_benchmark.py).
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import sys
 import time
 from collections import Counter
@@ -21,6 +22,54 @@ from typing import IO
 from .cases import Case, load_cases
 
 _SUMMARY_ORDER = ("smoke", "walled")
+
+
+def _norm(text: str) -> str:
+    """Casefold, straighten curly quotes and collapse whitespace for phrase matching."""
+    text = text.replace("\u2019", "'").replace("\u2018", "'")
+    text = text.replace("\u201c", '"').replace("\u201d", '"')
+    return " ".join(text.casefold().split())
+
+
+def matched_phrase(text: str, phrases: tuple[str, ...]) -> str | None:
+    """Return the first ``phrases`` entry found in ``text``, or None."""
+    haystack = _norm(text)
+    for phrase in phrases:
+        if _norm(phrase) in haystack:
+            return phrase
+    return None
+
+
+def judge(case: Case, text: str, min_chars: int) -> tuple[bool, str | None, str | None]:
+    """Score one returned body: ``(ok, error, matched_phrase)``.
+
+    Length is a floor, not a pass. A walled case also needs a phrase from the
+    real page (``Case.expect``); with none declared it cannot pass. A smoke case
+    is checked for its phrase only when it declares one.
+    """
+    chars = len(text or "")
+    if (not case.allow_thin) and chars < min_chars:
+        return False, f"thin content ({chars} < {min_chars} chars)", None
+    if case.suite == "walled" and not case.expect:
+        return False, "no expected real-page phrase declared for this walled case", None
+    if case.expect:
+        hit = matched_phrase(text or "", case.expect)
+        if hit is None:
+            return False, "none of the expected real-page phrases found in the text", None
+        return True, None, hit
+    return True, None, None
+
+
+def run_info(where: str | None = None) -> dict:
+    """Where this run happened: OS, Python and a network note the person supplies.
+
+    No hostname and no IP lookup; the network note is whatever ``--where`` says.
+    """
+    return {
+        "os": f"{platform.system()} {platform.release()}".strip(),
+        "python": platform.python_version(),
+        "network": (where or "").strip() or "not stated",
+    }
 
 
 def _tick(name: str) -> None:
@@ -52,19 +101,19 @@ def run_case(case: Case, *, progress: bool = False) -> dict:
             case.url, use_memory=False, min_chars=fetch_min, progress=progress,
         )
         chars = len(r.text or "")
-        min_chars = unlocker._MIN_CHARS
-        thin = (not case.allow_thin) and chars < min_chars
+        ok, error, matched = judge(case, r.text or "", unlocker._MIN_CHARS)
         return {
             "name": case.name,
             "url": case.url,
             "category": case.category,
             "suite": case.suite,
-            "ok": not thin,
+            "ok": ok,
             "backend": r.backend,
             "status": r.status,
             "chars": chars,
             "seconds": round(time.perf_counter() - t0, 2),
-            "error": (f"thin content ({chars} < {min_chars} chars)" if thin else None),
+            "error": error,
+            "matched": matched,
         }
     except Exception as e:  # UnlockerError, or anything a rung raised
         return {
@@ -78,6 +127,7 @@ def run_case(case: Case, *, progress: bool = False) -> dict:
             "chars": 0,
             "seconds": round(time.perf_counter() - t0, 2),
             "error": str(e)[:200],
+            "matched": None,
         }
 
 
@@ -118,6 +168,12 @@ def summarize(results: list[dict]) -> dict:
     }
 
 
+def _phrase_cell(r: dict) -> str:
+    if r.get("matched"):
+        return "`" + str(r["matched"]).replace("|", "\\|").replace("`", "'") + "`"
+    return "—"
+
+
 def _render_section(title: str, results: list[dict], summary: dict) -> list[str]:
     s = summary["by_suite"].get(title.lower())
     lines: list[str] = [f"## {title}"]
@@ -127,7 +183,10 @@ def _render_section(title: str, results: list[dict], summary: dict) -> list[str]
     pct = round(s["pass_rate"] * 100)
     honesty = ""
     if title.lower() == "walled":
-        honesty = " — failures are expected on real bot-walls; a low rate is honest, not a defect."
+        honesty = (
+            " — a row counts only when the text holds a phrase from the real page;"
+            " failures are expected on real bot-walls, and a low rate is honest, not a defect."
+        )
     lines += [
         "",
         f"Read **{s['passed']}/{s['total']}** pages (**{pct}%**).{honesty}",
@@ -161,22 +220,27 @@ def _render_section(title: str, results: list[dict], summary: dict) -> list[str]
         "",
         "## " + title + " — per page",
         "",
-        "| Page | Category | Read | Tier | Chars | Secs |",
-        "|------|----------|:----:|------|------:|-----:|",
+        "| Page | Category | Read | Tier | Chars | Secs |"
+        + (" Real-page phrase |" if title.lower() == "walled" else ""),
+        "|------|----------|:----:|------|------:|-----:|"
+        + ("------|" if title.lower() == "walled" else ""),
     ]
     for r in results:
         if r.get("suite") != title.lower():
             continue
         tier = f"`{r['backend']}`" if r["backend"] else "—"
-        lines.append(
+        row = (
             f"| {r['name']} | {r['category']} | {'yes' if r['ok'] else 'no'} | "
             f"{tier} | {r['chars']} | {r['seconds']} |"
         )
+        if title.lower() == "walled":
+            row += f" {_phrase_cell(r)} |"
+        lines.append(row)
     lines.append("")
     return lines
 
 
-def render_markdown(results: list[dict], summary: dict) -> str:
+def render_markdown(results: list[dict], summary: dict, where: dict | None = None) -> str:
     lines = [
         "# Unlocker benchmark",
         "",
@@ -189,6 +253,14 @@ def render_markdown(results: list[dict], summary: dict) -> str:
         "datacenter IP (CI, cloud VM) the curl_cffi tier is blocked more often "
         "than a real user sees.",
         "",
+    ]
+    if where is not None:
+        lines += [
+            f"> Where this was run: {where['os']}, Python {where['python']}; "
+            f"network: {where['network']}.",
+            "",
+        ]
+    lines += [
         "See [how to interpret this scorecard]"
         "(https://github.com/capad-xyz/searchts/blob/main/benchmarks/README.md"
         "#interpret-the-scorecard).",
@@ -230,6 +302,12 @@ def main(argv: list[str] | None = None) -> int:
         default="all",
         help="which suite to run (default: all — writes both sections)",
     )
+    ap.add_argument(
+        "--where",
+        metavar="NOTE",
+        help='network note for the scorecard, e.g. "home, residential, IN" '
+        "(default: not stated; no IP lookup is made)",
+    )
     ap.add_argument("--json", action="store_true", help="print raw JSON instead of the scorecard")
     ap.add_argument(
         "--plain",
@@ -245,11 +323,12 @@ def main(argv: list[str] | None = None) -> int:
         load_cases(args.cases, suite=suite_filter), progress=progress
     )
     summary = summarize(results)
+    where = run_info(args.where)
 
     if args.json:
-        print(json.dumps({"summary": summary, "results": results}, indent=2))
+        print(json.dumps({"run": where, "summary": summary, "results": results}, indent=2))
     else:
-        md = render_markdown(results, summary)
+        md = render_markdown(results, summary, where)
         use_rich = (not args.plain) and sys.stdout.isatty()
         print_scorecard(md, use_rich=use_rich)
 
@@ -257,9 +336,9 @@ def main(argv: list[str] | None = None) -> int:
         out = Path(args.out)
         out.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
-        (out / "scorecard.md").write_text(render_markdown(results, summary), encoding="utf-8")
+        (out / "scorecard.md").write_text(render_markdown(results, summary, where), encoding="utf-8")
         (out / "results.json").write_text(
-            json.dumps({"generated": stamp, "summary": summary, "results": results}, indent=2),
+            json.dumps({"generated": stamp, "run": where, "summary": summary, "results": results}, indent=2),
             encoding="utf-8",
         )
         print(f"\nwrote {out / 'scorecard.md'} and {out / 'results.json'}")

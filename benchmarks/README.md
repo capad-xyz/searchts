@@ -24,6 +24,7 @@ python -m benchmarks.run --suite walled       # walled only
 python -m benchmarks.run --out results/       # write scorecard.md + results.json (both suites)
 python -m benchmarks.run --suite walled --out results/  # measure the walled suite only
 python -m benchmarks.run --plain              # force raw markdown on a TTY
+python -m benchmarks.run --where "home, residential, IN"  # say where it ran, in the header
 ```
 
 On a TTY the final scorecard is rendered with Rich (tables, not literal `**100%**`).
@@ -71,6 +72,11 @@ A fetch that returns fewer than `unlocker._MIN_CHARS` characters fails
 unless the case sets `allow_thin: true`. For `reddit-hot`, once **F5c** lands,
 clearing that floor with one post is not a pass. The pass is a listing index
 (several titles and absolute permalinks). `reddit-comments` stays a thread.
+On the walled suite the floor is necessary, not sufficient: a row reads only when the
+text also holds a phrase from the real page (`expect` in `cases.py`), and the table
+shows which one matched. A walled case with no `expect` cannot pass; add the phrase
+once a real read of that page produces one. The scorecard header says which OS and
+Python ran it and carries the network note you pass with `--where`.
 `Secs` is wall-clock time for that run.
 A datacenter, CI, or some VPN connections can report a lower pass rate or more
 fallback-tier usage because their IP reputation and TLS fingerprint differ from
@@ -125,7 +131,7 @@ default to `walled`:
 
 ```json
 [
-  {"name": "some-site", "url": "https://example.org/page", "category": "datadome", "note": "press-and-hold on failure"},
+  {"name": "some-site", "url": "https://example.org/page", "category": "datadome", "note": "press-and-hold on failure", "expect": ["a phrase copied from the real page"]},
   {"name": "tiny", "url": "https://example.com", "category": "control", "allow_thin": true}
 ]
 ```
