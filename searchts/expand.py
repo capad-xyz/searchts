@@ -406,6 +406,7 @@ _FIND_JS = r"""
   const RE = /^(?:read|show|see|view)\s+(?:more|all|full|the\s+(?:rest|full\s+\w+))(?:\s+(?:post|article|text|story|description|details|comments?|replies))?[\s.…»›>]*$/i;
   const seen = new Set();
   const out = [];
+  let n = 0;
   const walk = (root) => {
     for (const el of root.querySelectorAll('button,summary,[role=button],[role=link],a')) {
       if (seen.has(el)) continue;
@@ -425,7 +426,16 @@ _FIND_JS = r"""
       try { off = !(el.offsetWidth || el.offsetHeight || el.getClientRects().length); } catch (e) { off = true; }
       if (off) continue;
       try { if (el.disabled) continue; } catch (e) { continue; }
-      out.push({label: raw, why: 'yes', tag: el.tagName});
+      // Only an element a press can reach is marked, and the mark is what
+      // the press finds again. A label is not an identity: a form, a nav or an
+      // aside can hold a button with the same words, and pressing the first
+      // match by label presses that one instead of this one.
+      let idx = null;
+      if (el.matches('button,[role=button]')) {
+        idx = n++;
+        el.setAttribute('data-searchts-expand', String(idx));
+      }
+      out.push({label: raw, why: 'yes', tag: el.tagName, idx: idx});
     }
   };
   walk(document);
@@ -471,31 +481,26 @@ def click_in_page(page, max_clicks: int) -> Report:
                 "button"
             )
         return rep
-    handles = page.query_selector_all("button, [role=button]")
-    # A list per label, not one handle per label. Two controls can read
-    # "Show more" - on kickstarter.com/discover/advanced both do - and keeping
-    # only the first meant the second press hit the *same* element, which
-    # collapsed what the first press had just revealed. Measured: innerText
-    # 3,197 -> 7,299 on the first press and back to nothing on the second.
-    by_label: Dict[str, List[Any]] = {}
-    try:
-        for h in handles:
-            key = re.sub(r"\s+", " ", h.inner_text() or "").strip()
-            by_label.setdefault(key, []).append(h)
-    except Exception:  # noqa: BLE001 - no handles means no clicks
-        return rep
-    pressed: set = set()
     for control in wanted:
         if rep.clicks >= max_clicks:
             rep.stop = f"stopped at the ceiling of {max_clicks} press(es)"
             break
         label = control.get("label") or ""
-        handle = next(
-            (h for h in by_label.get(label, []) if id(h) not in pressed), None
-        )
+        idx = control.get("idx")
+        if idx is None:
+            # Found, but not a button a press can reach (a ``<summary>`` or a
+            # same-page anchor): counted by the finder, never pressed here.
+            continue
+        # The element the finder vetted, found by the mark it left on it, never
+        # by its label (see _FIND_JS). Two controls can read "Show more" - on
+        # kickstarter.com/discover/advanced both do - and each has its own mark,
+        # so the second press cannot land on the element the first one used.
+        try:
+            handle = page.query_selector(f'[data-searchts-expand="{int(idx)}"]')
+        except Exception:  # noqa: BLE001 - no handle means no click
+            handle = None
         if handle is None:
             continue
-        pressed.add(id(handle))
         try:
             handle.click(timeout=3000)
         except Exception:  # noqa: BLE001 - an unclickable control is a skip
