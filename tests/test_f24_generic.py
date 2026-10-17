@@ -482,3 +482,116 @@ def test_the_faq_answers_a_read_already_had_are_not_double_counted():
 
 
 
+
+
+# ── F24c: one line saying where the page came from ────────────────────────────
+
+
+def _meta_page(head: str, inner: str = "") -> str:
+    return f"<html><head>{head}</head><body><main><h1>A page</h1>{_prose(40)}{inner}</main></body></html>"
+
+
+def _context(html: str) -> str:
+    return more.context_line(more._parse(html), html, URL)
+
+
+def test_the_line_says_the_site_the_author_and_the_date():
+    html = _meta_page(
+        '<meta property="og:site_name" content="The Gazette">'
+        '<meta property="article:section" content="U.S. News">'
+        '<meta name="author" content="A. Writer">'
+        '<meta property="article:published_time" content="2026-10-17T09:30:00Z">'
+    )
+    assert _context(html) == "[page: The Gazette · U.S. News · by A. Writer · 2026-10-17]"
+
+
+def test_the_line_is_built_from_the_data_when_the_meta_tag_lies():
+    """A CMS ``article:section`` read "tags" while the page's own data said "security"."""
+    payload = (
+        '{"@type":"NewsArticle","headline":"A story","articleSection":"security",'
+        '"author":{"@type":"Person","name":"B. Writer"},'
+        '"datePublished":"2026-10-16T18:00:00-04:00"}'
+    )
+    html = _meta_page(
+        '<meta property="og:site_name" content="A Magazine">'
+        '<meta property="article:section" content="tags">' + f"{payload}"
+    ).replace("</main>", f'<script type="application/ld+json">{payload}</script></main>')
+    assert _context(html) == "[page: A Magazine · security · by B. Writer · 2026-10-16]"
+
+
+def test_a_page_that_states_one_thing_gets_no_line():
+    html = _meta_page('<meta property="og:site_name" content="The Gazette">')
+    assert _context(html) == ""
+
+
+def test_a_page_that_states_nothing_gets_no_line():
+    assert _context(_meta_page("")) == ""
+
+
+def test_the_site_is_never_guessed_from_the_url():
+    """The caller already has the URL; repeating it is not context."""
+    html = _meta_page('<meta name="author" content="A. Writer">')
+    assert "example.org" not in _context(html)
+    assert _context(html) == ""
+
+
+@pytest.mark.parametrize(
+    "key, value",
+    [
+        ("article:author", "https://example.org/staff/a-writer"),
+        ("og:article:author", "https://example.org/people/a"),
+        ("byl", "https://example.org/by/a"),
+    ],
+)
+def test_an_author_that_is_a_url_is_not_an_author(key, value):
+    html = _meta_page(
+        '<meta property="og:site_name" content="The Gazette">'
+        f'<meta name="{key}" content="{value}">'
+    )
+    assert "by " not in _context(html)
+
+
+def test_a_field_the_page_repeats_is_not_printed_twice():
+    html = _meta_page(
+        '<meta property="og:site_name" content="The Gazette">'
+        '<meta name="author" content="The Gazette">'
+    )
+    assert _context(html) == ""
+
+
+def test_a_field_longer_than_a_name_is_left_out():
+    html = _meta_page(
+        '<meta property="og:site_name" content="The Gazette">'
+        f'<meta name="author" content="{"A. Writer " * 40}">'
+    )
+    assert _context(html) == ""
+
+
+def test_the_line_is_the_first_note_a_read_prints(monkeypatch):
+    html = (
+        _meta_page(
+            '<meta property="og:site_name" content="The Gazette">'
+            '<meta property="article:published_time" content="2026-10-17">'
+        )
+    )
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", lambda url, **kw: (200, html, url, {}))
+    result = unlocker.fetch(URL, backends=["curl_cffi"], use_memory=False)
+    notes = result.text.rsplit("\n\n", 1)[1].splitlines()
+    assert notes[0] == "[page: The Gazette · 2026-10-17]"
+    assert result.more[0] == {"kind": "context", "note": notes[0]}
+
+
+def test_the_line_appears_in_the_summary_and_never_raises():
+    html = _meta_page('<meta property="og:site_name" content="The Gazette"><meta name="author" content="A">')
+    assert more.summary(more.detect(html, URL, _kept(40))) == "more: context"
+    assert more.context_line(None, "", URL) == ""
+    assert more.context_line(more._parse("<html><body><main>x"), "", "") == ""
+
+
+def test_a_data_field_that_is_a_list_gives_its_first_name():
+    """A list of sections is one section, not the string "['a', 'b']"."""
+    payload = '{"@type":"NewsArticle","articleSection":["U.S. News","World"],"datePublished":"2026-10-17"}'
+    html = _meta_page('<meta property="og:site_name" content="A Wire">').replace(
+        "</main>", f'<script type="application/ld+json">{payload}</script></main>'
+    )
+    assert _context(html) == "[page: A Wire · U.S. News · 2026-10-17]"

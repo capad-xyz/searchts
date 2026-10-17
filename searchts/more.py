@@ -974,6 +974,11 @@ def detect(html: str, url: str, text: str) -> List[More]:
         return []
     found: List[More] = []
     try:
+        where = context_line(doc, html, url)
+        if where:
+            # First, so it reads as a header on the notes rather than as one
+            # more thing the page was missing.
+            found.append(More("context", where))
         base = _base_url(doc, url)
         nxt = _next_page(doc, base, url)
         is_feed, load_more_url = _feed(doc, base, url)
@@ -1231,7 +1236,7 @@ def annotate(text: str, found: List[More]) -> str:
 
 def summary(found: List[More]) -> str:
     """Short stderr tick, e.g. ``more: next page, folded``."""
-    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read"}
+    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read", "context": "context"}
     seen: List[str] = []
     for m in found:
         name = names.get(m.kind, m.kind)
@@ -1434,4 +1439,129 @@ def structured_text(html: str) -> str:
         text = "\n".join(lines).strip()
         return text if len(_norm(text)) >= _STRUCTURED_MIN_CHARS else ""
     except Exception:  # noqa: BLE001 - structured data is an extra, never a failure
+        return ""
+
+
+# ── F24c: one line saying where this page came from ───────────────────────────
+
+#: A field longer than this is a sentence or a keyword list, not a name.
+_CONTEXT_MAX_FIELD = 60
+#: The whole line stops being one line past this.
+_CONTEXT_MAX_CHARS = 200
+
+_SITE_KEYS = ("og:site_name", "application-name", "twitter:site")
+_SECTION_KEYS = ("article:section", "og:article:section", "section", "parsely-section")
+_AUTHOR_KEYS = ("author", "article:author", "og:article:author", "byl", "parsely-author")
+_DATE_KEYS = ("article:published_time", "og:article:published_time", "date", "pubdate", "dc.date")
+
+
+def _meta(doc) -> Dict[str, str]:
+    """The page's own ``<meta>`` values, first one wins for a name."""
+    out: Dict[str, str] = {}
+    for el in doc.xpath("//meta[@content]"):
+        key = (el.get("property") or el.get("name") or el.get("itemprop") or "").strip().lower()
+        value = _norm(el.get("content") or "")
+        if key and value and key not in out:
+            out[key] = value
+    return out
+
+
+def _field(value: str) -> str:
+    """A name, or nothing: a value too long for one is a sentence or a tag list.
+
+    Truncated, it would read as a complete name that is not one.
+    """
+    value = _norm(str(value or ""))
+    return value if 0 < len(value) <= _CONTEXT_MAX_FIELD else ""
+
+
+def _first(meta: Dict[str, str], keys) -> str:
+    for key in keys:
+        value = _field(meta.get(key, ""))
+        if value and not value.lower().startswith(("http://", "https://")):
+            return value
+    return ""
+
+
+def _first_string(value: Any) -> str:
+    """The first string in a JSON-LD value, which may be a list of them."""
+    if isinstance(value, str):
+        return _field(value)
+    if isinstance(value, list):
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                return _field(item)
+    return ""
+
+
+def _ld_meta(html: str) -> Dict[str, str]:
+    """``siteName``/``articleSection``/``author``/``datePublished`` from the data."""
+    out: Dict[str, str] = {}
+    for node in _ld_nodes(html):
+        name = _field(str(node.get("name") or ""))
+        publisher = node.get("publisher")
+        if isinstance(publisher, dict):
+            out.setdefault("site", _field(str(publisher.get("name") or "")))
+        if name:
+            out.setdefault("site", name)
+        for src, key in (
+            ("siteName", "site"),
+            ("articleSection", "section"),
+            ("datePublished", "date"),
+        ):
+            value = _first_string(node.get(src))
+            if value:
+                out.setdefault(key, value)
+        author = node.get("author") or node.get("creator")
+        if isinstance(author, dict):
+            author = author.get("name")
+        if isinstance(author, list) and author:
+            author = author[0].get("name") if isinstance(author[0], dict) else author[0]
+        value = _field(str(author)) if isinstance(author, (str, int)) else ""
+        if value:
+            out.setdefault("author", value)
+    return out
+
+
+def context_line(doc, html: str, url: str = "") -> str:
+    """One line: the site, the section, the author and the date, or ``""``.
+
+    F24c. Every field comes out of the bytes already downloaded: the ``<meta>``
+    the page ships and the JSON-LD beside it. Nothing is looked up, nothing is
+    inferred from the content, and a field the page does not state is left out
+    rather than guessed at, so the site is never filled in from the URL the
+    caller already has.
+
+    Fewer than two fields is not context, it is a repetition: a line naming
+    only the site says nothing the caller does not already have, so there is
+    no line.
+    """
+    if not html or doc is None:
+        return ""
+    try:
+        meta = _meta(doc)
+        data = _ld_meta(html)
+        site = _first(meta, _SITE_KEYS) or data.get("site", "")
+        # The data first for a section: a CMS meta tag on a real page read
+        # "tags" while its own JSON-LD said "security".
+        section = data.get("section", "") or _first(meta, _SECTION_KEYS)
+        author = _first(meta, _AUTHOR_KEYS) or data.get("author", "")
+        date = _first(meta, _DATE_KEYS) or data.get("date", "")
+        if date and len(date) >= 10 and date[4] == "-" and date[7] == "-":
+            date = date[:10]
+        parts = []
+        if site:
+            parts.append(site)
+        if section and section.lower() != site.lower():
+            parts.append(section)
+        if author and author.lower() not in (site.lower(), section.lower()):
+            parts.append(f"by {author}")
+        if date:
+            parts.append(date)
+        if len(parts) < 2:
+            # One field is not context: it repeats what the page already says.
+            return ""
+        line = "[page: " + " · ".join(parts) + "]"
+        return line if len(line) <= _CONTEXT_MAX_CHARS else ""
+    except Exception:  # noqa: BLE001 - context is an extra, never a failure
         return ""
