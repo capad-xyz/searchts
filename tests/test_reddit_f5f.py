@@ -23,6 +23,8 @@ What each fixture is, and what it proved:
 ``reddit_private``          /r/gryffindor/  ``reddit_banned``  /r/Random/
 ``reddit_quarantined``      /r/incest/      ``reddit_community_gone`` /r/nsfw/
 ``reddit_post_gone``        a comment URL for a post that is not there.
+``reddit_challenge``        Reddit's "Prove your humanity", served HTTP 200 to a
+                            direct request for a next-batch cursor: zero cards.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ import pytest
 
 from searchts import unlocker
 from searchts.known_hosts import reddit
+from searchts.unlocker import looks_blocked
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -158,6 +161,76 @@ def test_empty_batch_fails_loud_instead_of_reading_as_an_empty_feed():
     p = reddit.extract_page(BATCH, "<html><body><shreddit-feed></shreddit-feed></body></html>")
     assert p is not None and p.failure == "reddit-no-posts"
     assert p.markdown == ""
+
+
+def test_reddits_humanity_check_is_never_read_as_an_empty_feed():
+    """Measured 2026-10-17: HTTP 200, a reCAPTCHA mount, zero post cards.
+
+    Called "no posts" this would be the worst answer in the file: it is wrong
+    (the feed had 24 cards for the browser rung in the same minute) and nothing
+    in the page can refute it. Both the shared wall detector and this ring name
+    it, because it reaches the batch path that only ever expects cards.
+    """
+    html = fixture("reddit_challenge.html")
+    assert looks_blocked(200, html, {}) == "challenge", (
+        "the ladder must escalate past this, not extract it"
+    )
+    assert reddit.page_state(BATCH, html) == "reddit-challenge"
+    p = reddit.extract_page(BATCH, html)
+    assert p is not None and p.failure == "reddit-challenge"
+    assert p.markdown == ""
+    assert "Prove your humanity" in reddit.state_note("reddit-challenge", BATCH)
+    # A listing page must not be swallowed by it either: a real listing page
+    # never carries the interstitial's own title.
+    assert reddit.page_state(LISTING, fixture("reddit_feed_cursor.html")) == ""
+
+
+def test_the_ladder_reports_the_challenge_and_keeps_climbing(monkeypatch):
+    _no_reddit_json(monkeypatch)
+    challenge = fixture("reddit_challenge.html")
+    served = [challenge, challenge]
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda url, timeout=30: (200, served.pop() if served else "x" * 400, url, {}),
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_jina", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no jina"))
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_stealth",
+        lambda url, *a, **k: (200, fixture("reddit_feed_batch.html"), url, {}),
+    )
+    res = unlocker.fetch(
+        BATCH, backends=["curl_cffi", "stealth-browser"], use_memory=False
+    )
+    # The browser rung answered the same URL with 24 cards, so the read lands
+    # there. Nothing in the receipt claims the feed was empty.
+    assert res.backend == "stealth-browser"
+    assert res.text.count("- **") == 8
+
+
+def test_every_rung_failing_on_the_challenge_names_it_not_an_empty_feed(monkeypatch):
+    _no_reddit_json(monkeypatch)
+    challenge = fixture("reddit_challenge.html")
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (200, challenge, url, {})
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_jina", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no jina"))
+    )
+    monkeypatch.setattr(unlocker, "_fetch_stealth", lambda url, *a, **k: (200, challenge, url, {}))
+    with pytest.raises(unlocker.UnlockerError) as ei:
+        unlocker.fetch(
+            BATCH, backends=["curl_cffi", "stealth-browser"], use_memory=False
+        )
+    reasons = dict(ei.value.attempts)
+    assert "no posts" not in " ".join(reasons.values()), reasons
+    # "challenge" is true and useless; the host names which one.
+    assert reasons["curl_cffi"] == "reddit-challenge"
+    assert reasons["stealth-browser"] == "reddit-challenge"
+    assert "humanity" in ei.value.hint
 
 
 def test_a_community_page_with_no_cards_still_falls_through():

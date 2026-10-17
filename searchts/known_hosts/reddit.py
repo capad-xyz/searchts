@@ -438,6 +438,17 @@ def is_reddit_batch_url(url: str) -> bool:
     return _host_of(url) in REDDIT_HOSTS and bool(_BATCH_PATH_RE.match(_path_of(url)))
 
 
+def is_reddit_url(url: str) -> bool:
+    """True for any URL on a host Reddit serves, whatever its path.
+
+    Wider than :data:`PATTERN`, which is only the shapes the ``.json`` ring
+    claims. A wall check needs the wider test: the ``/svc/shreddit/…`` cursors are
+    Reddit pages too, and those are where the "Prove your humanity" interstitial
+    was measured.
+    """
+    return _host_of(url) in REDDIT_HOSTS
+
+
 def is_reddit_profile_batch_url(url: str) -> bool:
     """True for a profile feed batch, which mixes post cards and comment cards."""
     m = _BATCH_PATH_RE.match(_path_of(url)) if _host_of(url) in REDDIT_HOSTS else None
@@ -1594,6 +1605,19 @@ _STATE_NOT_FOUND = "reddit-community-not-found"
 _STATE_POST_GONE = "reddit-post-gone"
 _STATE_ARCHIVED = "reddit-post-archived"
 _STATE_NSFW = "reddit-nsfw-gate"
+#: Reddit's "Prove your humanity" interstitial. Measured 2026-10-17: HTTP 200,
+#: a reCAPTCHA mount, and **zero** post cards, on a direct request for a
+#: next-batch cursor. The same URL returned 24 cards to the browser rung in the
+#: same minute, because Reddit decides this from the browser's persistent
+#: profile. Without this state a batch of that kind reads as an empty feed,
+#: which is the one answer that is both wrong and unfalsifiable from the page.
+_STATE_CHALLENGE = "reddit-challenge"
+
+_CHALLENGE_RE = re.compile(
+    r"<title>\s*reddit\s*-\s*prove your humanity\s*</title>"
+    r"|prove your humanity",
+    re.IGNORECASE,
+)
 
 #: Every state the page names about itself, in the order they are checked. The
 #: reason is what the ladder reports, so it says which one it was.
@@ -1617,6 +1641,8 @@ def page_state(url: str, html: str) -> str:
     - ``reddit-post-gone``      ``Page not found`` on a comment URL
     - ``reddit-archived``       ``Archived post.`` on the OP of a removed post
     - ``reddit-nsfw-gate``      ``NSFW search results are hidden`` on a search
+    - ``reddit-challenge``      ``<title>Reddit - Prove your humanity</title>``,
+      served on HTTP 200 to a request the browser's profile does not vouch for
 
     A page that states one of these is not content, so it is reported as itself
     and the ladder keeps going rather than handing back the nav bar as a read.
@@ -1629,6 +1655,8 @@ def page_state(url: str, html: str) -> str:
             title = _GUARD_TITLE_RE.search(modal)
             if title and phrase in title.group(1).lower():
                 return state
+    if _CHALLENGE_RE.search(text):
+        return _STATE_CHALLENGE
     if 'class="subreddit-content-error' in text or "subreddit-content-error" in text:
         return _STATE_NOT_FOUND
     if 'id="shreddit-forbidden"' in text:
@@ -1663,6 +1691,10 @@ def state_note(state: str, url: str = "") -> str:
         "has to accept it",
         "reddit-no-posts": "Reddit's next-batch cursor came back with no posts, so "
         "the feed ended there",
+        _STATE_CHALLENGE: "Reddit answered with its 'Prove your humanity' check on "
+        "this request. Whether a page gets that depends on the browser profile's "
+        "standing with Reddit, so the same URL may read on a warm profile and be "
+        "challenged on a fresh one",
     }.get(state, "")
     if not what:
         return ""

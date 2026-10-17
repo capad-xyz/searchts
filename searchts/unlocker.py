@@ -91,6 +91,12 @@ _BLOCK_PHRASES = (
     "your request has been blocked as a possible bot",  # Fastly Bot Management block copy
     "checking if the site connection is secure",  # Cloudflare interstitial (alt phrasing)
     "complete the challenge below",  # Reddit bot interstitial (often HTTP 200)
+    # Reddit's current interstitial, measured 2026-10-17: the direct (non-browser)
+    # request for a next-batch cursor was answered HTTP 200 with this title and
+    # a reCAPTCHA mount, 0 post cards, and it read as an *empty feed*. Reddit
+    # shows it or not from the browser's persistent profile, so the same URL
+    # returned 24 posts to the browser rung in the same minute.
+    "prove your humanity",
     "let us know you're a real person",
     "let us know you are a real person",
     "we're committed to safety",  # Reddit interstitial lead-in (short extract)
@@ -1449,6 +1455,25 @@ def _fetch_stealth_impl(
             browser.close()
 
 
+def _host_wall_reason(url: str, html: str) -> str:
+    """The known host's own name for the wall in ``html``, or ``""``.
+
+    F5f. Only Reddit has one of these today, so this asks one file, and only for
+    URLs that file itself claims: ``page_state`` matches copy in the document,
+    which is right for a page that really is that page and wrong for a page that
+    merely quotes the words. A host with nothing to say returns ``""`` and the
+    ladder keeps the generic reason.
+    """
+    from searchts.known_hosts import reddit as _reddit
+
+    if not _reddit.is_reddit_url(url or ""):
+        return ""
+    try:
+        return _reddit.page_state(url, html) or ""
+    except Exception:  # noqa: BLE001 - a named reason must never break the ladder
+        return ""
+
+
 def _expand_known_host(
     page, url: str, html: str, clicks: int, tick=None
 ) -> str:
@@ -2080,6 +2105,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 text = body  # Jina already returns markdown
             else:
                 reason = looks_blocked(status, body, headers)
+                if reason == "challenge":
+                    # F5f: "challenge" says a wall was here. When a known host
+                    # can say WHICH one, that is the only actionable fact in the
+                    # run. Measured 2026-10-17: Reddit answers a direct request
+                    # for a next-batch cursor with HTTP 200 and its "Prove your
+                    # humanity" page, which is indistinguishable from any other
+                    # challenge in the body alone.
+                    reason = _host_wall_reason(url, body) or reason
                 if reason:
                     # Say WHICH wall it was when the rung can name one. The
                     # stealth browser reports its device-check stop in headers,
