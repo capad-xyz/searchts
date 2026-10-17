@@ -155,6 +155,10 @@ class Report:
     html: str = ""
     #: ``<details>`` elements this pass opened.
     details: int = 0
+    #: Characters the extract gained from opening them, when the pass measured
+    #: it (the markup half does: it extracts before and after). ``None`` means
+    #: not measured, as on the browser half, where a live DOM was really opened.
+    added_chars: Optional[int] = None
     #: Buttons this pass pressed (browser half only).
     clicks: int = 0
     #: Eligible buttons seen in the HTML. With no browser they are named in the
@@ -202,7 +206,19 @@ class Report:
     def note(self) -> str:
         """The trailing line for the read, or ``""`` when nothing happened."""
         bits: List[str] = []
-        if self.details:
+        if self.details and self.added_chars is not None and self.added_chars <= 0:
+            # The markup already held their text and the extractor already read
+            # it closed. "Opened" would suggest text came out of it.
+            bits.append(
+                f"{self.details} <details> section(s) were already readable in "
+                "the markup; opening them added no text"
+            )
+        elif self.details and self.added_chars:
+            bits.append(
+                f"{self.details} <details> section(s) opened "
+                f"(+{self.added_chars} chars of text)"
+            )
+        elif self.details:
             bits.append(f"{self.details} <details> section(s) opened")
         if self.clicks:
             said = ", ".join(f'"{c}"' for c in self.clicked[:3])
