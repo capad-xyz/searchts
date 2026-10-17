@@ -68,7 +68,7 @@ consent-gated, and cookies are never on by default.
 - `save_owned_site` had no production caller (tests only) in the snapshot
   reviewed, so the owned store was never written by the CLI; `for_site()` reads
   it. Since 0.15.0 `login_store.keep` calls it (`login_store.py:378`), so
-  `searchts login signin` and `login keep` now write that store. That path is
+  `searchts login signin` (CLI: with `--yes`; MCP `login_signin` keeps by default) and `login keep` now write that store. That path is
   not covered by this review.
 - On Windows the `0600`/`0700` chmod calls are skipped (`os.name == "nt"`);
   the file instead inherits the user-profile ACL. Tests do not assert the

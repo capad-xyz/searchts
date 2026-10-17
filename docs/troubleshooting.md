@@ -18,7 +18,7 @@ searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace
 
 **Reddit / LinkedIn / X often fail loud.** That is honesty, not a broken pip. Do not claim 0.8.1 unlocked them (**N7**).
 
-**A read says the page is behind a login.** That is a fail-loud, not a broken install. The error names two ways past it: `searchts login signin URL` (sign in once in a browser searchts opens), or `searchts read URL --cookies-from-browser firefox --yes` (copy that one site's cookies from a Firefox-family browser, this session only). A saved login that has expired: `searchts login kill HOST`, then sign in again. `searchts login list` shows what is kept.
+**A read says the page is behind a login.** That is a fail-loud, not a broken install. The error names two ways past it: `searchts login signin URL` (sign in once in a browser searchts opens), or `searchts read URL --cookies-from-browser firefox --yes` (copy that one site's cookies from a Firefox-family browser, this session only). A saved login that has expired: `searchts login kill URL`, then sign in again. `searchts login list` shows what is kept.
 
 **`externally-managed-environment` (PEP 668):** do not `pip install` onto Homebrew / system Python. Keep = `pipx install "searchts[mcp]"`. Try = `uvx --from "searchts[mcp]" searchts …`.
 
