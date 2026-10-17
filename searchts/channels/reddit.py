@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*-
-"""Reddit — multi-backend: OpenCLI / rdt-cli. Login is mandatory.
+"""Reddit — multi-backend channels: OpenCLI / rdt-cli. Login is mandatory here.
 
-Honest tiering (live-verified 2026-06): there is NO zero-config path.
-Anonymous .json endpoints are blocked (403 anti-bot, all variants), and
+Honest tiering (live-verified 2026-06): these two backends have NO zero-config
+path. Anonymous .json endpoints are blocked (403 anti-bot, all variants), and
 the official API closed self-service registration in 2025-11 (manual
 approval, individual scripts rarely granted — PRAW is only an option for
-users who already hold credentials). Every working backend rides a
+users who already hold credentials). Every working channel backend rides a
 logged-in session: OpenCLI reuses the browser's, rdt-cli imports cookies.
+
+This is a **channel** probe and it says nothing about ``read`` (**Q1**).
+``searchts read <reddit url>`` is the known-host ring (**F5b**/**F5f**) and
+reads anonymous public pages: a listing's own next-post cursor with ``--items``,
+deeper comments with ``--expand``, profiles and search as cards. What it needs
+is the browser (``searchts install --browser``) and a profile Reddit recognises
+— Reddit decides whether to answer with its "Prove your humanity" check from the
+profile's standing, so a brand-new profile is challenged page after page. Still
+no claim that every Reddit URL reads (**N7**).
 """
 
 import json
@@ -62,8 +71,12 @@ class RedditChannel(Channel):
             return "error", "\n".join(m for _, _, m in findings)
 
         return "off", (
-            "No Reddit backend is installed. Note: Reddit has no zero-config path "
-            "(anonymous .json is blocked, the official API requires manual approval), so a logged-in session is mandatory. Recommended:\n"
+            "No Reddit channel backend (OpenCLI / rdt-cli) is installed. These two "
+            "have no zero-config path (anonymous .json is blocked, the official API "
+            "requires manual approval), so a logged-in session is mandatory for them. "
+            "To read Reddit pages instead: searchts read <url> -- this is the "
+            "known-host ring, anonymous, and it needs the browser tier "
+            "(searchts install --browser) and a profile Reddit recognises.\n"
             "  Desktop: searchts install --channels opencli\n"
             "       (reuses your Chrome login session; works once you have logged into reddit.com)\n"
             f"  Server/existing: pipx install '{_RDT_GIT_SOURCE}'\n"

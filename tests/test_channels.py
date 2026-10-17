@@ -44,6 +44,11 @@ class TestRedditChannel:
         assert "zero-config" in msg
         assert "opencli" in msg
         assert "git+https://github.com/public-clis/rdt-cli.git" in msg
+        # F5f: the login is the *channel's*, not `read`'s. The known-host ring
+        # reads public Reddit pages anonymously, and a hint that says otherwise
+        # sends a reader down a login they do not need (N7 still stands).
+        assert "searchts read" in msg
+        assert "install --browser" in msg
 
     def test_opencli_ready_wins(self, monkeypatch):
         self._isolate(monkeypatch, opencli=("ok", "OpenCLI available (reuses the browser's login session)"))
