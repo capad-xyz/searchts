@@ -2516,14 +2516,23 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
         try:
             result = fetch(current, **call)
         except UnlockerError as e:
-            # Page one is the URL the caller asked for: nothing to return, so
-            # the error stands. A later hop failing means the caller already
-            # has real content, and throwing it away to report a URL they never
-            # asked for is a bad trade. Keep the pages, say why the walk ended.
-            if i == 0 or _is_refusal(e):
-                raise
-            _note_walk_stopped(out[-1], current, e)
-            break
+            # F5f: one known host judges the request itself on a next-page
+            # cursor, so the hop is worth a second ask on the rung that has a
+            # profile. Nothing else changes: a hop that fails again is reported
+            # exactly as it would have been.
+            retry = _retry_hop_on_browser(current, e, call) if i else None
+            if retry is not None:
+                result = retry
+            else:
+                # Page one is the URL the caller asked for: nothing to return,
+                # so the error stands. A later hop failing means the caller
+                # already has real content, and throwing it away to report a URL
+                # they never asked for is a bad trade. Keep the pages, say why
+                # the walk ended.
+                if i == 0 or _is_refusal(e):
+                    raise
+                _note_walk_stopped(out[-1], current, e)
+                break
         out.append(result)
         nxt = result.next_url
         if not nxt:
@@ -2546,6 +2555,42 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
     if out:
         _note_knobs(out[0], limits)
     return out
+
+
+def _retry_hop_on_browser(url: str, err: "UnlockerError", call: Dict[str, Any]):
+    """One browser retry of a next-page hop a known host walled off. None if no.
+
+    F5f. A next-page walk is curl-only after the first page (F23b), which is
+    right for a static pager and wrong for a site that judges the request rather
+    than the address: Reddit answers a direct request for its own
+    ``/svc/shreddit/…`` cursor with "Prove your humanity", and the same URL is 24
+    cards in the browser rung. Without this, ``--items`` on Reddit stops at the
+    first window forever.
+
+    Whether the wall is that kind is the ring's call
+    (:func:`searchts.known_hosts.needs_browser_hop`), so nothing here knows what
+    Reddit is. The retry carries the same cookies-free, proxy-free arguments the
+    first hop had - a proxy or cookies the walk cannot carry is dropped by the
+    same rules the scroll uses - and returns ``None`` if it fails, so the caller
+    reports the original failure unchanged.
+    """
+    try:
+        from searchts.known_hosts import needs_browser_hop
+    except Exception:  # noqa: BLE001 - the ring must never break a walk
+        return None
+    try:
+        if not needs_browser_hop(url, err.attempts):
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    retry = dict(call)
+    retry["backends"] = ["stealth-browser"]
+    retry["allow_human"] = False
+    retry["use_memory"] = False
+    try:
+        return fetch(url, **retry)
+    except UnlockerError:
+        return None
 
 
 def _note_knobs(page: "FetchResult", limits) -> None:
@@ -2703,11 +2748,18 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         try:
             result = fetch(current, **call)
         except UnlockerError as e:
-            if i == 0 or _is_refusal(e):
-                raise
-            _note_walk_stopped(out[-1], current, e)
-            broke = True
-            break
+            # F5f: see ``read_pages``. One known host can refuse a curl hop for
+            # a reason a browser does not share, and a row count that stops at
+            # the first window is the quiet failure this whole feature is for.
+            retry = _retry_hop_on_browser(current, e, call) if i else None
+            if retry is not None:
+                result = retry
+            else:
+                if i == 0 or _is_refusal(e):
+                    raise
+                _note_walk_stopped(out[-1], current, e)
+                broke = True
+                break
         out.append(result)
         added = _rows_added(result, seen)
         got += added

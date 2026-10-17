@@ -92,6 +92,47 @@ def extract(url: str) -> Optional[KnownResult]:
     return None
 
 
+def needs_browser_hop(url: str, reasons) -> bool:
+    """True when the wall that stopped a next-page hop is one a browser can pass.
+
+    F5f. A next-page hop is fetched curl-only (F23b), which is right for a static
+    pager and wrong for a site that judges the *request* rather than the address:
+    measured on Reddit, a direct request for its ``/svc/shreddit/…`` feed cursor
+    was answered with the "Prove your humanity" interstitial while the browser
+    rung read the same URL with 24 cards in the same minute. Without this the
+    walk ends at the first window of every feed, on a cold profile.
+
+    Only a host that declares :data:`HOSTS` and answers :func:`hop_needs_browser`
+    can say yes, and the ring asks one file. False for everything else, so no
+    other walk changes.
+    """
+    host = ""
+    try:
+        host = (url or "").split("//", 1)[-1].split("/", 1)[0].split(":")[0].lower()
+    except Exception:  # noqa: BLE001 - an unparsable URL is not a known host
+        return False
+    if not host:
+        return False
+    for info in pkgutil.iter_modules(__path__):
+        if info.name.startswith("_"):
+            continue
+        try:
+            mod = importlib.import_module(f"{__name__}.{info.name}")
+        except Exception:  # noqa: BLE001 - a broken module must not break a walk
+            continue
+        hosts = getattr(mod, "HOSTS", None)
+        checker = getattr(mod, "hop_needs_browser", None)
+        if not isinstance(hosts, (set, frozenset)) or not callable(checker):
+            continue
+        if host not in {str(h).lower() for h in hosts}:
+            continue
+        try:
+            return bool(checker(url, reasons))
+        except Exception:  # noqa: BLE001 - a broken check must not break a walk
+            return False
+    return False
+
+
 def expand_page(
     page, url: str, html: str, want: int, clicks: int, tick=None
 ) -> Optional[str]:

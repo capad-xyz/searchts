@@ -449,6 +449,30 @@ def is_reddit_url(url: str) -> bool:
     return _host_of(url) in REDDIT_HOSTS
 
 
+#: The hosts this file's own wall knowledge covers. Read by the ring's
+#: :func:`searchts.known_hosts.needs_browser_hop` for paths ``PATTERN`` does not
+#: claim, which is where the feed cursors live.
+HOSTS = REDDIT_HOSTS
+
+
+def hop_needs_browser(url: str, reasons) -> bool:
+    """True when this hop failed on a Reddit wall only the browser rung passes.
+
+    Asked by :func:`unlocker._retry_hop_on_browser` after a next-page walk was
+    refused, and it answers one thing: would opening the same URL in the browser
+    be a different request? For Reddit's humanity check it is - that interstitial
+    is decided from the browser profile's standing, not from the address - so the
+    walk is worth one more try. Every other Reddit wall (private, banned,
+    quarantined, gone, over-18) is the same page in a browser, and saying yes to
+    those would spend a launch to learn nothing.
+    """
+    if not is_reddit_url(url):
+        return False
+    return any(
+        str(why or "") == _STATE_CHALLENGE for _b, why in (reasons or ())
+    )
+
+
 def is_reddit_profile_batch_url(url: str) -> bool:
     """True for a profile feed batch, which mixes post cards and comment cards."""
     m = _BATCH_PATH_RE.match(_path_of(url)) if _host_of(url) in REDDIT_HOSTS else None
