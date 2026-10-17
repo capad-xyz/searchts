@@ -190,7 +190,16 @@ def _run():
     p_read.add_argument("--pages", type=int, default=1,
                         help="Follow the next page on the same site, curl only, up to this many (max 5)")
     p_read.add_argument("--items", type=int, default=0,
-                        help="Keep following next pages until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300)")
+                        help="Keep following next pages, then scroll if the list only grows that way, "
+                             "until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300)")
+    p_read.add_argument(
+        "--expand",
+        action="store_true",
+        help="Open the text the page is holding back: closed <details> and buttons "
+             "labelled read/show/see more. Off by default. Never follows a link, a form "
+             "or a sign-in; a 'continue reading' paywall is named, not opened "
+             "(ceiling SEARCHTS_MAX_EXPAND_CLICKS)",
+    )
     p_read.add_argument("--scrub", action="store_true",
                         help="Redact prompt-injection spans from the content (invisible-char "
 "stripping + indicator scanning always run regardless)")
@@ -1743,6 +1752,7 @@ def _cmd_read(args):
     # Progress is narration ("trying curl_cffi..."), not diagnosis. The reasons
     # are printed once, together, below. Passing progress=False keeps them from
     # being announced twice.
+    expand = bool(getattr(args, "expand", False))
     try:
         if getattr(args, "items", 0):
             if getattr(args, "pages", 1) > 1:
@@ -1751,19 +1761,21 @@ def _cmd_read(args):
                 print("--items and --pages are mutually exclusive; using --items.", file=sys.stderr)
             pages = unlocker.read_items(
                 args.url, args.items, backends=backends, allow_human=args.human,
-                scrub=args.scrub, progress=False, cookies=cookies,
+                scrub=args.scrub, progress=False, cookies=cookies, expand=expand,
                 proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )
         elif getattr(args, "pages", 1) > 1:
             pages = unlocker.read_pages(
                 args.url, args.pages, backends=backends, allow_human=args.human,
                 scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
+                expand=expand,
                 proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )
         else:
             pages = [unlocker.fetch(
                 args.url, backends=backends, allow_human=args.human,
                 scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
+                expand=expand,
                 proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )]
         result = pages[0]

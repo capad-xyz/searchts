@@ -199,6 +199,10 @@ class FetchResult:
     authenticated: bool = False
     #: Page HTML kept only until ``_finalize`` runs detection; never returned.
     page_html: Optional[str] = field(default=None, repr=False, compare=False)
+    #: F23c/F23d: trailing lines the pass itself earned (scroll stop reason,
+    #: what ``--expand`` opened, a named paywall). Appended inside ``_finalize``,
+    #: so they are sanitized with the rest of the text rather than after it.
+    extra_notes: List[str] = field(default_factory=list, repr=False, compare=False)
 
 
 @dataclass
@@ -1274,6 +1278,7 @@ def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:
 def _fetch_stealth(
     url: str, timeout: int = 60, progress: Optional[bool] = None,
     proxy: Optional[Dict[str, Any]] = None,
+    expand: bool = False, expand_sink: Optional["_ExpandSink"] = None,
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     """Tier-2: render with an undetected headless Chromium (patchright).
 
@@ -1291,10 +1296,24 @@ def _fetch_stealth(
     the returned headers under ``x-searchts-device-stop``, so the caller can say
     WHICH kind of wall this was. It is not solved and it is not sent anywhere.
 
+    F23d: with ``expand`` set, closed ``<details>`` are opened and eligible
+    "read/show/see more" buttons are pressed *before* the HTML is captured, so
+    the text behind them is extracted by the same extractor as everything else.
+    The sink collects what was done so the read can say so in one line.
+
     Safe under MCP/FastMCP: see ``_call_sync_browser``.
     """
-    if proxy:
-        return _call_sync_browser(_fetch_stealth_impl, url, timeout, progress, proxy)
+    if proxy or expand:
+        # Keyword-only through a closure. The impl's positional order is
+        # (url, timeout, progress, proxy, expand, expand_sink), and packing
+        # positionals here meant a read with a proxy but no expand handed
+        # ``proxy=True`` to the browser rung, which is a boolean where patchright
+        # wants a dict. One call site, one rule: never guess positions.
+        return _call_sync_browser(
+            lambda: _fetch_stealth_impl(
+                url, timeout, progress, proxy or None, expand, expand_sink
+            )
+        )
     # No proxy: delegate exactly as before. An impl stub may take only the
     # original three arguments, and an extra positional is a TypeError.
     return _call_sync_browser(_fetch_stealth_impl, url, timeout, progress)
@@ -1303,6 +1322,7 @@ def _fetch_stealth(
 def _fetch_stealth_impl(
     url: str, timeout: int = 60, progress: Optional[bool] = None,
     proxy: Optional[Dict[str, Any]] = None,
+    expand: bool = False, expand_sink: Optional["_ExpandSink"] = None,
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     try:
         from patchright.sync_api import sync_playwright
@@ -1374,6 +1394,26 @@ def _fetch_stealth_impl(
                 html, device_stop = device_check.solve_simple_click(
                     page, html, progress=want_tick
                 )
+            # F23d: open the folds, while the DOM is still live. This runs after
+            # the device-check so a press there is never confused with a press
+            # here: one is finishing a challenge script, the other is opening an
+            # article, and the counts are separate.
+            if expand:
+                from searchts import expand as _expand_mod
+
+                want_tick = _progress_wanted(progress)
+                opened = _expand_mod.open_details_in_page(page)
+                if opened:
+                    html = _page_content(page, progress=want_tick)
+                report = _expand_mod.click_in_page(
+                    page, expand_sink.max_clicks if expand_sink else 8
+                )
+                report.details = opened
+                report.pin_paywall(_page_content(page, progress=False))
+                if expand_sink is not None:
+                    expand_sink.add(report)
+                elif report.note():
+                    html = _page_content(page, progress=False)
             # If the challenge cleared, the real status is 200 regardless of the
             # initial challenge response; otherwise keep the original status.
             status = 200 if looks_blocked(200, html) is None else init_status
@@ -1468,6 +1508,90 @@ def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str,
 
 # ── the ladder ───────────────────────────────────────────────────────────────
 
+
+class _ExpandSink:
+    """Collects what the F23d expand pass did, and prints it once.
+
+    The pass runs inside whichever rung produced the HTML, and the note belongs
+    to the read rather than to a rung, so the rungs push into this and
+    ``_with_auth`` reads it back. A pass that did nothing adds nothing: a plain
+    ``read`` of a page with no folds must end up byte-identical to before.
+    """
+
+    def __init__(self, max_clicks: int = 8):
+        self.max_clicks = max_clicks
+        self._details = 0
+        self._clicks = 0
+        self._clicked: List[str] = []
+        self._buttons = 0
+        self._paywall = False
+        self._stop = ""
+        #: True once a rung has actually run the pass, so "nothing found" and
+        #: "never asked" stay different answers.
+        self.ran = False
+        self._reports: List["Any"] = []
+
+    def add(self, report: "Any") -> None:
+        self.ran = True
+        self._reports.append(report)
+        self._details += getattr(report, "details", 0)
+        self._clicks += getattr(report, "clicks", 0)
+        self._clicked.extend(getattr(report, "clicked", []) or [])
+        self._buttons += getattr(report, "buttons", 0)
+        self._paywall = self._paywall or bool(getattr(report, "paywall", False))
+        stop = getattr(report, "stop", "")
+        if getattr(report, "produced", bool)():
+            # A report that found something supersedes an earlier "nothing
+            # here". The markup rung cannot see a control the page builds in
+            # JavaScript, so its "nothing in this page's markup answered" is
+            # stale the moment the browser presses it: measured on
+            # kickstarter.com/discover/advanced, two "Show more" presses and
+            # the same read also claiming nothing was found is a note nobody
+            # can act on. Its own stop is kept when it has one.
+            self._stop = stop
+        elif stop and not self._stop:
+            self._stop = stop
+
+    def note(self) -> str:
+        if not self.ran:
+            return ""
+        return self.report().note()
+
+    @property
+    def buttons(self) -> int:
+        """Eligible buttons seen in the markup so far, across every rung.
+
+        Read by the ladder to decide whether the markup could answer ``--expand``
+        at all, and by the deferred branch to decide whether the note still needs
+        to say a browser is missing: when the markup *did* find buttons, the
+        expand report already named the command.
+        """
+        return self._buttons
+
+    def produced(self) -> bool:
+        """True when any rung that ran the pass actually opened or found something.
+
+        A page can hold text back with a control it builds in JavaScript, and
+        then its markup holds no evidence at all. When that is what happened the
+        ladder escalates to the rung that has the DOM, because the caller asked
+        for the text and the markup rung could not supply it.
+        """
+        return any(r.produced() for r in self._reports)
+
+    def report(self):
+        from searchts.expand import Report
+
+        return Report(
+            html="",
+            details=self._details,
+            clicks=self._clicks,
+            clicked=list(self._clicked),
+            buttons=self._buttons,
+            paywall=self._paywall,
+            stop=self._stop,
+        )
+
+
 def _finalize(
     result: FetchResult, scrub: bool, tick: Optional[Callable[[str], None]] = None
 ) -> FetchResult:
@@ -1482,6 +1606,11 @@ def _finalize(
     read (next page, feed, folds, a list the extract mostly dropped, stated
     counts) as trailing lines and in ``next_url`` / ``more``. The HTML is
     dropped here and never returned.
+
+    F23c/F23d: ``result.extra_notes`` (what the scroll collected and why it
+    stopped, what ``--expand`` opened or refused to press) lands here too, and
+    *before* the sanitizer runs. A note written after sanitizing is a hole: the
+    next-page stop note already had to scrub itself by hand because of that.
     """
     from searchts import more, sanitize
 
@@ -1501,6 +1630,8 @@ def _finalize(
             if tick is not None:
                 tick(f"  {more.summary(found)}")
         result.page_html = None
+    if result.extra_notes:
+        result.text = (result.text or "").rstrip() + "\n\n" + "\n".join(result.extra_notes)
     out = sanitize.scrub(result.text, redact=scrub)
     result.text = out.text
     if not result.fetched_at:
@@ -1514,7 +1645,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
           allow_human: bool = False, scrub: bool = False,
           allow_thin: bool = False, progress: Optional[bool] = None,
           cookies: Optional[List["CookieRecord"]] = None,
-          proxy: Optional[str] = None, proxy_trusted: bool = False) -> FetchResult:
+          proxy: Optional[str] = None, proxy_trusted: bool = False,
+          expand: bool = False) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -1573,6 +1705,19 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         from r.jina.ai's address, not yours, so your proxy cannot move it.
     proxy_trusted:
         Acknowledge that a remote proxy's operator will see the cookie header.
+    expand:
+        F23d. Open the text the page is holding back: closed ``<details>`` and
+        buttons labelled read/show/see more. Off unless asked, because a click
+        makes the read slower and different each time. Never presses a link, a
+        form control or a sign-in, and a "continue reading" paywall is named
+        rather than opened.
+
+        Asking for it also drops **Jina Reader** from the ladder. The relay
+        returns rendered markdown and nothing can tell it to press a button, so
+        on a page with a real "Show more" (measured on
+        kickstarter.com/discover/advanced: one press is worth +4,102 characters)
+        the relay would quietly win and the read would come back short of what
+        was asked for. With ``expand`` the read runs on a rung that has the DOM.
     """
     if progress is None:
         progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
@@ -1664,8 +1809,24 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     # and "I read Drive's public page" looked the same to the caller.
     cookie_rung = "curl_cffi"
 
+    # F23d: what the expand pass did, collected across the rungs that ran and
+    # printed once, on whichever result wins. A sink rather than a return value
+    # because the pass happens deep inside a rung and the note belongs to the
+    # read, not to the rung.
+    from searchts import expand as _expand
+    from searchts import knobs as _knobs
+    from searchts import scroll as _scroll
+
+    # The click ceiling is policy, not argument (F23e): `--expand` says yes to
+    # expanding and the user's ceiling says how far. Nothing here raises it.
+    _limits = _knobs.resolve()
+    expand_sink = _ExpandSink(max_clicks=_limits.expand_clicks)
+
     def _with_auth(result: FetchResult) -> FetchResult:
         result.authenticated = bool(cookie_header) and result.backend == cookie_rung
+        note = expand_sink.note()
+        if note:
+            result.extra_notes = list(result.extra_notes or []) + [note]
         return _finalize(result, scrub, tick=_tick)
 
     try:
@@ -1706,6 +1867,15 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     order = list(backends if backends is not None else DEFAULT_BACKENDS)
     if not jina_enabled() or _jina_spent:
         order = [b for b in order if b != "Jina Reader"]
+    if expand:
+        # F23d: the relay cannot be told to press a button, so an expanded read
+        # has to run on a rung that has the DOM. Dropping Jina here also means
+        # an expanded read never hands a URL to a third party, which is the
+        # wrong trade for "open the folds on this page".
+        _jina_dropped = "Jina Reader" in order
+        order = [b for b in order if b != "Jina Reader"]
+    else:
+        _jina_dropped = False
 
     memory_on = use_memory and _memory_enabled()
     domain = registrable_domain(url) if memory_on else ""
@@ -1719,6 +1889,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             order.insert(0, remembered)
 
     attempts: List[Tuple[str, str]] = []
+    if _jina_dropped and not order:
+        # `--backend jina --expand` leaves nothing to try. An empty reason list
+        # says only "all backends failed"; name the real cause.
+        attempts.append(("Jina Reader", "skipped: the relay cannot press a button, so --expand does not use it"))
     best: Optional[FetchResult] = None  # richest non-blocked but thin result so far
     status: Optional[int] = None
     #: The refusal status seen so far, and how many rungs have repeated it. A
@@ -1734,6 +1908,12 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     #: geo.captcha-delivery.com from a real Chromium. Skipping the rung there
     #: hides the only answer that names the wall.
     browser_would_differ = False
+    #: F23d: a clean curl win we stepped over to let the browser try to open the
+    #: folds. If the browser cannot be run, or fails, this read is still good
+    #: and saying so beats failing on a page we already read. `allow_thin` is
+    #: not the right home for it: nothing here was thin, we simply asked a
+    #: second question.
+    deferred: Optional[FetchResult] = None
 
     for backend in order:
         if refusal_count >= _REFUSAL_REPEAT_LIMIT and not (
@@ -1777,9 +1957,12 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 # because that changes the address the challenge is judged from.
                 # Passed only when set, for the same stub-signature reason as
                 # curl above.
-                if proxy_browser:
+                if proxy_browser or expand:
+                    # Passed only when set, for the same stub-signature reason
+                    # as curl above.
                     status, body, final_url, headers = _fetch_stealth(
                         url, progress=progress, proxy=proxy_browser,
+                        expand=expand, expand_sink=expand_sink,
                     )
                 else:
                     status, body, final_url, headers = _fetch_stealth(
@@ -1873,6 +2056,16 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 text = html_to_text(body, url)
 
             text = text or ""
+            # F23d: a rung that produced HTML gets the no-browser half of the
+            # expand pass before extraction, so a closed `<details>` becomes
+            # text. `body` is only set on the non-Jina path, which is exactly
+            # where there is markup to rewrite.
+            if expand and body:
+                rep = _expand.expand_html(body)
+                if rep.html != body:
+                    body = rep.html
+                    text = html_to_text(body, url) if backend != "Jina Reader" else text
+                expand_sink.add(rep)
             # Login-wall on the extract only (raw HTML often has a sign-in modal).
             # `final_url` rides along: a redirect onto /login is the wall, even
             # when the shell that renders there is too short to be scored.
@@ -1900,6 +2093,34 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     # A win on the remembered rung does not extend its pin, so a
                     # pin earned by mistake heals once _MEMORY_TTL_SECONDS pass.
                     remember(domain, backend)
+                # F23d: the caller asked for the text behind the folds and this
+                # rung's HTML has buttons whose text is not in it. Say why the
+                # rung is passing and escalate; a read that quietly returns the
+                # window is the failure `--expand` exists to remove. The second
+                # clause covers the harder case: a page that builds its "Show
+                # more" in JavaScript leaves nothing in its markup for the
+                # first check to find, and only the rendered DOM can answer.
+                if expand and backend == "curl_cffi" and (
+                    expand_sink.buttons or not expand_sink.produced()
+                ):
+                    why = (
+                        f"expand-needed-{expand_sink.buttons}-control(s)"
+                        if expand_sink.buttons
+                        else "expand-not-satisfied-by-markup"
+                    )
+                    attempts.append((backend, why))
+                    _tick(f"  {backend}: {why}, escalating to the browser")
+                    if backend == remembered:
+                        unpin(domain)
+                        remembered = None
+                    deferred = FetchResult(
+                        backend, text, status,
+                        final_url=final_url or url, headers=headers,
+                        page_html=body,
+                    )
+                    if best is None or len(text) > len(best.text):
+                        best = deferred
+                    continue
                 _tick(f"  {backend}: ok ({len(text)} chars{', whole page' if whole else ''})")
                 # clean win, stop here — sanitize untrusted content before return
                 return _with_auth(
@@ -2040,6 +2261,40 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     if allow_thin and best is not None:
         return _with_auth(best)
 
+    if deferred is not None:
+        # Every rung after the one we stepped over failed, including the
+        # browser that was asked to open the folds. The page was read; only
+        # the extra text is missing, and the attempts above say why.
+        deferred.headers = dict(deferred.headers or {})
+        deferred.headers["x-searchts-expand-deferred"] = "; ".join(
+            f"{b}: {w}" for b, w in attempts[-2:]
+        )
+        if expand and not expand_sink.buttons and not _scroll.browser_available():
+            # F23d, fail loud. The page may well hold text behind a "Show more"
+            # it builds in JavaScript: nothing in the markup says so, the rung
+            # that could have pressed it never ran, and the read would otherwise
+            # come back as a clean success with the folds still shut. Saying
+            # what to run is the whole point of `--expand` not existing yet.
+            deferred.extra_notes = list(deferred.extra_notes or []) + [
+                "[expand: this page may hold text behind a control only the "
+                "browser can see, and no browser is installed, so nothing was "
+                "opened. Run: searchts install --browser]"
+            ]
+        elif expand and _scroll.browser_available():
+            # The browser is installed and still could not open the page (a
+            # challenge, a timeout). The markup pass's own line says "nothing
+            # in this page's markup answered", which is true and reads as "the
+            # page has nothing to open". Measured on kickstarter.com/discover/
+            # advanced from a datacenter address: the browser rung got a
+            # Cloudflare Turnstile, and the text said only that line.
+            why = attempts[-1][1] if attempts else "unknown"
+            deferred.extra_notes = list(deferred.extra_notes or []) + [
+                "[expand: the browser could not open this page, so only the "
+                f"markup was expanded and a control built in JavaScript was not "
+                f"pressed ({attempts[-1][0] if attempts else 'browser'}: {why})]"
+            ]
+        return _with_auth(deferred)
+
     raise UnlockerError(url, attempts, _cookie_login_hint(cookie_header, attempts))
 
 
@@ -2080,13 +2335,23 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
     caller's backends. Later pages are curl only: a browser on every next page
     is not this change. The cap is said out loud: a walk that hits it with a
     live next link would otherwise look like the list ended.
+
+    F23e: the cap is the user's, not the product's. ``SEARCHTS_MAX_PAGES`` or a
+    ``more:`` block in the config lowers it; nothing can raise it above the
+    product cap; and a request over it is clamped **on page one**, which is the
+    text every caller actually reads. It used to land on the last page, so
+    ``read --json`` reported a truncated read with exit 0 and a ``text`` field
+    that never mentioned it.
     """
-    wanted = max(1, int(pages or 1))
-    pages = min(wanted, _MAX_PAGES)
+    from searchts import knobs
+
+    asked = max(1, int(pages or 1))
+    limits = knobs.resolve(pages=asked)
+    wanted = max(1, int(limits.pages))
     seen = set()
     out: List[FetchResult] = []
     current = url
-    for i in range(pages):
+    for i in range(wanted):
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
             break
@@ -2120,10 +2385,32 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
         # cap actually cut the request short: asking for 1 and getting 1 is not
         # a truncation, and read_pages(url, 1) is the default single-page read
         # on both the CLI and the MCP tool. Noting it there put a false "you
-        # hit a cap" line on every ordinary read of a paginated page.
-        if out and len(out) < wanted and out[-1].next_url:
-            _note_walk_capped(out[-1], len(out), wanted, out[-1].next_url)
+        # hit a cap" line on every ordinary read of a paginated page. `asked`,
+        # not `wanted`: the sentence is about what the caller asked for, and the
+        # clamp note on page one is the one that names the ceiling.
+        if out and len(out) < asked and out[-1].next_url:
+            _note_walk_capped(out[-1], len(out), asked, out[-1].next_url)
+    if out:
+        _note_knobs(out[0], limits)
     return out
+
+
+def _note_knobs(page: "FetchResult", limits) -> None:
+    """Write a clamped-request note onto the page the caller reads.
+
+    Page one, always. The old place was the last page of the walk, which the
+    CLI printed after the main text and the MCP envelope put in ``pages[1]`` -
+    so a caller that read ``text`` (the normal way) never saw that its request
+    had been cut down. A note about the request belongs with the request.
+    """
+    note = limits.note()
+    if not note:
+        return
+    from searchts import sanitize
+
+    scrubbed = sanitize.scrub(note, redact=True)
+    page.warnings = list(page.warnings or []) + scrubbed.findings
+    page.text = (page.text or "").rstrip() + f"\n\n{scrubbed.text}"
 
 
 def _note_walk_capped(
@@ -2176,14 +2463,6 @@ def _note_walk_stopped(last: "FetchResult", url: str, err: UnlockerError) -> Non
     last.text = (last.text or "").rstrip() + f"\n\n{note.text}"
 
 
-def _browser_installed() -> bool:
-    try:
-        import patchright  # noqa: F401
-        return True
-    except Exception:  # noqa: BLE001 - a missing extra is the normal case
-        return False
-
-
 def item_count(text: str) -> int:
     """Index rows already rendered as markdown links."""
     return len(_ITEM_LINE.findall(text or ""))
@@ -2192,23 +2471,31 @@ def item_count(text: str) -> int:
 def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]:
     """Follow next-page links until ``items`` list rows, curl only after the first.
 
-    The ceiling is ``SEARCHTS_MAX_ITEMS`` and never above 300. A request over
-    the ceiling is clamped and the read says so. A feed with no next link and
-    no browser says to install one. Scrolling that feed is not this function.
+    The ceiling is the user's (``SEARCHTS_MAX_ITEMS``, or a ``more:`` block in
+    the config) and never above 300. A request over the ceiling is clamped and
+    the read says so, on the page the caller reads.
+
+    F23c: when the next-page walk comes up short and the browser is installed,
+    the same URL is opened in the stealth Chromium and scrolled. See
+    :mod:`searchts.scroll` for the loop and why each rule is there. The scroll
+    runs on the *original* URL, not on a next-page URL: a feed is the feed's
+    own page, and scrolling page 3 of a static list adds nothing.
     """
-    try:
-        raw_ceiling = int(os.environ.get("SEARCHTS_MAX_ITEMS") or _MAX_ITEMS)
-    except ValueError:
-        raw_ceiling = _MAX_ITEMS
-    ceiling = max(1, min(raw_ceiling, _MAX_ITEMS))
+    from searchts import knobs
+
+    # `pages` is the user's ceiling here, never something the caller asked
+    # for: passing the product cap as a request made any lower ceiling look
+    # like a clamp and printed "[pages: asked for 5 ...]" on a read that never
+    # mentioned pages.
+    limits = knobs.resolve(items=items)
+    want = limits.items
     asked = max(1, int(items or 1))
-    want = min(asked, ceiling)
     seen = set()
     out: List[FetchResult] = []
     current = url
     got = 0
     broke = False
-    for i in range(_MAX_PAGES):
+    for i in range(limits.pages):
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
             break
@@ -2217,6 +2504,22 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         if i:
             call["backends"] = ["curl_cffi"]
             call["allow_human"] = False
+        elif not call.get("backends"):
+            # F23c: a rows-first read wants the page's markup. The relay returns
+            # markdown with no `role=feed`, no "Load more" control and no row
+            # markup, so a relay win is both uncountable and unscannable for a
+            # feed. It moves last rather than off the ladder: when the DOM
+            # rungs cannot read the page, a relay win still beats no read.
+            #
+            # Domain memory is off for this page too, and the reason is the same
+            # one. A pin records "the best rung for this domain is X", which is a
+            # claim about getting *text*. A rows-first read needs the page's own
+            # markup, and a pin that answers a different question must not decide
+            # it. Measured: with meta.discourse.org pinned to the relay from an
+            # earlier read, `--items 90` came back with 83 rows of relay markdown
+            # and no scroll, because the pin outranked the intent.
+            call["backends"] = _markup_first(call.get("backends"))
+            call["use_memory"] = False
         try:
             result = fetch(current, **call)
         except UnlockerError as e:
@@ -2242,14 +2545,149 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
             )
     if not out:
         return out
-    extra = ""
-    if asked > ceiling:
-        extra += f"\n\n[items: asked for {asked}, the ceiling is {ceiling}]"
     last = out[-1]
-    # The walk stopped because a page failed, and _note_walk_stopped already
-    # wrote that on the last page. Say nothing more about running out.
-    if not broke and got < want and not last.next_url and "[feed:" in (out[0].text or "") and not _browser_installed():
-        extra += "\n\n[items: more of this list loads in the browser. Run: searchts install --browser]"
+    extra = ""
+    if (
+        not broke
+        and got < want
+        # The scroll is the *second* mechanism, so it is tried whenever the
+        # first one did not deliver: the walk ended with no next URL, or it ran
+        # out of pages with rows still coming. A page that has both (Discourse's
+        # `latest` scrolls and also links `?page=N`) gets both, and asking for
+        # more than the page cap can carry is exactly the case where the
+        # second mechanism is the answer.
+        and (not last.next_url or len(out) >= limits.pages)
+    ):
+        # F23c: the list did not fill by following URLs, so try the other
+        # mechanism. The probe inside decides whether this page even is a feed,
+        # which is why nothing here asks whether the walk "looked like a list":
+        # a virtualized feed (measured on reddit.com) marks itself with neither
+        # `role=feed` nor a "Load more" control, and the probe is the only
+        # thing that can tell.
+        #
+        # The gate is deliberately *not* "the winning rung held the markup". A
+        # relay win means the local rungs could not read the page at all, which
+        # is the case where a browser is most likely to, and the old gate left
+        # that read short with nothing on it saying why.
+        if kwargs.get("proxy") or kwargs.get("cookies"):
+            # The scroll opens its own Chromium, which carries neither the
+            # proxy nor the cookies this read was given. Running it anyway sends
+            # the user's real address to a site they routed around, and swaps an
+            # authenticated page for an anonymous one. Say so instead.
+            carried = "proxy" if kwargs.get("proxy") else "cookies"
+            note, rep = (
+                f"[scroll: not run. This read carries a {carried} and the "
+                "scroll opens its own browser, which would not use it. Read "
+                "the feed without it to scroll]"
+            ), None
+        else:
+            note, rep = _scroll_feed(url, want - got, limits,
+                                     relay_only=not _has_markup(out[0]))
+        if note:
+            extra += f"\n\n{note}"
+        if rep is not None and rep.stop != "not-a-feed" and rep.html:
+            out[0] = _scrolled(out[0], rep, url, kwargs)
     if extra:
-        last.text = (last.text or "").rstrip() + extra
+        first = out[0]
+        first.text = (first.text or "").rstrip() + extra
+    _note_knobs(out[0], limits)
     return out
+
+
+def _scrolled(old: "FetchResult", rep, url: str, kwargs: Dict[str, Any]) -> "FetchResult":
+    """The same page, with every row the scroll ever saw put back in.
+
+    The collected HTML replaces the rung's, so the rows that unmounted on the
+    way down are in the extract again. Re-extracting and re-running detection
+    through :func:`_finalize` is the point: this is one read path with a longer
+    page, not a second reader that knows about feeds.
+
+    Only the *first* page is replaced. A feed is the feed's own URL; the
+    later pages of a next-page walk are static lists of the same collection and
+    have nothing to scroll.
+    """
+    text = html_to_text(rep.html, url)
+    # The same known-host ring the rungs run, so a host with its own row format
+    # (Reddit's F5e cards) still gets it - but only when it reads more. The ring
+    # picks one known container, and a page the scroll rebuilt is a different
+    # shape from the one it was written against, so on reddit.com the card
+    # extractor returned a single post while the generic extract had all 24.
+    try:
+        from searchts.known_hosts import reddit as _ring
+
+        hit = _ring.extract_from_html(url, rep.html)
+    except Exception:  # noqa: BLE001 - the ring is fail-open, always
+        hit = None
+    if hit and len(hit[1]) > len(text):
+        text = hit[1]
+    result = FetchResult(
+        backend=f"scroll:{old.backend}",
+        text=text,
+        status=old.status,
+        final_url=old.final_url or url,
+        headers=dict(old.headers or {}),
+        authenticated=old.authenticated,
+        page_html=rep.html,
+    )
+    return _finalize(result, bool(kwargs.get("scrub")))
+
+
+def _markup_first(backends: Optional[List[str]]) -> Optional[List[str]]:
+    """The default ladder with the relay moved to the end."""
+    order = list(backends if backends is not None else DEFAULT_BACKENDS)
+    relay = [b for b in order if b == "Jina Reader"]
+    rest = [b for b in order if b != "Jina Reader"]
+    return rest + relay if relay else rest
+
+
+def _has_markup(page: "FetchResult") -> bool:
+    """True when this result came from a rung that had the page's own markup.
+
+    The relay is the only rung that does not, and a markdown answer from it
+    cannot be scanned for a feed, so it is not a page the scroll pass could
+    have grown. Only used to *word* the note: the scroll itself opens the URL
+    in the browser and needs nothing from this result.
+    """
+    return "jina" not in (page.backend or "").lower()
+
+
+def _scroll_feed(url: str, want: int, limits, *,
+                  relay_only: bool = False) -> Tuple[str, Any]:
+    """Scroll ``url`` for ``want`` more rows: ``(note, report)``.
+
+    Every outcome is a note, including "this is not a feed": the caller asked
+    for rows it did not get, and the difference between "the page stopped
+    growing", "a login wall replaced the page" and "you have no browser
+    installed" is exactly what makes the answer actionable. The report is
+    ``None`` unless there is collected HTML worth reading.
+
+    ``relay_only`` says the read that came back was the Jina relay's markdown
+    and not the page's own markup. That changes only the wording, and only when
+    there is no browser to scroll with: the relay's markdown is what the caller
+    has, so saying "install a browser" without saying why the relay could not
+    help would leave the obvious question open.
+    """
+    from searchts import scroll
+
+    if not scroll.browser_available():
+        if relay_only:
+            return (
+                "[scroll: this read came from the Jina relay, which returns "
+                "markdown and cannot be scrolled for more rows, and no browser "
+                "is installed to read the list itself. Run: "
+                "searchts install --browser]"
+            ), None
+        return scroll.NO_BROWSER, None
+    rep, why = scroll.collect_url(
+        url, want_rows=want, max_clicks=limits.expand_clicks,
+        budget_seconds=limits.seconds, step_ms=limits.step_ms,
+        empty_steps=limits.empty_steps, persistent=True,
+    )
+    if rep is None:
+        if why == "no-browser":
+            return scroll.NO_BROWSER, None
+        return f"[scroll: could not open the list in the browser ({why})]", None
+    if rep.stop == "not-a-feed":
+        return ("[scroll: the page did not grow when scrolled, so it has no "
+                "more rows behind a scroll]"), None
+    return rep.note(), rep
