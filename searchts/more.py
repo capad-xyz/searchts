@@ -2,13 +2,18 @@
 
 Detection only. No extra requests and no clicks: the page HTML we already
 have is checked for a next page, a feed, folded text, a list the extractor
-mostly dropped, and counts the page states. Each finding becomes a short
-bracketed note under the text and a structured entry for ``--json`` / MCP.
+mostly dropped, how much of the page's own text the read kept, and counts the
+page states. Each finding becomes a short bracketed note under the text and a
+structured entry for ``--json`` / MCP.
 
 Also keeps accordion and tab text through extraction (``prepare_panels``):
 Trafilatura drops ``<button>`` labels (the questions) and inline
 ``display:none`` panels (the answers). ``tidy_markdown`` puts headings and
-code fences back on their own lines after extraction.
+code fences back on their own lines after extraction, and
+:func:`space_after_inline` puts back a space the extractor drops next to
+inline code or bold. :func:`structured_text` reads the page's own JSON-LD, so
+a page that ships its body as data instead of markup can still be read from
+the bytes already downloaded.
 
 No note is not a promise that the page is complete. These are page signals,
 not per-host code (Reddit keeps its own ring in ``known_hosts``).
@@ -22,6 +27,11 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
+from searchts.expand import EXPAND_EXACT_RE as _EXPAND_EXACT_RE
+from searchts.expand import EXPAND_RE as _EXPAND_RE
+from searchts.expand import FEED_FOLD_RE as _FEED_FOLD_RE
+from searchts.expand import FEED_NOUNS as _FEED_NOUNS
+
 #: Page chrome. A control or list inside these never counts.
 _CHROME_TAGS = frozenset({"header", "footer", "aside", "form", "dialog", "menu", "template"})
 _CHROME_ROLES = frozenset(
@@ -32,16 +42,15 @@ _SKIP_TEXT_TAGS = frozenset({"script", "style", "noscript", "template", "svg"})
 
 #: "Load more" and "Show more posts": more items, not more of one item.
 _FEED_RE = re.compile(
-    r"^(?:load\s+more\b.*|(?:show|see|view)\s+more\s+"
-    r"(?:posts|stories|results|items|articles|comments|replies|products|videos|news))[\s.…]*$",
+    r"^(?:load\s+more\b.*|(?:show|see|view)\s+more\s+(?:" + "|".join(_FEED_NOUNS) + r"))[\s.…]*$",
     re.I,
 )
-#: "Read more" and "Show more": the rest of one item.
-_FOLD_RE = re.compile(
-    r"^(?:read|show|see|view)\s+(?:more|all|full|the\s+rest)"
-    r"(?:\s+(?:post|article|text|story|description|details))?[\s.…>»›]*$",
-    re.I,
-)
+#: "Read more" and "Show more": the rest of one item. Imported from
+#: :mod:`searchts.expand` so the fold this names is the fold ``--expand`` opens.
+#: The exact form is kept for :func:`_accordion_toggles`, which must not mistake
+#: a fold for a question to open; the wide form counts folds for the note.
+_FOLD_RE = _EXPAND_EXACT_RE
+_FOLD_ANY_RE = _EXPAND_RE
 _NEXT_TEXT_RE = re.compile(r"^(?:next(?:\s+page)?|older(?:\s+(?:posts|entries))?|[›»>])[\s›»>]*$", re.I)
 _PAGER_HINT_RE = re.compile(r"pagination|pager|paging|page\s+navigation|more\s+results", re.I)
 #: A link's own name (aria-label or title) that says it is the next page (Bing, Google).
@@ -384,7 +393,67 @@ def tidy_markdown(markdown: str) -> str:
             _own_line(heading.group(2))
             continue
         out.append(line)
+    return space_after_inline("\n".join(out))
+
+
+#: An inline code span or a bold run: the two things an extractor can leave
+#: glued to the word next to them. ``searchts`read`` comes from markup with no
+#: whitespace node between the ``<code>`` and the text; the tags are real and
+#: the space is not. Measured on real extracts from docs pages and wikis.
+_TOKEN_RE = re.compile(r"(`+[^`\n]*`+|\*\*|__)")
+
+
+def space_after_inline(markdown: str) -> str:
+    """Put back the space an extractor drops next to inline code or bold.
+
+    One pass per line, over the inline code spans and the bold runs only:
+
+    - a **closing** code span followed immediately by a word gets a space
+      (``searchts`read`` -> ``searchts` read``). The span is left byte for
+      byte: the space belongs between the span and the word, never inside the
+      code.
+    - a bold run gets a space after it when it closes and a word follows
+      (``**bold**text`` -> ``**bold** text``), and not when it opens one
+      (``**bold** more`` is already right and stays as it is).
+
+    Never inside a fenced block. A fence is code the page wrote on purpose and
+    is left exactly as it is, which is also why a code sample that really does
+    read ``foo``bar`` is not "repaired".
+    """
+    if not markdown or not _TOKEN_RE.search(markdown):
+        return markdown
+    lines = markdown.split("\n")
+    out: List[str] = []
+    fenced = False
+    for line in lines:
+        fence = _FENCE_LINE_RE.match(line)
+        if fenced:
+            out.append(line)
+            if fence and _indent(fence.group(1)) <= 3:
+                fenced = False
+            continue
+        if fence:
+            fenced = True
+            out.append(line)
+            continue
+        out.append(_space_line(line))
     return "\n".join(out)
+
+
+def _space_line(line: str) -> str:
+    out: List[str] = []
+    pos = 0
+    bold_open = False
+    for m in _TOKEN_RE.finditer(line):
+        out.append(line[pos : m.start()])
+        token = m.group(0)
+        glued = line[m.end() : m.end() + 1].isalnum()
+        out.append(token + (" " if glued and (token.startswith("`") or bold_open) else ""))
+        if not token.startswith("`"):
+            bold_open = not bold_open
+        pos = m.end()
+    out.append(line[pos:])
+    return "".join(out)
 
 
 # ── detection ───────────────────────────────────────────────────────────────
@@ -502,13 +571,18 @@ def _feed(doc, base: str, url: str) -> Tuple[bool, Optional[str]]:
 
 
 def _folds(doc) -> Tuple[int, str]:
-    """(count, first label) of "Read more" style controls that stay on the page."""
+    """(count, first label) of the controls that say the rest of it is behind them.
+
+    A fold is the phrase whatever noun follows it: ``Show all reviews`` is the
+    same claim as ``Show more``, and only the exact form used to be counted, so
+    a product page named one fold where it had five.
+    """
     count, first = 0, ""
     for el in _controls(doc):
         if _in_chrome(el) or _in_nav(el):
             continue
         label = _norm(el.text_content())
-        if len(label) <= 40 and _FOLD_RE.match(label) and not _FEED_RE.match(label):
+        if len(label) <= 60 and _FOLD_ANY_RE.match(label) and not _FEED_FOLD_RE.match(label):
             count += 1
             first = first or label
     return count, first
@@ -754,6 +828,234 @@ def left_out(doc, text: str) -> List[More]:
     return out
 
 
+# ── F24: how much of the page this read actually kept ────────────────────────
+
+#: Below this a share means nothing: a 900-character page read down to 300 is a
+#: page, not a thin read. Measured over 26 unknown hosts, the first page where
+#: the numbers mean something is around 3,000 characters of the page's own text.
+_GAP_MIN_REGION_CHARS = 3_000
+#: The read keeps less than this share of that text. A read is allowed to drop
+#: ad slots, captions and chrome inside the content region; measured, a complete
+#: read on this corpus keeps 60-100% of it.
+_GAP_MIN_KEEP = 0.55
+#: ...and leaves at least this many characters behind. Without it, a ratio on a
+#: small page is a rounding error wearing a percentage.
+_GAP_MIN_LOST = 2_000
+#: A last line shorter than this cannot be "cut mid-sentence": it is a heading,
+#: a byline or a one-word footer.
+_TAIL_MIN_CHARS = 60
+
+#: Chrome, plus ``nav``: everything around the content rather than in it. Kept
+#: separate from :func:`_in_chrome` on purpose, so measuring the page's own text
+#: cannot change which controls count as folds.
+_CONTENT_SKIP_TAGS = _CHROME_TAGS | {"nav"}
+
+
+def _content_chars(el) -> int:
+    """Visible characters under ``el``, with the page's chrome left out."""
+    parts: List[str] = []
+
+    def walk(node) -> None:
+        tag = node.tag.lower() if isinstance(node.tag, str) else ""
+        if tag in _SKIP_TEXT_TAGS or not isinstance(node.tag, str):
+            if node.tail:
+                parts.append(node.tail)
+            return
+        if tag in _CONTENT_SKIP_TAGS or (node.get("role") or "").lower() in _CHROME_ROLES:
+            if node.tail:
+                parts.append(node.tail)
+            return
+        if _SIDE_CLASS.search(node.get("class") or ""):
+            if node.tail:
+                parts.append(node.tail)
+            return
+        if node.text:
+            parts.append(node.text)
+        for child in node:
+            walk(child)
+        if node.tail:
+            parts.append(node.tail)
+
+    walk(el)
+    return len(_norm(" ".join(parts)))
+
+
+def plain_len(markdown: str) -> int:
+    """Visible length of an extract: link targets and Markdown marks do not count.
+
+    Shared with the extractor's own recall gate so "how much of this page is
+    this read" means the same thing on both sides of the comparison.
+    """
+    t = re.sub(r"\]\([^)]*\)", "]", markdown or "")
+    t = re.sub(r"[\[\]#*_>`|]", "", t)
+    return len(re.sub(r"\s+", " ", t).strip())
+
+
+def content_region(doc):
+    """``(element, characters)`` for the page's own content region.
+
+    ``main``, ``article`` and ``role=main`` are the same claim three ways, and a
+    page may use one, two or none of them, so the largest is taken rather than
+    the first. Chrome inside a region is dropped, and nothing is mutated: the
+    same document still has to be right for every other finding.
+    """
+    best, best_n = None, 0
+    if doc is None:
+        return None, 0
+    for xp in (".//main", ".//article", "//*[@role='main']", ".//body"):
+        for el in doc.xpath(xp)[:1]:
+            n = _content_chars(el)
+            if n > best_n:
+                best, best_n = el, n
+    if best is None:
+        return doc, _content_chars(doc)
+    return best, best_n
+
+
+def page_text_chars(doc) -> int:
+    """The page's own content in characters, for callers that only want a count."""
+    return content_region(doc)[1]
+
+
+def _stops_mid_sentence(text: str) -> bool:
+    """True when the extract's last line stops in the middle of a thought.
+
+    False positives are everywhere: a byline ends with a date, a footer ends
+    with a product name, a list ends with a link. So the line has to be long
+    enough to be a sentence and end on a bare word or comma.
+    """
+    lines = [ln for ln in (text or "").rstrip().split("\n") if ln.strip()]
+    if not lines:
+        return False
+    last = lines[-1].rstrip().rstrip("`*~ ").strip()
+    if len(last) < _TAIL_MIN_CHARS:
+        return False
+    return bool(re.search(r"[A-Za-z0-9,'’-]$", last))
+
+
+def short_read(doc, text: str, region=None) -> Optional[More]:
+    """The read kept far less of the page than the page holds. Names both numbers.
+
+    A list page rebuilt from its own HTML, an article whose related links
+    swallowed the body, a shell that came back as prose: three different
+    failures, one honest way to say it. The extract is compared against the
+    page's own content region with the chrome out, because a page whose nav is
+    longer than its article has not lost content to the extractor.
+
+    This is a note and never a refusal. The read is real text; the claim is
+    only that a person opening the page sees more of it, and how much more.
+
+    ``region`` is ``content_region(doc)`` when the caller already has it, so a
+    read that asks for several things about the same page walks it once.
+    """
+    kept = plain_len(text)
+    have = (region or content_region(doc))[1]
+    lost = have - kept
+    if have < _GAP_MIN_REGION_CHARS or kept >= _GAP_MIN_KEEP * have or lost < _GAP_MIN_LOST:
+        return None
+    share = round(100.0 * kept / have)
+    tail = (
+        "; the last line also stops mid-sentence"
+        if _stops_mid_sentence(text)
+        else ""
+    )
+    return More(
+        "share",
+        f"[kept {kept:,} of {have:,} characters of the page's own text "
+        f"({share}%); {lost:,} characters are in blocks this read did not "
+        f"return{tail}]",
+    )
+
+
+# ── F24a: the media in the main content ───────────────────────────────────────
+
+#: How many URLs one note may carry. A product page has ninety images and an
+#: agent needs to know they are there, not to read ninety URLs.
+_MEDIA_MAX_LISTED = 4
+#: A "URL" this long is a data URI or an inline blob, not an address.
+_MEDIA_MAX_URL = 300
+_MEDIA_URL_ATTRS = (
+    "src", "data-src", "data-original", "data-lazy-src", "data-srcset", "srcset", "data", "poster",
+)
+#: ``source`` is absent on purpose: it is a child of ``video`` and of
+#: ``picture``, so counting it tripled the images on a measured front page (658
+#: sources against 112 pictures) and told a reader nothing true.
+_MEDIA_TAGS = {"img": "image", "video": "video", "audio": "audio", "iframe": "embed",
+               "embed": "embed", "object": "embed"}
+_MEDIA_HIDDEN_RE = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden", re.I)
+
+
+def _is_hidden(el) -> bool:
+    """Not shown to anyone: a tracking frame, a hidden player, a lazy placeholder."""
+    if el.get("hidden") is not None or (el.get("aria-hidden") or "").lower() == "true":
+        return True
+    if _MEDIA_HIDDEN_RE.search(el.get("style") or ""):
+        return True
+    for attr in ("width", "height"):
+        value = (el.get(attr) or "").strip().rstrip("px")
+        if value.isdigit() and int(value) <= 2:
+            return True
+    return False
+
+
+def _media_url(el, base: str = "") -> str:
+    for attr in _MEDIA_URL_ATTRS:
+        raw = (el.get(attr) or "").strip()
+        if not raw:
+            continue
+        # A srcset is a list of candidates; the last is normally the largest.
+        url = raw.split(",")[-1].strip().split(" ")[0].strip()
+        if url.lower().startswith(("data:", "javascript:", "about:", "blob:", "#")):
+            continue  # an inline blob, not an address anyone can fetch
+        if len(url) > _MEDIA_MAX_URL:
+            continue
+        if base and not url.startswith(("http://", "https://")):
+            url = urljoin(base, url)  # protocol-relative or root-relative
+        return url
+    return ""
+
+
+def media_note(region, base: str = "") -> Optional[More]:
+    """The images, video and embeds in the main content, by URL.
+
+    F24a. A read returns text, so a photo essay comes back as its captions and
+    an embedded video as nothing at all; both are real content the page holds.
+    The note lists the addresses the markup already carries and never fetches
+    one, and a page whose media has no address to give says so in the words
+    PLAN.md uses rather than pretending there is none.
+    """
+    if region is None:
+        return None
+    counts: Dict[str, int] = {}
+    urls: List[str] = []
+    try:
+        nodes = region.xpath(".//img | .//video | .//iframe | .//embed | .//object | .//audio")
+    except Exception:  # noqa: BLE001 - an unparsable region has no media to name
+        return None
+    for el in nodes:
+        if _in_chrome(el):
+            continue
+        kind = _MEDIA_TAGS.get(el.tag.lower() if isinstance(el.tag, str) else "")
+        if not kind or _is_hidden(el):
+            continue
+        counts[kind] = counts.get(kind, 0) + 1
+        if len(urls) < _MEDIA_MAX_LISTED:
+            url = _media_url(el, base)
+            if url and url not in urls:
+                urls.append(url)
+    if not counts:
+        return None
+    total = sum(counts.values())
+    said = ", ".join(
+        f"{counts[k]} {_plural(counts[k], k, k + 's')}" for k in ("image", "video", "audio", "embed") if k in counts
+    )
+    if not urls:
+        return More("media", f"[media: {said} in the main content; media present, not resolved]")
+    listed = ", ".join(urls)
+    rest = f", and {total - len(urls)} more" if total > len(urls) else ""
+    return More("media", f"[media: {said} in the main content: {listed}{rest}]")
+
+
 def detect(html: str, url: str, text: str) -> List[More]:
     """Findings for one read: the page HTML, its URL, and the extracted text."""
     doc = _parse(html)
@@ -761,6 +1063,11 @@ def detect(html: str, url: str, text: str) -> List[More]:
         return []
     found: List[More] = []
     try:
+        where = context_line(doc, html, url)
+        if where:
+            # First, so it reads as a header on the notes rather than as one
+            # more thing the page was missing.
+            found.append(More("context", where))
         base = _base_url(doc, url)
         nxt = _next_page(doc, base, url)
         is_feed, load_more_url = _feed(doc, base, url)
@@ -798,6 +1105,13 @@ def detect(html: str, url: str, text: str) -> List[More]:
             found.append(More("list", f"[partial: the page lists {total} items; this read kept {kept}]"))
         for said in _counts(doc):
             found.append(More("count", f"[page says: {said}]"))
+        region = content_region(doc)
+        short = short_read(doc, text, region=region)
+        if short:
+            found.append(short)
+        seen_media = media_note(region[0], base)
+        if seen_media:
+            found.append(seen_media)
         found.extend(left_out(doc, text))
     except Exception:  # noqa: BLE001 - a detection bug must never fail a read
         return found
@@ -1015,10 +1329,329 @@ def annotate(text: str, found: List[More]) -> str:
 
 def summary(found: List[More]) -> str:
     """Short stderr tick, e.g. ``more: next page, folded``."""
-    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out"}
+    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read", "context": "context",
+           "media": "media"}
     seen: List[str] = []
     for m in found:
         name = names.get(m.kind, m.kind)
         if name not in seen:
             seen.append(name)
     return "more: " + ", ".join(seen)
+
+
+# ── F24b: the page's own structured data ──────────────────────────────────────
+
+#: Below this a structured body is a teaser, not the page's text.
+_STRUCTURED_MIN_CHARS = 400
+_LD_SCRIPT_RE = re.compile(
+    r"<script[^>]*type\s*=\s*[\"']application/ld\+json[\"'][^>]*>(.*?)</script\s*>",
+    re.I | re.S,
+)
+#: schema.org types, compared on the last segment so a full URL and a bare name
+#: are the same type. Everything ending in "article" counts too, which is how
+#: ReportageNewsArticle and TechArticle are reached without naming them.
+_ARTICLE_TYPES = frozenset({"blogposting", "socialmediaposting", "liveblogposting", "newsarticle", "article"})
+_RECIPE_TYPES = frozenset({"recipe"})
+_FAQ_TYPES = frozenset({"faqpage", "qapage"})
+_DISCUSSION_TYPES = frozenset({"discussionforumposting", "socialmediaposting"})
+_VIDEO_TYPES = frozenset({"videoobject", "podcastepisode", "podcastseries"})
+
+
+def _norm_type(value: str) -> str:
+    return str(value or "").strip().lower().rsplit("/", 1)[-1].rsplit("#", 1)[-1]
+
+
+def _node_kind(node: Dict[str, Any]) -> str:
+    declared = node.get("@type")
+    names = {_norm_type(t) for t in (([declared] if isinstance(declared, str) else declared) or [])}
+    if names & _RECIPE_TYPES:
+        return "recipe"
+    if names & _FAQ_TYPES:
+        return "faq"
+    if names & _DISCUSSION_TYPES:
+        return "discussion"
+    if names & _VIDEO_TYPES:
+        return "video"
+    if names & _ARTICLE_TYPES or any(n.endswith("article") for n in names):
+        return "article"
+    return ""
+
+
+def _ld_blobs(html: str) -> List[str]:
+    """The bodies of every JSON-LD script in ``html``.
+
+    A regex, not a parse, on purpose: this runs on every read of a page that
+    ships data, and re-parsing a megabyte of markup to find one script is not
+    worth it. A ``</script>`` inside the JSON truncates it and ``json.loads``
+    then refuses it, which is the right way to fail.
+    """
+    return [
+        m.group(1).strip()
+        for m in _LD_SCRIPT_RE.finditer(html or "")
+        if m.group(1).strip()
+    ]
+
+
+def _ld_nodes(html: str) -> List[Dict[str, Any]]:
+    """Every JSON-LD object the page ships, ``@graph`` included."""
+    import json
+
+    out: List[Dict[str, Any]] = []
+    for raw in _ld_blobs(html):
+        try:
+            data = json.loads(raw)
+        except Exception:  # noqa: BLE001 - a page's own malformed JSON is not a failure
+            continue
+        for node in (data if isinstance(data, list) else [data]):
+            if not isinstance(node, dict):
+                continue
+            out.append(node)
+            graph = node.get("@graph")
+            if isinstance(graph, list):
+                out.extend(n for n in graph if isinstance(n, dict))
+    return out
+
+
+def _strings(node: Any) -> List[str]:
+    """Every prose string under ``node``: a string, a dict's text, or a list."""
+    out: List[str] = []
+    if isinstance(node, str):
+        if node.strip():
+            out.append(node.strip())
+    elif isinstance(node, dict):
+        for key in ("text", "name", "itemListElement", "acceptedAnswer", "suggestedAnswer"):
+            out.extend(_strings(node.get(key)))
+    elif isinstance(node, list):
+        for item in node:
+            out.extend(_strings(item))
+    return out
+
+
+def _node_lines(node: Dict[str, Any], kind: str) -> List[str]:
+    """Markdown for one JSON-LD node, or nothing when it carries no body."""
+    lines: List[str] = []
+    title = _norm(str(node.get("headline") or node.get("name") or ""))
+    if kind == "article":
+        body = _strings(node.get("articleBody") or node.get("text"))
+        if not body:
+            return []
+        if title:
+            lines += [f"# {title}", ""]
+        lines += [b for b in body if b]
+    elif kind == "recipe":
+        ingredients = [str(i).strip() for i in (node.get("recipeIngredient") or []) if str(i).strip()]
+        steps = _strings(node.get("recipeInstructions"))
+        if not ingredients and not steps:
+            return []
+        if title:
+            lines += [f"# {title}", ""]
+        if ingredients:
+            lines.append("## Ingredients")
+            lines += [f"- {i}" for i in ingredients]
+            lines.append("")
+        if steps:
+            lines.append("## Directions")
+            lines += [f"{n}. {s}" for n, s in enumerate(steps, 1)]
+            lines.append("")
+    elif kind == "faq":
+        main_entity = node.get("mainEntity")
+        entities = main_entity if isinstance(main_entity, list) else [main_entity]
+        for entity in entities:
+            if not isinstance(entity, dict):
+                continue
+            question = _norm(str(entity.get("name") or ""))
+            answers = _strings(entity.get("acceptedAnswer"))
+            if not question or not answers:
+                continue
+            lines += [f"## {question}", ""]
+            lines += answers
+            lines.append("")
+    elif kind == "discussion":
+        body = _strings(node.get("articleBody") or node.get("text"))
+        comments = _strings(node.get("comment"))
+        if not body and not comments:
+            return []
+        if title:
+            lines += [f"# {title}", ""]
+        lines += body
+        for comment in comments:
+            lines += [f"> {comment}", ""]
+    elif kind == "video":
+        body = _strings(node.get("description"))
+        if not body and not title:
+            return []
+        if title:
+            lines += [f"# {title}", ""]
+        lines += body
+    return lines
+
+
+def _pays_for_the_rest(html_or_text: str) -> bool:
+    """True when the page says the rest of it is sold.
+
+    The words a wall puts in a button (:data:`searchts.expand.PAY_LABELS`) and
+    the sentences it puts in the body (``PAY_TEXT_RE``) are both checked, on
+    the page with script and style bodies dropped, so a phrase that only
+    appears inside a locale bundle does not count.
+    """
+    from searchts.expand import PAY_LABELS, paywall_in
+    from searchts.walls import scrub
+
+    if paywall_in(html_or_text):
+        return True
+    low = scrub(html_or_text or "").lower()
+    return any(label in low for label in PAY_LABELS)
+
+
+def structured_text(html: str) -> str:
+    """The page's own JSON-LD as Markdown, or ``""`` when it holds no body.
+
+    F24b. No second request and no guess about the host: the bytes already
+    downloaded often carry the whole article as data, and a client-rendered
+    page serves almost nothing else. This only *supplies* text; it never
+    replaces a longer extract, so a page whose markup reads well is untouched.
+
+    A paywalled page is refused here on purpose. Its structured body is the
+    copy the paywall is charging for, and reading it out of the markup would be
+    the thing ``--expand`` refuses to do with a "continue reading" button.
+    """
+    if not html or "application/ld+json" not in html:
+        return ""
+    try:
+        if _pays_for_the_rest(html):
+            return ""
+        lines: List[str] = []
+        for node in _ld_nodes(html):
+            kind = _node_kind(node)
+            if not kind:
+                continue
+            lines.extend(_node_lines(node, kind))
+        text = "\n".join(lines).strip()
+        return text if len(_norm(text)) >= _STRUCTURED_MIN_CHARS else ""
+    except Exception:  # noqa: BLE001 - structured data is an extra, never a failure
+        return ""
+
+
+# ── F24c: one line saying where this page came from ───────────────────────────
+
+#: A field longer than this is a sentence or a keyword list, not a name.
+_CONTEXT_MAX_FIELD = 60
+#: The whole line stops being one line past this.
+_CONTEXT_MAX_CHARS = 200
+
+_SITE_KEYS = ("og:site_name", "application-name", "twitter:site")
+_SECTION_KEYS = ("article:section", "og:article:section", "section", "parsely-section")
+_AUTHOR_KEYS = ("author", "article:author", "og:article:author", "byl", "parsely-author")
+_DATE_KEYS = ("article:published_time", "og:article:published_time", "date", "pubdate", "dc.date")
+
+
+def _meta(doc) -> Dict[str, str]:
+    """The page's own ``<meta>`` values, first one wins for a name."""
+    out: Dict[str, str] = {}
+    for el in doc.xpath("//meta[@content]"):
+        key = (el.get("property") or el.get("name") or el.get("itemprop") or "").strip().lower()
+        value = _norm(el.get("content") or "")
+        if key and value and key not in out:
+            out[key] = value
+    return out
+
+
+def _field(value: str) -> str:
+    """A name, or nothing: a value too long for one is a sentence or a tag list.
+
+    Truncated, it would read as a complete name that is not one.
+    """
+    value = _norm(str(value or ""))
+    return value if 0 < len(value) <= _CONTEXT_MAX_FIELD else ""
+
+
+def _first(meta: Dict[str, str], keys) -> str:
+    for key in keys:
+        value = _field(meta.get(key, ""))
+        if value and not value.lower().startswith(("http://", "https://")):
+            return value
+    return ""
+
+
+def _first_string(value: Any) -> str:
+    """The first string in a JSON-LD value, which may be a list of them."""
+    if isinstance(value, str):
+        return _field(value)
+    if isinstance(value, list):
+        for item in value:
+            if isinstance(item, str) and item.strip():
+                return _field(item)
+    return ""
+
+
+def _ld_meta(html: str) -> Dict[str, str]:
+    """``siteName``/``articleSection``/``author``/``datePublished`` from the data."""
+    out: Dict[str, str] = {}
+    for node in _ld_nodes(html):
+        name = _field(str(node.get("name") or ""))
+        publisher = node.get("publisher")
+        if isinstance(publisher, dict):
+            out.setdefault("site", _field(str(publisher.get("name") or "")))
+        if name:
+            out.setdefault("site", name)
+        for src, key in (
+            ("siteName", "site"),
+            ("articleSection", "section"),
+            ("datePublished", "date"),
+        ):
+            value = _first_string(node.get(src))
+            if value:
+                out.setdefault(key, value)
+        author = node.get("author") or node.get("creator")
+        if isinstance(author, dict):
+            author = author.get("name")
+        if isinstance(author, list) and author:
+            author = author[0].get("name") if isinstance(author[0], dict) else author[0]
+        value = _field(str(author)) if isinstance(author, (str, int)) else ""
+        if value:
+            out.setdefault("author", value)
+    return out
+
+
+def context_line(doc, html: str, url: str = "") -> str:
+    """One line: the site, the section, the author and the date, or ``""``.
+
+    F24c. Every field comes out of the bytes already downloaded: the ``<meta>``
+    the page ships and the JSON-LD beside it. Nothing is looked up, nothing is
+    inferred from the content, and a field the page does not state is left out
+    rather than guessed at, so the site is never filled in from the URL the
+    caller already has.
+
+    Fewer than two fields is not context, it is a repetition: a line naming
+    only the site says nothing the caller does not already have, so there is
+    no line.
+    """
+    if not html or doc is None:
+        return ""
+    try:
+        meta = _meta(doc)
+        data = _ld_meta(html)
+        site = _first(meta, _SITE_KEYS) or data.get("site", "")
+        # The data first for a section: a CMS meta tag on a real page read
+        # "tags" while its own JSON-LD said "security".
+        section = data.get("section", "") or _first(meta, _SECTION_KEYS)
+        author = _first(meta, _AUTHOR_KEYS) or data.get("author", "")
+        date = _first(meta, _DATE_KEYS) or data.get("date", "")
+        if date and len(date) >= 10 and date[4] == "-" and date[7] == "-":
+            date = date[:10]
+        parts = []
+        if site:
+            parts.append(site)
+        if section and section.lower() != site.lower():
+            parts.append(section)
+        if author and author.lower() not in (site.lower(), section.lower()):
+            parts.append(f"by {author}")
+        if date:
+            parts.append(date)
+        if len(parts) < 2:
+            # One field is not context: it repeats what the page already says.
+            return ""
+        line = "[page: " + " · ".join(parts) + "]"
+        return line if len(line) <= _CONTEXT_MAX_CHARS else ""
+    except Exception:  # noqa: BLE001 - context is an extra, never a failure
+        return ""

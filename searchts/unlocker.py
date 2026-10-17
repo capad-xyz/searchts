@@ -766,6 +766,10 @@ MAX_HTML_BYTES = 20 * 1024 * 1024
 #: book page is already beyond what an agent will read, and every consumer here
 #: (MCP response, search index, transcript) pays for it more than once.
 MAX_TEXT_CHARS = 400_000
+#: F24b: how much bigger the page's structured body has to be than the extract
+#: to replace it. One word in ten, so a formatted article that says the same
+#: thing keeps its Markdown.
+_STRUCTURED_MARGIN = 1.1
 
 #: Wall-clock budget for the extraction parse itself. This is the CPU class the
 #: other two caps do not cover: a small, pathological document can burn arbitrary
@@ -863,17 +867,38 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     page that is mostly links loses its content to an article-shaped heuristic
     and comes back as navigation, so on those the crude strip wins: whole beats
     clean when clean is chrome.
+
+    F24b: when that all comes back thinner than the JSON-LD the same bytes
+    carry, the structured body wins. Same download, no second request, and only
+    ever as the *richer* of the two.
     """
     body = cap_html(html)
     try:
-        return cap_text(
-            _extract_within(body, url, EXTRACTION_TIMEOUT) or ""
-        )
+        text = cap_text(_extract_within(body, url, EXTRACTION_TIMEOUT) or "")
     except _ExtractionTimeout:
-        return cap_text(_tidy_crude(_strip_html(body), url))
+        text = cap_text(_tidy_crude(_strip_html(body), url))
     except Exception:
-        pass
-    return cap_text(_tidy_crude(_strip_html(body), url))
+        text = cap_text(_tidy_crude(_strip_html(body), url))
+    return _prefer_structured(body, text)
+
+
+def _prefer_structured(html: str, text: str) -> str:
+    """F24b: the page's own JSON-LD, when the extractor came back thinner.
+
+    Both sides are compared the same way (:func:`_plain_len`), so "thinner"
+    means fewer visible characters rather than fewer bytes of markup, and the
+    data has to win by a margin so a flat blob never replaces formatted prose
+    that says the same thing. A page that ships no data costs one substring
+    test, and one that ships data it cannot read costs a failed ``json.loads``.
+    """
+    if "application/ld+json" not in html:
+        return text
+    from searchts.more import plain_len, structured_text
+
+    data = structured_text(html)
+    if data and plain_len(data) >= _STRUCTURED_MARGIN * plain_len(text):
+        return cap_text(data)
+    return text
 
 
 def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
@@ -947,6 +972,7 @@ _APP_STATE_MARKERS = (
     "__NEXT_DATA__", "__NUXT__", "__INITIAL_STATE__", "__APOLLO_STATE__",
     "__PRELOADED_STATE__", "__remixContext", "__sveltekit",
 )
+_SCRIPTISH_RE = re.compile(r"(?is)<(script|style)\b[^>]*>.*?</\1\s*>")
 _NEEDS_JS = re.compile(
     r"\b(?:enable|turn on|requires?|needs?)\s+javascript\b"
     r"|\bjavascript\s+(?:is\s+)?(?:required|disabled|needed|off)\b",
@@ -955,10 +981,94 @@ _NEEDS_JS = re.compile(
 
 
 def _plain_len(markdown: str) -> int:
-    """Visible length of an extract: link targets and Markdown marks do not count."""
-    t = re.sub(r"\]\([^)]*\)", "]", markdown or "")
-    t = re.sub(r"[\[\]#*_>`|]", "", t)
-    return len(re.sub(r"\s+", " ", t).strip())
+    """Visible length of an extract: link targets and Markdown marks do not count.
+
+    The definition lives in :mod:`searchts.more`, because F24 compares this
+    number against the page's own text and the two sides have to mean the same
+    thing.
+    """
+    from searchts.more import plain_len
+
+    return plain_len(markdown)
+
+
+#: Below this a page is short enough that its own markup states the app shape.
+_APP_SHELL_MAX_CHARS = 60
+#: A page this big that still shows this few characters is a client app, not a
+#: read an HTTP rung could have completed.
+_APP_SHELL_MIN_HTML = 100_000
+_APP_SHELL_MAX_VISIBLE = 1_200
+#: Inline script this long, on a page that shows almost no text, is the app's
+#: own state and bundle rather than an analytics tag a static page also ships.
+_APP_SHELL_MIN_INLINE = 50_000
+_TAG_RE = re.compile(r"(?s)<[^>]*>")
+_INLINE_SCRIPT_RE = re.compile(r"(?is)<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script\s*>")
+
+
+def _visible_markup_len(markup: str) -> int:
+    """Characters a reader would see in the served markup, tags and scripts off."""
+    return len(re.sub(r"\s+", " ", _TAG_RE.sub(" ", markup)).strip())
+
+
+def _inline_script_chars(html: str) -> int:
+    """Characters of inline script, the app's state and bundle in the markup."""
+    return sum(len(m.group(1) or "") for m in _INLINE_SCRIPT_RE.finditer(html))
+
+
+def _app_signal(html: str, visible: str) -> bool:
+    """A shape a client app leaves in the markup: state, a mount node, no-JS.
+
+    These are the page's own structures, never a host name: app state in a
+    script, a known empty mount node, an "enable JavaScript" notice, or a
+    module script.
+    """
+    if any(marker in html for marker in _APP_STATE_MARKERS):
+        return True
+    if _NEEDS_JS.search(visible):
+        return True
+    try:
+        import lxml.html
+
+        doc = lxml.html.fromstring(re.sub(r"^\s*<\?xml[^>]*\?>", "", html))
+    except Exception:  # noqa: BLE001 - HTML we cannot parse is not one we can call an app
+        return False
+    for el in doc.iter():
+        if not isinstance(el.tag, str):
+            continue
+        if (el.get("id") or "").strip().lower() in _APP_ROOT_IDS:
+            if len(re.sub(r"\s+", " ", el.text_content() or "").strip()) < _APP_SHELL_MAX_CHARS:
+                return True
+        if el.tag.lower() == "script" and (el.get("type") or "").strip().lower() == "module":
+            return True
+    return False
+
+
+def _is_app_shell(html: str, text: str) -> bool:
+    """True when the page was drawn by a client app this rung cannot run.
+
+    Two measured shapes. A short page (under :data:`_APP_SHELL_MAX_CHARS` of
+    extract) that still carries an app's own structure is one; the tests are the
+    page's, not the host's. Bigger than that, the served markup itself gives the
+    page away: a real video page measured 1.4 MB of HTML that showed 234
+    characters of text, and a social post page 738 KB that showed 1.1 KB, both
+    of them all script and a mount node, none of it the content a reader came
+    for. A page that big with text that thin is not a truncated article: the
+    article would still be in the markup. No HTTP rung can read it, and the one
+    request already made is never repeated to decide this.
+    """
+    if not html:
+        return False
+    visible = _SCRIPTISH_RE.sub(" ", html)
+    if _plain_len(text) < _APP_SHELL_MAX_CHARS and _app_signal(html, visible):
+        return True
+    return (
+        len(html) >= _APP_SHELL_MIN_HTML
+        and _visible_markup_len(visible) <= _APP_SHELL_MAX_VISIBLE
+        and (
+            _app_signal(html, visible)
+            or _inline_script_chars(html) >= _APP_SHELL_MIN_INLINE
+        )
+    )
 
 
 def whole_short_page(html: str, text: str) -> bool:
@@ -2093,6 +2203,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     #: geo.captcha-delivery.com from a real Chromium. Skipping the rung there
     #: hides the only answer that names the wall.
     browser_would_differ = False
+    #: A rung served markup with no text in it and the signs of a client app.
+    #: Only the browser can read such a page, and the browser is sent no
+    #: cookies, so the one sentence worth saying is about the rung and the
+    #: fence rather than about a thin article.
+    app_shell = False
     #: F23d: a clean curl win we stepped over to let the browser try to open the
     #: folds. If the browser cannot be run, or fails, this read is still good
     #: and saying so beats failing on a page we already read. `allow_thin` is
@@ -2344,6 +2459,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 )
             # Real but thin (e.g. JS-rendered or genuinely short): keep as a
             # fallback and escalate in case a richer backend renders more.
+            if body and not app_shell:
+                app_shell = _is_app_shell(body, text)
             attempts.append((backend, f"thin-{len(text)}b"))
             _tick(f"  {backend}: thin-{len(text)}b")
             if backend == remembered:
@@ -2518,11 +2635,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             ]
         return _with_auth(deferred)
 
-    raise UnlockerError(url, attempts, _final_hint(cookie_header, attempts, url))
+    raise UnlockerError(
+        url, attempts, _final_hint(cookie_header, attempts, url, app_shell=app_shell)
+    )
 
 
 def _final_hint(
-    cookie_header: str, attempts: List[Tuple[str, str]], url: str
+    cookie_header: str, attempts: List[Tuple[str, str]], url: str,
+    app_shell: bool = False,
 ) -> str:
     """The one sentence that says what to do next, when the reasons do not.
 
@@ -2542,6 +2662,8 @@ def _final_hint(
     cookie = _cookie_login_hint(cookie_header, attempts)
     if cookie:
         return cookie
+    if app_shell:
+        return _app_shell_hint()
     from searchts.known_hosts import reddit as _reddit
 
     fallback = ""
@@ -2557,6 +2679,33 @@ def _final_hint(
         if note:
             return note
     return fallback
+
+
+def _app_shell_hint() -> str:
+    """The one sentence for a page the address only ever sends to a browser.
+
+    Two facts, and both of them are needed. The markup carries no text, so no
+    rung that speaks HTTP can do better. And the browser rung is sent no
+    cookies, which is the fence that keeps a cookie from reaching a third
+    party, so "sign in and the browser will read it" is not a plan here. What
+    the browser can do is render the page, and the command to install it is
+    what is actually missing when it is not there.
+    """
+    from searchts import scroll as _scroll
+
+    if _scroll.browser_available():
+        return (
+            "this page is a JS app: the markup it served carries almost none "
+            "of its text, so only the browser tier can read it, and that tier "
+            "is sent no cookies. The browser rung did not manage this page "
+            "either."
+        )
+    return (
+        "this page is a JS app: the markup it served carries almost none of "
+        "its text, so only the browser tier can read it, and that tier is sent "
+        "no cookies, so there is no rung left that can. Run: searchts install "
+        "--browser"
+    )
 
 
 def _cookie_login_hint(
@@ -2581,8 +2730,9 @@ def _cookie_login_hint(
     return (
         "cookies were sent for this host and the site still returned a login "
         "page: the session is probably expired, or these cookies belong to a "
-        "different profile. Only the direct request carries them, so the "
-        "browser and reader rungs can never satisfy a logged-in read."
+        "different profile. They ride the direct request only - the browser "
+        "tier is sent no cookies at all - so a logged-in read cannot be fixed "
+        "by making the browser logged in."
     )
 
 
