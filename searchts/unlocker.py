@@ -1872,7 +1872,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         # has to run on a rung that has the DOM. Dropping Jina here also means
         # an expanded read never hands a URL to a third party, which is the
         # wrong trade for "open the folds on this page".
+        _jina_dropped = "Jina Reader" in order
         order = [b for b in order if b != "Jina Reader"]
+    else:
+        _jina_dropped = False
 
     memory_on = use_memory and _memory_enabled()
     domain = registrable_domain(url) if memory_on else ""
@@ -1886,6 +1889,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             order.insert(0, remembered)
 
     attempts: List[Tuple[str, str]] = []
+    if _jina_dropped and not order:
+        # `--backend jina --expand` leaves nothing to try. An empty reason list
+        # says only "all backends failed"; name the real cause.
+        attempts.append(("Jina Reader", "skipped: the relay cannot press a button, so --expand does not use it"))
     best: Optional[FetchResult] = None  # richest non-blocked but thin result so far
     status: Optional[int] = None
     #: The refusal status seen so far, and how many rungs have repeated it. A
@@ -2273,6 +2280,19 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 "browser can see, and no browser is installed, so nothing was "
                 "opened. Run: searchts install --browser]"
             ]
+        elif expand and _scroll.browser_available():
+            # The browser is installed and still could not open the page (a
+            # challenge, a timeout). The markup pass's own line says "nothing
+            # in this page's markup answered", which is true and reads as "the
+            # page has nothing to open". Measured on kickstarter.com/discover/
+            # advanced from a datacenter address: the browser rung got a
+            # Cloudflare Turnstile, and the text said only that line.
+            why = attempts[-1][1] if attempts else "unknown"
+            deferred.extra_notes = list(deferred.extra_notes or []) + [
+                "[expand: the browser could not open this page, so only the "
+                f"markup was expanded and a control built in JavaScript was not "
+                f"pressed ({attempts[-1][0] if attempts else 'browser'}: {why})]"
+            ]
         return _with_auth(deferred)
 
     raise UnlockerError(url, attempts, _cookie_login_hint(cookie_header, attempts))
@@ -2463,7 +2483,11 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     """
     from searchts import knobs
 
-    limits = knobs.resolve(items=items, pages=_MAX_PAGES)
+    # `pages` is the user's ceiling here, never something the caller asked
+    # for: passing the product cap as a request made any lower ceiling look
+    # like a clamp and printed "[pages: asked for 5 ...]" on a read that never
+    # mentioned pages.
+    limits = knobs.resolve(items=items)
     want = limits.items
     asked = max(1, int(items or 1))
     seen = set()
@@ -2545,8 +2569,20 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         # relay win means the local rungs could not read the page at all, which
         # is the case where a browser is most likely to, and the old gate left
         # that read short with nothing on it saying why.
-        note, rep = _scroll_feed(url, want - got, limits,
-                                 relay_only=not _has_markup(out[0]))
+        if kwargs.get("proxy") or kwargs.get("cookies"):
+            # The scroll opens its own Chromium, which carries neither the
+            # proxy nor the cookies this read was given. Running it anyway sends
+            # the user's real address to a site they routed around, and swaps an
+            # authenticated page for an anonymous one. Say so instead.
+            carried = "proxy" if kwargs.get("proxy") else "cookies"
+            note, rep = (
+                f"[scroll: not run. This read carries a {carried} and the "
+                "scroll opens its own browser, which would not use it. Read "
+                "the feed without it to scroll]"
+            ), None
+        else:
+            note, rep = _scroll_feed(url, want - got, limits,
+                                     relay_only=not _has_markup(out[0]))
         if note:
             extra += f"\n\n{note}"
         if rep is not None and rep.stop != "not-a-feed" and rep.html:
