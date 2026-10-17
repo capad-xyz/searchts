@@ -469,3 +469,96 @@ def test_main_uses_rich_when_stdout_is_tty(monkeypatch, capsys):
     assert rendered
     assert "100%" in rendered
     assert "## Smoke" not in rendered
+
+
+# --- P3.7d: a walled row needs a phrase from the real page -------------------
+
+
+def _walled(**kw):
+    return Case("w", "https://w.test", "reddit", suite="walled", **kw)
+
+
+def test_judge_walled_long_text_without_phrase_is_not_a_pass():
+    ok, err, hit = bench.judge(_walled(expect=("Why Booking.com?",)), "x" * 5000, 500)
+    assert not ok and hit is None and "phrase" in err
+
+
+def test_judge_walled_passes_on_phrase_and_names_it():
+    text = "intro " * 100 + "Why   booking.com? and more"
+    ok, err, hit = bench.judge(_walled(expect=("nope", "Why Booking.com?")), text, 500)
+    assert ok and err is None and hit == "Why Booking.com?"
+
+
+def test_judge_length_floor_still_applies_when_phrase_is_present():
+    ok, err, hit = bench.judge(_walled(expect=("hi",)), "hi there", 500)
+    assert not ok and hit is None and "thin content" in err
+
+
+def test_judge_walled_without_expect_cannot_pass():
+    ok, err, _ = bench.judge(_walled(), "x" * 5000, 500)
+    assert not ok and "no expected real-page phrase" in err
+
+
+def test_judge_curly_apostrophe_matches_straight_phrase():
+    ok, _, hit = bench.judge(_walled(expect=("See what's happening",)), "See what\u2019s happening " + "x" * 600, 500)
+    assert ok and hit == "See what's happening"
+
+
+def test_judge_smoke_unchanged_and_checks_phrase_only_if_declared():
+    smoke = Case("s", "https://s.test", "open", suite="smoke")
+    assert bench.judge(smoke, "x" * 600, 500) == (True, None, None)
+    with_phrase = Case("s", "https://s.test", "open", suite="smoke", expect=("zzz",))
+    assert not bench.judge(with_phrase, "x" * 600, 500)[0]
+
+
+def test_run_case_walled_block_page_of_enough_length_fails():
+    case = _walled(expect=("/r/MachineLearning/comments/",))
+    with patch("searchts.unlocker.fetch", return_value=FetchResult("curl_cffi", "blocked " * 400, 200)):
+        r = bench.run_case(case)
+    assert r["ok"] is False and r["chars"] > 500 and r["matched"] is None
+
+
+def test_run_case_walled_real_page_text_passes():
+    case = _walled(expect=("/r/MachineLearning/comments/",))
+    body = "- post (https://www.reddit.com/r/MachineLearning/comments/abc/x/) " * 20
+    with patch("searchts.unlocker.fetch", return_value=FetchResult("stealth-browser", body, 200)):
+        r = bench.run_case(case)
+    assert r["ok"] is True and r["matched"] == "/r/MachineLearning/comments/"
+
+
+def test_default_walled_cases_declare_phrases_or_say_why_not():
+    walled = load_cases(suite="walled")
+    declared = {c.name for c in walled if c.expect}
+    assert {"reddit-hot", "reddit-comments", "x-home", "booking-home"} <= declared
+    # linkedin, g2 and datadome were not seen from a real read; they carry no invented phrase
+    assert not {"linkedin-feed", "g2-cloudflare", "datadome-co"} & declared
+
+
+def test_case_expect_must_be_a_list_of_phrases_not_a_string():
+    with pytest.raises(ValueError):
+        Case("w", "https://w.test", "x", suite="walled", expect="phrase")  # type: ignore[arg-type]
+
+
+def test_local_json_expect_becomes_a_tuple(tmp_path):
+    f = tmp_path / "c.json"
+    f.write_text('[{"name": "n", "url": "https://n.test", "category": "x", "expect": ["a b"]}]')
+    extra = [c for c in load_cases(str(f)) if c.name == "n"][0]
+    assert extra.suite == "walled" and extra.expect == ("a b",)
+
+
+def test_scorecard_says_where_it_was_run_and_shows_the_matched_phrase():
+    results = [
+        {"name": "w", "url": "u", "category": "reddit", "suite": "walled", "ok": True,
+         "backend": "stealth-browser", "status": 200, "chars": 9000, "seconds": 1.0,
+         "error": None, "matched": "Why Booking.com?"},
+        {"name": "v", "url": "u2", "category": "x", "suite": "walled", "ok": False,
+         "backend": None, "status": None, "chars": 0, "seconds": 1.0,
+         "error": "blocked", "matched": None},
+    ]
+    where = bench.run_info("home, residential, IN")
+    md = bench.render_markdown(results, bench.summarize(results), where)
+    assert "Where this was run:" in md and "network: home, residential, IN." in md
+    assert "| Real-page phrase |" in md and "`Why Booking.com?`" in md
+    assert bench.run_info()["network"] == "not stated"
+    # without run info the header line is simply absent (older callers)
+    assert "Where this was run" not in bench.render_markdown(results, bench.summarize(results))
