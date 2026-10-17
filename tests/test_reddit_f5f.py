@@ -530,6 +530,36 @@ def test_expand_more_on_a_page_that_raises_content_just_stops():
 # ── the walls, each named ────────────────────────────────────────────────────
 
 
+def test_a_notice_this_file_does_not_know_falls_through_instead_of_reading_as_a_page():
+    """A wall we have not named yet must not come back as content.
+
+    No page saying "removed by the subreddit moderators" was obtained from this
+    box, so there is no state for it. Failing open is the point: an unmodelled
+    notice reaches the ladder, which can still call it thin, instead of being
+    rendered as if it were the community.
+    """
+    notice = (
+        "<html><body><h1>Page not found</h1><p>Sorry, this post was removed "
+        "by the subreddit moderators.</p><nav>Home  Popular  Explore</nav>"
+        "</body></html>"
+    )
+    # A listing and a thread fall through: the ladder still gets to call the page
+    # thin, which is the honest answer for a notice we cannot name.
+    for url in (THREAD, LISTING):
+        assert reddit.extract_page(url, notice) is None, url
+        assert reddit.extract_from_html(url, notice) is None, url
+    # A batch is only ever reached by following a cursor this ring printed, so
+    # one with no cards means the feed ended, and it says so by name.
+    batch = reddit.extract_page(BATCH, notice)
+    assert batch is not None and batch.failure == "reddit-no-posts" and batch.markdown == ""
+    # A profile and a search are cards or a loud failure, and a notice is not a
+    # card: they fail by name with no markdown at all.
+    for url, state in ((PROFILE, "reddit-profile-empty"), (SEARCH, "reddit-search-empty")):
+        page = reddit.extract_page(url, notice)
+        assert page is not None and page.failure == state and page.markdown == "", url
+        assert reddit.extract_from_html(url, notice) is None, url
+
+
 @pytest.mark.parametrize(
     "fixture_name,url,state",
     [
