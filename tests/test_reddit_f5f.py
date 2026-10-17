@@ -233,6 +233,49 @@ def test_every_rung_failing_on_the_challenge_names_it_not_an_empty_feed(monkeypa
     assert "humanity" in ei.value.hint
 
 
+def test_a_wall_on_the_human_rung_is_one_line_and_still_loud(monkeypatch, capsys):
+    """One rung, one line: the wall's own name, and nothing after it.
+
+    The human rung used to say the wall (``human-browser: reddit-private``) and
+    then fall into the generic "no text came out" branch, printing
+    ``human-browser: empty-extract`` under it. Two lines for one rung read as two
+    failures, and the second one is a lie about the page: it was not empty, it was
+    refused. Fail loud is unchanged: the error still names the wall and still
+    carries Reddit's hint.
+    """
+    _no_reddit_json(monkeypatch)
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (403, "no", url, {})
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_jina", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("no jina"))
+    )
+    monkeypatch.setattr(unlocker, "_fetch_stealth", lambda url, *a, **k: (403, "no", url, {}))
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_human",
+        lambda url, timeout=180: (200, fixture("reddit_private.html"), url),
+    )
+    with pytest.raises(unlocker.UnlockerError) as ei:
+        unlocker.fetch(
+            "https://www.reddit.com/r/gryffindor/",
+            backends=["curl_cffi", "stealth-browser"],
+            allow_human=True,
+            progress=True,
+            use_memory=False,
+        )
+    said = [
+        line
+        for line in capsys.readouterr().err.splitlines()
+        if "human-browser:" in line
+    ]
+    assert len(said) == 1, said
+    assert "reddit-private" in said[0], said
+    assert "empty-extract" not in said[0], said
+    assert dict(ei.value.attempts)["human-browser"] == "reddit-private"
+    assert "private" in ei.value.hint
+
+
 def test_a_community_page_with_no_cards_still_falls_through():
     # F5c's rule: zero or one node falls through so the ladder owns the page.
     assert reddit.extract_page(LISTING, "<html><body>nothing here</body></html>") is None

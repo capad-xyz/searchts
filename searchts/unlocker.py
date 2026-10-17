@@ -2348,6 +2348,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             hop = private_hop(url, final_url or url)
             page_hit = None
             text = ""
+            said = False
             if hop:
                 attempts.append(("human-browser", hop))
                 _tick(f"  human-browser: {hop}")
@@ -2363,6 +2364,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         if page_hit.failure:
                             attempts.append(("human-browser", page_hit.failure))
                             _tick(f"  human-browser: {page_hit.failure}")
+                            said = True
                         else:
                             _tick(page_hit.label)
                             text = page_hit.markdown
@@ -2394,7 +2396,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 best = human
                 attempts.append(("human-browser", f"thin-{len(text)}b"))
                 _tick(f"  human-browser: thin-{len(text)}b")
-            elif not hop:
+            elif not hop and not said:
+                # A rung gets one line. The wall this page is was already said
+                # above (its own name, not "empty-extract"), and saying it twice
+                # made one rung read as two failures: the second line is a lie
+                # about the page, which was not empty, it was refused.
                 if human_error:
                     why = human_error
                 elif not text:
