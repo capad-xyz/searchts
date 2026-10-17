@@ -1220,3 +1220,26 @@ def test_no_expand_means_the_browser_rung_is_called_exactly_as_before(monkeypatc
     unlocker.fetch("https://site.test/plain", backends=["stealth-browser"], use_memory=False)
     assert "expand" not in seen
     assert "proxy" not in seen
+
+
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["reddit_challenge.html", "reddit_community_gone.html", "reddit_private.html"],
+)
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://example.com/r/foo/",
+        "https://www.reddit.com.evil.test/r/foo/",
+        "https://notreddit.com/svc/shreddit/community-more-posts/hot/?after=x",
+    ],
+)
+def test_reddit_walls_are_never_named_on_a_host_that_is_not_reddit(fixture_name, url):
+    """Generic-first: an unknown host never gets a Reddit reason.
+
+    The ladder hands every URL's HTML to ``extract_page``, so a page on any
+    other site that happens to carry Reddit's interstitial title, its community
+    error element or its guard modal (a mirror, an archive, an article quoting
+    the markup) must fall through to the generic path untouched.
+    """
+    assert reddit.extract_page(url, fixture(fixture_name)) is None

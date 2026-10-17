@@ -1832,6 +1832,11 @@ def extract_page(url: str, html: str) -> Optional[RedditPage]:
     does not recognise is not a Reddit page, so the ladder owns it unchanged
     (fail-open).
     """
+    if not is_reddit_url(url):
+        # Generic-first: the ladder hands this every page it fetched, and the
+        # wall checks below read markup, not the host. A mirror, an archive or an
+        # article quoting Reddit's interstitial must never be told it is Reddit.
+        return None
     state = page_state(url, html)
     if state and state != _STATE_ARCHIVED:
         return RedditPage(label=f"reddit: {state}", markdown="", failure=state)
