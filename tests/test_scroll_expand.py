@@ -23,13 +23,31 @@ live feed would make each of those non-deterministic.
 from __future__ import annotations
 
 import json
-import re
+import time
 
 import pytest
 
-from searchts import expand, knobs, scroll, unlocker
+from searchts import expand, knobs, scroll, unlocker, walls
 
 FIX = "tests/fixtures"
+
+#: The label the fake's button carries. The loop presses by label, so the fake
+#: has to answer the handle with the same string its "is there a Load more"
+#: query returned, or the press silently matches nothing.
+LOAD_MORE = "Load more projects"
+
+#: A real login interstitial, in the shape ``walls.classify`` calls ``auth``.
+#: :func:`searchts.scroll._wall` refuses to believe the in-page answer on its
+#: own, so the fake has to serve text the ladder's own classifier agrees with,
+#: the same way a page that is not a wall has to serve content it does not
+#: call a wall.
+LOGIN_HTML = (
+    "<html><body><main><h1>Members only</h1>"
+    "<p>Please sign in to continue reading this thread.</p>"
+    "<form><input name=password><button>Sign in</button></form>"
+    "</main></body></html>"
+)
+CONTENT_HTML = "<html><body><p>a page with no wall on it</p></body></html>"
 
 
 def load(name: str) -> str:
@@ -43,18 +61,39 @@ def load(name: str) -> str:
 class FakePage:
     """A page whose rows the test decides, one scroll step at a time.
 
-    ``steps`` is a list of row-lists: what the page shows after each step. The
-    last one repeats, so a test only writes down the part it cares about.
-    ``unmount_from`` is where rows start disappearing from the *live* DOM while
-    staying in the store, which is the virtualized case: the loop must keep
-    counting them.
+    Faithful to the five blobs :mod:`searchts.scroll` evaluates, and to the
+    rules those blobs carry, because a fake that answers differently proves
+    nothing about the loop:
+
+    * each blob is recognised by a string that is really in it (``findBest`` in
+      :data:`searchts.scroll._COLLECT_JS`, the ``role=button`` selector in
+      :data:`searchts.scroll._LOAD_MORE_JS`, ``challenge-form`` in
+      :data:`searchts.scroll._WALL_JS`), so a blob that changes stops matching;
+    * the probe answers ``None`` under three repeating rows, which is the
+      ``bestN < 3`` cut in the real JS, and that is the only way to be
+      ``not-a-feed``;
+    * ``wait_for_timeout`` really waits. The loop's budget is a wall-clock
+      budget, so a fake that returns instantly can never reach it, and the
+      stop reason it is supposed to produce would go untested;
+    * pressing the button is what fetches the next batch, so a press moves the
+      page forward the way a real one does;
+    * the wall answer is the *in-page* one (``login``, ``challenge``,
+      ``rate-limit``); the ladder's classifier gets the last word, so the page
+      text has to agree with it.
+
+    ``steps`` is a list of row-lists (what the page shows after each step, last
+    one repeating) or a callable taking the step number, for a feed that never
+    stops growing.
     """
 
-    def __init__(self, steps, load_more=False, wall="", content="<html><body>x</body></html>"):
-        self.steps = [list(s) for s in steps]
+    def __init__(self, steps, load_more=False, wall="", content=None):
+        self.steps = steps if callable(steps) else [list(s) for s in steps]
         self.load_more = load_more
+        #: The in-page wall answer, as ``_WALL_JS`` gives it.
         self.wall = wall
-        self._content = content
+        self._content = (
+            content if content is not None else (LOGIN_HTML if wall else CONTENT_HTML)
+        )
         self.scrolled = 0
         self.presses = []
         self.store = {}
@@ -76,14 +115,19 @@ class FakePage:
             return 0
         if "deepLink" in js:
             return self._probe()
-        if "Load" in js and "role=button" in js:
-            return {"label": "Load more projects", "tag": "BUTTON"} if self.load_more else None
+        if "button,[role=button]" in js:
+            return {"label": LOAD_MORE, "tag": "BUTTON"} if self.load_more else None
         if "challenge-form" in js:
             return self.wall
+        # Anything else is a page that will not answer, which is what a dead
+        # evaluate looks like to the loop: every one of its callers treats None
+        # as "nothing here", so this is the honest default and not a stub.
         return None
 
     def wait_for_timeout(self, ms):
-        return None
+        # Real Playwright sleeps here, and the loop's whole budget is spent
+        # across these calls. Not sleeping would make the clock stop.
+        time.sleep(max(0, int(ms)) / 1000.0)
 
     def query_selector_all(self, selector):
         class _H:
@@ -91,10 +135,13 @@ class FakePage:
                 self.page = page
 
             def inner_text(self):
-                return "Load more projects" if self.page.load_more else ""
+                return LOAD_MORE if self.page.load_more else ""
 
             def click(self, timeout=None):
-                self.page.presses.append("Load more projects")
+                self.page.presses.append(LOAD_MORE)
+                # The batch the button fetched is on the page now: one step
+                # forward, and the control is spent.
+                self.page.scrolled += 1
                 self.page.load_more = False
                 return True
 
@@ -105,10 +152,16 @@ class FakePage:
 
     # ── the JS, in Python ──
     def _rows(self):
-        return self.steps[min(self.scrolled, len(self.steps) - 1)]
+        if callable(self.steps):
+            # A feed that never stops growing: the step number decides how much
+            # is on the page, and there is no last step to repeat.
+            return list(self.steps(self.scrolled))
+        return list(self.steps[min(self.scrolled, len(self.steps) - 1)])
 
     def _probe(self):
         rows = self._rows()
+        # `if (!best || bestN < 3) return null;` in _FIND_LIST_JS. Two rows are
+        # not a list; three are, and then the loop has to watch it grow.
         if len(rows) < 3:
             return None
         return {"rows": len(rows), "parent": True}
@@ -132,9 +185,6 @@ class FakePage:
         self.rebuilt = [self.store[k] for k in self.order]
         return len(self.rebuilt)
 
-    def scroll_to_bottom(self):
-        self.scrolled += 1
-
 
 def row(i, href="https://example.org/t/item-%d/"):
     return {
@@ -157,11 +207,26 @@ def run(page, **kw):
 # ── the loop's decisions ──────────────────────────────────────────────────────
 
 
-def test_the_probe_stops_a_page_that_does_not_grow():
-    page = FakePage([[row(i) for i in range(3)]])
+def test_the_probe_stops_a_page_with_no_list_in_it():
+    # Two repeating rows: the real probe cuts under three (`bestN < 3`), so the
+    # walk ends on the first look and says nothing at all. An article is not
+    # news.
+    page = FakePage([[row(i) for i in range(2)]])
     rep = run(page)
     assert rep.stop == "not-a-feed"
     assert rep.note() == "", "a page that is not a feed is not news"
+    assert page.scrolled == 0, "no scroll step should run on a page that is not a feed"
+
+
+def test_a_list_that_has_rows_but_never_grows_says_it_stopped_growing():
+    # Three rows is a list as far as the probe is concerned, so the loop takes
+    # it as a feed and then watches it refuse to grow. That is a different
+    # answer from `not-a-feed` and it is named.
+    page = FakePage([[row(i) for i in range(3)]] * 4)
+    rep = run(page)
+    assert rep.stop == "2 scroll step(s) in a row added nothing"
+    assert "3 list row(s) after" in rep.note()
+    assert "2 scroll step(s) in a row added nothing" in rep.note()
 
 
 def test_one_growing_list_collects_every_row_and_says_why_it_stopped():
@@ -199,21 +264,49 @@ def test_a_stalled_step_presses_load_more_and_keeps_going():
     # Step one grows the list, then the page stops growing until the button is
     # pressed. The button is the same intent by another mechanism.
     page = FakePage(
-        [[row(i) for i in range(4)], [row(i) for i in range(8)], [row(i) for i in range(16)]],
+        [[row(i) for i in range(4)], [row(i) for i in range(8)],
+         [row(i) for i in range(8)], [row(i) for i in range(16)]],
         load_more=True,
     )
     rep = run(page)
-    assert rep.clicks >= 1
-    assert page.presses, "the button was never pressed"
-    assert len(rep.rows) == 16
+    assert rep.clicks == 1
+    assert page.presses == [LOAD_MORE], "the button was never pressed"
+    assert len(rep.rows) == 16, "the rows the press fetched were not collected"
+    assert '1 "Load more" press(es)' in rep.note()
+    # And the press is what un-stalled it: without one, 8 rows is where a walk
+    # on this page ends.
+    assert rep.stop == "2 scroll step(s) in a row added nothing"
 
 
 def test_a_login_wall_stops_the_walk_and_is_named():
-    page = FakePage([[row(i) for i in range(6)]], wall="auth")
+    # The page says "sign in to continue" in the DOM *and* in its own text, so
+    # the in-page check and the ladder's classifier agree, which is the only way
+    # the loop is allowed to call it a wall.
+    page = FakePage([[row(i) for i in range(6)]], wall="login")
     rep = run(page)
     assert rep.wall == "auth"
     assert "a auth wall replaced the page" in rep.stop
     assert "a auth wall stopped the scroll" in rep.note()
+    assert len(rep.rows) == 6, "the rows it did get must not be thrown away"
+
+
+def test_a_page_that_only_says_sign_in_is_not_a_wall():
+    # The loop believes the classifier, not the page's word for itself: a feed
+    # whose header links "sign in" is not a login wall, and calling it one
+    # would stop a perfectly good walk over a word in a nav bar. The nav copy
+    # here is deliberately short and set in a page with real prose around it,
+    # so the ladder's classifier calls it content.
+    nav = "<nav><a href=/login>sign in</a> <a href=/help>log in</a></nav>"
+    page = FakePage(
+        [[row(i) for i in range(4)], [row(i) for i in range(8)]],
+        wall="login",
+        content="<html><body>" + ("<p>ordinary feed prose about a topic</p>" * 40) + nav
+        + "</body></html>",
+    )
+    assert walls.classify(page.content()) is None, "the fixture must not be a wall"
+    rep = run(page)
+    assert rep.wall == ""
+    assert len(rep.rows) == 8
 
 
 def test_no_browser_says_to_install_one():
@@ -229,11 +322,101 @@ def test_no_browser_says_to_install_one():
     assert "searchts install --browser" in note
 
 
-def test_a_six_tenths_of_a_second_budget_still_returns_what_it_got():
-    page = FakePage([[row(i) for i in range(50)]])
+def test_a_relay_read_that_came_back_short_says_why_and_what_to_run(monkeypatch):
+    # The Jina relay returns markdown, so a read that lands on it has no rows to
+    # scroll and no page to walk. Before this the read simply stopped short with
+    # nothing on it saying why, which is the one thing `--items` must never do.
+    monkeypatch.setattr(scroll, "browser_available", lambda: False)
+    note, rep = unlocker._scroll_feed(
+        "https://example.org/feed", 20, knobs.resolve(), relay_only=True,
+    )
+    assert rep is None
+    assert "searchts install --browser" in note
+    assert "Jina" in note, "the note must say which rung answered and why it stopped"
+
+
+def test_an_items_read_that_came_back_short_names_the_browser(monkeypatch):
+    # End to end through read_items, on the page-one text the caller reads.
+    rows = "\n".join("- [Row %d](https://example.org/r/%d)" % (i, i) for i in range(6))
+    _stub_read(monkeypatch, rows, backend="curl_cffi", next_url=None)
+    monkeypatch.setattr(scroll, "browser_available", lambda: False)
+    got = unlocker.read_items("https://example.org/list", 90)
+    assert "searchts install --browser" in got[0].text
+    assert len(got) == 1
+
+
+def test_an_items_read_landed_on_the_relay_still_says_something(monkeypatch):
+    rows = "\n".join("- [Row %d](https://example.org/r/%d)" % (i, i) for i in range(6))
+    _stub_read(monkeypatch, rows, backend="Jina Reader", next_url=None)
+    monkeypatch.setattr(scroll, "browser_available", lambda: False)
+    got = unlocker.read_items("https://example.org/list", 90)
+    assert "searchts install --browser" in got[0].text
+    assert "Jina" in got[0].text
+    # The relay's own text is what the caller gets, note or no note: nothing
+    # here invented rows the relay did not send.
+    assert "- [Row 0](https://example.org/r/0)" in got[0].text
+
+
+def test_the_relay_is_dropped_from_the_ladder_under_expand(monkeypatch):
+    # The relay cannot be told to press a button, so a relay win under --expand
+    # would return a short read and call it success. It must not be on the list
+    # at all, and the caller's own backend list must not put it back.
+    seen = []
+
+    def curl(url, timeout=30):
+        seen.append("curl_cffi")
+        return (200, "<html><body><p>" + ("word " * 300) + "</p></body></html>", url, {})
+
+    def boom(url, timeout=40):
+        seen.append("Jina Reader")
+        return (200, "J" * 900, url, {})
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", curl)
+    monkeypatch.setattr(unlocker, "_fetch_jina", boom)
+    monkeypatch.setattr(scroll, "browser_available", lambda: False)
+    monkeypatch.setattr(
+        unlocker, "_fetch_stealth",
+        lambda *a, **k: seen.append("stealth") or (None, "", "", {}),
+    )
+    got = unlocker.fetch("https://example.org/a", expand=True,
+                         backends=["Jina Reader", "curl_cffi", "stealth-browser"])
+    assert "Jina Reader" not in seen, "the relay ran under --expand"
+    assert got.backend == "curl_cffi"
+
+
+def test_an_expand_read_with_no_browser_says_so_loudly(monkeypatch):
+    # The hard case the markup pass cannot see: the page builds its "Show more"
+    # in JavaScript, so the HTML holds no evidence of a fold at all. The ladder
+    # escalates to the browser, the browser is not installed, and without this
+    # note the read would come back a clean success with the text still shut.
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (
+        200, "<html><body><p>" + ("word " * 300) + "</p></body></html>", url, {},
+    ))
+    monkeypatch.setattr(unlocker, "_fetch_jina", lambda url, timeout=40: (
+        200, "J" * 900, url, {},
+    ))
+    monkeypatch.setattr(scroll, "browser_available", lambda: False)
+    monkeypatch.setattr(unlocker, "_fetch_stealth",
+                        lambda *a, **k: (None, "", "", {}))
+    got = unlocker.fetch("https://example.org/a", expand=True)
+    assert got.backend == "curl_cffi"
+    assert "searchts install --browser" in got.text
+    assert "no browser is installed" in got.text
+    assert "x-searchts-expand-deferred" in (got.headers or {}), \
+        "the envelope must record why the read was short"
+
+
+def test_a_tiny_budget_still_returns_what_it_got():
+    # The budget is wall-clock, and ``wait_for_timeout`` is where the clock is
+    # spent, so this fake really waits. The page keeps growing, which is what
+    # stops the empty-steps rule from ending the walk first: the only reason
+    # this can end is the clock, and that reason has to survive.
+    page = FakePage(lambda n: [row(i) for i in range(50 + 10 * n)])
     rep = run(page, budget_seconds=1, want_rows=500, step_ms=200)
     assert rep.rows, "a tight budget must not throw the page away"
-    assert "scroll budget ran out" in rep.stop or "rows asked for" in rep.stop
+    assert len(rep.rows) >= 50
+    assert "the 1s scroll budget ran out" in rep.stop
+    assert "scroll budget ran out" in rep.stop
 
 
 # ── the collected page ────────────────────────────────────────────────────────
@@ -400,8 +583,11 @@ def test_env_beats_yaml(monkeypatch, tmp_path):
 
 
 def test_the_knob_names_are_the_same_everywhere():
+    import inspect
     import subprocess
     import sys
+
+    from searchts.integrations import mcp_server
 
     # The CLI's own help, not a parse of its source: this is what a user reads.
     out = subprocess.run(
@@ -410,10 +596,6 @@ def test_the_knob_names_are_the_same_everywhere():
     ).stdout
     for flag in ("--items", "--pages", "--expand"):
         assert flag in out, f"{flag} is not in the CLI help"
-
-    from searchts.integrations import mcp_server
-
-    import inspect
 
     params = set(inspect.signature(mcp_server.read_url).parameters)
     assert {"max_items", "max_pages", "expand"} <= params
