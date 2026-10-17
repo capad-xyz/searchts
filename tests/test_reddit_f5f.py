@@ -640,6 +640,52 @@ def test_a_quarantine_names_the_browser_as_the_next_step(monkeypatch):
     assert "quarantined" in ei.value.hint
 
 
+def test_the_content_wall_wins_over_the_humanity_check_in_the_hint(monkeypatch):
+    """Measured 2026-10-17: curl got the interstitial, the browser the page.
+
+    /r/gryffindor/ answered curl with "Prove your humanity" and the browser rung
+    with the real community notice. The hint has to be about the community: the
+    interstitial is true of the request and useless about the URL, and it is the
+    reason a reader would give up on a page that is simply private.
+    """
+    _no_reddit_json(monkeypatch)
+    private = fixture("reddit_private.html")
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (200, fixture("reddit_challenge.html"), url, {})
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_stealth", lambda url, *a, **k: (200, private, url, {})
+    )
+    with pytest.raises(unlocker.UnlockerError) as ei:
+        unlocker.fetch(
+            "https://www.reddit.com/r/gryffindor/",
+            backends=["curl_cffi", "stealth-browser"],
+            use_memory=False,
+        )
+    assert dict(ei.value.attempts) == {
+        "curl_cffi": "reddit-challenge",
+        "stealth-browser": "reddit-private",
+    }
+    assert "this community is private" in ei.value.hint
+    assert "humanity" not in ei.value.hint
+
+
+def test_the_humanity_check_is_still_the_hint_when_it_is_all_there_is(monkeypatch):
+    _no_reddit_json(monkeypatch)
+    challenge = fixture("reddit_challenge.html")
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (200, challenge, url, {})
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_stealth", lambda url, *a, **k: (200, challenge, url, {})
+    )
+    with pytest.raises(unlocker.UnlockerError) as ei:
+        unlocker.fetch(
+            BATCH, backends=["curl_cffi", "stealth-browser"], use_memory=False
+        )
+    assert "humanity" in ei.value.hint
+
+
 def test_items_counts_new_rows_only_and_says_when_the_feed_repeated_one(monkeypatch):
     """A feed cursor that hands back old rows must not inflate the count.
 

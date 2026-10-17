@@ -2423,19 +2423,32 @@ def _final_hint(
     either. A Reddit notice a person has to accept (a quarantine, an over-18
     gate, a banned community) is the same shape: the ladder is right that it
     cannot read it, and only the person can move it.
+
+    Within Reddit's reasons the *named content* state wins over the humanity
+    check, and that ordering is the whole point. Measured 2026-10-17 on
+    /r/gryffindor/: curl got the interstitial and the browser rung got the real
+    page, which is a private community. Reporting the first reason said
+    "Prove your humanity" about a page whose answer is "there is no public page
+    to fetch" - true of the request, useless about the URL.
     """
     cookie = _cookie_login_hint(cookie_header, attempts)
     if cookie:
         return cookie
+    from searchts.known_hosts import reddit as _reddit
+
+    fallback = ""
     for _backend, why in attempts:
         if not why.startswith("reddit-"):
             continue
-        from searchts.known_hosts import reddit as _reddit
-
+        if why == "reddit-challenge":
+            # Held back, not thrown away: when every rung got the interstitial
+            # this is the whole answer, and there is nothing better to say.
+            fallback = fallback or _reddit.state_note(why, url)
+            continue
         note = _reddit.state_note(why, url)
         if note:
             return note
-    return ""
+    return fallback
 
 
 def _cookie_login_hint(
