@@ -977,6 +977,53 @@ def test_items_counts_new_rows_only_and_says_when_the_feed_repeated_one(monkeypa
     assert "cursor pointed back at a page this walk had already read" in first
 
 
+def test_the_cursor_hop_stops_at_the_items_ceiling_and_never_counts_a_row_twice(
+    monkeypatch,
+):
+    """Reddit's own cursor is followed only while the rows asked for are short.
+
+    The ceiling is ``SEARCHTS_MAX_ITEMS``. A walk that has what it asked for
+    makes no further request (3 rows, one fetch; 5 rows, one hop), and a feed
+    whose cursor repeats a window is never counted twice for it. This is the
+    walk's *request* count, not a trim of the last window: a window that
+    overshoots the ceiling still comes back whole, which is issue #378 and not
+    fixed here.
+    """
+    _no_reddit_json(monkeypatch)
+    listing_html = fixture("reddit_feed_cursor.html")
+    batch_html = fixture("reddit_feed_batch.html")
+    fetched = []
+
+    def curl(url, timeout=30):
+        fetched.append(url)
+        return 200, (listing_html if url == LISTING else batch_html), url, {}
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", curl)
+    for dead in ("_fetch_jina", "_fetch_stealth"):
+        monkeypatch.setattr(
+            unlocker, dead, lambda *a, **k: (_ for _ in ()).throw(RuntimeError("off"))
+        )
+
+    # (ceiling, requests the walk may make, rows counted)
+    for ceiling, requests, rows in ((3, 1, 3), (5, 2, 11)):
+        fetched.clear()
+        monkeypatch.setenv("SEARCHTS_MAX_ITEMS", str(ceiling))
+        got = unlocker.read_items(LISTING, 300, use_memory=False)
+        assert len(fetched) == requests, (ceiling, fetched)
+        keys = [k for r in got for k in (r.index_keys or [])]
+        assert len(keys) == len(set(keys)), "a row was counted twice"
+        assert len(set(keys)) == rows
+
+    # No ceiling short of the feed: the walk follows the cursor until the feed
+    # points back at a window it has read; that repeat is named, not counted.
+    fetched.clear()
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "300")
+    got = unlocker.read_items(LISTING, 300, use_memory=False)
+    assert len(fetched) == 3
+    assert len(set(fetched)) == 3, "a URL was requested twice in one walk"
+    assert "8 the feed handed back again were not counted twice" in got[0].text
+
+
 def test_expand_escalates_to_the_browser_and_raises_the_comment_cap(monkeypatch):
     """``--expand`` gets a read to the rung that has a page, and says what it got.
 
