@@ -48,10 +48,12 @@ No host in this table is in `searchts/known_hosts` or `searchts/share_extractors
 
 ## What this set says
 
-- **17 of 20 reads returned content** (rows 1, 2, 3, 4, 5, 6, 8, 9, 11, 12,
-  13, 15, 16, 17, 18, 19, 20; rows 7, 10 and 14 refused).
-- **Three refused for a real wall or a real shell** (7, 14) or for a false wall
-  the classifier can name but not read through (10).
+- **First run (2026-10-17): 17 of 20 reads returned content** (rows 1, 2, 3, 4,
+  5, 6, 8, 9, 11, 12, 13, 15, 16, 17, 18, 19, 20; rows 7, 10 and 14 refused).
+  **At the branch tip (2026-10-18, table below): 16 of 20**, because row 16
+  was refused with 403 on the re-run.
+- **Three refused in the first run for a real wall or a real shell** (7, 14) or
+  for a false wall the classifier can name but not read through (10).
 - **No row silently passed a thin page** in the sense of an empty or
   mid-sentence read. The silent failures in this set are *partial*, not empty:
   row 20 keeps 16% of the page's visible text and says only that 8 items were
