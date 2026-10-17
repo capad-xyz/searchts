@@ -89,9 +89,6 @@ def _to_json_url(url: str) -> str:
         (parts.scheme, parts.netloc, path, parts.query, "")
     )
 
-#: Max top-level comments to include in rendered output.
-_MAX_COMMENTS = 30
-
 #: Safety-interstitial signal from Reddit's JSON endpoint.
 _BLOCK_SIGNALS = frozenset({"error", "message"})
 
@@ -206,8 +203,9 @@ def _render_thread(post: Dict[str, Any], comments: List[Dict[str, Any]]) -> str:
     """
     lines = _post_lines(post)
     if comments:
+        cap = _comment_ceiling(False)
         lines.append("\n## Comments\n")
-        for i, child in enumerate(comments[:_MAX_COMMENTS]):
+        for i, child in enumerate(comments[:cap]):
             if not isinstance(child, dict):
                 continue
             # Unwrap if needed; treat bare objects as already flat.
@@ -224,9 +222,13 @@ def _render_thread(post: Dict[str, Any], comments: List[Dict[str, Any]]) -> str:
 
 
 def _render_subreddit_from_children(children: List[Dict[str, Any]]) -> str:
-    """Render a list of children (t3 dicts or {kind, data} wrappers) as a compact index."""
+    """Render a list of children (t3 dicts or {kind, data} wrappers) as a compact index.
+
+    The row cap is the knobs ceiling (``SEARCHTS_MAX_ITEMS``), never a literal:
+    a post is a row, and the user caps rows there (F5f).
+    """
     lines: List[str] = []
-    for child in children[:_MAX_COMMENTS]:
+    for child in children[: _row_ceiling()]:
         if not isinstance(child, dict):
             continue
         # Accept both bare t3 objects and {kind, data} wrappers.
@@ -1120,6 +1122,23 @@ _COMMENT_MIN_CHARS = 8
 _MAX_COMMENTS = 30
 
 
+def _row_ceiling() -> int:
+    """How many rows any Reddit read may print. The knobs answer (F5f).
+
+    A post card, a comment and a search result are all rows, and ``--items`` /
+    ``SEARCHTS_MAX_ITEMS`` is what the user caps rows with. Every literal that
+    used to stand in for one (the JSON ring's 30-comment slice, the listing
+    index's 30-post slice) reads this instead, so lowering the ceiling lowers
+    every Reddit path at once and nothing here can raise it.
+
+    Resolved only on the paths that need it. A broken config is answered by the
+    built-in default, never an error (:mod:`searchts.knobs` swallows it).
+    """
+    from searchts import knobs
+
+    return max(1, int(knobs.resolve().items))
+
+
 def _comment_ceiling(expand: bool = False) -> int:
     """How many comments this read may print. The knobs answer (F23e).
 
@@ -1133,9 +1152,7 @@ def _comment_ceiling(expand: bool = False) -> int:
     read. A broken config is answered by the built-in default, never an error
     (:mod:`searchts.knobs` swallows it for exactly this reason).
     """
-    from searchts import knobs
-
-    ceiling = max(1, int(knobs.resolve().items))
+    ceiling = _row_ceiling()
     return ceiling if expand else min(_MAX_COMMENTS, ceiling)
 
 #: Where Reddit hides the rest of a thread. A ``faceplate-partial`` that answers

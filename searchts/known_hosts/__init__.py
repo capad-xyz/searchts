@@ -167,8 +167,6 @@ def expand_page(
             return page.content()
         return None
     return None
-    return None
-    return None
 
 
 _discover()
