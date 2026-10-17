@@ -333,3 +333,152 @@ def test_the_extract_path_runs_the_fix():
         + _prose(6) + "</p></main></body></html>"
     )
     assert "`searchts` read" in unlocker.html_to_text(html, URL)
+
+
+# ── F24b: the page's own JSON-LD ─────────────────────────────────────────────
+
+
+def _ld(payload: str, inner: str = "") -> str:
+    return f'<html><body><main>{inner}</main><script type="application/ld+json">{payload}</script></body></html>'
+
+
+def _body_words(n: int) -> str:
+    return " ".join(f"word{i}" for i in range(n))
+
+
+def test_a_shell_page_is_read_from_its_own_data():
+    body = _body_words(1_500)
+    html = _ld(
+        '{"@context":"https://schema.org","@type":"NewsArticle",'
+        '"headline":"The finding of the week","articleBody":"' + body + '"}',
+        '<div id="root"></div>',
+    )
+    data = more.structured_text(html)
+    assert data.startswith("# The finding of the week")
+    assert data.endswith("word1499")
+    read = unlocker.html_to_text(html, URL)
+    assert "word1499" in read
+    assert len(read) > 1_500
+
+
+def test_a_page_that_reads_well_keeps_its_own_text():
+    """The data is a copy of what the extractor already had: nothing changes."""
+    prose = _kept(6).replace("\n\n", " ")
+    html = _ld(
+        '{"@type":"Article","headline":"A page","articleBody":"' + prose + '"}',
+        "<article><h1>A page</h1>" + _prose(6) + "</article>",
+    )
+    read = unlocker.html_to_text(html, URL)
+    assert read.count(_body_words(2)) == 0
+    assert "Paragraph 3" in read
+
+
+def test_an_faq_reads_from_the_page_data():
+    payload = (
+        '{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"How long does it take?",'
+        '"acceptedAnswer":{"@type":"Answer","text":"' + _body_words(400) + '"}},'
+        '{"@type":"Question","name":"Is it free?","acceptedAnswer":{"@type":"Answer","text":"'
+        + _body_words(300) + '"}}]}'
+    )
+    read = unlocker.html_to_text(_ld(payload, '<div id="root"></div>'), URL)
+    assert "## How long does it take?" in read
+    assert "## Is it free?" in read
+    assert _body_words(300) in read
+
+
+def test_a_recipe_reads_ingredients_and_directions_from_the_page_data():
+    payload = (
+        '{"@type":"Recipe","name":"A stew","recipeIngredient":["water","salt","a root vegetable"],'
+        '"recipeInstructions":[{"@type":"HowToStep","text":"' + _body_words(300) + '"},'
+        '{"@type":"HowToStep","text":"' + _body_words(300) + '"}]}'
+    )
+    read = unlocker.html_to_text(_ld(payload, '<div id="root"></div>'), URL)
+    assert "## Ingredients" in read and "- water" in read
+    assert "## Directions" in read and "1. word0" in read and "2. word0" in read
+
+
+def test_a_discussion_reads_the_post_and_its_comments():
+    payload = (
+        '{"@type":"DiscussionForumPosting","headline":"A thread",'
+        '"text":"' + _body_words(400) + '","comment":[{"@type":"Comment","text":"'
+        + _body_words(200) + '"}]}'
+    )
+    read = unlocker.html_to_text(_ld(payload, '<div id="root"></div>'), URL)
+    assert read.startswith("# A thread")
+    assert read.count("> word0") == 1
+
+
+@pytest.mark.parametrize(
+    "wall",
+    [
+        '<div class="paywall"><p>Continue reading</p></div>',
+        '<div class="paywall"><p>This story is for subscribers</p></div>',
+        '<div class="paywall"><p>Subscribe to read further</p></div>',
+    ],
+)
+def test_a_paywalled_page_never_reads_its_data_body(wall):
+    """The body in the markup is the copy the wall is charging for."""
+    payload = '{"@type":"NewsArticle","headline":"A paid story","articleBody":"' + _body_words(1_500) + '"}'
+    html = _ld(payload, wall)
+    assert more.structured_text(html) == ""
+    assert more._pays_for_the_rest(html)
+
+
+def test_structured_data_that_is_not_a_body_is_ignored():
+    payload = '{"@type":"Organization","name":"A company","url":"https://example.org"}'
+    assert more.structured_text(_ld(payload)) == ""
+    assert more.structured_text(_ld('{"@type":"NewsArticle","description":"' + _body_words(600) + '"}')) == ""
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "",
+        "<html><body>no data here</body></html>",
+        '<script type="application/ld+json">{not json</script>',
+        '<script type="application/ld+json">[]</script>',
+        '<script type="application/ld+json">"a string"</script>',
+        '<script type="application/ld+json">{"@type":"NewsArticle","articleBody":null}</script>',
+    ],
+)
+def test_bad_or_empty_data_never_raises(bad):
+    html = f"<html><body><main><p>{_kept(3)}</p></main>{bad}</body></html>"
+    assert "Paragraph 2" in unlocker.html_to_text(html, URL)
+
+
+def test_the_data_is_read_from_the_bytes_already_downloaded(monkeypatch):
+    """One request, not two: the fence is the whole point of this box."""
+    calls: list = []
+    body = _body_words(1_500)
+    html = _ld(
+        '{"@type":"NewsArticle","headline":"A shell","articleBody":"' + body + '"}',
+        '<div id="root"></div>',
+    )
+
+    def _one_call(url, **kwargs):
+        calls.append(url)
+        return 200, html, url, {}
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", _one_call)
+    result = unlocker.fetch(URL, backends=["curl_cffi"], use_memory=False)
+    assert len(calls) == 1
+    assert body[:200] in result.text
+
+
+def test_the_faq_answers_a_read_already_had_are_not_double_counted():
+    """A page whose markup carries the answers reads once, from the markup."""
+    questions = "".join(
+        f"<details><summary>Question {i} about the thing</summary>"
+        f"<p>{_body_words(200)}</p></details>"
+        for i in range(6)
+    )
+    payload = (
+        '{"@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Question 0 about the thing",'
+        '"acceptedAnswer":{"@type":"Answer","text":"' + _body_words(200) + '"}}]}'
+    )
+    html = _ld(payload, questions)
+    read = unlocker.html_to_text(html, URL)
+    assert read.count(_body_words(200)) == 6
+
+
+

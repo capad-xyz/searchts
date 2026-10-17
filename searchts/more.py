@@ -11,7 +11,9 @@ Trafilatura drops ``<button>`` labels (the questions) and inline
 ``display:none`` panels (the answers). ``tidy_markdown`` puts headings and
 code fences back on their own lines after extraction, and
 :func:`space_after_inline` puts back a space the extractor drops next to
-inline code or bold.
+inline code or bold. :func:`structured_text` reads the page's own JSON-LD, so
+a page that ships its body as data instead of markup can still be read from
+the bytes already downloaded.
 
 No note is not a promise that the page is complete. These are page signals,
 not per-host code (Reddit keeps its own ring in ``known_hosts``).
@@ -1236,3 +1238,200 @@ def summary(found: List[More]) -> str:
         if name not in seen:
             seen.append(name)
     return "more: " + ", ".join(seen)
+
+
+# ── F24b: the page's own structured data ──────────────────────────────────────
+
+#: Below this a structured body is a teaser, not the page's text.
+_STRUCTURED_MIN_CHARS = 400
+#: The data has to be this much bigger than the extract to replace it. A plain
+#: article's ``articleBody`` is the same text the extractor already formatted,
+#: so without a margin the swap would trade Markdown for a flat blob.
+_STRUCTURED_MARGIN = 1.1
+_LD_SCRIPT_RE = re.compile(
+    r"<script[^>]*type\s*=\s*[\"']application/ld\+json[\"'][^>]*>(.*?)</script\s*>",
+    re.I | re.S,
+)
+#: schema.org types, compared on the last segment so a full URL and a bare name
+#: are the same type. Everything ending in "article" counts too, which is how
+#: ReportageNewsArticle and TechArticle are reached without naming them.
+_ARTICLE_TYPES = frozenset({"blogposting", "socialmediaposting", "liveblogposting", "newsarticle", "article"})
+_RECIPE_TYPES = frozenset({"recipe"})
+_FAQ_TYPES = frozenset({"faqpage", "qapage"})
+_DISCUSSION_TYPES = frozenset({"discussionforumposting", "socialmediaposting"})
+_VIDEO_TYPES = frozenset({"videoobject", "podcastepisode", "podcastseries"})
+
+
+def _norm_type(value: str) -> str:
+    return str(value or "").strip().lower().rsplit("/", 1)[-1].rsplit("#", 1)[-1]
+
+
+def _node_kind(node: Dict[str, Any]) -> str:
+    declared = node.get("@type")
+    names = {_norm_type(t) for t in (([declared] if isinstance(declared, str) else declared) or [])}
+    if names & _RECIPE_TYPES:
+        return "recipe"
+    if names & _FAQ_TYPES:
+        return "faq"
+    if names & _DISCUSSION_TYPES:
+        return "discussion"
+    if names & _VIDEO_TYPES:
+        return "video"
+    if names & _ARTICLE_TYPES or any(n.endswith("article") for n in names):
+        return "article"
+    return ""
+
+
+def _ld_blobs(html: str) -> List[str]:
+    """The bodies of every JSON-LD script in ``html``.
+
+    A regex, not a parse, on purpose: this runs on every read of a page that
+    ships data, and re-parsing a megabyte of markup to find one script is not
+    worth it. A ``</script>`` inside the JSON truncates it and ``json.loads``
+    then refuses it, which is the right way to fail.
+    """
+    return [
+        m.group(1).strip()
+        for m in _LD_SCRIPT_RE.finditer(html or "")
+        if m.group(1).strip()
+    ]
+
+
+def _ld_nodes(html: str) -> List[Dict[str, Any]]:
+    """Every JSON-LD object the page ships, ``@graph`` included."""
+    import json
+
+    out: List[Dict[str, Any]] = []
+    for raw in _ld_blobs(html):
+        try:
+            data = json.loads(raw)
+        except Exception:  # noqa: BLE001 - a page's own malformed JSON is not a failure
+            continue
+        for node in (data if isinstance(data, list) else [data]):
+            if not isinstance(node, dict):
+                continue
+            out.append(node)
+            graph = node.get("@graph")
+            if isinstance(graph, list):
+                out.extend(n for n in graph if isinstance(n, dict))
+    return out
+
+
+def _strings(node: Any) -> List[str]:
+    """Every prose string under ``node``: a string, a dict's text, or a list."""
+    out: List[str] = []
+    if isinstance(node, str):
+        if node.strip():
+            out.append(node.strip())
+    elif isinstance(node, dict):
+        for key in ("text", "name", "itemListElement", "acceptedAnswer", "suggestedAnswer"):
+            out.extend(_strings(node.get(key)))
+    elif isinstance(node, list):
+        for item in node:
+            out.extend(_strings(item))
+    return out
+
+
+def _node_lines(node: Dict[str, Any], kind: str) -> List[str]:
+    """Markdown for one JSON-LD node, or nothing when it carries no body."""
+    lines: List[str] = []
+    title = _norm(str(node.get("headline") or node.get("name") or ""))
+    if kind == "article":
+        body = _strings(node.get("articleBody") or node.get("text"))
+        if not body:
+            return []
+        if title:
+            lines += [f"# {title}", ""]
+        lines += [b for b in body if b]
+    elif kind == "recipe":
+        ingredients = [str(i).strip() for i in (node.get("recipeIngredient") or []) if str(i).strip()]
+        steps = _strings(node.get("recipeInstructions"))
+        if not ingredients and not steps:
+            return []
+        if title:
+            lines += [f"# {title}", ""]
+        if ingredients:
+            lines.append("## Ingredients")
+            lines += [f"- {i}" for i in ingredients]
+            lines.append("")
+        if steps:
+            lines.append("## Directions")
+            lines += [f"{n}. {s}" for n, s in enumerate(steps, 1)]
+            lines.append("")
+    elif kind == "faq":
+        main_entity = node.get("mainEntity")
+        entities = main_entity if isinstance(main_entity, list) else [main_entity]
+        for entity in entities:
+            if not isinstance(entity, dict):
+                continue
+            question = _norm(str(entity.get("name") or ""))
+            answers = _strings(entity.get("acceptedAnswer"))
+            if not question or not answers:
+                continue
+            lines += [f"## {question}", ""]
+            lines += answers
+            lines.append("")
+    elif kind == "discussion":
+        body = _strings(node.get("articleBody") or node.get("text"))
+        comments = _strings(node.get("comment"))
+        if not body and not comments:
+            return []
+        if title:
+            lines += [f"# {title}", ""]
+        lines += body
+        for comment in comments:
+            lines += [f"> {comment}", ""]
+    elif kind == "video":
+        body = _strings(node.get("description"))
+        if not body and not title:
+            return []
+        if title:
+            lines += [f"# {title}", ""]
+        lines += body
+    return lines
+
+
+def _pays_for_the_rest(html_or_text: str) -> bool:
+    """True when the page says the rest of it is sold.
+
+    The words a wall puts in a button (:data:`searchts.expand.PAY_LABELS`) and
+    the sentences it puts in the body (``PAY_TEXT_RE``) are both checked, on
+    the page with script and style bodies dropped, so a phrase that only
+    appears inside a locale bundle does not count.
+    """
+    from searchts.expand import PAY_LABELS, paywall_in
+    from searchts.walls import scrub
+
+    if paywall_in(html_or_text):
+        return True
+    low = scrub(html_or_text or "").lower()
+    return any(label in low for label in PAY_LABELS)
+
+
+def structured_text(html: str) -> str:
+    """The page's own JSON-LD as Markdown, or ``""`` when it holds no body.
+
+    F24b. No second request and no guess about the host: the bytes already
+    downloaded often carry the whole article as data, and a client-rendered
+    page serves almost nothing else. This only *supplies* text; it never
+    replaces a longer extract, so a page whose markup reads well is untouched.
+
+    A paywalled page is refused here on purpose. Its structured body is the
+    copy the paywall is charging for, and reading it out of the markup would be
+    the thing ``--expand`` refuses to do with a "continue reading" button.
+    """
+    if not html or "application/ld+json" not in html:
+        return ""
+    try:
+        if _pays_for_the_rest(html):
+            return ""
+        lines: List[str] = []
+        for node in _ld_nodes(html):
+            kind = _node_kind(node)
+            if not kind:
+                continue
+            lines.extend(_node_lines(node, kind))
+        text = "\n".join(lines).strip()
+        return text if len(_norm(text)) >= _STRUCTURED_MIN_CHARS else ""
+    except Exception:  # noqa: BLE001 - structured data is an extra, never a failure
+        return ""

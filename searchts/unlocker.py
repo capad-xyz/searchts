@@ -766,6 +766,10 @@ MAX_HTML_BYTES = 20 * 1024 * 1024
 #: book page is already beyond what an agent will read, and every consumer here
 #: (MCP response, search index, transcript) pays for it more than once.
 MAX_TEXT_CHARS = 400_000
+#: F24b: how much bigger the page's structured body has to be than the extract
+#: to replace it. One word in ten, so a formatted article that says the same
+#: thing keeps its Markdown.
+_STRUCTURED_MARGIN = 1.1
 
 #: Wall-clock budget for the extraction parse itself. This is the CPU class the
 #: other two caps do not cover: a small, pathological document can burn arbitrary
@@ -863,17 +867,38 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     page that is mostly links loses its content to an article-shaped heuristic
     and comes back as navigation, so on those the crude strip wins: whole beats
     clean when clean is chrome.
+
+    F24b: when that all comes back thinner than the JSON-LD the same bytes
+    carry, the structured body wins. Same download, no second request, and only
+    ever as the *richer* of the two.
     """
     body = cap_html(html)
     try:
-        return cap_text(
-            _extract_within(body, url, EXTRACTION_TIMEOUT) or ""
-        )
+        text = cap_text(_extract_within(body, url, EXTRACTION_TIMEOUT) or "")
     except _ExtractionTimeout:
-        return cap_text(_tidy_crude(_strip_html(body), url))
+        text = cap_text(_tidy_crude(_strip_html(body), url))
     except Exception:
-        pass
-    return cap_text(_tidy_crude(_strip_html(body), url))
+        text = cap_text(_tidy_crude(_strip_html(body), url))
+    return _prefer_structured(body, text)
+
+
+def _prefer_structured(html: str, text: str) -> str:
+    """F24b: the page's own JSON-LD, when the extractor came back thinner.
+
+    Both sides are compared the same way (:func:`_plain_len`), so "thinner"
+    means fewer visible characters rather than fewer bytes of markup, and the
+    data has to win by a margin so a flat blob never replaces formatted prose
+    that says the same thing. A page that ships no data costs one substring
+    test, and one that ships data it cannot read costs a failed ``json.loads``.
+    """
+    if "application/ld+json" not in html:
+        return text
+    from searchts.more import plain_len, structured_text
+
+    data = structured_text(html)
+    if data and plain_len(data) >= _STRUCTURED_MARGIN * plain_len(text):
+        return cap_text(data)
+    return text
 
 
 def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
