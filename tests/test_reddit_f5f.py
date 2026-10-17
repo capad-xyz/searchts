@@ -1243,3 +1243,40 @@ def test_reddit_walls_are_never_named_on_a_host_that_is_not_reddit(fixture_name,
     the markup) must fall through to the generic path untouched.
     """
     assert reddit.extract_page(url, fixture(fixture_name)) is None
+
+
+def test_a_failed_hop_retry_reports_its_own_reason_next_to_the_original(monkeypatch):
+    """A browser that is missing or still challenged must reach the caller.
+
+    The retry returns None so the caller keeps its original failure, but the
+    reason the retry died has to be on that failure or the user only ever sees
+    the curl-side "challenge" and is never told the browser tier was the gap.
+    """
+    monkeypatch.setattr(reddit, "hop_needs_browser", lambda url, reasons: True)
+
+    def boom(url, **kw):
+        raise unlocker.UnlockerError(
+            url, [("stealth-browser", "not-installed: run searchts install --browser")]
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", boom)
+    err = unlocker.UnlockerError(BATCH, [("curl_cffi", "reddit-challenge")])
+
+    assert unlocker._retry_hop_on_browser(BATCH, err, {}) is None
+    assert err.attempts[0] == ("curl_cffi", "reddit-challenge")
+    assert (
+        "stealth-browser (retry)",
+        "not-installed: run searchts install --browser",
+    ) in err.attempts
+    assert "not-installed" in str(err)
+
+
+def test_a_hop_retry_that_is_not_attempted_leaves_the_error_alone(monkeypatch):
+    """No retry, no new reason: the original attempts are reported exactly."""
+    monkeypatch.setattr(reddit, "hop_needs_browser", lambda url, reasons: False)
+    monkeypatch.setattr(
+        unlocker, "fetch", lambda *a, **k: pytest.fail("fetch must not run")
+    )
+    err = unlocker.UnlockerError(BATCH, [("curl_cffi", "403")])
+    assert unlocker._retry_hop_on_browser(BATCH, err, {}) is None
+    assert err.attempts == [("curl_cffi", "403")]

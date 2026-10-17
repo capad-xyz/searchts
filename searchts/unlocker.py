@@ -2612,7 +2612,8 @@ def _retry_hop_on_browser(url: str, err: "UnlockerError", call: Dict[str, Any]):
     no hook for it (**N4**). The retry carries the same cookies-free, proxy-free
     arguments the first hop had - a proxy or cookies the walk cannot carry is
     dropped by the same rules the scroll uses - and returns ``None`` if it fails,
-    so the caller reports the original failure unchanged.
+    so the caller reports the original failure, with the retry's own reasons
+    appended to its attempts.
     """
     try:
         from searchts.known_hosts import reddit as _reddit
@@ -2631,7 +2632,12 @@ def _retry_hop_on_browser(url: str, err: "UnlockerError", call: Dict[str, Any]):
     retry["use_memory"] = False
     try:
         return fetch(url, **retry)
-    except UnlockerError:
+    except UnlockerError as again:
+        # The caller reports the original error, so the retry's own reason has
+        # to travel on it: a browser that is not installed, or a profile that is
+        # still challenged, is a different next step from "curl was refused".
+        for rung, why in again.attempts or [("stealth-browser", str(again))]:
+            err.attempts.append((f"{rung} (retry)", why))
         return None
 
 
