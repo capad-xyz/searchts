@@ -881,3 +881,20 @@ def test_scroll_rows_are_not_repeated_by_the_pages_walk(monkeypatch):
     # wanted in all, not what the page walk left over: asking for the
     # remainder is how it came back with rows the walk already had.
     assert asked == [300]
+
+
+def test_repeated_list_rows_take_their_byline_and_nothing_else_with_them():
+    page = (
+        "# Index\n\n"
+        "- [Seen](https://e.test/seen)\n  by someone, 2h\n  a snippet of the seen row\n\n"
+        "- [Fresh](https://e.test/fresh)\n  by another, 3h\n\n"
+        "Closing paragraph that is not a row.\n"
+        "[pages: 2 rows of 5, stopped after 1 page. The next page is https://e.test/?p=2]"
+    )
+    out = unlocker._drop_repeated_rows(page, {"https://e.test/seen"})
+    assert "Seen" not in out and "a snippet of the seen row" not in out
+    assert "- [Fresh](https://e.test/fresh)\n  by another, 3h" in out
+    assert "Closing paragraph that is not a row." in out
+    assert "[pages: 2 rows of 5" in out
+    # Nothing seen: byte for byte what came in.
+    assert unlocker._drop_repeated_rows(page, set()) == page
