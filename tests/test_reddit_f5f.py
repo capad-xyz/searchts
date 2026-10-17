@@ -342,6 +342,42 @@ def test_the_click_budget_has_no_default_and_the_rung_without_a_sink_reads_the_k
     assert unlocker._expand_clicks(unlocker._ExpandSink(max_clicks=11)) == 11
 
 
+def test_a_thread_that_quotes_the_humanity_check_is_not_the_humanity_check():
+    """Reddit is full of posts *about* the "Prove your humanity" check.
+
+    Both detectors used to match the bare words anywhere in the first 8 KB, so a
+    readable thread whose title or opening comments quote them was refused as a
+    captcha: a fail-loud lie in the direction that loses a page that was there.
+    The interstitial's own title is the signal, in both places.
+    """
+    thread = (
+        '<shreddit-post post-title="Reddit asks me to prove my humanity" '
+        'author="u/op" permalink="/r/MachineLearning/comments/abc/reddit_asks/">'
+        "<div slot=\"text-body\"><p>Here is the page again.</p></div></shreddit-post>"
+        '<shreddit-comment author="u/c1" score="4">'
+        "<div slot=\"comment\"><p>The interstitial says prove your humanity "
+        "and then serves nothing.</p></div></shreddit-comment>"
+    )
+    # The title is the one thing a real page of that thread cannot have, and
+    # Reddit's interstitial is the one page that cannot have post cards.
+    readable = (
+        "<html><head><title>Reddit - Prove your humanity : r/MachineLearning</title>"
+        f"</head><body>{thread}</body></html>"
+    )
+    assert reddit.page_state(THREAD, readable) == "", "a title prefix is not the interstitial"
+    assert reddit.extract_page(THREAD, readable).failure is None
+    assert looks_blocked(200, readable, {}) is None
+
+    body_only = f"<html><body>{thread}</body></html>"
+    assert reddit.page_state(THREAD, body_only) == ""
+    assert looks_blocked(200, body_only, {}) is None
+
+    # And the real thing is still caught, by the host and by the shared detector.
+    interstitial = fixture("reddit_challenge.html")
+    assert reddit.page_state(BATCH, interstitial) == "reddit-challenge"
+    assert looks_blocked(200, interstitial, {}) == "challenge"
+
+
 def test_expand_more_clicks_until_quiet_and_never_raises():
     class Control:
         def __init__(self, log):

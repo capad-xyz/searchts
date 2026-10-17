@@ -1647,8 +1647,12 @@ _STATE_NSFW = "reddit-nsfw-gate"
 _STATE_CHALLENGE = "reddit-challenge"
 
 _CHALLENGE_RE = re.compile(
-    r"<title>\s*reddit\s*-\s*prove your humanity\s*</title>"
-    r"|prove your humanity",
+    # The interstitial's own title, and nothing looser. Both saved copies
+    # (2026-10-17, 3.4 KB trimmed and 167 KB raw) carry exactly this title, and
+    # a thread whose *comments* quote the words is a thread about Reddit's
+    # captcha, not a captcha: matching the bare phrase anywhere would fail a
+    # readable page loudly, which is the one error this file must not make.
+    r"<title>\s*reddit\s*-\s*prove your humanity\s*</title>",
     re.IGNORECASE,
 )
 

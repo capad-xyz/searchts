@@ -96,7 +96,15 @@ _BLOCK_PHRASES = (
     # a reCAPTCHA mount, 0 post cards, and it read as an *empty feed*. Reddit
     # shows it or not from the browser's persistent profile, so the same URL
     # returned 24 posts to the browser rung in the same minute.
-    "prove your humanity",
+    #
+    # Matched as the interstitial's whole title element, not as a bare phrase:
+    # "prove your humanity" is what people *write about* on Reddit, and this list
+    # is checked against the first 8 KB of a page, so a thread whose title or
+    # opening comments quote the words was refused as a captcha (F5f). A thread
+    # page's own title ends in " : r/<sub>", so the closing tag is what tells
+    # the interstitial from a post *about* it. Measured at offset 163 of 167,165
+    # in the raw page, far inside the 8 KB window this list searches.
+    "reddit - prove your humanity</title>",
     "let us know you're a real person",
     "let us know you are a real person",
     "we're committed to safety",  # Reddit interstitial lead-in (short extract)
