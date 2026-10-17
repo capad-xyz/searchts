@@ -498,9 +498,7 @@ There is no web deploy target. `searchts` ships as a Python package.
   green CI run says nothing about the stealth-browser or audio-transcription
   code paths.
 - **`docs/troubleshooting.md`** is agent-facing (fail-loud, pipx/uvx, F11). This runbook's failures table is still the contributor replacement for literal CLI strings.
-- **`docs/install.md` never mentions the extras.** No ffmpeg, whisper,
-  patchright, chromium, `[browser]`, `[mcp]` or `[local-transcribe]` anywhere in
-  `docs/`. Its "Directory Rules" table also assumes `/tmp/`, which is Unix-only.
+- **`docs/install.md` does not cover the transcription extras.** It names `[mcp]`, `[browser]` and `install --browser`, but no ffmpeg, whisper or `[local-transcribe]` appears anywhere in `docs/`.
 - **`rookiepy` is gone from cookie extraction.** `searchts/cookie_extract.py` no
   longer tries it: rookiepy pins pyo3 0.20, which has no wheel for Python 3.13+,
   so the suggested install could not build. Firefox-derived browsers (Zen,

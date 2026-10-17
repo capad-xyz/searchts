@@ -50,7 +50,7 @@ The package you install is free and keyless. The fetch and the browser run on yo
 
 If no tier comes back with real content, an optional human-in-the-loop step opens a real browser so you can clear the page once and continue. That covers interactive CAPTCHAs and soft walls alike: a login page served as HTTP 200 is not a challenge, but it is still a page only a human gets past. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
 
-**What it won't do.** It will not pretend a wall page is the article. A login the user did not hand over still fails, with the reason. Reusing a login for `read` is [F27](PLAN.md) and is not in this release. A DataDome device-check is not a permanent failure: the stealth browser is supposed to let that script finish, and to take a simple click (continue, a checkbox, a press-and-hold that is one action). A puzzle that asks a person to recognize images still stops. The package will not route you through a paid residential proxy by default. A release never claims a site reads until it does. `datadome.co` is still a fail on the current scorecard. That is a measurement, not a rule.
+**What it won't do.** It will not pretend a wall page is the article. A login the user did not hand over still fails, with the reason. `read` can reuse a login only when you hand it one, for the one site in the command: `searchts read URL --cookies-from-browser firefox --yes` copies that site's cookies from a Firefox-family browser for this session, and `searchts login signin URL` signs in once in a browser searchts opens. A Chrome cookie file that App-Bound Encryption locks is never decrypted; start Chrome with a debugger port and pass `--cdp-port`. Signing in on a remote browser is not built ([F27](PLAN.md)). A DataDome device-check is not a permanent failure: the stealth browser is supposed to let that script finish, and to take a simple click (continue, a checkbox, a press-and-hold that is one action). A puzzle that asks a person to recognize images still stops. The package will not route you through a paid residential proxy by default. A release never claims a site reads until it does. `datadome.co` is still a fail on the current scorecard. That is a measurement, not a rule.
 
 ## AI-chat share links
 
@@ -120,7 +120,8 @@ searchts get https://example.com/logo.png  # download one asset (image/PDF/font/
 searchts doctor                            # see what is configured and working
 ```
 
-`read` flags: `--json`, `--backend <tier>`, `--human` (hand off a CAPTCHA or login wall to a real browser), `--scrub` (redact injection).
+`read` flags: `--json`, `--backend <tier>`, `--human` (hand off a CAPTCHA or login wall to a real browser), `--scrub` (redact injection), `--pages <n>` (follow the next page, curl only, max 5), `--items <n>` (keep following until this many list rows), `--proxy <url>` (route through a proxy; `--proxy-trusted` lets a remote proxy operator see the Cookie header). Logged-in reads, all opt-in and for the one site in the command: `--cookies-from-browser <browser>` with `--yes` (copy that site's cookies for this session), `--cookies <path>` (a searchts-owned cookie file), `--cdp-port <port>` (cookies from your localhost debugger port).
+`login` verbs: `searchts login signin <url>` (sign in once in a browser searchts opens; add `--yes` to keep it), `login keep <url>`, `login kill <url>` (delete searchts's copy; your own browser is untouched unless you pass `--also-browser`), `login list`, `login purge-scratch`.
 `search` flags: `-n <count>`, `--json`, `--provider <name>`. Content goes to stdout (pipeable); status to stderr.
 `grab` flags: `--out <dir>`, `--kinds <images,icons,css,fonts,svg>`, `--read` (also save page.md), `--max <n>`, `--json`.
 
@@ -135,7 +136,7 @@ Add searchts to your agent in one line - as an MCP server, or as a Claude Code s
 Two ways, both one command:
 
 ```bash
-# 1) MCP: always-on read_url + web_search + fetch_asset + grab_site + get_status + transcribe
+# 1) MCP: always-on read_url + web_search + fetch_asset + grab_site + get_status + transcribe + login_status / login_signin / login_kill
 # Try / no install / Claude cannot see PATH:
 claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 # Keep (after pipx install "searchts[mcp]"):
@@ -147,7 +148,7 @@ claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 searchts skill install        # writes ~/.claude/commands/searchts.md
 ```
 
-See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/docs/mcp.md) for all six tools (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`), their inputs and outputs, and when to use each.
+See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/docs/mcp.md) for all nine tools (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_kill`), their inputs and outputs, and when to use each.
 
 ## Features
 
@@ -158,7 +159,7 @@ See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/d
 - **Prompt-injection scrubbing**: strips invisible/bidi characters, flags injection indicators, optional redaction, so untrusted page content is safer to feed a model.
 - **Per-domain backend memory**: remembers which tier worked per domain and tries it first (`SEARCHTS_NO_MEMORY=1` to disable).
 - **Jina opt-out**: the JS-render relay is on by default; `SEARCHTS_NO_JINA=1` (or `jina: false` in `~/.searchts` config) skips it so URLs never hit `r.jina.ai`.
-- **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`), and a Python library.
+- **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_kill`), and a Python library.
 
 ## Use as a library
 
@@ -203,7 +204,7 @@ Latest run: [docs/scorecard.md](https://github.com/capad-xyz/searchts/blob/main/
 Search works with no keys (DuckDuckGo). Everything else is optional, via `searchts configure` or a `.env` (see `.env.example`):
 
 - **Search providers**: Exa, Brave, Tavily API keys, or a self-hosted `SEARXNG_URL`, for more and better results.
-- **Transcription**: a Groq or OpenAI (Whisper) key, plus `ffmpeg` and `yt-dlp`. Login-gated video: `searchts transcribe URL --cookies-from-browser chrome` (opt-in; `read` does not use it yet, [F27](PLAN.md)).
+- **Transcription**: a Groq or OpenAI (Whisper) key, plus `ffmpeg` and `yt-dlp`. Login-gated video: `searchts transcribe URL --cookies-from-browser chrome` (opt-in; `read` has its own opt-ins, see the `read` flags above).
 - **GitHub token** for higher rate limits.
 
 Run `searchts doctor` to check what is configured and working.
