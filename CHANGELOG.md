@@ -2,6 +2,20 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.16.0](https://github.com/capad-xyz/searchts/compare/v0.15.0...v0.16.0) (2026-10-17)
+
+
+### Added
+
+* **generic:** read unknown pages with more fidelity (F24) ([#382](https://github.com/capad-xyz/searchts/issues/382)) ([a9cf1d4](https://github.com/capad-xyz/searchts/commit/a9cf1d4dbf0180de3cc2345fbf2e185eb15ce49a))
+* **read:** scroll, expand and ceilings for long pages (F23c, F23d, F23e) ([#376](https://github.com/capad-xyz/searchts/issues/376)) ([21aef47](https://github.com/capad-xyz/searchts/commit/21aef47f4d0f15d6681356ac2b91cbf61a09f41a))
+* **reddit:** read the rest of Reddit through the one read path ([#380](https://github.com/capad-xyz/searchts/issues/380)) ([cd9cc39](https://github.com/capad-xyz/searchts/commit/cd9cc3973d0893ed422c70ca6ae1557064f7a212))
+
+
+### Fixed
+
+* **read:** the items ceiling stops the page walk, and --expand never drops content ([#381](https://github.com/capad-xyz/searchts/issues/381)) ([0c10837](https://github.com/capad-xyz/searchts/commit/0c10837166f92ef06433e86c6e3e7cbd45c3dafc))
+
 ## [0.15.0](https://github.com/capad-xyz/searchts/compare/v0.14.1...v0.15.0) (2026-10-13)
 
 
