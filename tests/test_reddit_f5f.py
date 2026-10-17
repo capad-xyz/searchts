@@ -135,6 +135,16 @@ def test_listing_reads_and_hands_back_reddits_own_cursor():
     assert "&amp;" not in p.next_url  # unescaped, or the next request is broken
     assert p.keys and len(set(p.keys)) == len(p.keys), "one identity per row"
     assert [m["kind"] for m in p.more] == ["next-page"]
+    # The note counts the page that was just read, and never the batch behind the
+    # cursor: that count is Reddit's and we have not seen it. Measured live
+    # 2026-10-17 (artifacts f5f/r3/r3_listing_items): 3 cards on page one, 24
+    # on the batch its cursor served, and the note claimed a 3-post batch.
+    note = p.more[0]["note"]
+    assert note == (
+        f"[more: after these 3 cards, Reddit's own cursor for the next batch of "
+        f"this feed is {p.next_url}]"
+    ), note
+    assert p.more[0]["url"] == p.next_url
 
 
 def test_batch_is_a_listing_and_carries_the_next_cursor_on():

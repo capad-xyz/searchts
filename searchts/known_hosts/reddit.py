@@ -1738,11 +1738,12 @@ def page_state(url: str, html: str) -> str:
     # The two "this is not here" wrappers only count on a page with nothing in
     # it. A thread that explains the wrapper carries the class name and the id,
     # and it has a post of its own; a page Reddit refused has no post element at
-    # all (checked on every wall fixture saved here).
-    bare = not _has_titled_post(text)
-    if bare and _COMMUNITY_ERROR_RE.search(text):
+    # all (checked on every wall fixture saved here). The cheap element match
+    # runs first, so the scan for a post element is only spent on a page that
+    # already looks like one of these walls.
+    if _COMMUNITY_ERROR_RE.search(text) and not _has_titled_post(text):
         return _STATE_NOT_FOUND
-    if bare and _FORBIDDEN_RE.search(text):
+    if _FORBIDDEN_RE.search(text) and not _has_titled_post(text):
         return _STATE_POST_GONE
     if _op_is_archived(text):
         return _STATE_ARCHIVED
@@ -1880,8 +1881,14 @@ def _listing_page(url: str, html: str, batch: bool) -> Optional[RedditPage]:
         page.more.append(
             _more(
                 "next-page",
-                f"[more: Reddit has another {len(rows) + len(comments)}-post batch "
-                f"after these; it is {nxt}]",
+                # The count is the page just read, never the batch behind the
+                # cursor: that one is Reddit's, and saying otherwise is a number
+                # we do not have. Measured 2026-10-17 on /r/MachineLearning/hot
+                # (artifacts f5f/r3/r3_listing_items): page one holds 3 cards,
+                # the cursor it printed went on to serve 24, and the note said
+                # "another 3-post batch".
+                f"[more: after these {len(rows) + len(comments)} cards, Reddit's "
+                f"own cursor for the next batch of this feed is {nxt}]",
                 nxt,
             )
         )
