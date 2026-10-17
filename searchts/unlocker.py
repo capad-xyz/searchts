@@ -992,27 +992,38 @@ def _plain_len(markdown: str) -> int:
     return plain_len(markdown)
 
 
-#: Below this the served markup has no text in it at all.
+#: Below this a page is short enough that its own markup states the app shape.
 _APP_SHELL_MAX_CHARS = 60
+#: A page this big that still shows this few characters is a client app, not a
+#: read an HTTP rung could have completed.
+_APP_SHELL_MIN_HTML = 100_000
+_APP_SHELL_MAX_VISIBLE = 1_200
+#: Inline script this long, on a page that shows almost no text, is the app's
+#: own state and bundle rather than an analytics tag a static page also ships.
+_APP_SHELL_MIN_INLINE = 50_000
+_TAG_RE = re.compile(r"(?s)<[^>]*>")
+_INLINE_SCRIPT_RE = re.compile(r"(?is)<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script\s*>")
 
 
-def _is_app_shell(html: str, text: str) -> bool:
-    """True when the markup ships no text and says a client app drew the page.
+def _visible_markup_len(markup: str) -> int:
+    """Characters a reader would see in the served markup, tags and scripts off."""
+    return len(re.sub(r"\s+", " ", _TAG_RE.sub(" ", markup)).strip())
 
-    Measured on a real video page: 1.4 MB of HTML, 225 characters of visible
-    text, no media URL anywhere in the served markup, and a mount node with
-    nothing in it. A read like that is not a thin article, it is a page this
-    address never sends, and the only rung that can change it is the browser.
 
-    The tests are the page's own, not the host's: no text, and one of the
-    shapes an app leaves behind (its state in a script, an empty mount node, a
-    "enable JavaScript" notice, a module script).
+def _inline_script_chars(html: str) -> int:
+    """Characters of inline script, the app's state and bundle in the markup."""
+    return sum(len(m.group(1) or "") for m in _INLINE_SCRIPT_RE.finditer(html))
+
+
+def _app_signal(html: str, visible: str) -> bool:
+    """A shape a client app leaves in the markup: state, a mount node, no-JS.
+
+    These are the page's own structures, never a host name: app state in a
+    script, a known empty mount node, an "enable JavaScript" notice, or a
+    module script.
     """
-    if not html or _plain_len(text) >= _APP_SHELL_MAX_CHARS:
-        return False
     if any(marker in html for marker in _APP_STATE_MARKERS):
         return True
-    visible = _SCRIPTISH_RE.sub(" ", html)
     if _NEEDS_JS.search(visible):
         return True
     try:
@@ -1030,6 +1041,34 @@ def _is_app_shell(html: str, text: str) -> bool:
         if el.tag.lower() == "script" and (el.get("type") or "").strip().lower() == "module":
             return True
     return False
+
+
+def _is_app_shell(html: str, text: str) -> bool:
+    """True when the page was drawn by a client app this rung cannot run.
+
+    Two measured shapes. A short page (under :data:`_APP_SHELL_MAX_CHARS` of
+    extract) that still carries an app's own structure is one; the tests are the
+    page's, not the host's. Bigger than that, the served markup itself gives the
+    page away: a real video page measured 1.4 MB of HTML that showed 234
+    characters of text, and a social post page 738 KB that showed 1.1 KB, both
+    of them all script and a mount node, none of it the content a reader came
+    for. A page that big with text that thin is not a truncated article: the
+    article would still be in the markup. No HTTP rung can read it, and the one
+    request already made is never repeated to decide this.
+    """
+    if not html:
+        return False
+    visible = _SCRIPTISH_RE.sub(" ", html)
+    if _plain_len(text) < _APP_SHELL_MAX_CHARS and _app_signal(html, visible):
+        return True
+    return (
+        len(html) >= _APP_SHELL_MIN_HTML
+        and _visible_markup_len(visible) <= _APP_SHELL_MAX_VISIBLE
+        and (
+            _app_signal(html, visible)
+            or _inline_script_chars(html) >= _APP_SHELL_MIN_INLINE
+        )
+    )
 
 
 def whole_short_page(html: str, text: str) -> bool:
@@ -2656,14 +2695,16 @@ def _app_shell_hint() -> str:
 
     if _scroll.browser_available():
         return (
-            "this page is a JS app: the markup it served carries no text, so "
-            "only the browser tier can read it, and that tier is sent no "
-            "cookies. The browser rung did not manage this page either."
+            "this page is a JS app: the markup it served carries almost none "
+            "of its text, so only the browser tier can read it, and that tier "
+            "is sent no cookies. The browser rung did not manage this page "
+            "either."
         )
     return (
-        "this page is a JS app: the markup it served carries no text, so only "
-        "the browser tier can read it, and that tier is sent no cookies, so "
-        "there is no rung left that can. Run: searchts install --browser"
+        "this page is a JS app: the markup it served carries almost none of "
+        "its text, so only the browser tier can read it, and that tier is sent "
+        "no cookies, so there is no rung left that can. Run: searchts install "
+        "--browser"
     )
 
 

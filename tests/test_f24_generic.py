@@ -291,7 +291,7 @@ def test_the_note_counts_every_fold_on_the_page():
         ("Use `a`and `b`or it.", "Use `a` and `b` or it."),
         ("Set `--items`for the count.", "Set `--items` for the count."),
         ("**bold**text follows.", "**bold** text follows."),
-        ("__bold__text follows.", "__bold** text follows.".replace("__bold**", "__bold__")),
+        ("__bold__text follows.", "__bold__ text follows."),
         ("**bold** and `code`x", "**bold** and `code` x"),
     ],
 )
@@ -757,6 +757,59 @@ def test_a_thin_read_that_is_not_an_app_gets_no_hint(monkeypatch):
             "https://example.org/page", backends=["curl_cffi"], use_memory=False
         )
     assert "JS app" not in raised.value.hint
+
+
+def _big_app_shell() -> str:
+    """The measured video-page shape: megabytes of script, a mount, little text.
+
+    Measured on a real video page: 1.4 MB of HTML and 234 characters of visible
+    text. This fixture keeps the ratio and names no site.
+    """
+    machine = "<script>" + "var x=1;" * 20_000 + "</script>"
+    return (
+        "<html><head><title>A video page</title></head><body>"
+        "<div id='stage'></div>"
+        + machine
+        + "<div id='player'></div>"
+        "<footer>About Press Copyright Contact us</footer>"
+        "<iframe src='/embed/xyz'></iframe>"
+        "</body></html>"
+    )
+
+
+def test_a_big_page_that_shows_no_text_is_an_app_shell():
+    html = _big_app_shell()
+    assert len(html) > unlocker._APP_SHELL_MIN_HTML
+    assert unlocker._is_app_shell(html, "About Press Copyright Contact us") is True
+
+
+def test_a_big_page_with_its_content_in_the_markup_is_not_an_app_shell():
+    html = f"<html><body><main>{_prose(200, size=4)}</main></body></html>"
+    assert len(html) > unlocker._APP_SHELL_MIN_HTML
+    assert unlocker._is_app_shell(html, "a short extract") is False
+
+
+def test_a_big_image_page_is_not_called_a_js_app():
+    """Little text and no script is a gallery, not an app; F24a names the images."""
+    imgs = "".join(f'<img src="/g/{i}.jpg" alt="Photo {i}">' for i in range(4000))
+    html = f"<html><body><main>{imgs}</main></body></html>"
+    assert len(html) > unlocker._APP_SHELL_MIN_HTML
+    assert unlocker._is_app_shell(html, "One caption.") is False
+
+
+def test_a_real_app_shell_page_gets_the_js_app_hint(monkeypatch):
+    from searchts import scroll
+
+    monkeypatch.setattr(scroll, "browser_available", lambda: False)
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi", lambda url, **kw: (200, _big_app_shell(), url, {})
+    )
+    with pytest.raises(unlocker.UnlockerError) as raised:
+        unlocker.fetch(
+            "https://example.org/watch/1", backends=["curl_cffi"],
+            use_memory=False, progress=False,
+        )
+    assert "this page is a JS app" in raised.value.hint
 
 
 def test_the_cookie_hint_says_the_browser_tier_gets_no_cookies(monkeypatch):
