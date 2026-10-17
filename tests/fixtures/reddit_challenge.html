@@ -1,0 +1,118 @@
+<!-- Reddit's "Prove your humanity" interstitial, served on HTTP 200 to a
+     direct (non-browser) request for a next-batch cursor on 2026-10-17 from
+     this box. URL fetched:
+     https://www.reddit.com/svc/shreddit/community-more-posts/hot/?after=dDNfMXg3NWVkYg%3D%3D&t=DAY&name=MachineLearning
+     Real body was 167,165 characters; the head and the reCAPTCHA form are
+     kept verbatim, the inline stylesheet is dropped. The recaptcha site key is
+     Reddit's public one. This is what an agent must NOT read as an empty feed. -->
+<!DOCTYPE html>
+  <html lang="en">
+  <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Reddit - Prove your humanity</title>
+      <script src="https://www.google.com/recaptcha/api.js"></script>
+      <link href="https://www.redditstatic.com/shreddit/assets/favicon/64x64.png" rel="icon shortcut" sizes="64x64" />
+      <script>
+      function submit() {
+          document.forms[0].submit();
+      }
+      </script>
+      <style>
+      body {
+          position: relative;
+          color: #2a3c42;
+          margin: 0;
+          height: 100vh;
+          font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      }
+
+      .header {
+          width: 100%;
+          height: 56px;
+          background: white;
+          border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          padding: 0 14px;
+          box-sizing: border-box;
+      }
+
+      .header a img {
+          width: 100px;
+      }
+
+      .footer {
+          position: absolute;
+          bottom: 0;
+      }
+
+      .main {
+          width: 100%;
+          max-width: 480px;
+          margin: 40px auto 0;
+          background: white;
+          padding: 0 14px;
+          box-sizing: border-box;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-direction: column;
+          text-align: center;
+      }
+
+      .main h1 {
+          font-size: 24px;
+          margin-bottom: 16px;
+          color: #0f1a1c;
+      }
+
+      .main p {
+          margin-bottom: 40px;
+      }
+
+      .footer {
+          font-size: 12px;
+          width: 100%;
+          display: flex;
+          justify-content: space-between;
+          padding: 0 14px;
+          box-sizing: border-box;
+          height: 64px;
+          align-items: center;
+      }
+
+      @media (max-width: 600px) {
+          .footer {
+          flex-direction: column;
+          justify-content: center;
+          font-size: 11px;
+          }
+
+          .footer > a {
+          margin-bottom: 5px;
+          }
+      }
+
+      .footer a {
+          color: #576f76;
+          text-decoration: none;
+      }
+
+      .footer > a {
+          color: #0f1a1c;
+      }
+
+      .footer div {
+          display: flex;
+          gap: 24px;
+      }
+      </style>
+  </head>
+  <body>
+<form method="POST" action="/svc/shreddit/community-more-posts/hot/?after=dDNfMXg3NWVkYg%3D%3D&amp;t=DAY&amp;name=MachineLearning&amp;adDistance=2&amp;ad_posts_served=1&amp;navigationSessionId=25640ea1-ac93-4c56-9666-48c79745110c&amp;feedLength=4&amp;captcha=1">
+          <div class="g-recaptcha" data-sitekey="6LeTlV4oAAAAAGioktuFt-KvUtwKRJRfc8A7UJws" data-action="edge" data-callback="submit"></div>
+      </form>
+  </body>
+</html>

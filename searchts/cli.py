@@ -196,7 +196,8 @@ def _run():
         "--expand",
         action="store_true",
         help="Open the text the page is holding back: closed <details> and buttons "
-             "labelled read/show/see more. Off by default. Never follows a link, a form "
+             "labelled read/show/see more, and a known host's own controls (a Reddit "
+             "thread's 'more replies'). Off by default. Never follows a link, a form "
              "or a sign-in; a 'continue reading' paywall is named, not opened "
              "(ceiling SEARCHTS_MAX_EXPAND_CLICKS)",
     )
@@ -2326,8 +2327,10 @@ def _cmd_setup():
         print("  Current status: -- not set. Skipped; the public API works too")
     print()
 
-    # Step 3: Reddit — rdt-cli
-    print("[Info] Reddit -- a logged-in session is mandatory (no zero-config path). OpenCLI is recommended on desktop; or rdt-cli:")
+    # Step 3: Reddit — rdt-cli (a channel; `read` does not need a login, F5f)
+    print("[Info] Reddit -- no login needed to `searchts read` a public page (that is the "
+          "known-host ring; it needs searchts install --browser and a profile Reddit knows). "
+          "These CHANNEL backends do need one:")
     print(f"  Install: pipx install '{_RDT_GIT_SOURCE}'")
     print("  Then run: rdt login (you must log into reddit.com in the browser first)")
     print()

@@ -16,6 +16,11 @@ module defines:
 
 Adding a host is dropping in a new module — no registry edits needed.
 
+Those two names are the whole contract (**N4**): a ladder that needed a third
+one per host would be a plugin framework wearing a ring's clothes, so a caller
+that wants something host-specific imports that host's file and asks it, the way
+:func:`unlocker._host_wall_reason` does.
+
 Public API: ``matches(url)`` and ``extract(url)``. ``extract`` never raises,
 so ``unlocker.fetch`` can always fall through to the normal ladder.
 

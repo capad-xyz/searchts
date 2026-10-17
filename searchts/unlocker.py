@@ -91,6 +91,20 @@ _BLOCK_PHRASES = (
     "your request has been blocked as a possible bot",  # Fastly Bot Management block copy
     "checking if the site connection is secure",  # Cloudflare interstitial (alt phrasing)
     "complete the challenge below",  # Reddit bot interstitial (often HTTP 200)
+    # Reddit's current interstitial, measured 2026-10-17: the direct (non-browser)
+    # request for a next-batch cursor was answered HTTP 200 with this title and
+    # a reCAPTCHA mount, 0 post cards, and it read as an *empty feed*. Reddit
+    # shows it or not from the browser's persistent profile, so the same URL
+    # returned 24 posts to the browser rung in the same minute.
+    #
+    # Matched as the interstitial's whole title element, not as a bare phrase:
+    # "prove your humanity" is what people *write about* on Reddit, and this list
+    # is checked against the first 8 KB of a page, so a thread whose title or
+    # opening comments quote the words was refused as a captcha (F5f). A thread
+    # page's own title ends in " : r/<sub>", so the closing tag is what tells
+    # the interstitial from a post *about* it. Measured at offset 163 of 167,165
+    # in the raw page, far inside the 8 KB window this list searches.
+    "reddit - prove your humanity</title>",
     "let us know you're a real person",
     "let us know you are a real person",
     "we're committed to safety",  # Reddit interstitial lead-in (short extract)
@@ -203,6 +217,13 @@ class FetchResult:
     #: what ``--expand`` opened, a named paywall). Appended inside ``_finalize``,
     #: so they are sanitized with the rest of the text rather than after it.
     extra_notes: List[str] = field(default_factory=list, repr=False, compare=False)
+    #: One identity per index row this read added, when the producer can name
+    #: them (a known-host feed knows the post id on every card). ``--items``
+    #: dedupes on these because a site's own cursor can hand back a row the
+    #: previous window already had, and counting it twice would be a lie about
+    #: how many rows were read. None means "count the markdown rows", which is
+    #: what every other read does.
+    index_keys: Optional[List[str]] = field(default=None, repr=False, compare=False)
 
 
 @dataclass
@@ -1275,6 +1296,22 @@ def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:
         return pool.submit(fn, *args, **kwargs).result()
 
 
+def _expand_clicks(expand_sink: Optional["_ExpandSink"]) -> int:
+    """How many presses an expand pass may spend. The knobs answer (F23e).
+
+    The sink carries the budget the read already resolved, so the generic pass
+    and a known host's own controls spend **one** budget, not two. A caller that
+    reaches the rung without a sink still gets the user's
+    ``SEARCHTS_MAX_EXPAND_CLICKS`` rather than a literal: a read has one click
+    budget, and it is the ceiling either way (F5f).
+    """
+    if expand_sink is not None:
+        return expand_sink.max_clicks
+    from searchts import knobs as _expand_knobs
+
+    return _expand_knobs.resolve().expand_clicks
+
+
 def _fetch_stealth(
     url: str, timeout: int = 60, progress: Optional[bool] = None,
     proxy: Optional[Dict[str, Any]] = None,
@@ -1405,15 +1442,26 @@ def _fetch_stealth_impl(
                 opened = _expand_mod.open_details_in_page(page)
                 if opened:
                     html = _page_content(page, progress=want_tick)
-                report = _expand_mod.click_in_page(
-                    page, expand_sink.max_clicks if expand_sink else 8
-                )
+                clicks = _expand_clicks(expand_sink)
+                report = _expand_mod.click_in_page(page, clicks)
                 report.details = opened
                 report.pin_paywall(_page_content(page, progress=False))
                 if expand_sink is not None:
                     expand_sink.add(report)
                 elif report.note():
                     html = _page_content(page, progress=False)
+                # F5f: a known host's own controls, on top of the generic pass.
+                # Reddit serves the first window of a thread and keeps the rest
+                # behind its ``more-comments-partial``, which the generic
+                # read/show/see-more words never match. The selectors stay in the
+                # one ring file that already knows the host, and the row budget
+                # comes from the knobs, so nothing here decides a number.
+                host_html = _expand_known_host(
+                    page, url, html, clicks,
+                    lambda msg: _stderr_tick(msg, want_tick),
+                )
+                if host_html != html:
+                    html = host_html
             # If the challenge cleared, the real status is 200 regardless of the
             # initial challenge response; otherwise keep the original status.
             status = 200 if looks_blocked(200, html) is None else init_status
@@ -1429,6 +1477,77 @@ def _fetch_stealth_impl(
             return status, html, final, headers
         finally:
             browser.close()
+
+
+def _host_wall_reason(url: str, html: str) -> str:
+    """The known host's own name for the wall in ``html``, or ``""``.
+
+    F5f. Only Reddit has one of these today, so this asks one file, and only for
+    URLs that file itself claims: ``page_state`` matches copy in the document,
+    which is right for a page that really is that page and wrong for a page that
+    merely quotes the words. A host with nothing to say returns ``""`` and the
+    ladder keeps the generic reason.
+    """
+    from searchts.known_hosts import reddit as _reddit
+
+    if not _reddit.is_reddit_url(url or ""):
+        return ""
+    try:
+        return _reddit.page_state(url, html) or ""
+    except Exception:  # noqa: BLE001 - a named reason must never break the ladder
+        return ""
+
+
+def _expand_known_host(
+    page, url: str, html: str, clicks: int, tick=None
+) -> str:
+    """Let a known host open what its own page hides behind controls (F5f).
+
+    Reddit serves the first window of a thread and keeps the rest behind its
+    ``more-comments-partial`` controls; opening them is a browser action, and the
+    selectors belong to the one fail-open ring file that already knows the host.
+    A host the ring does not recognise returns its HTML unchanged, so this is not
+    a routing decision and never a silent one: only ``expand`` reaches here, and
+    only after the caller asked.
+
+    Asked the same way as :func:`_host_wall_reason`: import the one host file
+    that has an answer, check the host, call it. The ring gains no third hook for
+    it (**N4**).
+
+    ``clicks`` is the press budget the caller already resolved from
+    ``SEARCHTS_MAX_EXPAND_CLICKS`` (the same number the generic pass spent, so a
+    read has one click budget and not two). ``want`` is the row ceiling,
+    ``SEARCHTS_MAX_ITEMS``: a comment is a row, and the user caps rows there.
+    Both are read from :mod:`searchts.knobs` and never written here.
+
+    ``tick`` is the caller's stderr narrator (P4.6): each round of opening Reddit's
+    controls waits on the network, and a loop that can sit for many seconds has to
+    say so on the way. It is None when the caller wants silence.
+
+    Returns the fullest HTML seen, or the input unchanged when nothing loaded.
+    """
+    try:
+        from searchts import knobs
+        from searchts.known_hosts import reddit as _reddit
+    except Exception:  # noqa: BLE001 - the ring must never break the ladder
+        return html
+    try:
+        limits = knobs.resolve()
+    except Exception:  # noqa: BLE001 - the ring must never break the ladder
+        return html
+    try:
+        if not _reddit.is_reddit_url(url or ""):
+            return html
+    except Exception:  # noqa: BLE001 - a named host must never break the ladder
+        return html
+    try:
+        _reddit.expand_more(page, limits.items, clicks, tick)
+    except Exception:  # noqa: BLE001 - a failed expand is a shorter read, not a failure
+        return html
+    try:
+        return page.content() or html
+    except Exception:  # noqa: BLE001 - the page's own HTML is still worth returning
+        return html
 
 
 def _fetch_human(url: str, timeout: int = 180) -> Tuple[Optional[int], str, str]:
@@ -1718,6 +1837,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         kickstarter.com/discover/advanced: one press is worth +4,102 characters)
         the relay would quietly win and the read would come back short of what
         was asked for. With ``expand`` the read runs on a rung that has the DOM.
+
+        F5f rides this same bool rather than a count: how many clicks that
+        budget is comes from the ``expand_clicks`` knob, never from here. A known
+        host keeps its own selectors - Reddit's "more replies" partials are its
+        own, not the generic read/show/see-more words.
     """
     if progress is None:
         progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
@@ -1955,11 +2079,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             elif backend == "stealth-browser":
                 # No cookie header here, ever. The browser may carry the proxy,
                 # because that changes the address the challenge is judged from.
-                # Passed only when set, for the same stub-signature reason as
-                # curl above.
                 if proxy_browser or expand:
-                    # Passed only when set, for the same stub-signature reason
-                    # as curl above.
                     status, body, final_url, headers = _fetch_stealth(
                         url, progress=progress, proxy=proxy_browser,
                         expand=expand, expand_sink=expand_sink,
@@ -2024,6 +2144,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 text = body  # Jina already returns markdown
             else:
                 reason = looks_blocked(status, body, headers)
+                if reason == "challenge":
+                    # F5f: "challenge" says a wall was here. When a known host
+                    # can say WHICH one, that is the only actionable fact in the
+                    # run. Measured 2026-10-17: Reddit answers a direct request
+                    # for a next-batch cursor with HTTP 200 and its "Prove your
+                    # humanity" page, which is indistinguishable from any other
+                    # challenge in the body alone.
+                    reason = _host_wall_reason(url, body) or reason
                 if reason:
                     # Say WHICH wall it was when the rung can name one. The
                     # stealth browser reports its device-check stop in headers,
@@ -2039,20 +2167,32 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         unpin(domain)
                         remembered = None
                     continue
-                # F5c: Reddit listing or thread HTML before Trafilatura.
-                reddit_hit = _reddit_listing.extract_from_html(url, body)
-                if reddit_hit:
-                    label, listing_md = reddit_hit
-                    _tick(label)
-                    return _with_auth(
-                        FetchResult(
-                            backend,
-                            listing_md,
-                            status,
-                            final_url=final_url or url,
-                            headers=headers,
-                        )
+                # F5c/F5f: Reddit listing, feed batch, thread, profile or search
+                # from the HTML this rung already downloaded. A page that is a
+                # wall reports itself and the ladder keeps going, so a private,
+                # banned, quarantined, gone or NSFW page never comes back as
+                # navigation chrome wearing a URL.
+                reddit_hit = _reddit_listing.extract_page(url, body)
+                if reddit_hit is not None:
+                    if reddit_hit.failure:
+                        attempts.append((backend, reddit_hit.failure))
+                        _tick(f"  {backend}: {reddit_hit.failure}")
+                        if backend == remembered:
+                            unpin(domain)
+                            remembered = None
+                        continue
+                    _tick(reddit_hit.label)
+                    page_result = FetchResult(
+                        backend,
+                        reddit_hit.markdown,
+                        status,
+                        final_url=final_url or url,
+                        headers=headers,
+                        next_url=reddit_hit.next_url,
+                        more=reddit_hit.as_dicts(),
+                        index_keys=reddit_hit.keys or None,
                     )
+                    return _with_auth(page_result)
                 text = html_to_text(body, url)
 
             text = text or ""
@@ -2206,22 +2346,23 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             _tick(f"  human-browser: {why}")
         else:
             hop = private_hop(url, final_url or url)
-            listing_hit = False
-            if hop:
-                attempts.append(("human-browser", hop))
-                _tick(f"  human-browser: {hop}")
-                text = ""
-            else:
-                # F5c: listing or thread HTML (human rung). Wins even if short,
-                # and even when an earlier rung left a longer thin `best`.
+            page_hit = None
+            text = ""
+            if not hop:
+                # F5c/F5f: listing, batch, thread, profile or search (human
+                # rung). Wins even if short, and even when an earlier rung left
+                # a longer thin `best`. A page that is a wall reports itself, so
+                # a private or quarantined community never reads as its nav bar.
+                # A wall is not ticked here: one rung says its one reason, below,
+                # so the page's own name cannot be answered by "empty-extract"
+                # underneath it.
                 try:
-                    reddit_hit = _reddit_listing.extract_from_html(url, html)
-                    if reddit_hit:
-                        label, listing_md = reddit_hit
-                        _tick(label)
-                        text = listing_md
-                        listing_hit = True
-                    else:
+                    page_hit = _reddit_listing.extract_page(url, html)
+                    if page_hit is not None:
+                        if not page_hit.failure:
+                            _tick(page_hit.label)
+                            text = page_hit.markdown
+                    if not text and page_hit is None:
                         text = html_to_text(html, url)
                 except Exception as e:  # noqa: BLE001 - fail loud, not a traceback
                     text = ""
@@ -2231,7 +2372,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 text
                 and wall is None
                 and (
-                    listing_hit
+                    page_hit is not None
                     or best is None
                     or len(text) > len(best.text)
                 )
@@ -2239,16 +2380,29 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 human = FetchResult(
                     backend="human-browser", text=text, status=status,
                     final_url=final_url or url,
-                    page_html=None if listing_hit else html,
+                    page_html=None if page_hit is not None else html,
+                    next_url=page_hit.next_url if page_hit is not None else None,
+                    more=page_hit.as_dicts() if page_hit is not None else [],
+                    index_keys=(page_hit.keys or None) if page_hit is not None else None,
                 )
-                if listing_hit or len(text) >= min_chars:
+                if page_hit is not None or len(text) >= min_chars:
                     return _with_auth(human)
                 best = human
                 attempts.append(("human-browser", f"thin-{len(text)}b"))
                 _tick(f"  human-browser: thin-{len(text)}b")
-            elif not hop:
-                if human_error:
+            else:
+                # One rung, one line. The reason is decided here and nowhere
+                # else: a page that is a wall is named by that wall, and the
+                # generic "nothing came out" answer cannot be printed under it.
+                # Printing both made one rung read as two failures, and the
+                # second was a lie about the page: it was not empty, it was
+                # refused.
+                if hop:
+                    why = hop
+                elif human_error:
                     why = human_error
+                elif page_hit is not None and page_hit.failure:
+                    why = page_hit.failure
                 elif not text:
                     why = "empty-extract"
                 elif wall is not None:
@@ -2295,7 +2449,45 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             ]
         return _with_auth(deferred)
 
-    raise UnlockerError(url, attempts, _cookie_login_hint(cookie_header, attempts))
+    raise UnlockerError(url, attempts, _final_hint(cookie_header, attempts, url))
+
+
+def _final_hint(
+    cookie_header: str, attempts: List[Tuple[str, str]], url: str
+) -> str:
+    """The one sentence that says what to do next, when the reasons do not.
+
+    Two cases, checked in order. A cookie read that still landed on a login page
+    has one cause and one next step, and three copies of "login-wall" do not say
+    either. A Reddit notice a person has to accept (a quarantine, an over-18
+    gate, a banned community) is the same shape: the ladder is right that it
+    cannot read it, and only the person can move it.
+
+    Within Reddit's reasons the *named content* state wins over the humanity
+    check, and that ordering is the whole point. Measured 2026-10-17 on
+    /r/gryffindor/: curl got the interstitial and the browser rung got the real
+    page, which is a private community. Reporting the first reason said
+    "Prove your humanity" about a page whose answer is "there is no public page
+    to fetch" - true of the request, useless about the URL.
+    """
+    cookie = _cookie_login_hint(cookie_header, attempts)
+    if cookie:
+        return cookie
+    from searchts.known_hosts import reddit as _reddit
+
+    fallback = ""
+    for _backend, why in attempts:
+        if not why.startswith("reddit-"):
+            continue
+        if why == "reddit-challenge":
+            # Held back, not thrown away: when every rung got the interstitial
+            # this is the whole answer, and there is nothing better to say.
+            fallback = fallback or _reddit.state_note(why, url)
+            continue
+        note = _reddit.state_note(why, url)
+        if note:
+            return note
+    return fallback
 
 
 def _cookie_login_hint(
@@ -2363,14 +2555,23 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
         try:
             result = fetch(current, **call)
         except UnlockerError as e:
-            # Page one is the URL the caller asked for: nothing to return, so
-            # the error stands. A later hop failing means the caller already
-            # has real content, and throwing it away to report a URL they never
-            # asked for is a bad trade. Keep the pages, say why the walk ended.
-            if i == 0 or _is_refusal(e):
-                raise
-            _note_walk_stopped(out[-1], current, e)
-            break
+            # F5f: one known host judges the request itself on a next-page
+            # cursor, so the hop is worth a second ask on the rung that has a
+            # profile. Nothing else changes: a hop that fails again is reported
+            # exactly as it would have been.
+            retry = _retry_hop_on_browser(current, e, call) if i else None
+            if retry is not None:
+                result = retry
+            else:
+                # Page one is the URL the caller asked for: nothing to return,
+                # so the error stands. A later hop failing means the caller
+                # already has real content, and throwing it away to report a URL
+                # they never asked for is a bad trade. Keep the pages, say why
+                # the walk ended.
+                if i == 0 or _is_refusal(e):
+                    raise
+                _note_walk_stopped(out[-1], current, e)
+                break
         out.append(result)
         nxt = result.next_url
         if not nxt:
@@ -2393,6 +2594,51 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
     if out:
         _note_knobs(out[0], limits)
     return out
+
+
+def _retry_hop_on_browser(url: str, err: "UnlockerError", call: Dict[str, Any]):
+    """One browser retry of a next-page hop a known host walled off. None if no.
+
+    F5f. A next-page walk is curl-only after the first page (F23b), which is
+    right for a static pager and wrong for a site that judges the request rather
+    than the address: Reddit answers a direct request for its own
+    ``/svc/shreddit/…`` cursor with "Prove your humanity", and the same URL is 24
+    cards in the browser rung. Without this, ``--items`` on Reddit stops at the
+    first window forever.
+
+    Whether the wall is that kind is Reddit's own answer, asked the way
+    :func:`_host_wall_reason` asks it: import the one file that knows the host,
+    check the host, call it. Nothing here knows what Reddit is and the ring gains
+    no hook for it (**N4**). The retry carries the same cookies-free, proxy-free
+    arguments the first hop had - a proxy or cookies the walk cannot carry is
+    dropped by the same rules the scroll uses - and returns ``None`` if it fails,
+    so the caller reports the original failure, with the retry's own reasons
+    appended to its attempts.
+    """
+    try:
+        from searchts.known_hosts import reddit as _reddit
+    except Exception:  # noqa: BLE001 - the ring must never break a walk
+        return None
+    try:
+        if not _reddit.is_reddit_url(url or ""):
+            return None
+        if not _reddit.hop_needs_browser(url, err.attempts):
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    retry = dict(call)
+    retry["backends"] = ["stealth-browser"]
+    retry["allow_human"] = False
+    retry["use_memory"] = False
+    try:
+        return fetch(url, **retry)
+    except UnlockerError as again:
+        # The caller reports the original error, so the retry's own reason has
+        # to travel on it: a browser that is not installed, or a profile that is
+        # still challenged, is a different next step from "curl was refused".
+        for rung, why in again.attempts or [("stealth-browser", str(again))]:
+            err.attempts.append((f"{rung} (retry)", why))
+        return None
 
 
 def _note_knobs(page: "FetchResult", limits) -> None:
@@ -2468,6 +2714,26 @@ def item_count(text: str) -> int:
     return len(_ITEM_LINE.findall(text or ""))
 
 
+def _rows_added(result: "FetchResult", seen: set) -> int:
+    """How many rows this read added that earlier reads did not already have.
+
+    A known host can name every row it added (``FetchResult.index_keys``), and a
+    site's own cursor sometimes hands back a row the previous window had, so the
+    count is of *new* rows. Without keys it is the markdown row count, which is
+    what every read that was not produced by a host with its own cursor has
+    always used.
+    """
+    if result.index_keys is None:
+        return item_count(result.text)
+    fresh = 0
+    for key in result.index_keys:
+        if key in seen:
+            continue
+        seen.add(key)
+        fresh += 1
+    return fresh
+
+
 def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]:
     """Follow next-page links until ``items`` list rows, curl only after the first.
 
@@ -2491,13 +2757,23 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     want = limits.items
     asked = max(1, int(items or 1))
     seen = set()
+    # Row keys are a different namespace from page URLs: one set for both let a
+    # row whose key was a later page's URL end the walk as a "loop".
+    seen_rows: set = set()
     out: List[FetchResult] = []
     current = url
     got = 0
+    repeats = 0
     broke = False
+    looped = False
     for i in range(limits.pages):
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
+            # The cursor pointed at a page this walk already read. A list that
+            # never grows is the one case where a second pass cannot help, and
+            # saying so is the difference between "asked 300, got 11" and a lie
+            # about the list ending there.
+            looped = True
             break
         seen.add(key)
         call = dict(kwargs)
@@ -2523,13 +2799,22 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         try:
             result = fetch(current, **call)
         except UnlockerError as e:
-            if i == 0 or _is_refusal(e):
-                raise
-            _note_walk_stopped(out[-1], current, e)
-            broke = True
-            break
+            # F5f: see ``read_pages``. One known host can refuse a curl hop for
+            # a reason a browser does not share, and a row count that stops at
+            # the first window is the quiet failure this whole feature is for.
+            retry = _retry_hop_on_browser(current, e, call) if i else None
+            if retry is not None:
+                result = retry
+            else:
+                if i == 0 or _is_refusal(e):
+                    raise
+                _note_walk_stopped(out[-1], current, e)
+                broke = True
+                break
         out.append(result)
-        got += item_count(result.text)
+        added = _rows_added(result, seen_rows)
+        got += added
+        repeats += (len(result.index_keys) - added) if result.index_keys is not None else 0
         nxt = result.next_url
         if got >= want or not nxt:
             break
@@ -2547,6 +2832,24 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         return out
     last = out[-1]
     extra = ""
+    if looped and got < want:
+        # F5f. Reddit's own feed cursor (``/svc/shreddit/…?after=…``) hands back
+        # a batch the walk has already read when the feed has stopped moving, and
+        # a walk that stops there says nothing. Named on page one, with the count.
+        extra += (
+            f"\n\n[items: {got} new rows of the {asked} asked for. The feed's own "
+            "cursor pointed back at a page this walk had already read, so the "
+            "walk stopped there; the rows it did not have were never served]"
+        )
+    if repeats:
+        # The feed cursor handed back rows we already had. Saying so is the whole
+        # point of counting new rows: a count that included them would claim to
+        # have read more of the list than it did. The ceiling itself is named by
+        # ``_note_knobs`` below, on this same page.
+        extra += (
+            f"\n\n[items: {got} new rows; {repeats} the feed handed back again "
+            "were not counted twice]"
+        )
     if (
         not broke
         and got < want

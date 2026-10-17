@@ -1,0 +1,1365 @@
+<!-- Trimmed from chain_batch2.html (fetched 2026-10-17). -->
+<!DOCTYPE html><html><body>
+<shreddit-post data-ks-item class="block relative cursor-pointer group bg-neutral-background focus-within:bg-neutral-background-hover hover:bg-neutral-background-hover xs:rounded-4 px-md py-2xs my-2xs nd:visible rgb-action-bar-placeholder [&amp;:not(:defined):not(:has(rpl-action-bar))]:pb-2xl" permalink="/r/MachineLearning/comments/1x7ojxo/p_my_rust_framework_trains_nanogpt_with_the_exact/" content-href="https://www.reddit.com/r/MachineLearning/comments/1x7ojxo/p_my_rust_framework_trains_nanogpt_with_the_exact/" view-context="SubredditFeed" comment-count="13" view-type="cardView" pdp-target="_self" feedIndex="4" award-count="0" hide-awards-button moderation-verdict="" is-embeddable is-desktop-viewport is-awardable created-timestamp="2026-10-16T18:49:12.717000+0000" domain="self.MachineLearning" id="t3_1x7ojxo" post-title="[P] my rust framework trains nanoGPT with the exact same bits as pytorch. worth continuing? [P]" post-language="en" post-type="multi_media" score="0" upvote-ratio="0.42105263157894735" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" author-id="t2_ptjq7mjpm" author="Mental-Feature-2377" icon="https://www.redditstatic.com/avatars/defaults/v2/avatar_default_2.png" data-expected-lcp subreddit-name="MachineLearning">
+       <a data-ks-id="t3_1x7ojxo" slot="full-post-link" class="absolute inset-0" href="https://www.reddit.com/r/MachineLearning/comments/1x7ojxo/p_my_rust_framework_trains_nanogpt_with_the_exact/" target="_self">
+    <faceplate-screen-reader-content>
+    [P] my rust framework trains nanoGPT with the exact same bits as pytorch. worth continuing? [P]
+  </faceplate-screen-reader-content>
+  </a>
+        
+    
+    
+    <span slot="credit-bar" class="flex justify-between text-12 min-h-[32px]  mb-2xs -mt-2xs">
+      <span id="feed-post-credit-bar-t3_1x7ojxo" class="flex flex-wrap text-12 gap-2xs items-center min-w-0 relative">
+         
+    <span slot="authorName" class="flex">
+      <div class="inline-flex items-center max-w-full">
+        
+    
+    <faceplate-hovercard enter-delay="500" leave-delay="150" position="bottom-start" data-id="user-hover-card" close-on-track label="Mental-Feature-2377 details" mouse-only>
+      <faceplate-tracker source="post_credit_bar" action="click" noun="user_profile" class="visible"><a rpl aria-label="Author: u/Mental-Feature-2377" class="flex items-center text-neutral-content visited:text-neutral-content-weak font-bold a
+  
+  
+  
+  no-visited
+  no-underline hover:no-underline
+  
+  cursor-pointer" href="https://www.reddit.com/user/Mental-Feature-2377/"><div class="flex items-center gap-2xs">
+    <span class="inline-flex items-center justify-center w-lg h-lg relative nd:visible nd:block nd:animate-pulse nd:bg-neutral-background-selected" rpl avatar>
+    
+    <span rpl class="inline-block rounded-full  relative [&>:first-child]:h-full [&>:first-child]:w-full [&>:first-child]:mb-0 [&>:first-child]:rounded-[inherit] h-full w-full
+    [&>:first-child]:overflow-hidden [&>:first-child]:max-h-full">
+    <img src="https://www.redditstatic.com/avatars/defaults/v2/avatar_default_2.png?cf_migration=control_1" alt="u/Mental-Feature-2377 avatar" class="h-full w-full">
+  </span></span><span class="inline-flex items-center max-w-full whitespace-nowrap" dir="auto" data-testid="nameplate">
+    <span class="truncate">u/Mental-Feature-2377</span>
+  </span>
+  </div></a></faceplate-tracker>
+      <div slot="content">
+        <faceplate-partial src="/svc/shreddit/user-hover-card/Mental-Feature-2377?subredditName=MachineLearning" loading="programmatic">
+          <div class="w-5xl h-4xl flex items-center justify-center">
+            <faceplate-progress value="20" class="animate-spin"></faceplate-progress>
+          </div>
+        </faceplate-partial>
+      </div>
+    </faceplate-hovercard>
+  
+      </div>
+    </span>
+   
+  <shreddit-async-loader class="contents" bundlename="distinguished_post_tags">
+    <shreddit-distinguished-post-tags post-id="t3_1x7ojxo">
+    </shreddit-distinguished-post-tags>
+  </shreddit-async-loader>  <span class="inline-block my-0 created-separator text-neutral-content-weak" aria-hidden="true">•</span>
+  
+  
+    <faceplate-timeago ts="2026-10-16T18:49:12.717000+0000" format="short" locale="en-US-u-nu-latn" class="whitespace-nowrap text-neutral-content-weak"></faceplate-timeago>
+  
+  <shreddit-brand-affiliate-tag post-id="t3_1x7ojxo" class="contents"></shreddit-brand-affiliate-tag>  
+            
+      </span>
+      <span class="flex items-center ps-xs">
+        
+    
+    <shreddit-async-loader bundlename="status_icons">
+      <shreddit-status-icons class="nd:visible flex items-center gap-2xs isolate" thing-id="t3_1x7ojxo">
+        
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Locked post"><svg rpl aria-label="Locked post" class="hidden lock-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="lock-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.993 8.168h-.429V6.61a5.572 5.572 0 00-5.566-5.566A5.572 5.572 0 004.432 6.61v1.558h-.429a2.005 2.005 0 00-2.005 2.005v3.692a5.054 5.054 0 005.054 5.054h5.892a5.054 5.054 0 005.054-5.054v-3.692a2.005 2.005 0 00-2.005-2.005ZM10.998 15h-2v-3h2v3Zm2.767-6.832H6.232V6.61A3.771 3.771 0 0110 2.844a3.77 3.77 0 013.767 3.766l-.001 1.558Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Stickied post"><svg rpl aria-label="Stickied post" class="hidden stickied-status fill-[color:var(--color-identity-moderator)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="pin-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18.163 6.191a4.194 4.194 0 00-1.237-2.986l-.167-.167a4.197 4.197 0 00-2.986-1.236 4.194 4.194 0 00-2.986 1.237L8.835 4.99a6.267 6.267 0 00-2.708.116 6.276 6.276 0 00-2.798 1.611.902.902 0 00-.001 1.274l3.724 3.723-4.955 4.955a.898.898 0 00.636 1.536c.23 0 .46-.088.636-.264l4.955-4.955 3.644 3.644a.897.897 0 001.273-.001 6.25 6.25 0 001.727-5.499l1.958-1.953a4.197 4.197 0 001.236-2.986h.001Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Archived post"><svg rpl aria-label="Archived post" class="hidden archived-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="archive-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.7 1H4.3C2.48 1 1 2.48 1 4.3v2.76c0 .5.4.9.9.9H2v6.74C2 16.52 3.48 18 5.3 18h9.4c1.82 0 3.3-1.48 3.3-3.3V7.96h.1c.5 0 .9-.4.9-.9V4.3C19 2.48 17.52 1 15.7 1ZM13 11.87H7v-1.8h6v1.8Zm4.2-5.71H2.8V4.3c0-.83.67-1.5 1.5-1.5h11.4c.83 0 1.5.67 1.5 1.5v1.86Z"></path>
+    </svg></rpl-tooltip>
+      </shreddit-status-icons>
+    </shreddit-async-loader>
+  
+        
+        <span class="flex items-center -me-[7px]"><shreddit-async-loader class="relative w-xl h-xl " bundleName="shreddit_post_overflow_menu">
+    <shreddit-post-overflow-menu class="group/overflow-menu" post-id="t3_1x7ojxo" author-id="t2_ptjq7mjpm" author-name="Mental-Feature-2377" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" post-type="multi_media" score="0" comment-count="13" permalink="/r/MachineLearning/comments/1x7ojxo/p_my_rust_framework_trains_nanogpt_with_the_exact/" post-view-context="SubredditFeed" has-post-flair is-desktop-viewport ama-state="" ama-starts-at="" ama-ends-at="" feed-index="4" should-render-follow-menu-item is-post-awardable should-render-award-menu-item recommendation-context-json="{}" translation-state="" source-id="t3_1x7ojxo" data-faceplate-tracking-context="{&quot;post&quot;:{&quot;id&quot;:&quot;t3_1x7ojxo&quot;,&quot;type&quot;:&quot;multi_media&quot;,&quot;score&quot;:0,&quot;number_comments&quot;:13},&quot;subreddit&quot;:{&quot;id&quot;:&quot;t5_2r3gv&quot;},&quot;action_info&quot;:{&quot;position&quot;:4}}">
+      <button rpl aria-label="Open user actions" class="
+button-small px-[calc(var(--rem10)-var(--button-border-width,0px))]
+button-plain
+
+
+icon
+items-center justify-center
+button inline-flex ">
+      <span class="flex items-center justify-center">
+      <span class="flex"><svg rpl fill="currentColor" height="16" icon-name="overflow-horizontal" viewBox="0 0 20 20" width="16" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 11.75a1.75 1.75 0 11.001-3.501A1.75 1.75 0 0116 11.75ZM11.75 10a1.75 1.75 0 10-3.501.001A1.75 1.75 0 0011.75 10Zm-6 0a1.75 1.75 0 10-3.501.001A1.75 1.75 0 005.75 10Z"></path>
+    </svg></span>
+      
+    </span>
+    
+    </button>
+      
+      
+    </shreddit-post-overflow-menu>
+  </shreddit-async-loader></span>
+      </span>
+    </span>
+  
+    <div slot="ssr-post-content-header"></div>
+    <a href="https://www.reddit.com/r/MachineLearning/comments/1x7ojxo/p_my_rust_framework_trains_nanogpt_with_the_exact/" id="post-title-t3_1x7ojxo" slot="title" class="block text-neutral-content-strong m-0 visited:text-neutral-content-weak font-semibold text-16-scalable xs:text-18-scalable  mb-2xs xs:mb-xs  overflow-hidden" aria-describedby="feed-post-credit-bar-t3_1x7ojxo" dir="auto">
+    [P] my rust framework trains nanoGPT with the exact same bits as pytorch. worth continuing? [P]
+  </a>
+    
+    <shreddit-post-flair slot="post-flair" post-id="t3_1x7ojxo" flair-class=" relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 "><a href="/r/MachineLearning/?f=flair_name%3A%22Project%22" class="no-decoration"><ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" san="post|click|post_flair"></ac-track>
+    <span class="bg-tone-4 inline-block truncate max-w-full text-12 font-normal align-text-bottom box-border px-[6px] rounded-5 leading-4 text-global-black   relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 " style="background-color: #7D659A;">
+      <div aria-label="Flair: Project" class="flair-content [&_.flair-image]:align-bottom max-w-full overflow-hidden whitespace-nowrap text-ellipsis" dir="auto">
+    Project
+  </div>
+    </span>
+  </a></shreddit-post-flair>
+  
+    
+    <shreddit-post-text-body slot="text-body" post-id="t3_1x7ojxo" view-context="SubredditFeed" feed-view-type="cardView" max-text-body-height="253" text-body-height-class="max-h-[253px] overflow-hidden s:max-h-[318px] m:max-h-[337px] l:max-h-[352px] xl:max-h-[452px]" subreddit-prefixed-name="r/MachineLearning">
+      
+        <a href="/r/MachineLearning/comments/1x7ojxo/p_my_rust_framework_trains_nanogpt_with_the_exact/" class="hover:no-underline no-underline pointer-events-none text-neutral-content visited:text-neutral-content-weak" slot="text-body">
+          
+    <div class="  overflow-hidden" data-post-click-location="text-body">
+      <div id="t3_1x7ojxo-post-rtjson-content" class="md feed-card-text-preview text-ellipsis line-clamp-3 xs:line-clamp-6 text-14-scalable pb-2xs [--emote-size:20px]" about="t3_1x7ojxo" property="schema:articleBody" dir="auto">
+      <p>
+      hey, CS student here. for the past few days I&#39;ve been building DenseCore, a small deep learning framework in rust with a pytorch-like python API.
+    </p><p>
+      the thing I&#39;m kind of proud of: if you point `import torch` at it and run karpathy&#39;s nanoGPT unchanged, you get the exact same numbers as pytorch. same initial weights from manual_seed, same loss, same gradients, same weights, bit for bit, for all 50 steps I tested, even with dropout on. not &quot;close enough&quot;, literally identical.
+    </p><p>
+      getting there was a rabbit hole. pytorch&#39;s CPU attention isn&#39;t the textbook formula, it&#39;s a flash attention kernel, and it switches to a different path when dropout is on. adam rounds differently on the last few elements of each thread&#39;s chunk because of how the compiler fuses the tail loop. clip_grad_norm_ secretly does reciprocal() * max_norm instead of a division. stuff like that everywhere.
+    </p><p>
+      also found out pytorch doesn&#39;t match itself across machines. same version, mac vs linux x86, only 1 of 26 ops I tried gave the same bits. so mine only matches pytorch on apple silicon macs.
+    </p><p>
+      it&#39;s tiny though, about 2 MB vs ~580 MB for pytorch.
+    </p><p>
+      anyway the honest question: is this useful to anyone, or is it just a cool learning project? if I keep going I&#39;m thinking either keep copying pytorch until most of it works, or make it a lightweight drop-in for small cpu stuff like serverless/CI, or turn it into a tool that tells you why two pytorch runs give different results. would any of those be useful to you? or should I move on? brutal answers are fine.
+    </p><p>
+      repo: <object role="none"><a rpl class="relative pointer-events-auto a
+  
+  
+  
+  
+  underline
+  
+  cursor-pointer" href="https://github.com/lncch/DenseCore" rel="noopener nofollow ugc" target="_blank">https://github.com/lncch/DenseCore</a></object>
+    </p><p>
+      (`python scripts/demo_bit_exact.py` runs the nanoGPT comparison if you want to check)
+    </p>
+    </div>
+    </div>
+  
+        </a>
+      
+    </shreddit-post-text-body>
+  
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   
+  </shreddit-post>
+<shreddit-post data-ks-item class="block relative cursor-pointer group bg-neutral-background focus-within:bg-neutral-background-hover hover:bg-neutral-background-hover xs:rounded-4 px-md py-2xs my-2xs nd:visible rgb-action-bar-placeholder [&amp;:not(:defined):not(:has(rpl-action-bar))]:pb-2xl" permalink="/r/MachineLearning/comments/1x6dytx/university_gpu_cluster_is_holding_my_research/" content-href="https://www.reddit.com/r/MachineLearning/comments/1x6dytx/university_gpu_cluster_is_holding_my_research/" view-context="SubredditFeed" comment-count="98" view-type="cardView" pdp-target="_self" feedIndex="5" award-count="0" hide-awards-button moderation-verdict="" is-embeddable is-desktop-viewport is-awardable created-timestamp="2026-10-15T06:06:50.592000+0000" domain="self.MachineLearning" id="t3_1x6dytx" post-title="University GPU cluster is holding my research hostage. Can I use my internship company’s GPUs instead? 💀 [D]" post-language="en" post-type="text" score="138" upvote-ratio="0.7464285714285714" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" author-id="t2_7rnwp60u" author="ParticularWork8424" icon="https://www.redditstatic.com/avatars/defaults/v2/avatar_default_6.png" data-expected-lcp subreddit-name="MachineLearning">
+       <a data-ks-id="t3_1x6dytx" slot="full-post-link" class="absolute inset-0" href="https://www.reddit.com/r/MachineLearning/comments/1x6dytx/university_gpu_cluster_is_holding_my_research/" target="_self">
+    <faceplate-screen-reader-content>
+    University GPU cluster is holding my research hostage. Can I use my internship company’s GPUs instead? 💀 [D]
+  </faceplate-screen-reader-content>
+  </a>
+        
+    
+    
+    <span slot="credit-bar" class="flex justify-between text-12 min-h-[32px]  mb-2xs -mt-2xs">
+      <span id="feed-post-credit-bar-t3_1x6dytx" class="flex flex-wrap text-12 gap-2xs items-center min-w-0 relative">
+         
+    <span slot="authorName" class="flex">
+      <div class="inline-flex items-center max-w-full">
+        
+    
+    <faceplate-hovercard enter-delay="500" leave-delay="150" position="bottom-start" data-id="user-hover-card" close-on-track label="ParticularWork8424 details" mouse-only>
+      <faceplate-tracker source="post_credit_bar" action="click" noun="user_profile" class="visible"><a rpl aria-label="Author: u/ParticularWork8424" class="flex items-center text-neutral-content visited:text-neutral-content-weak font-bold a
+  
+  
+  
+  no-visited
+  no-underline hover:no-underline
+  
+  cursor-pointer" href="https://www.reddit.com/user/ParticularWork8424/"><div class="flex items-center gap-2xs">
+    <span class="inline-flex items-center justify-center w-lg h-lg relative nd:visible nd:block nd:animate-pulse nd:bg-neutral-background-selected" rpl avatar>
+    
+    <span rpl class="inline-block rounded-full  relative [&>:first-child]:h-full [&>:first-child]:w-full [&>:first-child]:mb-0 [&>:first-child]:rounded-[inherit] h-full w-full
+    [&>:first-child]:overflow-hidden [&>:first-child]:max-h-full">
+    <img src="https://www.redditstatic.com/avatars/defaults/v2/avatar_default_6.png?cf_migration=control_1" alt="u/ParticularWork8424 avatar" class="h-full w-full">
+  </span></span><span class="inline-flex items-center max-w-full whitespace-nowrap" dir="auto" data-testid="nameplate">
+    <span class="truncate">u/ParticularWork8424</span>
+  </span>
+  </div></a></faceplate-tracker>
+      <div slot="content">
+        <faceplate-partial src="/svc/shreddit/user-hover-card/ParticularWork8424?subredditName=MachineLearning" loading="programmatic">
+          <div class="w-5xl h-4xl flex items-center justify-center">
+            <faceplate-progress value="20" class="animate-spin"></faceplate-progress>
+          </div>
+        </faceplate-partial>
+      </div>
+    </faceplate-hovercard>
+  
+      </div>
+    </span>
+   
+  <shreddit-async-loader class="contents" bundlename="distinguished_post_tags">
+    <shreddit-distinguished-post-tags post-id="t3_1x6dytx">
+    </shreddit-distinguished-post-tags>
+  </shreddit-async-loader>  <span class="inline-block my-0 created-separator text-neutral-content-weak" aria-hidden="true">•</span>
+  
+  
+    <faceplate-timeago ts="2026-10-15T06:06:50.592000+0000" format="short" locale="en-US-u-nu-latn" class="whitespace-nowrap text-neutral-content-weak"></faceplate-timeago>
+  
+  <shreddit-brand-affiliate-tag post-id="t3_1x6dytx" class="contents"></shreddit-brand-affiliate-tag>  
+            
+      </span>
+      <span class="flex items-center ps-xs">
+        
+    
+    <shreddit-async-loader bundlename="status_icons">
+      <shreddit-status-icons class="nd:visible flex items-center gap-2xs isolate" thing-id="t3_1x6dytx">
+        
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Locked post"><svg rpl aria-label="Locked post" class="hidden lock-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="lock-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.993 8.168h-.429V6.61a5.572 5.572 0 00-5.566-5.566A5.572 5.572 0 004.432 6.61v1.558h-.429a2.005 2.005 0 00-2.005 2.005v3.692a5.054 5.054 0 005.054 5.054h5.892a5.054 5.054 0 005.054-5.054v-3.692a2.005 2.005 0 00-2.005-2.005ZM10.998 15h-2v-3h2v3Zm2.767-6.832H6.232V6.61A3.771 3.771 0 0110 2.844a3.77 3.77 0 013.767 3.766l-.001 1.558Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Stickied post"><svg rpl aria-label="Stickied post" class="hidden stickied-status fill-[color:var(--color-identity-moderator)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="pin-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18.163 6.191a4.194 4.194 0 00-1.237-2.986l-.167-.167a4.197 4.197 0 00-2.986-1.236 4.194 4.194 0 00-2.986 1.237L8.835 4.99a6.267 6.267 0 00-2.708.116 6.276 6.276 0 00-2.798 1.611.902.902 0 00-.001 1.274l3.724 3.723-4.955 4.955a.898.898 0 00.636 1.536c.23 0 .46-.088.636-.264l4.955-4.955 3.644 3.644a.897.897 0 001.273-.001 6.25 6.25 0 001.727-5.499l1.958-1.953a4.197 4.197 0 001.236-2.986h.001Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Archived post"><svg rpl aria-label="Archived post" class="hidden archived-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="archive-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.7 1H4.3C2.48 1 1 2.48 1 4.3v2.76c0 .5.4.9.9.9H2v6.74C2 16.52 3.48 18 5.3 18h9.4c1.82 0 3.3-1.48 3.3-3.3V7.96h.1c.5 0 .9-.4.9-.9V4.3C19 2.48 17.52 1 15.7 1ZM13 11.87H7v-1.8h6v1.8Zm4.2-5.71H2.8V4.3c0-.83.67-1.5 1.5-1.5h11.4c.83 0 1.5.67 1.5 1.5v1.86Z"></path>
+    </svg></rpl-tooltip>
+      </shreddit-status-icons>
+    </shreddit-async-loader>
+  
+        
+        <span class="flex items-center -me-[7px]"><shreddit-async-loader class="relative w-xl h-xl " bundleName="shreddit_post_overflow_menu">
+    <shreddit-post-overflow-menu class="group/overflow-menu" post-id="t3_1x6dytx" author-id="t2_7rnwp60u" author-name="ParticularWork8424" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" post-type="text" score="138" comment-count="98" permalink="/r/MachineLearning/comments/1x6dytx/university_gpu_cluster_is_holding_my_research/" post-view-context="SubredditFeed" has-post-flair is-desktop-viewport ama-state="" ama-starts-at="" ama-ends-at="" feed-index="5" should-render-follow-menu-item is-post-awardable should-render-award-menu-item recommendation-context-json="{}" translation-state="" source-id="t3_1x6dytx" data-faceplate-tracking-context="{&quot;post&quot;:{&quot;id&quot;:&quot;t3_1x6dytx&quot;,&quot;type&quot;:&quot;text&quot;,&quot;score&quot;:138,&quot;number_comments&quot;:98},&quot;subreddit&quot;:{&quot;id&quot;:&quot;t5_2r3gv&quot;},&quot;action_info&quot;:{&quot;position&quot;:5}}">
+      <button rpl aria-label="Open user actions" class="
+button-small px-[calc(var(--rem10)-var(--button-border-width,0px))]
+button-plain
+
+
+icon
+items-center justify-center
+button inline-flex ">
+      <span class="flex items-center justify-center">
+      <span class="flex"><svg rpl fill="currentColor" height="16" icon-name="overflow-horizontal" viewBox="0 0 20 20" width="16" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 11.75a1.75 1.75 0 11.001-3.501A1.75 1.75 0 0116 11.75ZM11.75 10a1.75 1.75 0 10-3.501.001A1.75 1.75 0 0011.75 10Zm-6 0a1.75 1.75 0 10-3.501.001A1.75 1.75 0 005.75 10Z"></path>
+    </svg></span>
+      
+    </span>
+    
+    </button>
+      
+      
+    </shreddit-post-overflow-menu>
+  </shreddit-async-loader></span>
+      </span>
+    </span>
+  
+    <div slot="ssr-post-content-header"></div>
+    <a href="https://www.reddit.com/r/MachineLearning/comments/1x6dytx/university_gpu_cluster_is_holding_my_research/" id="post-title-t3_1x6dytx" slot="title" class="block text-neutral-content-strong m-0 visited:text-neutral-content-weak font-semibold text-16-scalable xs:text-18-scalable  mb-2xs xs:mb-xs  overflow-hidden" aria-describedby="feed-post-credit-bar-t3_1x6dytx" dir="auto">
+    University GPU cluster is holding my research hostage. Can I use my internship company’s GPUs instead? 💀 [D]
+  </a>
+    
+    <shreddit-post-flair slot="post-flair" post-id="t3_1x6dytx" flair-class=" relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 "><a href="/r/MachineLearning/?f=flair_name%3A%22Discussion%22" class="no-decoration"><ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" san="post|click|post_flair"></ac-track>
+    <span class="bg-tone-4 inline-block truncate max-w-full text-12 font-normal align-text-bottom box-border px-[6px] rounded-5 leading-4 text-global-black   relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 " style="background-color: #26C4D9;">
+      <div aria-label="Flair: Discussion" class="flair-content [&_.flair-image]:align-bottom max-w-full overflow-hidden whitespace-nowrap text-ellipsis" dir="auto">
+    Discussion
+  </div>
+    </span>
+  </a></shreddit-post-flair>
+  
+    
+    <shreddit-post-text-body slot="text-body" post-id="t3_1x6dytx" view-context="SubredditFeed" feed-view-type="cardView" max-text-body-height="253" text-body-height-class="max-h-[253px] overflow-hidden s:max-h-[318px] m:max-h-[337px] l:max-h-[352px] xl:max-h-[452px]" subreddit-prefixed-name="r/MachineLearning">
+      
+        <a href="/r/MachineLearning/comments/1x6dytx/university_gpu_cluster_is_holding_my_research/" class="hover:no-underline no-underline pointer-events-none text-neutral-content visited:text-neutral-content-weak" slot="text-body">
+          
+    <div class="  overflow-hidden" data-post-click-location="text-body">
+      <div id="t3_1x6dytx-post-rtjson-content" class="md feed-card-text-preview text-ellipsis line-clamp-3 xs:line-clamp-6 text-14-scalable pb-2xs [--emote-size:20px]" about="t3_1x6dytx" property="schema:articleBody" dir="auto">
+      <p>
+      PhD student here. My university’s GPU cluster has apparently become a luxury resort. I submit a job requesting a couple of GPUs, and it takes <strong>3–4 business days just to START running.</strong> Meanwhile, my internship company has some pretty sweet compute sitting there, and the intrusive thoughts are winning.
+    </p><p>
+      <strong>Hypothetically speaking (HR, if you’re reading this, I’m asking for a friend):</strong> Has anyone used their internship/company’s GPU infrastructure for personal academic research? I can&#39;t fall behind in the race this way.
+    </p><p>
+      Would love to hear actual experiences.
+    </p>
+    </div>
+    </div>
+  
+        </a>
+      
+    </shreddit-post-text-body>
+  
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   
+  </shreddit-post>
+<shreddit-post data-ks-item class="block relative cursor-pointer group bg-neutral-background focus-within:bg-neutral-background-hover hover:bg-neutral-background-hover xs:rounded-4 px-md py-2xs my-2xs nd:visible rgb-action-bar-placeholder [&amp;:not(:defined):not(:has(rpl-action-bar))]:pb-2xl" permalink="/r/MachineLearning/comments/1x6yg7s/resources_for_learning_to_write_production_grade/" content-href="https://www.reddit.com/r/MachineLearning/comments/1x6yg7s/resources_for_learning_to_write_production_grade/" view-context="SubredditFeed" comment-count="3" view-type="cardView" pdp-target="_self" feedIndex="6" award-count="0" hide-awards-button moderation-verdict="" is-embeddable is-desktop-viewport is-awardable created-timestamp="2026-10-15T21:41:08.706000+0000" domain="self.MachineLearning" id="t3_1x6yg7s" post-title="Resources for learning to write production grade python code [N]" post-language="en" post-type="text" score="7" upvote-ratio="0.7692307692307693" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" author-id="t2_1vmtkf0oh8" author="Entire-Tomato-3192" icon="https://www.redditstatic.com/avatars/defaults/v2/avatar_default_4.png" data-expected-lcp subreddit-name="MachineLearning">
+       <a data-ks-id="t3_1x6yg7s" slot="full-post-link" class="absolute inset-0" href="https://www.reddit.com/r/MachineLearning/comments/1x6yg7s/resources_for_learning_to_write_production_grade/" target="_self">
+    <faceplate-screen-reader-content>
+    Resources for learning to write production grade python code [N]
+  </faceplate-screen-reader-content>
+  </a>
+        
+    
+    
+    <span slot="credit-bar" class="flex justify-between text-12 min-h-[32px]  mb-2xs -mt-2xs">
+      <span id="feed-post-credit-bar-t3_1x6yg7s" class="flex flex-wrap text-12 gap-2xs items-center min-w-0 relative">
+         
+    <span slot="authorName" class="flex">
+      <div class="inline-flex items-center max-w-full">
+        
+    
+    <faceplate-hovercard enter-delay="500" leave-delay="150" position="bottom-start" data-id="user-hover-card" close-on-track label="Entire-Tomato-3192 details" mouse-only>
+      <faceplate-tracker source="post_credit_bar" action="click" noun="user_profile" class="visible"><a rpl aria-label="Author: u/Entire-Tomato-3192" class="flex items-center text-neutral-content visited:text-neutral-content-weak font-bold a
+  
+  
+  
+  no-visited
+  no-underline hover:no-underline
+  
+  cursor-pointer" href="https://www.reddit.com/user/Entire-Tomato-3192/"><div class="flex items-center gap-2xs">
+    <span class="inline-flex items-center justify-center w-lg h-lg relative nd:visible nd:block nd:animate-pulse nd:bg-neutral-background-selected" rpl avatar>
+    
+    <span rpl class="inline-block rounded-full  relative [&>:first-child]:h-full [&>:first-child]:w-full [&>:first-child]:mb-0 [&>:first-child]:rounded-[inherit] h-full w-full
+    [&>:first-child]:overflow-hidden [&>:first-child]:max-h-full">
+    <img src="https://www.redditstatic.com/avatars/defaults/v2/avatar_default_4.png?cf_migration=control_1" alt="u/Entire-Tomato-3192 avatar" class="h-full w-full">
+  </span></span><span class="inline-flex items-center max-w-full whitespace-nowrap" dir="auto" data-testid="nameplate">
+    <span class="truncate">u/Entire-Tomato-3192</span>
+  </span>
+  </div></a></faceplate-tracker>
+      <div slot="content">
+        <faceplate-partial src="/svc/shreddit/user-hover-card/Entire-Tomato-3192?subredditName=MachineLearning" loading="programmatic">
+          <div class="w-5xl h-4xl flex items-center justify-center">
+            <faceplate-progress value="20" class="animate-spin"></faceplate-progress>
+          </div>
+        </faceplate-partial>
+      </div>
+    </faceplate-hovercard>
+  
+      </div>
+    </span>
+   
+  <shreddit-async-loader class="contents" bundlename="distinguished_post_tags">
+    <shreddit-distinguished-post-tags post-id="t3_1x6yg7s">
+    </shreddit-distinguished-post-tags>
+  </shreddit-async-loader>  <span class="inline-block my-0 created-separator text-neutral-content-weak" aria-hidden="true">•</span>
+  
+  
+    <faceplate-timeago ts="2026-10-15T21:41:08.706000+0000" format="short" locale="en-US-u-nu-latn" class="whitespace-nowrap text-neutral-content-weak"></faceplate-timeago>
+  
+  <shreddit-brand-affiliate-tag post-id="t3_1x6yg7s" class="contents"></shreddit-brand-affiliate-tag>  
+            
+      </span>
+      <span class="flex items-center ps-xs">
+        
+    
+    <shreddit-async-loader bundlename="status_icons">
+      <shreddit-status-icons class="nd:visible flex items-center gap-2xs isolate" thing-id="t3_1x6yg7s">
+        
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Locked post"><svg rpl aria-label="Locked post" class="hidden lock-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="lock-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.993 8.168h-.429V6.61a5.572 5.572 0 00-5.566-5.566A5.572 5.572 0 004.432 6.61v1.558h-.429a2.005 2.005 0 00-2.005 2.005v3.692a5.054 5.054 0 005.054 5.054h5.892a5.054 5.054 0 005.054-5.054v-3.692a2.005 2.005 0 00-2.005-2.005ZM10.998 15h-2v-3h2v3Zm2.767-6.832H6.232V6.61A3.771 3.771 0 0110 2.844a3.77 3.77 0 013.767 3.766l-.001 1.558Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Stickied post"><svg rpl aria-label="Stickied post" class="hidden stickied-status fill-[color:var(--color-identity-moderator)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="pin-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18.163 6.191a4.194 4.194 0 00-1.237-2.986l-.167-.167a4.197 4.197 0 00-2.986-1.236 4.194 4.194 0 00-2.986 1.237L8.835 4.99a6.267 6.267 0 00-2.708.116 6.276 6.276 0 00-2.798 1.611.902.902 0 00-.001 1.274l3.724 3.723-4.955 4.955a.898.898 0 00.636 1.536c.23 0 .46-.088.636-.264l4.955-4.955 3.644 3.644a.897.897 0 001.273-.001 6.25 6.25 0 001.727-5.499l1.958-1.953a4.197 4.197 0 001.236-2.986h.001Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Archived post"><svg rpl aria-label="Archived post" class="hidden archived-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="archive-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.7 1H4.3C2.48 1 1 2.48 1 4.3v2.76c0 .5.4.9.9.9H2v6.74C2 16.52 3.48 18 5.3 18h9.4c1.82 0 3.3-1.48 3.3-3.3V7.96h.1c.5 0 .9-.4.9-.9V4.3C19 2.48 17.52 1 15.7 1ZM13 11.87H7v-1.8h6v1.8Zm4.2-5.71H2.8V4.3c0-.83.67-1.5 1.5-1.5h11.4c.83 0 1.5.67 1.5 1.5v1.86Z"></path>
+    </svg></rpl-tooltip>
+      </shreddit-status-icons>
+    </shreddit-async-loader>
+  
+        
+        <span class="flex items-center -me-[7px]"><shreddit-async-loader class="relative w-xl h-xl " bundleName="shreddit_post_overflow_menu">
+    <shreddit-post-overflow-menu class="group/overflow-menu" post-id="t3_1x6yg7s" author-id="t2_1vmtkf0oh8" author-name="Entire-Tomato-3192" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" post-type="text" score="7" comment-count="3" permalink="/r/MachineLearning/comments/1x6yg7s/resources_for_learning_to_write_production_grade/" post-view-context="SubredditFeed" has-post-flair is-desktop-viewport ama-state="" ama-starts-at="" ama-ends-at="" feed-index="6" should-render-follow-menu-item is-post-awardable should-render-award-menu-item recommendation-context-json="{}" translation-state="" source-id="t3_1x6yg7s" data-faceplate-tracking-context="{&quot;post&quot;:{&quot;id&quot;:&quot;t3_1x6yg7s&quot;,&quot;type&quot;:&quot;text&quot;,&quot;score&quot;:7,&quot;number_comments&quot;:3},&quot;subreddit&quot;:{&quot;id&quot;:&quot;t5_2r3gv&quot;},&quot;action_info&quot;:{&quot;position&quot;:6}}">
+      <button rpl aria-label="Open user actions" class="
+button-small px-[calc(var(--rem10)-var(--button-border-width,0px))]
+button-plain
+
+
+icon
+items-center justify-center
+button inline-flex ">
+      <span class="flex items-center justify-center">
+      <span class="flex"><svg rpl fill="currentColor" height="16" icon-name="overflow-horizontal" viewBox="0 0 20 20" width="16" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 11.75a1.75 1.75 0 11.001-3.501A1.75 1.75 0 0116 11.75ZM11.75 10a1.75 1.75 0 10-3.501.001A1.75 1.75 0 0011.75 10Zm-6 0a1.75 1.75 0 10-3.501.001A1.75 1.75 0 005.75 10Z"></path>
+    </svg></span>
+      
+    </span>
+    
+    </button>
+      
+      
+    </shreddit-post-overflow-menu>
+  </shreddit-async-loader></span>
+      </span>
+    </span>
+  
+    <div slot="ssr-post-content-header"></div>
+    <a href="https://www.reddit.com/r/MachineLearning/comments/1x6yg7s/resources_for_learning_to_write_production_grade/" id="post-title-t3_1x6yg7s" slot="title" class="block text-neutral-content-strong m-0 visited:text-neutral-content-weak font-semibold text-16-scalable xs:text-18-scalable  mb-2xs xs:mb-xs  overflow-hidden" aria-describedby="feed-post-credit-bar-t3_1x6yg7s" dir="auto">
+    Resources for learning to write production grade python code [N]
+  </a>
+    
+    <shreddit-post-flair slot="post-flair" post-id="t3_1x6yg7s" flair-class=" relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 "><a href="/r/MachineLearning/?f=flair_name%3A%22Discussion%22" class="no-decoration"><ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" san="post|click|post_flair"></ac-track>
+    <span class="bg-tone-4 inline-block truncate max-w-full text-12 font-normal align-text-bottom box-border px-[6px] rounded-5 leading-4 text-global-black   relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 " style="background-color: #26C4D9;">
+      <div aria-label="Flair: Discussion" class="flair-content [&_.flair-image]:align-bottom max-w-full overflow-hidden whitespace-nowrap text-ellipsis" dir="auto">
+    Discussion
+  </div>
+    </span>
+  </a></shreddit-post-flair>
+  
+    
+    <shreddit-post-text-body slot="text-body" post-id="t3_1x6yg7s" view-context="SubredditFeed" feed-view-type="cardView" max-text-body-height="253" text-body-height-class="max-h-[253px] overflow-hidden s:max-h-[318px] m:max-h-[337px] l:max-h-[352px] xl:max-h-[452px]" subreddit-prefixed-name="r/MachineLearning">
+      
+        <a href="/r/MachineLearning/comments/1x6yg7s/resources_for_learning_to_write_production_grade/" class="hover:no-underline no-underline pointer-events-none text-neutral-content visited:text-neutral-content-weak" slot="text-body">
+          
+    <div class="  overflow-hidden" data-post-click-location="text-body">
+      <div id="t3_1x6yg7s-post-rtjson-content" class="md feed-card-text-preview text-ellipsis line-clamp-3 xs:line-clamp-6 text-14-scalable pb-2xs [--emote-size:20px]" about="t3_1x6yg7s" property="schema:articleBody" dir="auto">
+      <p>
+      I am a data scientist with a very strong background in Stats and ML algos. I am struggling with the production ready code. Though I can build models which are awesome and tuned to perfection and address highly complex business problems, the problem is that they are all done in a jupyter notebook.
+    </p><p>
+      Once I had built a complete solution in  notebook for a forecasting problem and the ML team in company productionized it. I was called in to validate few results of the production run and couldn&#39;t understand the repo which had so many folders, classes and highly organized code.
+    </p><p>
+      Is there anyway I can learn to write that type of code or is it all AI job now? Appreciate if I can get some learning resources/links for the same
+    </p>
+    </div>
+    </div>
+  
+        </a>
+      
+    </shreddit-post-text-body>
+  
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   
+  </shreddit-post>
+<shreddit-post data-ks-item class="block relative cursor-pointer group bg-neutral-background focus-within:bg-neutral-background-hover hover:bg-neutral-background-hover xs:rounded-4 px-md py-2xs my-2xs nd:visible rgb-action-bar-placeholder [&amp;:not(:defined):not(:has(rpl-action-bar))]:pb-2xl" permalink="/r/MachineLearning/comments/1x6p42z/neurips_2026_waitlist_r/" content-href="https://www.reddit.com/r/MachineLearning/comments/1x6p42z/neurips_2026_waitlist_r/" view-context="SubredditFeed" comment-count="7" view-type="cardView" pdp-target="_self" feedIndex="7" award-count="0" hide-awards-button moderation-verdict="" is-embeddable is-desktop-viewport is-awardable created-timestamp="2026-10-15T15:42:47.118000+0000" domain="self.MachineLearning" id="t3_1x6p42z" post-title="NeurIPS 2026 - waitlist [R]" post-language="en" post-type="text" score="10" upvote-ratio="0.8571428571428571" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" author-id="t2_phmrg428h" author="Training_Magazine_62" icon="https://preview.redd.it/snoovatar/avatars/c8deba35-1ce8-432e-bd76-bb4c326d1cb5-headshot.png?width=64&amp;height=64&amp;crop=smart&amp;auto=webp&amp;s=23f60d072516d795f3d1204eaab35d8d9b785a86" data-expected-lcp subreddit-name="MachineLearning">
+       <a data-ks-id="t3_1x6p42z" slot="full-post-link" class="absolute inset-0" href="https://www.reddit.com/r/MachineLearning/comments/1x6p42z/neurips_2026_waitlist_r/" target="_self">
+    <faceplate-screen-reader-content>
+    NeurIPS 2026 - waitlist [R]
+  </faceplate-screen-reader-content>
+  </a>
+        
+    
+    
+    <span slot="credit-bar" class="flex justify-between text-12 min-h-[32px]  mb-2xs -mt-2xs">
+      <span id="feed-post-credit-bar-t3_1x6p42z" class="flex flex-wrap text-12 gap-2xs items-center min-w-0 relative">
+         
+    <span slot="authorName" class="flex">
+      <div class="inline-flex items-center max-w-full">
+        
+    
+    <faceplate-hovercard enter-delay="500" leave-delay="150" position="bottom-start" data-id="user-hover-card" close-on-track label="Training_Magazine_62 details" mouse-only>
+      <faceplate-tracker source="post_credit_bar" action="click" noun="user_profile" class="visible"><a rpl aria-label="Author: u/Training_Magazine_62" class="flex items-center text-neutral-content visited:text-neutral-content-weak font-bold a
+  
+  
+  
+  no-visited
+  no-underline hover:no-underline
+  
+  cursor-pointer" href="https://www.reddit.com/user/Training_Magazine_62/"><div class="flex items-center gap-2xs">
+    <span class="inline-flex items-center justify-center w-lg h-lg relative " rpl avatar>
+    
+    <span class="inline-flex snoovatar relative  fp-avatar-container rounded-full w-lg h-lg min-w-[1.5rem] min-h-[1.5rem] isolate box-content"> 
+    <span class="absolute start-0 end-0 bottom-0 mx-auto inline-flex shrink-0 justify-center box-border h-full w-full">
+       <span style="" class="rounded-full absolute h-full w-full inline-flex justify-center bg-[image:var(--color-avatar-gradient)]">
+    
+  </span>
+    <svg viewBox="0 0 121 122" xmlns="http://www.w3.org/2000/svg" class="overflow-hidden absolute bottom-0 w-lg h-lg">
+      <defs>
+        <clipPath id="e15683ed94da9">
+          <path d="M0 0V79L28.1628 105.5C35.013 115.465 46.4934 122 59.5 122C72.5066 122 83.987 115.465 90.8372 105.5L120.5 79V0H0Z"></path>
+        </clipPath>
+      </defs>
+      <image href="https://preview.redd.it/snoovatar/avatars/c8deba35-1ce8-432e-bd76-bb4c326d1cb5-headshot.png?width=64&amp;height=64&amp;crop=smart&amp;auto=webp&amp;s=23f60d072516d795f3d1204eaab35d8d9b785a86" alt="u/Training_Magazine_62 avatar" clip-path="url(#e15683ed94da9)" height="100%" width="100%"></image>
+    </svg>
+    </span>
+  </span></span><span class="inline-flex items-center max-w-full whitespace-nowrap" dir="auto" data-testid="nameplate">
+    <span class="truncate">u/Training_Magazine_62</span>
+  </span>
+  </div></a></faceplate-tracker>
+      <div slot="content">
+        <faceplate-partial src="/svc/shreddit/user-hover-card/Training_Magazine_62?subredditName=MachineLearning" loading="programmatic">
+          <div class="w-5xl h-4xl flex items-center justify-center">
+            <faceplate-progress value="20" class="animate-spin"></faceplate-progress>
+          </div>
+        </faceplate-partial>
+      </div>
+    </faceplate-hovercard>
+  
+      </div>
+    </span>
+   
+  <shreddit-async-loader class="contents" bundlename="distinguished_post_tags">
+    <shreddit-distinguished-post-tags post-id="t3_1x6p42z">
+    </shreddit-distinguished-post-tags>
+  </shreddit-async-loader>  <span class="inline-block my-0 created-separator text-neutral-content-weak" aria-hidden="true">•</span>
+  
+  
+    <faceplate-timeago ts="2026-10-15T15:42:47.118000+0000" format="short" locale="en-US-u-nu-latn" class="whitespace-nowrap text-neutral-content-weak"></faceplate-timeago>
+  
+  <shreddit-brand-affiliate-tag post-id="t3_1x6p42z" class="contents"></shreddit-brand-affiliate-tag>  
+            
+      </span>
+      <span class="flex items-center ps-xs">
+        
+    
+    <shreddit-async-loader bundlename="status_icons">
+      <shreddit-status-icons class="nd:visible flex items-center gap-2xs isolate" thing-id="t3_1x6p42z">
+        
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Locked post"><svg rpl aria-label="Locked post" class="hidden lock-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="lock-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.993 8.168h-.429V6.61a5.572 5.572 0 00-5.566-5.566A5.572 5.572 0 004.432 6.61v1.558h-.429a2.005 2.005 0 00-2.005 2.005v3.692a5.054 5.054 0 005.054 5.054h5.892a5.054 5.054 0 005.054-5.054v-3.692a2.005 2.005 0 00-2.005-2.005ZM10.998 15h-2v-3h2v3Zm2.767-6.832H6.232V6.61A3.771 3.771 0 0110 2.844a3.77 3.77 0 013.767 3.766l-.001 1.558Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Stickied post"><svg rpl aria-label="Stickied post" class="hidden stickied-status fill-[color:var(--color-identity-moderator)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="pin-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18.163 6.191a4.194 4.194 0 00-1.237-2.986l-.167-.167a4.197 4.197 0 00-2.986-1.236 4.194 4.194 0 00-2.986 1.237L8.835 4.99a6.267 6.267 0 00-2.708.116 6.276 6.276 0 00-2.798 1.611.902.902 0 00-.001 1.274l3.724 3.723-4.955 4.955a.898.898 0 00.636 1.536c.23 0 .46-.088.636-.264l4.955-4.955 3.644 3.644a.897.897 0 001.273-.001 6.25 6.25 0 001.727-5.499l1.958-1.953a4.197 4.197 0 001.236-2.986h.001Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Archived post"><svg rpl aria-label="Archived post" class="hidden archived-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="archive-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.7 1H4.3C2.48 1 1 2.48 1 4.3v2.76c0 .5.4.9.9.9H2v6.74C2 16.52 3.48 18 5.3 18h9.4c1.82 0 3.3-1.48 3.3-3.3V7.96h.1c.5 0 .9-.4.9-.9V4.3C19 2.48 17.52 1 15.7 1ZM13 11.87H7v-1.8h6v1.8Zm4.2-5.71H2.8V4.3c0-.83.67-1.5 1.5-1.5h11.4c.83 0 1.5.67 1.5 1.5v1.86Z"></path>
+    </svg></rpl-tooltip>
+      </shreddit-status-icons>
+    </shreddit-async-loader>
+  
+        
+        <span class="flex items-center -me-[7px]"><shreddit-async-loader class="relative w-xl h-xl " bundleName="shreddit_post_overflow_menu">
+    <shreddit-post-overflow-menu class="group/overflow-menu" post-id="t3_1x6p42z" author-id="t2_phmrg428h" author-name="Training_Magazine_62" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" post-type="text" score="10" comment-count="7" permalink="/r/MachineLearning/comments/1x6p42z/neurips_2026_waitlist_r/" post-view-context="SubredditFeed" has-post-flair is-desktop-viewport ama-state="" ama-starts-at="" ama-ends-at="" feed-index="7" should-render-follow-menu-item is-post-awardable should-render-award-menu-item recommendation-context-json="{}" translation-state="" source-id="t3_1x6p42z" data-faceplate-tracking-context="{&quot;post&quot;:{&quot;id&quot;:&quot;t3_1x6p42z&quot;,&quot;type&quot;:&quot;text&quot;,&quot;score&quot;:10,&quot;number_comments&quot;:7},&quot;subreddit&quot;:{&quot;id&quot;:&quot;t5_2r3gv&quot;},&quot;action_info&quot;:{&quot;position&quot;:7}}">
+      <button rpl aria-label="Open user actions" class="
+button-small px-[calc(var(--rem10)-var(--button-border-width,0px))]
+button-plain
+
+
+icon
+items-center justify-center
+button inline-flex ">
+      <span class="flex items-center justify-center">
+      <span class="flex"><svg rpl fill="currentColor" height="16" icon-name="overflow-horizontal" viewBox="0 0 20 20" width="16" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 11.75a1.75 1.75 0 11.001-3.501A1.75 1.75 0 0116 11.75ZM11.75 10a1.75 1.75 0 10-3.501.001A1.75 1.75 0 0011.75 10Zm-6 0a1.75 1.75 0 10-3.501.001A1.75 1.75 0 005.75 10Z"></path>
+    </svg></span>
+      
+    </span>
+    
+    </button>
+      
+      
+    </shreddit-post-overflow-menu>
+  </shreddit-async-loader></span>
+      </span>
+    </span>
+  
+    <div slot="ssr-post-content-header"></div>
+    <a href="https://www.reddit.com/r/MachineLearning/comments/1x6p42z/neurips_2026_waitlist_r/" id="post-title-t3_1x6p42z" slot="title" class="block text-neutral-content-strong m-0 visited:text-neutral-content-weak font-semibold text-16-scalable xs:text-18-scalable  mb-2xs xs:mb-xs  overflow-hidden" aria-describedby="feed-post-credit-bar-t3_1x6p42z" dir="auto">
+    NeurIPS 2026 - waitlist [R]
+  </a>
+    
+    <shreddit-post-flair slot="post-flair" post-id="t3_1x6p42z" flair-class=" relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 "><a href="/r/MachineLearning/?f=flair_name%3A%22Research%22" class="no-decoration"><ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" san="post|click|post_flair"></ac-track>
+    <span class="bg-tone-4 inline-block truncate max-w-full text-12 font-normal align-text-bottom box-border px-[6px] rounded-5 leading-4 text-global-black   relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 " style="background-color: #F1F10E;">
+      <div aria-label="Flair: Research" class="flair-content [&_.flair-image]:align-bottom max-w-full overflow-hidden whitespace-nowrap text-ellipsis" dir="auto">
+    Research
+  </div>
+    </span>
+  </a></shreddit-post-flair>
+  
+    
+    <shreddit-post-text-body slot="text-body" post-id="t3_1x6p42z" view-context="SubredditFeed" feed-view-type="cardView" max-text-body-height="253" text-body-height-class="max-h-[253px] overflow-hidden s:max-h-[318px] m:max-h-[337px] l:max-h-[352px] xl:max-h-[452px]" subreddit-prefixed-name="r/MachineLearning">
+      
+        <a href="/r/MachineLearning/comments/1x6p42z/neurips_2026_waitlist_r/" class="hover:no-underline no-underline pointer-events-none text-neutral-content visited:text-neutral-content-weak" slot="text-body">
+          
+    <div class="  overflow-hidden" data-post-click-location="text-body">
+      <div id="t3_1x6p42z-post-rtjson-content" class="md feed-card-text-preview text-ellipsis line-clamp-3 xs:line-clamp-6 text-14-scalable pb-2xs [--emote-size:20px]" about="t3_1x6p42z" property="schema:articleBody" dir="auto">
+      <p>
+      Hey everyone,
+    </p><p>
+      I am trying to register for NeurIPS 2026 in Sydney, they mentioned more tickets would be out mid October and I am registered for the waitlist, however I still haven&#39;t heard from them. Anyone on the waitlist for Sydney has managed to get tickets or has been contacted about it? If so, when did you sign up on the waitlist?<br>Thankss
+    </p>
+    </div>
+    </div>
+  
+        </a>
+      
+    </shreddit-post-text-body>
+  
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   
+  </shreddit-post>
+<shreddit-post data-ks-item class="block relative cursor-pointer group bg-neutral-background focus-within:bg-neutral-background-hover hover:bg-neutral-background-hover xs:rounded-4 px-md py-2xs my-2xs nd:visible rgb-action-bar-placeholder [&amp;:not(:defined):not(:has(rpl-action-bar))]:pb-2xl" permalink="/r/MachineLearning/comments/1x6d829/i_made_a_wordlestyle_word_guessing_game_to_teach/" content-href="https://i.redd.it/boo6mqstfkvh1.gif" view-context="SubredditFeed" comment-count="11" view-type="cardView" pdp-target="_self" feedIndex="10" award-count="0" hide-awards-button moderation-verdict="" is-embeddable is-desktop-viewport is-awardable created-timestamp="2026-10-15T05:22:11.022000+0000" domain="i.redd.it" id="t3_1x6d829" post-title="I made a Wordle-style word guessing game to teach students how vector embeddings work [P]" post-language="en" post-type="gif" score="62" upvote-ratio="0.9558823529411765" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" author-id="t2_2a22r4g9" author="Neon0asis" icon="https://styles.redditmedia.com/t5_ozn97/styles/profileIcon_snooda460d75-5c1a-49ca-8b38-3679261cba77-headshot-f.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=6d3172b2c93347cea1e04be4632f1d42a5f9c86f" data-expected-lcp subreddit-name="MachineLearning">
+       <a data-ks-id="t3_1x6d829" slot="full-post-link" class="absolute inset-0" href="https://www.reddit.com/r/MachineLearning/comments/1x6d829/i_made_a_wordlestyle_word_guessing_game_to_teach/" target="_self">
+    <faceplate-screen-reader-content>
+    I made a Wordle-style word guessing game to teach students how vector embeddings work [P]
+  </faceplate-screen-reader-content>
+  </a>
+        
+    
+    
+    <span slot="credit-bar" class="flex justify-between text-12 min-h-[32px]  mb-2xs -mt-2xs">
+      <span id="feed-post-credit-bar-t3_1x6d829" class="flex flex-wrap text-12 gap-2xs items-center min-w-0 relative">
+         
+    <span slot="authorName" class="flex">
+      <div class="inline-flex items-center max-w-full">
+        
+    
+    <faceplate-hovercard enter-delay="500" leave-delay="150" position="bottom-start" data-id="user-hover-card" close-on-track label="Neon0asis details" mouse-only>
+      <faceplate-tracker source="post_credit_bar" action="click" noun="user_profile" class="visible"><a rpl aria-label="Author: u/Neon0asis" class="flex items-center text-neutral-content visited:text-neutral-content-weak font-bold a
+  
+  
+  
+  no-visited
+  no-underline hover:no-underline
+  
+  cursor-pointer" href="https://www.reddit.com/user/Neon0asis/"><div class="flex items-center gap-2xs">
+    <span class="inline-flex items-center justify-center w-lg h-lg relative " rpl avatar>
+    
+    <span class="inline-flex snoovatar relative  fp-avatar-container rounded-full w-lg h-lg min-w-[1.5rem] min-h-[1.5rem] isolate box-content"> 
+    <span class="absolute start-0 end-0 bottom-0 mx-auto inline-flex shrink-0 justify-center box-border h-full w-full">
+       <span style="" class="rounded-full absolute h-full w-full inline-flex justify-center bg-[image:var(--color-avatar-gradient)]">
+    
+  </span>
+    <svg viewBox="0 0 121 122" xmlns="http://www.w3.org/2000/svg" class="overflow-hidden absolute bottom-0 w-lg h-lg">
+      <defs>
+        <clipPath id="b424609a4beb9">
+          <path d="M0 0V79L28.1628 105.5C35.013 115.465 46.4934 122 59.5 122C72.5066 122 83.987 115.465 90.8372 105.5L120.5 79V0H0Z"></path>
+        </clipPath>
+      </defs>
+      <image href="https://styles.redditmedia.com/t5_ozn97/styles/profileIcon_snooda460d75-5c1a-49ca-8b38-3679261cba77-headshot-f.png?width=64&amp;height=64&amp;frame=1&amp;auto=webp&amp;crop=64%3A64%2Csmart&amp;s=6d3172b2c93347cea1e04be4632f1d42a5f9c86f" alt="u/Neon0asis avatar" clip-path="url(#b424609a4beb9)" height="100%" width="100%"></image>
+    </svg>
+    </span>
+  </span></span><span class="inline-flex items-center max-w-full whitespace-nowrap" dir="auto" data-testid="nameplate">
+    <span class="truncate">u/Neon0asis</span>
+  </span>
+  </div></a></faceplate-tracker>
+      <div slot="content">
+        <faceplate-partial src="/svc/shreddit/user-hover-card/Neon0asis?subredditName=MachineLearning" loading="programmatic">
+          <div class="w-5xl h-4xl flex items-center justify-center">
+            <faceplate-progress value="20" class="animate-spin"></faceplate-progress>
+          </div>
+        </faceplate-partial>
+      </div>
+    </faceplate-hovercard>
+  
+      </div>
+    </span>
+   
+  <shreddit-async-loader class="contents" bundlename="distinguished_post_tags">
+    <shreddit-distinguished-post-tags post-id="t3_1x6d829">
+    </shreddit-distinguished-post-tags>
+  </shreddit-async-loader>  <span class="inline-block my-0 created-separator text-neutral-content-weak" aria-hidden="true">•</span>
+  
+  
+    <faceplate-timeago ts="2026-10-15T05:22:11.022000+0000" format="short" locale="en-US-u-nu-latn" class="whitespace-nowrap text-neutral-content-weak"></faceplate-timeago>
+  
+  <shreddit-brand-affiliate-tag post-id="t3_1x6d829" class="contents"></shreddit-brand-affiliate-tag>  
+            
+      </span>
+      <span class="flex items-center ps-xs">
+        
+    
+    <shreddit-async-loader bundlename="status_icons">
+      <shreddit-status-icons class="nd:visible flex items-center gap-2xs isolate" thing-id="t3_1x6d829">
+        
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Locked post"><svg rpl aria-label="Locked post" class="hidden lock-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="lock-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.993 8.168h-.429V6.61a5.572 5.572 0 00-5.566-5.566A5.572 5.572 0 004.432 6.61v1.558h-.429a2.005 2.005 0 00-2.005 2.005v3.692a5.054 5.054 0 005.054 5.054h5.892a5.054 5.054 0 005.054-5.054v-3.692a2.005 2.005 0 00-2.005-2.005ZM10.998 15h-2v-3h2v3Zm2.767-6.832H6.232V6.61A3.771 3.771 0 0110 2.844a3.77 3.77 0 013.767 3.766l-.001 1.558Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Stickied post"><svg rpl aria-label="Stickied post" class="hidden stickied-status fill-[color:var(--color-identity-moderator)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="pin-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18.163 6.191a4.194 4.194 0 00-1.237-2.986l-.167-.167a4.197 4.197 0 00-2.986-1.236 4.194 4.194 0 00-2.986 1.237L8.835 4.99a6.267 6.267 0 00-2.708.116 6.276 6.276 0 00-2.798 1.611.902.902 0 00-.001 1.274l3.724 3.723-4.955 4.955a.898.898 0 00.636 1.536c.23 0 .46-.088.636-.264l4.955-4.955 3.644 3.644a.897.897 0 001.273-.001 6.25 6.25 0 001.727-5.499l1.958-1.953a4.197 4.197 0 001.236-2.986h.001Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Archived post"><svg rpl aria-label="Archived post" class="hidden archived-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="archive-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.7 1H4.3C2.48 1 1 2.48 1 4.3v2.76c0 .5.4.9.9.9H2v6.74C2 16.52 3.48 18 5.3 18h9.4c1.82 0 3.3-1.48 3.3-3.3V7.96h.1c.5 0 .9-.4.9-.9V4.3C19 2.48 17.52 1 15.7 1ZM13 11.87H7v-1.8h6v1.8Zm4.2-5.71H2.8V4.3c0-.83.67-1.5 1.5-1.5h11.4c.83 0 1.5.67 1.5 1.5v1.86Z"></path>
+    </svg></rpl-tooltip>
+      </shreddit-status-icons>
+    </shreddit-async-loader>
+  
+        
+        <span class="flex items-center -me-[7px]"><shreddit-async-loader class="relative w-xl h-xl " bundleName="shreddit_post_overflow_menu">
+    <shreddit-post-overflow-menu class="group/overflow-menu" post-id="t3_1x6d829" author-id="t2_2a22r4g9" author-name="Neon0asis" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" post-type="gif" score="62" comment-count="11" permalink="/r/MachineLearning/comments/1x6d829/i_made_a_wordlestyle_word_guessing_game_to_teach/" post-view-context="SubredditFeed" has-post-flair is-desktop-viewport ama-state="" ama-starts-at="" ama-ends-at="" feed-index="10" should-render-follow-menu-item is-post-awardable should-render-award-menu-item recommendation-context-json="{}" translation-state="" source-id="t3_1x6d829" data-faceplate-tracking-context="{&quot;post&quot;:{&quot;id&quot;:&quot;t3_1x6d829&quot;,&quot;type&quot;:&quot;gif&quot;,&quot;score&quot;:62,&quot;number_comments&quot;:11},&quot;subreddit&quot;:{&quot;id&quot;:&quot;t5_2r3gv&quot;},&quot;action_info&quot;:{&quot;position&quot;:10}}">
+      <button rpl aria-label="Open user actions" class="
+button-small px-[calc(var(--rem10)-var(--button-border-width,0px))]
+button-plain
+
+
+icon
+items-center justify-center
+button inline-flex ">
+      <span class="flex items-center justify-center">
+      <span class="flex"><svg rpl fill="currentColor" height="16" icon-name="overflow-horizontal" viewBox="0 0 20 20" width="16" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 11.75a1.75 1.75 0 11.001-3.501A1.75 1.75 0 0116 11.75ZM11.75 10a1.75 1.75 0 10-3.501.001A1.75 1.75 0 0011.75 10Zm-6 0a1.75 1.75 0 10-3.501.001A1.75 1.75 0 005.75 10Z"></path>
+    </svg></span>
+      
+    </span>
+    
+    </button>
+      
+      
+    </shreddit-post-overflow-menu>
+  </shreddit-async-loader></span>
+      </span>
+    </span>
+  
+    <div slot="ssr-post-content-header"></div>
+    <a href="https://www.reddit.com/r/MachineLearning/comments/1x6d829/i_made_a_wordlestyle_word_guessing_game_to_teach/" id="post-title-t3_1x6d829" slot="title" class="block text-neutral-content-strong m-0 visited:text-neutral-content-weak font-semibold text-16-scalable xs:text-18-scalable  mb-2xs xs:mb-xs  overflow-hidden" aria-describedby="feed-post-credit-bar-t3_1x6d829" dir="auto">
+    I made a Wordle-style word guessing game to teach students how vector embeddings work [P]
+  </a>
+    
+    <shreddit-post-flair slot="post-flair" post-id="t3_1x6d829" flair-class=" relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 "><a href="/r/MachineLearning/?f=flair_name%3A%22Project%22" class="no-decoration"><ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" san="post|click|post_flair"></ac-track>
+    <span class="bg-tone-4 inline-block truncate max-w-full text-12 font-normal align-text-bottom box-border px-[6px] rounded-5 leading-4 text-global-black   relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 " style="background-color: #7D659A;">
+      <div aria-label="Flair: Project" class="flair-content [&_.flair-image]:align-bottom max-w-full overflow-hidden whitespace-nowrap text-ellipsis" dir="auto">
+    Project
+  </div>
+    </span>
+  </a></shreddit-post-flair>
+  
+    
+     <faceplate-loader name="PostMediaContainer_zGcX6F" src="concat:5L_Azkp9vY,B-wYfxWavl,B7aW7Bw9hJ,Bbpnxo4uQB,BCLvLU9SEA,BcxodosoBz,BDs_cWiwHu,BFNqxF-3dz,bh_nlrZcTR,BkdwzxvEQv,BMMtFuh02L,BMXIXRjf3K,BotES7Ij0-,BP0RnCvxeY,BR7V0LXwYv,BszMto8jkT,BvOWmaNPEJ,C_sOTSpASW,C_xPsidQ6K,C6ucJ2fhHB,C9prUyRTnk,CAIRkvAdbZ,CbWoH88MLD,CC-ecZk1Om,Ce4RJitxvT,Cej0BeqWW3,CH6CnjLQBr,Chi1QBgkSt,CI1Gx7ADUb,CJowXoJNim,Cld0fRFHuk,CMcoPgXNg9,CmjdKsYPs5,CoWeaNg06u,CQkyYK0-6b,CtsAW19Stp,CveDfve8QQ,D3j26I9nFT,d8hYRG--8d,DaKXluem0P,DbpzrQD9st,Ddcr0J1ZYp,DgXkm-cXOC,DGxYZhxLoU,DHjhml04Zt,DL2h2thanv,DmCe02f9f5,DoEyFGWXz5,DPlAdZ3V0q,DrL81Zc6l5,DVU-k27NnI,DWNVpGoG6e,Dyg3q1gB6W,Dyy3mu_xgA,DZDBx0nCO6,e2BBVaCDgh,fkEVIK-yJm,FtGcoD-GK1,HpUs05vQlH,IcFov4Cjef,iuk9o3jZtz,l0PvOKI4QI,MCRen0IqK2,nxw5GxDg0G,SY9MOw42gE,vN_1bAaUaE" loading="eager" data-prefix="en-US/">
+    
+        
+      
+  </faceplate-loader>
+    <div class="relative overflow-hidden pointer-cursor   isolate bg-black rounded-4" slot="post-media-container">
+      <div class="pointer-events-none absolute inset-0 z-[3] border-sm border-solid border-neutral-border-weak rounded-4"></div>
+      
+      <div id="t3_1x6d829-aspect-ratio" class="relative block w-full overflow-hidden " data-aspect-ratio-container style="
+    aspect-ratio: 1;
+    min-height: 220px;
+    max-height: 540px;
+  ">
+    <div class="absolute inset-0 h-full w-full"><shreddit-media-lightbox-listener class="nd:visible contents" permalink="/r/MachineLearning/comments/1x6d829/i_made_a_wordlestyle_word_guessing_game_to_teach/" post-id="t3_1x6d829" telemetry="{&quot;post&quot;:{&quot;id&quot;:&quot;t3_1x6d829&quot;,&quot;nsfw&quot;:false,&quot;url&quot;:&quot;https://i.redd.it/boo6mqstfkvh1.gif&quot;,&quot;created_timestamp&quot;:1792041731022,&quot;type&quot;:&quot;gif&quot;,&quot;promoted&quot;:false,&quot;domain&quot;:&quot;i.redd.it&quot;,&quot;translation_state&quot;:false,&quot;translation_language&quot;:&quot;original&quot;,&quot;translation_reason&quot;:&quot;original&quot;,&quot;translatable_state&quot;:&quot;is_not_translatable&quot;,&quot;is_event&quot;:false,&quot;pinned&quot;:false,&quot;number_comments&quot;:11,&quot;score&quot;:62,&quot;upvote_ratio&quot;:0.9558823529411765},&quot;subreddit&quot;:{&quot;id&quot;:&quot;t5_2r3gv&quot;,&quot;name&quot;:&quot;machinelearning&quot;,&quot;nsfw&quot;:false,&quot;quarantined&quot;:false}}">
+    
+    
+    
+    
+    <shreddit-async-loader bundleName="shreddit_player_loader">
+      <shreddit-player src="https://preview.redd.it/boo6mqstfkvh1.gif?width=1280&amp;format=mp4&amp;s=0135116bfd56f36631d04ea9e7359d02fb7b6757" class="block h-full w-full max-h-full max-w-full nd:visible" data-post-click-location="video-player" autoplay autoplay-pref gif player-type="in_feed_player" post-created-at="2026-10-15T05:22:11.022000+0000" post-domain="i.redd.it" post-id="t3_1x6d829" post-score="62" post-type="gif" poster="https://preview.redd.it/i-made-a-wordle-style-word-guessing-game-to-teach-students-v0-boo6mqstfkvh1.gif?width=640&amp;crop=smart&amp;format=png8&amp;s=afef0cdf5e5a27e6f47119e5c29ca5ed20a4c489" subreddit-id="t5_2r3gv" subreddit-name="MachineLearning" priority="auto" vp9-codec-delivery-variant="fallback_on_fail" media-codec-cookie-recalc-version="0">
+        <source src="https://preview.redd.it/boo6mqstfkvh1.gif?width=1280&amp;format=mp4&amp;s=0135116bfd56f36631d04ea9e7359d02fb7b6757">
+        
+    <img alt="media poster" loading="lazy" objectfit="contain" src="https://preview.redd.it/i-made-a-wordle-style-word-guessing-game-to-teach-students-v0-boo6mqstfkvh1.gif?width=640&amp;crop=smart&amp;format=png8&amp;s=afef0cdf5e5a27e6f47119e5c29ca5ed20a4c489" class="preview-image h-full w-full ease absolute inset-0 object-contain bg-black" slot="poster">
+
+    
+    <div class="h-full w-full absolute inset-0 flex items-center justify-center opacity-90" slot="loading-spinner">
+      <svg aria-hidden="true" class="w-3xl h-3xl animate-spin" fill="none" viewBox="0 0 120 120">
+        <circle class="opacity-25" cx="60" cy="60" r="54" stroke="white" stroke-width="8"></circle>
+        <circle class="buffering-track-fill opacity-75" cx="60" cy="60" r="54" stroke="white" stroke-width="10" pathLength="100"></circle>
+      </svg>
+      
+    </div>
+  
+        
+      </shreddit-player>
+      
+    <template slot="error">
+    
+    <div class="bg-black block h-100 overflow-hidden relative">
+      <img alt="Media error" class="blur-[6px] bottom-0 start-0 end-0 top-0 absolute opacity-55 z-0" loading="eager" objectfit="contain" src="https://preview.redd.it/i-made-a-wordle-style-word-guessing-game-to-teach-students-v0-boo6mqstfkvh1.gif?width=640&amp;crop=smart&amp;format=png8&amp;s=afef0cdf5e5a27e6f47119e5c29ca5ed20a4c489">
+      <div class="bottom-0 start-0 end-0 top-0 absolute items-center flex flex-col justify-center z-1">
+        <p dir="auto" class="text-[#fffc] font-[var(--font-title-h4)] max-w-[300px] text-center mt-sm mb-[20px] xs:m-0">
+          Sorry, something went wrong when loading this video.
+        </p>
+        
+    <a rpl name="app-link" class="rounded-1 uppercase mt-lg [--button-color-text:var(--color-global-white)] [--button-border-color:var(--color-global-white)] no-underline hover:no-underline visited:no-underline active:no-underline overflow-hidden text-ellipsis whitespace-nowrap button-medium px-[calc(var(--rem12)-var(--button-border-width,0px))] button-bordered items-center justify-center button inline-flex" rel="nofollow" href="https://reddit.onelink.me/MRHZ?deep_link_value=https%3A%2F%2Fwww.reddit.com%2Fr%2FMachineLearning%2Fcomments%2F1x6d829%2Fi_made_a_wordlestyle_word_guessing_game_to_teach%2F&amp;af_dp=reddit%3A%2F%2Freddit%2Fr%2FMachineLearning%2Fcomments%2F1x6d829%2Fi_made_a_wordlestyle_word_guessing_game_to_teach%2F&amp;base_url=%2Fr%2FMachineLearning%2Fcomments%2F1x6d829%2Fi_made_a_wordlestyle_word_guessing_game_to_teach%2F&amp;mweb_loid_enc=v1%3AIpOm8DJ0CiQ4iRg4DrMNwQb3WGxPbSifKB9Kks8OrhDfJjFfmRomIfg&amp;mweb_loid_created=1792198384091&amp;referrer_domain=www.reddit.com&amp;referrer_url=%2Fr%2FMachineLearning%2Fhot%2F&amp;pid=xpromo&amp;c=no_amp_test&amp;af_channel=xpromo&amp;af_keywords=no_amp&amp;af_sub1=web3x&amp;af_sub4=rmp_fail&amp;af_sub2=rmp_fail&amp;external_ref_type=external">
+      <span class="flex items-center justify-center">
+        <span class="flex items-center gap-xs">
+          View in app
+          
+    
+    <ac-manipulate-href nonce="kbFw4IU9ELdBS26p3kHns_Cw" once payload="?$referrer" target="closest([href])" trigger="init"></ac-manipulate-href>
+    
+    <ac-publish nonce="kbFw4IU9ELdBS26p3kHns_Cw" topic="trigger_educational_deeplink_prompt" trigger-elem="closest([href])" trigger="click"></ac-publish>
+  
+          <ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" data-faceplate-tracking-context="{&quot;popup&quot;:{&quot;button_text&quot;:&quot;get_app&quot;},&quot;action_info&quot;:{&quot;app_link_provider&quot;:&quot;appsFlyer&quot;}}" san="xpromo|click|rmp_fail" trigger-elem="closest([href])"></ac-track>
+        </span>
+      </span>
+    </a>
+  
+      </div>
+      <ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" san="xpromo|view|rmp_fail" trigger="view"></ac-track>
+    </div>
+  
+    </template>
+  
+    </shreddit-async-loader>
+  
+  </shreddit-media-lightbox-listener></div>
+  </div>
+      <div>
+    
+  </div>
+    </div>
+  
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   
+  </shreddit-post>
+<shreddit-post data-ks-item class="block relative cursor-pointer group bg-neutral-background focus-within:bg-neutral-background-hover hover:bg-neutral-background-hover xs:rounded-4 px-md py-2xs my-2xs nd:visible rgb-action-bar-placeholder [&amp;:not(:defined):not(:has(rpl-action-bar))]:pb-2xl" permalink="/r/MachineLearning/comments/1x7n0i2/crashing_out_after_iclr_desk_rejection_content/" content-href="https://www.reddit.com/r/MachineLearning/comments/1x7n0i2/crashing_out_after_iclr_desk_rejection_content/" view-context="SubredditFeed" comment-count="13" view-type="cardView" pdp-target="_self" feedIndex="11" award-count="0" hide-awards-button moderation-verdict="" is-embeddable is-desktop-viewport is-awardable created-timestamp="2026-10-16T17:50:55.119000+0000" domain="self.MachineLearning" id="t3_1x7n0i2" post-title="Crashing out after ICLR desk rejection: &quot;content exceeds the 9-page limit.&quot; [D]" post-language="en" post-type="text" score="0" upvote-ratio="0.18181818181818182" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" author-id="t2_dxw98zn7" author="Eclectic_eels" icon="https://preview.redd.it/snoovatar/avatars/afa6c244-0124-4327-a5ae-4ba5d231454e-headshot.png?width=64&amp;height=64&amp;crop=smart&amp;auto=webp&amp;s=8b6aa49f115a67901bafb011b6f0f7e3c8bd567b" data-expected-lcp subreddit-name="MachineLearning">
+       <a data-ks-id="t3_1x7n0i2" slot="full-post-link" class="absolute inset-0" href="https://www.reddit.com/r/MachineLearning/comments/1x7n0i2/crashing_out_after_iclr_desk_rejection_content/" target="_self">
+    <faceplate-screen-reader-content>
+    Crashing out after ICLR desk rejection: &quot;content exceeds the 9-page limit.&quot; [D]
+  </faceplate-screen-reader-content>
+  </a>
+        
+    
+    
+    <span slot="credit-bar" class="flex justify-between text-12 min-h-[32px]  mb-2xs -mt-2xs">
+      <span id="feed-post-credit-bar-t3_1x7n0i2" class="flex flex-wrap text-12 gap-2xs items-center min-w-0 relative">
+         
+    <span slot="authorName" class="flex">
+      <div class="inline-flex items-center max-w-full">
+        
+    
+    <faceplate-hovercard enter-delay="500" leave-delay="150" position="bottom-start" data-id="user-hover-card" close-on-track label="Eclectic_eels details" mouse-only>
+      <faceplate-tracker source="post_credit_bar" action="click" noun="user_profile" class="visible"><a rpl aria-label="Author: u/Eclectic_eels" class="flex items-center text-neutral-content visited:text-neutral-content-weak font-bold a
+  
+  
+  
+  no-visited
+  no-underline hover:no-underline
+  
+  cursor-pointer" href="https://www.reddit.com/user/Eclectic_eels/"><div class="flex items-center gap-2xs">
+    <span class="inline-flex items-center justify-center w-lg h-lg relative " rpl avatar>
+    
+    <span class="inline-flex snoovatar relative  fp-avatar-container rounded-full w-lg h-lg min-w-[1.5rem] min-h-[1.5rem] isolate box-content"> 
+    <span class="absolute start-0 end-0 bottom-0 mx-auto inline-flex shrink-0 justify-center box-border h-full w-full">
+       <span style="" class="rounded-full absolute h-full w-full inline-flex justify-center bg-[image:var(--color-avatar-gradient)]">
+    
+  </span>
+    <svg viewBox="0 0 121 122" xmlns="http://www.w3.org/2000/svg" class="overflow-hidden absolute bottom-0 w-lg h-lg">
+      <defs>
+        <clipPath id="99106598c558f">
+          <path d="M0 0V79L28.1628 105.5C35.013 115.465 46.4934 122 59.5 122C72.5066 122 83.987 115.465 90.8372 105.5L120.5 79V0H0Z"></path>
+        </clipPath>
+      </defs>
+      <image href="https://preview.redd.it/snoovatar/avatars/afa6c244-0124-4327-a5ae-4ba5d231454e-headshot.png?width=64&amp;height=64&amp;crop=smart&amp;auto=webp&amp;s=8b6aa49f115a67901bafb011b6f0f7e3c8bd567b" alt="u/Eclectic_eels avatar" clip-path="url(#99106598c558f)" height="100%" width="100%"></image>
+    </svg>
+    </span>
+  </span></span><span class="inline-flex items-center max-w-full whitespace-nowrap" dir="auto" data-testid="nameplate">
+    <span class="truncate">u/Eclectic_eels</span>
+  </span>
+  </div></a></faceplate-tracker>
+      <div slot="content">
+        <faceplate-partial src="/svc/shreddit/user-hover-card/Eclectic_eels?subredditName=MachineLearning" loading="programmatic">
+          <div class="w-5xl h-4xl flex items-center justify-center">
+            <faceplate-progress value="20" class="animate-spin"></faceplate-progress>
+          </div>
+        </faceplate-partial>
+      </div>
+    </faceplate-hovercard>
+  
+      </div>
+    </span>
+   
+  <shreddit-async-loader class="contents" bundlename="distinguished_post_tags">
+    <shreddit-distinguished-post-tags post-id="t3_1x7n0i2">
+    </shreddit-distinguished-post-tags>
+  </shreddit-async-loader>  <span class="inline-block my-0 created-separator text-neutral-content-weak" aria-hidden="true">•</span>
+  
+  
+    <faceplate-timeago ts="2026-10-16T17:50:55.119000+0000" format="short" locale="en-US-u-nu-latn" class="whitespace-nowrap text-neutral-content-weak"></faceplate-timeago>
+  
+  <shreddit-brand-affiliate-tag post-id="t3_1x7n0i2" class="contents"></shreddit-brand-affiliate-tag>  
+            
+      </span>
+      <span class="flex items-center ps-xs">
+        
+    
+    <shreddit-async-loader bundlename="status_icons">
+      <shreddit-status-icons class="nd:visible flex items-center gap-2xs isolate" thing-id="t3_1x7n0i2">
+        
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Locked post"><svg rpl aria-label="Locked post" class="hidden lock-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="lock-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.993 8.168h-.429V6.61a5.572 5.572 0 00-5.566-5.566A5.572 5.572 0 004.432 6.61v1.558h-.429a2.005 2.005 0 00-2.005 2.005v3.692a5.054 5.054 0 005.054 5.054h5.892a5.054 5.054 0 005.054-5.054v-3.692a2.005 2.005 0 00-2.005-2.005ZM10.998 15h-2v-3h2v3Zm2.767-6.832H6.232V6.61A3.771 3.771 0 0110 2.844a3.77 3.77 0 013.767 3.766l-.001 1.558Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Stickied post"><svg rpl aria-label="Stickied post" class="hidden stickied-status fill-[color:var(--color-identity-moderator)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="pin-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18.163 6.191a4.194 4.194 0 00-1.237-2.986l-.167-.167a4.197 4.197 0 00-2.986-1.236 4.194 4.194 0 00-2.986 1.237L8.835 4.99a6.267 6.267 0 00-2.708.116 6.276 6.276 0 00-2.798 1.611.902.902 0 00-.001 1.274l3.724 3.723-4.955 4.955a.898.898 0 00.636 1.536c.23 0 .46-.088.636-.264l4.955-4.955 3.644 3.644a.897.897 0 001.273-.001 6.25 6.25 0 001.727-5.499l1.958-1.953a4.197 4.197 0 001.236-2.986h.001Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Archived post"><svg rpl aria-label="Archived post" class="hidden archived-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="archive-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.7 1H4.3C2.48 1 1 2.48 1 4.3v2.76c0 .5.4.9.9.9H2v6.74C2 16.52 3.48 18 5.3 18h9.4c1.82 0 3.3-1.48 3.3-3.3V7.96h.1c.5 0 .9-.4.9-.9V4.3C19 2.48 17.52 1 15.7 1ZM13 11.87H7v-1.8h6v1.8Zm4.2-5.71H2.8V4.3c0-.83.67-1.5 1.5-1.5h11.4c.83 0 1.5.67 1.5 1.5v1.86Z"></path>
+    </svg></rpl-tooltip>
+      </shreddit-status-icons>
+    </shreddit-async-loader>
+  
+        
+        <span class="flex items-center -me-[7px]"><shreddit-async-loader class="relative w-xl h-xl " bundleName="shreddit_post_overflow_menu">
+    <shreddit-post-overflow-menu class="group/overflow-menu" post-id="t3_1x7n0i2" author-id="t2_dxw98zn7" author-name="Eclectic_eels" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" post-type="text" score="0" comment-count="13" permalink="/r/MachineLearning/comments/1x7n0i2/crashing_out_after_iclr_desk_rejection_content/" post-view-context="SubredditFeed" has-post-flair is-desktop-viewport ama-state="" ama-starts-at="" ama-ends-at="" feed-index="11" should-render-follow-menu-item is-post-awardable should-render-award-menu-item recommendation-context-json="{}" translation-state="" source-id="t3_1x7n0i2" data-faceplate-tracking-context="{&quot;post&quot;:{&quot;id&quot;:&quot;t3_1x7n0i2&quot;,&quot;type&quot;:&quot;text&quot;,&quot;score&quot;:0,&quot;number_comments&quot;:13},&quot;subreddit&quot;:{&quot;id&quot;:&quot;t5_2r3gv&quot;},&quot;action_info&quot;:{&quot;position&quot;:11}}">
+      <button rpl aria-label="Open user actions" class="
+button-small px-[calc(var(--rem10)-var(--button-border-width,0px))]
+button-plain
+
+
+icon
+items-center justify-center
+button inline-flex ">
+      <span class="flex items-center justify-center">
+      <span class="flex"><svg rpl fill="currentColor" height="16" icon-name="overflow-horizontal" viewBox="0 0 20 20" width="16" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 11.75a1.75 1.75 0 11.001-3.501A1.75 1.75 0 0116 11.75ZM11.75 10a1.75 1.75 0 10-3.501.001A1.75 1.75 0 0011.75 10Zm-6 0a1.75 1.75 0 10-3.501.001A1.75 1.75 0 005.75 10Z"></path>
+    </svg></span>
+      
+    </span>
+    
+    </button>
+      
+      
+    </shreddit-post-overflow-menu>
+  </shreddit-async-loader></span>
+      </span>
+    </span>
+  
+    <div slot="ssr-post-content-header"></div>
+    <a href="https://www.reddit.com/r/MachineLearning/comments/1x7n0i2/crashing_out_after_iclr_desk_rejection_content/" id="post-title-t3_1x7n0i2" slot="title" class="block text-neutral-content-strong m-0 visited:text-neutral-content-weak font-semibold text-16-scalable xs:text-18-scalable  mb-2xs xs:mb-xs  overflow-hidden" aria-describedby="feed-post-credit-bar-t3_1x7n0i2" dir="auto">
+    Crashing out after ICLR desk rejection: &quot;content exceeds the 9-page limit.&quot; [D]
+  </a>
+    
+    <shreddit-post-flair slot="post-flair" post-id="t3_1x7n0i2" flair-class=" relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 "><a href="/r/MachineLearning/?f=flair_name%3A%22Discussion%22" class="no-decoration"><ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" san="post|click|post_flair"></ac-track>
+    <span class="bg-tone-4 inline-block truncate max-w-full text-12 font-normal align-text-bottom box-border px-[6px] rounded-5 leading-4 text-global-black   relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 " style="background-color: #26C4D9;">
+      <div aria-label="Flair: Discussion" class="flair-content [&_.flair-image]:align-bottom max-w-full overflow-hidden whitespace-nowrap text-ellipsis" dir="auto">
+    Discussion
+  </div>
+    </span>
+  </a></shreddit-post-flair>
+  
+    
+    <shreddit-post-text-body slot="text-body" post-id="t3_1x7n0i2" view-context="SubredditFeed" feed-view-type="cardView" max-text-body-height="253" text-body-height-class="max-h-[253px] overflow-hidden s:max-h-[318px] m:max-h-[337px] l:max-h-[352px] xl:max-h-[452px]" subreddit-prefixed-name="r/MachineLearning">
+      
+        <a href="/r/MachineLearning/comments/1x7n0i2/crashing_out_after_iclr_desk_rejection_content/" class="hover:no-underline no-underline pointer-events-none text-neutral-content visited:text-neutral-content-weak" slot="text-body">
+          
+    <div class="  overflow-hidden" data-post-click-location="text-body">
+      <div id="t3_1x7n0i2-post-rtjson-content" class="md feed-card-text-preview text-ellipsis line-clamp-3 xs:line-clamp-6 text-14-scalable pb-2xs [--emote-size:20px]" about="t3_1x7n0i2" property="schema:articleBody" dir="auto">
+      <p>
+      Half of one sentence in my paper trails onto page 10...
+    </p><p>
+      This must have happened after a small edit and recompile of the pdf on resubmission?
+    </p><p>
+      but this got me desk rejected??? Is this normal?? This wasn&#39;t even flagged by the official LLM feedback?
+    </p><p>
+      Like whats the point of providing LLM feedback if it can&#39;t catch this. I don&#39;t need an AI slop breakdown of my papers strengths and weaknesses, I need to know that i didn&#39;t miss any ridiculous formatting mistakes that would lead to a desk rejection.
+    </p><p>
+      This whole thing feels criminal and humiliating :(
+    </p><p>
+      Especially after already being de-anonymized...
+    </p>
+    </div>
+    </div>
+  
+        </a>
+      
+    </shreddit-post-text-body>
+  
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   
+  </shreddit-post>
+<shreddit-post data-ks-item class="block relative cursor-pointer group bg-neutral-background focus-within:bg-neutral-background-hover hover:bg-neutral-background-hover xs:rounded-4 px-md py-2xs my-2xs nd:visible rgb-action-bar-placeholder [&amp;:not(:defined):not(:has(rpl-action-bar))]:pb-2xl" permalink="/r/MachineLearning/comments/1x5zd2m/remember_alphaxiv_their_new_research_agents_are/" content-href="https://www.reddit.com/r/MachineLearning/comments/1x5zd2m/remember_alphaxiv_their_new_research_agents_are/" view-context="SubredditFeed" comment-count="18" view-type="cardView" pdp-target="_self" feedIndex="12" award-count="0" hide-awards-button moderation-verdict="" is-embeddable is-desktop-viewport is-awardable created-timestamp="2026-10-14T18:40:18.171000+0000" domain="self.MachineLearning" id="t3_1x5zd2m" post-title="Remember alphaXiv? Their new research agents are told to report on users without telling them with no disclosure [D]" post-language="en" post-type="text" score="115" upvote-ratio="0.9259259259259259" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" author-id="t2_7hraep5r" author="Dry_Leadership1075" icon="https://www.redditstatic.com/avatars/defaults/v2/avatar_default_7.png" data-expected-lcp subreddit-name="MachineLearning">
+       <a data-ks-id="t3_1x5zd2m" slot="full-post-link" class="absolute inset-0" href="https://www.reddit.com/r/MachineLearning/comments/1x5zd2m/remember_alphaxiv_their_new_research_agents_are/" target="_self">
+    <faceplate-screen-reader-content>
+    Remember alphaXiv? Their new research agents are told to report on users without telling them with no disclosure [D]
+  </faceplate-screen-reader-content>
+  </a>
+        
+    
+    
+    <span slot="credit-bar" class="flex justify-between text-12 min-h-[32px]  mb-2xs -mt-2xs">
+      <span id="feed-post-credit-bar-t3_1x5zd2m" class="flex flex-wrap text-12 gap-2xs items-center min-w-0 relative">
+         
+    <span slot="authorName" class="flex">
+      <div class="inline-flex items-center max-w-full">
+        
+    
+    <faceplate-hovercard enter-delay="500" leave-delay="150" position="bottom-start" data-id="user-hover-card" close-on-track label="Dry_Leadership1075 details" mouse-only>
+      <faceplate-tracker source="post_credit_bar" action="click" noun="user_profile" class="visible"><a rpl aria-label="Author: u/Dry_Leadership1075" class="flex items-center text-neutral-content visited:text-neutral-content-weak font-bold a
+  
+  
+  
+  no-visited
+  no-underline hover:no-underline
+  
+  cursor-pointer" href="https://www.reddit.com/user/Dry_Leadership1075/"><div class="flex items-center gap-2xs">
+    <span class="inline-flex items-center justify-center w-lg h-lg relative nd:visible nd:block nd:animate-pulse nd:bg-neutral-background-selected" rpl avatar>
+    
+    <span rpl class="inline-block rounded-full  relative [&>:first-child]:h-full [&>:first-child]:w-full [&>:first-child]:mb-0 [&>:first-child]:rounded-[inherit] h-full w-full
+    [&>:first-child]:overflow-hidden [&>:first-child]:max-h-full">
+    <img src="https://www.redditstatic.com/avatars/defaults/v2/avatar_default_7.png?cf_migration=control_1" alt="u/Dry_Leadership1075 avatar" class="h-full w-full">
+  </span></span><span class="inline-flex items-center max-w-full whitespace-nowrap" dir="auto" data-testid="nameplate">
+    <span class="truncate">u/Dry_Leadership1075</span>
+  </span>
+  </div></a></faceplate-tracker>
+      <div slot="content">
+        <faceplate-partial src="/svc/shreddit/user-hover-card/Dry_Leadership1075?subredditName=MachineLearning" loading="programmatic">
+          <div class="w-5xl h-4xl flex items-center justify-center">
+            <faceplate-progress value="20" class="animate-spin"></faceplate-progress>
+          </div>
+        </faceplate-partial>
+      </div>
+    </faceplate-hovercard>
+  
+      </div>
+    </span>
+   
+  <shreddit-async-loader class="contents" bundlename="distinguished_post_tags">
+    <shreddit-distinguished-post-tags post-id="t3_1x5zd2m">
+    </shreddit-distinguished-post-tags>
+  </shreddit-async-loader>  <span class="inline-block my-0 created-separator text-neutral-content-weak" aria-hidden="true">•</span>
+  
+  
+    <faceplate-timeago ts="2026-10-14T18:40:18.171000+0000" format="short" locale="en-US-u-nu-latn" class="whitespace-nowrap text-neutral-content-weak"></faceplate-timeago>
+  
+  <shreddit-brand-affiliate-tag post-id="t3_1x5zd2m" class="contents"></shreddit-brand-affiliate-tag>  
+            
+      </span>
+      <span class="flex items-center ps-xs">
+        
+    
+    <shreddit-async-loader bundlename="status_icons">
+      <shreddit-status-icons class="nd:visible flex items-center gap-2xs isolate" thing-id="t3_1x5zd2m">
+        
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Locked post"><svg rpl aria-label="Locked post" class="hidden lock-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="lock-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.993 8.168h-.429V6.61a5.572 5.572 0 00-5.566-5.566A5.572 5.572 0 004.432 6.61v1.558h-.429a2.005 2.005 0 00-2.005 2.005v3.692a5.054 5.054 0 005.054 5.054h5.892a5.054 5.054 0 005.054-5.054v-3.692a2.005 2.005 0 00-2.005-2.005ZM10.998 15h-2v-3h2v3Zm2.767-6.832H6.232V6.61A3.771 3.771 0 0110 2.844a3.77 3.77 0 013.767 3.766l-.001 1.558Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Stickied post"><svg rpl aria-label="Stickied post" class="hidden stickied-status fill-[color:var(--color-identity-moderator)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="pin-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18.163 6.191a4.194 4.194 0 00-1.237-2.986l-.167-.167a4.197 4.197 0 00-2.986-1.236 4.194 4.194 0 00-2.986 1.237L8.835 4.99a6.267 6.267 0 00-2.708.116 6.276 6.276 0 00-2.798 1.611.902.902 0 00-.001 1.274l3.724 3.723-4.955 4.955a.898.898 0 00.636 1.536c.23 0 .46-.088.636-.264l4.955-4.955 3.644 3.644a.897.897 0 001.273-.001 6.25 6.25 0 001.727-5.499l1.958-1.953a4.197 4.197 0 001.236-2.986h.001Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Archived post"><svg rpl aria-label="Archived post" class="hidden archived-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="archive-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.7 1H4.3C2.48 1 1 2.48 1 4.3v2.76c0 .5.4.9.9.9H2v6.74C2 16.52 3.48 18 5.3 18h9.4c1.82 0 3.3-1.48 3.3-3.3V7.96h.1c.5 0 .9-.4.9-.9V4.3C19 2.48 17.52 1 15.7 1ZM13 11.87H7v-1.8h6v1.8Zm4.2-5.71H2.8V4.3c0-.83.67-1.5 1.5-1.5h11.4c.83 0 1.5.67 1.5 1.5v1.86Z"></path>
+    </svg></rpl-tooltip>
+      </shreddit-status-icons>
+    </shreddit-async-loader>
+  
+        
+        <span class="flex items-center -me-[7px]"><shreddit-async-loader class="relative w-xl h-xl " bundleName="shreddit_post_overflow_menu">
+    <shreddit-post-overflow-menu class="group/overflow-menu" post-id="t3_1x5zd2m" author-id="t2_7hraep5r" author-name="Dry_Leadership1075" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" post-type="text" score="115" comment-count="18" permalink="/r/MachineLearning/comments/1x5zd2m/remember_alphaxiv_their_new_research_agents_are/" post-view-context="SubredditFeed" has-post-flair is-desktop-viewport ama-state="" ama-starts-at="" ama-ends-at="" feed-index="12" should-render-follow-menu-item is-post-awardable should-render-award-menu-item recommendation-context-json="{}" translation-state="" source-id="t3_1x5zd2m" data-faceplate-tracking-context="{&quot;post&quot;:{&quot;id&quot;:&quot;t3_1x5zd2m&quot;,&quot;type&quot;:&quot;text&quot;,&quot;score&quot;:115,&quot;number_comments&quot;:18},&quot;subreddit&quot;:{&quot;id&quot;:&quot;t5_2r3gv&quot;},&quot;action_info&quot;:{&quot;position&quot;:12}}">
+      <button rpl aria-label="Open user actions" class="
+button-small px-[calc(var(--rem10)-var(--button-border-width,0px))]
+button-plain
+
+
+icon
+items-center justify-center
+button inline-flex ">
+      <span class="flex items-center justify-center">
+      <span class="flex"><svg rpl fill="currentColor" height="16" icon-name="overflow-horizontal" viewBox="0 0 20 20" width="16" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 11.75a1.75 1.75 0 11.001-3.501A1.75 1.75 0 0116 11.75ZM11.75 10a1.75 1.75 0 10-3.501.001A1.75 1.75 0 0011.75 10Zm-6 0a1.75 1.75 0 10-3.501.001A1.75 1.75 0 005.75 10Z"></path>
+    </svg></span>
+      
+    </span>
+    
+    </button>
+      
+      
+    </shreddit-post-overflow-menu>
+  </shreddit-async-loader></span>
+      </span>
+    </span>
+  
+    <div slot="ssr-post-content-header"></div>
+    <a href="https://www.reddit.com/r/MachineLearning/comments/1x5zd2m/remember_alphaxiv_their_new_research_agents_are/" id="post-title-t3_1x5zd2m" slot="title" class="block text-neutral-content-strong m-0 visited:text-neutral-content-weak font-semibold text-16-scalable xs:text-18-scalable  mb-2xs xs:mb-xs  overflow-hidden" aria-describedby="feed-post-credit-bar-t3_1x5zd2m" dir="auto">
+    Remember alphaXiv? Their new research agents are told to report on users without telling them with no disclosure [D]
+  </a>
+    
+    <shreddit-post-flair slot="post-flair" post-id="t3_1x5zd2m" flair-class=" relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 "><a href="/r/MachineLearning/?f=flair_name%3A%22Discussion%22" class="no-decoration"><ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" san="post|click|post_flair"></ac-track>
+    <span class="bg-tone-4 inline-block truncate max-w-full text-12 font-normal align-text-bottom box-border px-[6px] rounded-5 leading-4 text-global-black   relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 " style="background-color: #26C4D9;">
+      <div aria-label="Flair: Discussion" class="flair-content [&_.flair-image]:align-bottom max-w-full overflow-hidden whitespace-nowrap text-ellipsis" dir="auto">
+    Discussion
+  </div>
+    </span>
+  </a></shreddit-post-flair>
+  
+    
+    <shreddit-post-text-body slot="text-body" post-id="t3_1x5zd2m" view-context="SubredditFeed" feed-view-type="cardView" max-text-body-height="253" text-body-height-class="max-h-[253px] overflow-hidden s:max-h-[318px] m:max-h-[337px] l:max-h-[352px] xl:max-h-[452px]" subreddit-prefixed-name="r/MachineLearning">
+      
+        <a href="/r/MachineLearning/comments/1x5zd2m/remember_alphaxiv_their_new_research_agents_are/" class="hover:no-underline no-underline pointer-events-none text-neutral-content visited:text-neutral-content-weak" slot="text-body">
+          
+    <div class="  overflow-hidden" data-post-click-location="text-body">
+      <div id="t3_1x5zd2m-post-rtjson-content" class="md feed-card-text-preview text-ellipsis line-clamp-3 xs:line-clamp-6 text-14-scalable pb-2xs [--emote-size:20px]" about="t3_1x5zd2m" property="schema:articleBody" dir="auto">
+      <p>
+      I was curious about OpenResearch by alphaXiv. &quot;Turn your coding agents into research agents&quot;? Sounds great! Just what I needed to save time on my experiments. So I copy pasted their repo into Claude and asked what it thought. Here were the first 4 lines:
+    </p><ol>
+        <li>
+      <p>
+      &quot;Silent feedback to the vendor. Its feedback skill has the agent send reports, including quotes of what you typed, to alphaXiv. The skill says &quot;Do not mention the report to the user.&quot;
+    </p>
+    </li><li>
+      <p>
+      Silent updates. They&#39;re on by default; the code literally falls back to true.
+    </p>
+    </li><li>
+      <p>
+      Telemetry on by default. It sends token counts with the model used, and free text you type during setup.
+    </p>
+    </li><li>
+      <p>
+      Runs without asking. The agent launches experiments on its own by default (&quot;copilot&quot; mode, which asks first, is opt-in), and I couldn&#39;t find a spend limit for API costs. &quot;
+    </p>
+    </li>
+      </ol><p>
+      ... LOL
+    </p><p>
+      But it doesn&#39;t just end there. When I looked at what they actually did:
+    </p><ol>
+        <li>
+      <p>
+      They deleted the README section that told users the reports exist
+    </p>
+    </li><li>
+      <p>
+      They ignored their AI code reviewer that caught it (&quot;feedback disclosure disappears&quot;) and told it this was a decision not a mistake
+    </p>
+    </li>
+      </ol><p>
+      bruh
+    </p><p>
+      Skill Line: <object role="none"><a rpl class="relative pointer-events-auto a
+  
+  
+  
+  
+  underline
+  
+  cursor-pointer" href="https://github.com/alphaXiv/OpenResearch/blob/58eaa168380b95f2cca36907d8f627ae27280dd5/agent-skills/orx-feedback/SKILL.md?plain=1#L57-L59" rel="noopener nofollow ugc" target="_blank">https://github.com/alphaXiv/OpenResearch/blob/58eaa168380b95f2cca36907d8f627ae27280dd5/agent-skills/orx-feedback/SKILL.md?plain=1#L57-L59</a></object><br>Reviewer&#39;s Flag: <object role="none"><a rpl class="relative pointer-events-auto a
+  
+  
+  
+  
+  underline
+  
+  cursor-pointer" href="https://github.com/alphaXiv/OpenResearch/pull/541#discussion_r4190882201" rel="noopener nofollow ugc" target="_blank">https://github.com/alphaXiv/OpenResearch/pull/541#discussion_r4190882201</a></object>
+    </p><p>
+      Is this what everyone&#39;s doing these days?
+    </p>
+    </div>
+    </div>
+  
+        </a>
+      
+    </shreddit-post-text-body>
+  
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   
+  </shreddit-post>
+<shreddit-post data-ks-item class="block relative cursor-pointer group bg-neutral-background focus-within:bg-neutral-background-hover hover:bg-neutral-background-hover xs:rounded-4 px-md py-2xs my-2xs nd:visible rgb-action-bar-placeholder [&amp;:not(:defined):not(:has(rpl-action-bar))]:pb-2xl" permalink="/r/MachineLearning/comments/1x5nhu6/event2vec_additive_event_embeddings_where_a/" content-href="https://www.reddit.com/gallery/1x5nhu6" view-context="SubredditFeed" comment-count="14" view-type="cardView" pdp-target="_self" feedIndex="13" award-count="0" hide-awards-button moderation-verdict="" is-embeddable is-desktop-viewport is-awardable gallery created-timestamp="2026-10-14T10:16:24.546000+0000" domain="reddit.com" id="t3_1x5nhu6" post-title="Event2Vec: additive event embeddings where a linear score on a history decomposes exactly into per-event terms [P]" post-language="en" post-type="gallery" score="243" upvote-ratio="0.9764705882352941" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" author-id="t2_77e3jpuf" author="sulcantonin" icon="https://www.redditstatic.com/avatars/defaults/v2/avatar_default_7.png" data-expected-lcp subreddit-name="MachineLearning">
+       <a data-ks-id="t3_1x5nhu6" slot="full-post-link" class="absolute inset-0" href="https://www.reddit.com/r/MachineLearning/comments/1x5nhu6/event2vec_additive_event_embeddings_where_a/" target="_self">
+    <faceplate-screen-reader-content>
+    Event2Vec: additive event embeddings where a linear score on a history decomposes exactly into per-event terms [P]
+  </faceplate-screen-reader-content>
+  </a>
+        
+    
+    
+    <span slot="credit-bar" class="flex justify-between text-12 min-h-[32px]  mb-2xs -mt-2xs">
+      <span id="feed-post-credit-bar-t3_1x5nhu6" class="flex flex-wrap text-12 gap-2xs items-center min-w-0 relative">
+         
+    <span slot="authorName" class="flex">
+      <div class="inline-flex items-center max-w-full">
+        
+    
+    <faceplate-hovercard enter-delay="500" leave-delay="150" position="bottom-start" data-id="user-hover-card" close-on-track label="sulcantonin details" mouse-only>
+      <faceplate-tracker source="post_credit_bar" action="click" noun="user_profile" class="visible"><a rpl aria-label="Author: u/sulcantonin" class="flex items-center text-neutral-content visited:text-neutral-content-weak font-bold a
+  
+  
+  
+  no-visited
+  no-underline hover:no-underline
+  
+  cursor-pointer" href="https://www.reddit.com/user/sulcantonin/"><div class="flex items-center gap-2xs">
+    <span class="inline-flex items-center justify-center w-lg h-lg relative nd:visible nd:block nd:animate-pulse nd:bg-neutral-background-selected" rpl avatar>
+    
+    <span rpl class="inline-block rounded-full  relative [&>:first-child]:h-full [&>:first-child]:w-full [&>:first-child]:mb-0 [&>:first-child]:rounded-[inherit] h-full w-full
+    [&>:first-child]:overflow-hidden [&>:first-child]:max-h-full">
+    <img src="https://www.redditstatic.com/avatars/defaults/v2/avatar_default_7.png?cf_migration=control_1" alt="u/sulcantonin avatar" class="h-full w-full">
+  </span></span><span class="inline-flex items-center max-w-full whitespace-nowrap" dir="auto" data-testid="nameplate">
+    <span class="truncate">u/sulcantonin</span>
+  </span>
+  </div></a></faceplate-tracker>
+      <div slot="content">
+        <faceplate-partial src="/svc/shreddit/user-hover-card/sulcantonin?subredditName=MachineLearning" loading="programmatic">
+          <div class="w-5xl h-4xl flex items-center justify-center">
+            <faceplate-progress value="20" class="animate-spin"></faceplate-progress>
+          </div>
+        </faceplate-partial>
+      </div>
+    </faceplate-hovercard>
+  
+      </div>
+    </span>
+   
+  <shreddit-async-loader class="contents" bundlename="distinguished_post_tags">
+    <shreddit-distinguished-post-tags post-id="t3_1x5nhu6">
+    </shreddit-distinguished-post-tags>
+  </shreddit-async-loader>  <span class="inline-block my-0 created-separator text-neutral-content-weak" aria-hidden="true">•</span>
+  
+  
+    <faceplate-timeago ts="2026-10-14T10:16:24.546000+0000" format="short" locale="en-US-u-nu-latn" class="whitespace-nowrap text-neutral-content-weak"></faceplate-timeago>
+  
+  <shreddit-brand-affiliate-tag post-id="t3_1x5nhu6" class="contents"></shreddit-brand-affiliate-tag>  
+            
+      </span>
+      <span class="flex items-center ps-xs">
+        
+    
+    <shreddit-async-loader bundlename="status_icons">
+      <shreddit-status-icons class="nd:visible flex items-center gap-2xs isolate" thing-id="t3_1x5nhu6">
+        
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Locked post"><svg rpl aria-label="Locked post" class="hidden lock-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="lock-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.993 8.168h-.429V6.61a5.572 5.572 0 00-5.566-5.566A5.572 5.572 0 004.432 6.61v1.558h-.429a2.005 2.005 0 00-2.005 2.005v3.692a5.054 5.054 0 005.054 5.054h5.892a5.054 5.054 0 005.054-5.054v-3.692a2.005 2.005 0 00-2.005-2.005ZM10.998 15h-2v-3h2v3Zm2.767-6.832H6.232V6.61A3.771 3.771 0 0110 2.844a3.77 3.77 0 013.767 3.766l-.001 1.558Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Stickied post"><svg rpl aria-label="Stickied post" class="hidden stickied-status fill-[color:var(--color-identity-moderator)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="pin-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18.163 6.191a4.194 4.194 0 00-1.237-2.986l-.167-.167a4.197 4.197 0 00-2.986-1.236 4.194 4.194 0 00-2.986 1.237L8.835 4.99a6.267 6.267 0 00-2.708.116 6.276 6.276 0 00-2.798 1.611.902.902 0 00-.001 1.274l3.724 3.723-4.955 4.955a.898.898 0 00.636 1.536c.23 0 .46-.088.636-.264l4.955-4.955 3.644 3.644a.897.897 0 001.273-.001 6.25 6.25 0 001.727-5.499l1.958-1.953a4.197 4.197 0 001.236-2.986h.001Z"></path>
+    </svg></rpl-tooltip>
+        <rpl-tooltip class="nd:visible" appearance="inverted" trigger="hover focus" content="Archived post"><svg rpl aria-label="Archived post" class="hidden archived-status fill-[color:var(--color-identity-coins)] shrink-0 px-2xs" fill="currentColor" height="12" icon-name="archive-fill" viewBox="0 0 20 20" width="12" xmlns="http://www.w3.org/2000/svg">
+      <path d="M15.7 1H4.3C2.48 1 1 2.48 1 4.3v2.76c0 .5.4.9.9.9H2v6.74C2 16.52 3.48 18 5.3 18h9.4c1.82 0 3.3-1.48 3.3-3.3V7.96h.1c.5 0 .9-.4.9-.9V4.3C19 2.48 17.52 1 15.7 1ZM13 11.87H7v-1.8h6v1.8Zm4.2-5.71H2.8V4.3c0-.83.67-1.5 1.5-1.5h11.4c.83 0 1.5.67 1.5 1.5v1.86Z"></path>
+    </svg></rpl-tooltip>
+      </shreddit-status-icons>
+    </shreddit-async-loader>
+  
+        
+        <span class="flex items-center -me-[7px]"><shreddit-async-loader class="relative w-xl h-xl " bundleName="shreddit_post_overflow_menu">
+    <shreddit-post-overflow-menu class="group/overflow-menu" post-id="t3_1x5nhu6" author-id="t2_77e3jpuf" author-name="sulcantonin" subreddit-id="t5_2r3gv" subreddit-prefixed-name="r/MachineLearning" post-type="gallery" score="243" comment-count="14" permalink="/r/MachineLearning/comments/1x5nhu6/event2vec_additive_event_embeddings_where_a/" post-view-context="SubredditFeed" has-post-flair is-desktop-viewport ama-state="" ama-starts-at="" ama-ends-at="" feed-index="13" should-render-follow-menu-item is-post-awardable should-render-award-menu-item recommendation-context-json="{}" translation-state="" source-id="t3_1x5nhu6" data-faceplate-tracking-context="{&quot;post&quot;:{&quot;id&quot;:&quot;t3_1x5nhu6&quot;,&quot;type&quot;:&quot;gallery&quot;,&quot;score&quot;:243,&quot;number_comments&quot;:14},&quot;subreddit&quot;:{&quot;id&quot;:&quot;t5_2r3gv&quot;},&quot;action_info&quot;:{&quot;position&quot;:13}}">
+      <button rpl aria-label="Open user actions" class="
+button-small px-[calc(var(--rem10)-var(--button-border-width,0px))]
+button-plain
+
+
+icon
+items-center justify-center
+button inline-flex ">
+      <span class="flex items-center justify-center">
+      <span class="flex"><svg rpl fill="currentColor" height="16" icon-name="overflow-horizontal" viewBox="0 0 20 20" width="16" xmlns="http://www.w3.org/2000/svg">
+      <path d="M16 11.75a1.75 1.75 0 11.001-3.501A1.75 1.75 0 0116 11.75ZM11.75 10a1.75 1.75 0 10-3.501.001A1.75 1.75 0 0011.75 10Zm-6 0a1.75 1.75 0 10-3.501.001A1.75 1.75 0 005.75 10Z"></path>
+    </svg></span>
+      
+    </span>
+    
+    </button>
+      
+      
+    </shreddit-post-overflow-menu>
+  </shreddit-async-loader></span>
+      </span>
+    </span>
+  
+    <div slot="ssr-post-content-header"></div>
+    <a href="https://www.reddit.com/r/MachineLearning/comments/1x5nhu6/event2vec_additive_event_embeddings_where_a/" id="post-title-t3_1x5nhu6" slot="title" class="block text-neutral-content-strong m-0 visited:text-neutral-content-weak font-semibold text-16-scalable xs:text-18-scalable  mb-2xs xs:mb-xs  overflow-hidden" aria-describedby="feed-post-credit-bar-t3_1x5nhu6" dir="auto">
+    Event2Vec: additive event embeddings where a linear score on a history decomposes exactly into per-event terms [P]
+  </a>
+    
+    <shreddit-post-flair slot="post-flair" post-id="t3_1x5nhu6" flair-class=" relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 "><a href="/r/MachineLearning/?f=flair_name%3A%22Project%22" class="no-decoration"><ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" san="post|click|post_flair"></ac-track>
+    <span class="bg-tone-4 inline-block truncate max-w-full text-12 font-normal align-text-bottom box-border px-[6px] rounded-5 leading-4 text-global-black   relative -top-2xs xs:top-[-2px] my-2xs xs:mb-sm py-0 " style="background-color: #7D659A;">
+      <div aria-label="Flair: Project" class="flair-content [&_.flair-image]:align-bottom max-w-full overflow-hidden whitespace-nowrap text-ellipsis" dir="auto">
+    Project
+  </div>
+    </span>
+  </a></shreddit-post-flair>
+  
+    
+     <faceplate-loader name="PostMediaContainer_zGcX6F" src="concat:5L_Azkp9vY,B-wYfxWavl,B7aW7Bw9hJ,Bbpnxo4uQB,BCLvLU9SEA,BcxodosoBz,BDs_cWiwHu,BFNqxF-3dz,bh_nlrZcTR,BkdwzxvEQv,BMMtFuh02L,BMXIXRjf3K,BotES7Ij0-,BP0RnCvxeY,BR7V0LXwYv,BszMto8jkT,BvOWmaNPEJ,C_sOTSpASW,C_xPsidQ6K,C6ucJ2fhHB,C9prUyRTnk,CAIRkvAdbZ,CbWoH88MLD,CC-ecZk1Om,Ce4RJitxvT,Cej0BeqWW3,CH6CnjLQBr,Chi1QBgkSt,CI1Gx7ADUb,CJowXoJNim,Cld0fRFHuk,CMcoPgXNg9,CmjdKsYPs5,CoWeaNg06u,CQkyYK0-6b,CtsAW19Stp,CveDfve8QQ,D3j26I9nFT,d8hYRG--8d,DaKXluem0P,DbpzrQD9st,Ddcr0J1ZYp,DgXkm-cXOC,DGxYZhxLoU,DHjhml04Zt,DL2h2thanv,DmCe02f9f5,DoEyFGWXz5,DPlAdZ3V0q,DrL81Zc6l5,DVU-k27NnI,DWNVpGoG6e,Dyg3q1gB6W,Dyy3mu_xgA,DZDBx0nCO6,e2BBVaCDgh,fkEVIK-yJm,FtGcoD-GK1,HpUs05vQlH,IcFov4Cjef,iuk9o3jZtz,l0PvOKI4QI,MCRen0IqK2,nxw5GxDg0G,SY9MOw42gE,vN_1bAaUaE" loading="eager" data-prefix="en-US/">
+    
+        
+      
+  </faceplate-loader>
+    <div class="relative overflow-hidden pointer-cursor   isolate bg-neutral-background rounded-4" slot="post-media-container">
+      <div class="pointer-events-none absolute inset-0 z-[3] border-sm border-solid border-neutral-border-weak rounded-4"></div>
+      
+      
+    <shreddit-async-loader bundleName="gallery_carousel">
+      <gallery-carousel style="--gallery-initial-height: 540px" class="nd:block nd:overflow-hidden nd:h-[var(--gallery-initial-height)]" post-id="t3_1x5nhu6" permalink="/r/MachineLearning/comments/1x5nhu6/event2vec_additive_event_embeddings_where_a/" carousel-style="
+    max-height: 540px;
+  " fetch-ahead-count="3" use-media-lightbox advance-animation device-type="desktop">
+        <ul>
+          
+      <li slot="page-1" class="relative flex justify-center mt-0 bg-black/20">
+        
+       <img class="absolute top-0 start-0 w-full h-full opacity-30 object-cover scale-[1.2] post-background-image-filter z-0" src="https://preview.redd.it/event2vec-additive-event-embeddings-where-a-linear-score-on-v0-6yoixcborevh1.gif?width=640&amp;crop=smart&amp;auto=webp&amp;s=76f5d9f1a047424e2f6d5ad9312c0ee6a80142f6" width="720" height="720" srcset="" alt="" role="presentation" fetchpriority="auto" loading="lazy">
+      <figure class="h-full w-full m-0 z-10 flex items-center">
+        <img class="non-lightboxed-content media-lightbox-img h-full w-full max-h-[100vw] object-contain mb-0 relative" src="https://i.redd.it/6yoixcborevh1.gif" width="720" height="720" srcset="" loading="lazy" alt="r/MachineLearning - Event2Vec: additive event embeddings where a linear score on a history decomposes exactly into per-event terms [P]" fetchpriority="auto"><image-observer placement="gallery_post"></image-observer> <div class="lightboxed-content hidden">
+          <zoomable-img style="position: absolute; inset: 0"><img class="media-lightbox-img h-full w-full object-contain relative z-1" loading="lazy" src="https://i.redd.it/6yoixcborevh1.gif" alt="r/MachineLearning - Event2Vec: additive event embeddings where a linear score on a history decomposes exactly into per-event terms [P]"></zoomable-img>
+        </div> 
+      </figure>
+    
+      </li>
+    
+      <li slot="page-2" class="relative flex justify-center mt-0 bg-black/20">
+        
+       <img class="absolute top-0 start-0 w-full h-full opacity-30 object-cover scale-[1.2] post-background-image-filter z-0" width="1080" height="594" data-lazy-src="https://preview.redd.it/event2vec-additive-event-embeddings-where-a-linear-score-on-v0-8srvocborevh1.gif?width=640&amp;crop=smart&amp;auto=webp&amp;s=a8373de75d3398becb1d3e5aaf3cb34740b2140a" data-lazy-srcset="" alt="" role="presentation" fetchpriority="low" loading="eager">
+      <figure class="h-full w-full m-0 z-10 flex items-center">
+        <img class="non-lightboxed-content media-lightbox-img h-full w-full max-h-[100vw] object-contain mb-0 relative" width="1080" height="594" data-lazy-src="https://i.redd.it/8srvocborevh1.gif" data-lazy-srcset="" loading="eager" alt="r/MachineLearning - Event2Vec: additive event embeddings where a linear score on a history decomposes exactly into per-event terms [P]" fetchpriority="low"><image-observer placement="gallery_post"></image-observer> <div class="lightboxed-content hidden">
+          <zoomable-img style="position: absolute; inset: 0"><img class="media-lightbox-img h-full w-full object-contain relative z-1" loading="lazy" src="https://i.redd.it/8srvocborevh1.gif" alt="r/MachineLearning - Event2Vec: additive event embeddings where a linear score on a history decomposes exactly into per-event terms [P]"></zoomable-img>
+        </div> 
+      </figure>
+    
+      </li>
+    
+        </ul>
+      </gallery-carousel>
+    </shreddit-async-loader>
+    <shreddit-gallery-listener for="post-gallery-t3_1x5nhu6" id="t3_1x5nhu6" subreddit="MachineLearning">
+    </shreddit-gallery-listener>
+  
+      <div>
+    
+  </div>
+    </div>
+  
+    
+    
+    
+    
+    
+    
+    
+    
+    
+   
+  </shreddit-post>
+<faceplate-partial slot="load-after" id="partial-more-posts-dDNfMXg0YXdsaw" loading="programmatic" tabindex="0" src="/svc/shreddit/community-more-posts/hot/?after=dDNfMXg0YXdsaw%3D%3D&amp;t=DAY&amp;name=MachineLearning&amp;ad_posts_served=4&amp;navigationSessionId=5f825129-5e54-4b4c-a89b-0b579767e428&amp;feedLength=32&amp;referer=www.reddit.com&amp;adDistance=6&amp;distance=28" method="GET">
+      <shreddit-feed-page-loading page-type="community" length-of-feed="32"><ac-track nonce="kbFw4IU9ELdBS26p3kHns_Cw" once san="feed|view|loading_spinner" trigger="view"></ac-track></shreddit-feed-page-loading>
+    </faceplate-partial>
+</body></html>

@@ -98,7 +98,14 @@ READ_URL_DESCRIPTION = (
     "redirect elsewhere, and are never returned. Ask the user before using one. "
     "'proxy' routes the read through a proxy for walls decided on the address "
     "rather than the request; it refuses to carry cookies unless "
-    "'proxy_trusted' is true. Returns an 'Error: ...' "
+    "'proxy_trusted' is true. 'max_pages' and 'max_items' ask for more of a "
+    "list than the first window: 'max_items' counts rows and follows the "
+    "site's own next-batch link when it has one (a Reddit feed, for instance, "
+    "carries its own cursor), 'max_pages' counts page hops. 'expand' is opt-in "
+    "for a page that serves only part of itself and keeps the rest behind its "
+    "own controls -- Reddit's 'more replies' on a long thread, say -- and it "
+    "needs the browser tier; it is off by default because it clicks things. "
+    "Returns an 'Error: ...' "
     "string (not an exception) when every tier fails."
 )
 
@@ -661,7 +668,8 @@ def read_url(
     if expand:
         # F23d, passed only when asked. The click ceiling comes from the
         # user's policy inside fetch; this parameter is the intent, not the
-        # mechanics, and there is no parameter for "how far".
+        # mechanics, and there is no parameter for "how far". F5f rides it: on a
+        # Reddit thread this is what opens the "more replies" partials.
         extra["expand"] = True
     try:
         if max_items:

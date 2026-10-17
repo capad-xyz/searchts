@@ -15,6 +15,10 @@ prints nothing and fails loudly when no tier produced real content.
   list that only grows that way.
 - `read-expand` opens closed `<details>` and read/show/see-more buttons with
   `--expand`, and names a paywall instead of opening it.
+- `read-reddit` reads a Reddit listing, thread, profile or search page as cards,
+  follows Reddit's own next-post cursor for `--items`, opens its "more replies"
+  controls for `--expand`, and names each wall it finds (private, banned,
+  quarantined, over-18, gone, archived) instead of returning the nav bar.
 - `read-ceilings` clamps `--pages`, `--items` and the expand presses to the
   user's own ceiling and says so on the text the caller reads.
 - `read-scrub` redacts prompt-injection spans on request.
@@ -31,6 +35,9 @@ prints nothing and fails loudly when no tier produced real content.
   scroll the page in the browser when that is the only way it grows more.
 - Run `searchts read <url> --expand` to open the text the page is holding back.
 - Run `searchts read <url> --scrub` before passing the text to another model.
+- Run `searchts read https://www.reddit.com/r/<sub>/hot/ --items 40` for more
+  posts than the first window, and `searchts read <reddit thread url> --expand`
+  for deeper comments.
 
 ## Driving it with searchts
 
@@ -82,6 +89,30 @@ Preconditions:
   button]`. Both are honest answers and which one you get depends on hydration
   having finished, so record the one you saw rather than asserting one.
 
+### Reddit (a known host)
+
+Preconditions:
+
+- `searchts install --browser` has been run. Every one of these drives needs the
+  browser tier; Reddit's first window, its "more replies" controls and its feed
+  cursor all live behind that rung.
+- The run uses the **user's real** `HOME`. The persistent `~/.searchts/browser-profile`
+  is what Reddit judges, and a scratch `HOME` (or `SEARCHTS_NO_BROWSER_PROFILE=1`)
+  answers "Prove your humanity" on every page. That pairing is itself a drive; see
+  the last bullet.
+
+- **Listing and its cursor.** Run `.venv/bin/python -m searchts read https://www.reddit.com/r/MachineLearning/hot/ --items 40 --json > artifacts/reddit/listing-items.json 2> artifacts/reddit/listing-items.err`. Exit code `0`. The object has a `pages` array with more than one entry, the later entries' `url` starting `https://www.reddit.com/svc/shreddit/`, and each entry's `text` holding `- **post title**` rows. One entry is the first window; two or more is Reddit's own cursor being followed. `text` also carries the `[more: after these N cards, Reddit's own cursor for the next batch of this feed is <url>]` note naming the cursor an agent can act on. N is the count of the page just read, never the batch behind the cursor: the drive saved on 2026-10-17 read 3 cards on page one and 24 on the batch its cursor served, so a note claiming the next batch holds N is a number searchts does not have.
+- **Payload, not just pages.** Count `- **` across all the entries in `pages`. One window is roughly 3 posts for a Reddit feed, so a walk that ends with the first window's worth of rows read nothing extra no matter how many entries there are.
+- **Deeper comments.** Run the same verb on a Reddit thread URL with and without `--expand` and compare. The plain read reports `[partial: Reddit reports N comments; M were in the page]`; the `--expand` read reports the same sentence with a larger M. M is a count of `**/u/name** (N pts)` lines in `text`, and M must grow. A drive saved on 2026-10-17 went 25 → 127 on a 195-comment thread.
+- **The ceiling still caps a thread.** Run `SEARCHTS_MAX_ITEMS=12 ... read <thread url> --expand --json`. `text` holds 12 comment lines and the line `[truncated: N more comments in the page were cut at the 12-comment cap]`. Comments are rows; `SEARCHTS_MAX_ITEMS` is the only cap on them, and the note has to name the number it used.
+- **Profile and search.** Drive `https://www.reddit.com/user/spez/ --items 80 --json` and `https://www.reddit.com/search/?q=searchts --json`. The profile's `pages` array grows past its first entry and `text` starts `# /u/spez` with a `## Posts (` and a `## Comments (` section; the search's `text` starts `## Results` with one card per hit. A profile or search with no cards must exit non-zero with empty stdout, never the nav bar.
+- **Each wall names itself.** Drive `https://www.reddit.com/r/gryffindor/` (private), `https://www.reddit.com/r/Random/` (banned), `https://www.reddit.com/r/incest/` (quarantined), `https://www.reddit.com/r/nsfw/` (no such community) and a comment URL for a post that is not there. Each exits non-zero, stdout is empty, and stderr names a different reason per URL. Two of these hand off to a person with `searchts read <same url> --human`; the private one must not, because there is no public page for a person to accept. The over-18 gate has its own bullet below because it does not fire on demand.
+- **One rung, one line.** Drive the quarantined community again with `--human`. stderr carries `human-browser: reddit-quarantined` **once**: a wall the rung can name is not also answered with `human-browser: empty-extract` under it. Two lines for one rung read as two failures, and the second is a lie about the page, which was refused rather than empty. Count the `human-browser:` lines in stderr, not the presence of the wall's name. `read` itself passes `progress=False`, so the ladder's per-rung ticks are not in this drive; the error summary still shows one entry per rung, and that is the assertion to make on the CLI.
+- **The over-18 gate is not a wall you can summon.** Drive `https://www.reddit.com/search/?q=gore`. On a warm profile this has answered with 7 result cards and exit `0` twice in a row, and with the gate notice once. Both are real. Record which one you saw; the gate is proven by the saved fixture and the one drive that hit it, and a drive that returns cards is not a failure of searchts.
+- **An archived post still reads its comments.** Drive a post whose author deleted it. Exit `0`, `text` carries `**Post:** archived by Reddit. Its text is not available.` and a `[removed: ...]` note, and the comments are there. Removal that leaves nothing public is a failure; removal that leaves a comment tree is content.
+- **A post that *quotes* the archived notice is not archived.** Drive `https://www.reddit.com/r/NoStupidQuestions/comments/1x4uke7/` (its OP body quotes "Archived post. New comments cannot be posted" because its author was reading one elsewhere). Exit `0`, `text` carries the OP body and its comments, and it carries **no** `archived by Reddit` line and no `[removed:` note. The archived line is only ever true when Reddit puts `archived` on the post element; Reddit serves threads about all four notices, so a read that keys off the words loses a page that was there.
+- **Warm profile vs cold, paired.** Run the listing twice: once as above, once with `SEARCHTS_NO_BROWSER_PROFILE=1`. The warm run exits `0` with posts; the cold run exits non-zero with `reddit-challenge` on every tier and a hint that says the same URL may read on a warm profile. Both artifacts side by side are the proof for the warm-profile caveat in the README. If only the cold answer appears, the profile is not warm and the rest of the Reddit drives prove nothing yet.
+
 ### The ceilings
 
 - **Clamp.** Run `SEARCHTS_MAX_ITEMS=20 .venv/bin/python -m searchts read https://meta.discourse.org/latest --items 90 --json > artifacts/read/clamp.json 2> artifacts/read/clamp.err`. The object carries a `text` containing `[items: asked for 90, the ceiling is 20]`, and the `[scroll:` line says it stopped at the 20 rows asked for. The ceiling stops further walking and scrolling; it does not trim rows page one already held (the saved drive had 30).
@@ -120,3 +151,13 @@ Preconditions:
   would have hidden the fail-loud behaviour above.
 - `example.com` is a reserved documentation domain and is deliberately empty.
   It proves the ladder and the JSON shape. It proves nothing about extraction.
+- A Reddit read on a **fresh** profile is challenged on every page, and that is
+  a fact about the profile, not a bug to report. Re-drive with the user's real
+  `HOME` before concluding anything about the Reddit path. It also means the
+  Reddit numbers in a scorecard are a warm-profile number (**N7** still stands:
+  a listing, a thread, a profile and a search reading is not "Reddit works").
+- A Reddit wall is worth one look at the *right* tier. `curl_cffi` gets the
+  "Prove your humanity" interstitial for pages the browser rung reads fine, so a
+  stderr line naming `reddit-challenge` for the first tier is not the page's
+  state. The named content wall (`reddit-private`, `reddit-banned`, ...) is the
+  one to report.
