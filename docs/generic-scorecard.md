@@ -73,3 +73,68 @@ No host in this table is in `searchts/known_hosts` or `searchts/share_extractors
   row (14) and the browser-only half of `--expand` were not measured.
 - The over-18 / private states and any host-specific failure: out of scope for
   this scorecard, which only covers pages with no host code.
+
+## Re-measured at the branch tip (2026-10-18)
+
+Same 20 URLs, same method (`SEARCHTS_NO_MEMORY=1 searchts read <url>`, curl +
+Jina only, no browser installed), run from the branch tip with every F24 commit.
+"Chars" is the length of what the CLI printed on stdout, notes included. Live
+pages change between runs, so a row's size can move for reasons that are not the
+code (rows 11 and 13 changed most).
+
+| # | Host / path | Chars | Exit | What the read said |
+|---|---|---|---|---|
+| 1 | www.bbc.com/news/articles/cxr5yvzv7rp0o | 7,504 | 0 | context line, media, two `[left out:]` panels |
+| 2 | apnews.com/article/oregon-school-shooting-… | 7,381 | 0 | context line, `[folded: 7 …]`, `[kept 5,869 of 27,006 … (22%)]`, media |
+| 3 | danluu.com/ | 17,571 | 0 | no notes |
+| 4 | simonwillison.net/2024/Dec/31/llms-in-2024/ | 47,632 | 0 | context line, media |
+| 5 | docs.python.org/3/library/json.html | 33,497 | 0 | no notes |
+| 6 | meta.discourse.org/t/about-the-news-and-events-category/396990 | 677 | 0 | context line |
+| 7 | stackoverflow.com/questions/11227809/… | 0 | 1 | refused: `curl_cffi: http-403`, `Jina Reader: 403` |
+| 8 | www.ikea.com/us/en/p/markus-office-chair-… | 18,736 | 0 | `[folded: 5 controls like "Show more"]`, media |
+| 9 | en.wikipedia.org/wiki/Web_scraping | 44,530 | 0 | context line, media |
+| 10 | github.com/psf/requests | 0 | 1 | refused: `login-wall` on curl and Jina; the hint now says the browser tier is sent no cookies. Still a **false wall** (see gaps). |
+| 11 | news.ycombinator.com/news?p=2 | 3,952 | 0 | `[more: next page …]`, media. No `[list:]` note this run, and the text is one token per line (same on `origin/main`: 3,877 chars). |
+| 12 | developer.mozilla.org/…/Elements/details | 11,165 | 0 | `[folded: 1 …]`, `[media: 4 embeds …; media present, not resolved]`, `[left out: "In this article"]` |
+| 13 | news.ycombinator.com/item?id=50126253 | 10,287 | 0 | `[list: 35 items rebuilt …]`, media (the thread grew since the first run) |
+| 14 | www.youtube.com/watch?v=dQw4w9WgXcQ | 0 | 1 | refused: `curl_cffi: thin-146b`; hint: "this page is a JS app … that tier is sent no cookies" |
+| 15 | svelte.dev/ | 1,392 | 0 | media (18 images, 1 video) |
+| 16 | www.allrecipes.com/recipe/223042/chicken-parmesan/ | 0 | 1 | refused: `curl_cffi: http-403`, `Jina Reader: 451`. The first run fetched this page; **NOT RE-MEASURED** for its JSON-LD. |
+| 17 | www.notion.so/ | 3,382 | 0 | media (53 images, 1 video) |
+| 18 | www.wired.com/story/kernel-panic-… | 8,635 | 0 | context line, media |
+| 19 | hnrss.org/frontpage | 8,456 | 0 | no notes |
+| 20 | www.theguardian.com/international | 4,496 | 0 | `[list: 9 items …]`, `[kept 2,607 of 16,600 … (16%); … the last line also stops mid-sentence]`, media (105 images, 4 videos) |
+
+What changed against the first table: rows 2 and 20, the two "kept a small
+share, said nothing about the size" cases, now say the share and both numbers;
+row 20 also says the last line stops mid-sentence. Every read that has media in
+its main content lists it, with at most four URLs, or says "media present, not
+resolved". Row 14 gets the JS-app hint and row 10 the no-cookies hint.
+
+### JSON-LD (F24b) on real pages
+
+`more.structured_text` and the extractor, run on the same downloaded bytes
+(visible characters, 2026-10-18; `curl_cffi` impersonating Chrome):
+
+| Page | Has JSON-LD | Structured body | Extract | Used |
+|---|---|---|---|---|
+| www.bonappetit.com/recipe/bas-best-chocolate-chip-cookies | yes | 2,811 | 5,198 | extract |
+| www.healthline.com/nutrition/intermittent-fasting-guide | yes | 1,436 | 11,613 | extract |
+| www.theverge.com | yes | 0 | 20,751 | extract |
+| www.nngroup.com/articles/usability-101-… | yes | 0 | 7,047 | extract |
+
+On all four the page's own markup already beat the data, so the read is
+unchanged, which is the intended rule (the data is used only when it beats the
+extract by 10%). **No real page was found where the data wins**; that path is
+proved by hand-written fixtures only (`tests/test_f24_generic.py`). Four other
+candidate recipe/Q&A pages returned 403 and were not measured.
+
+## Open gaps
+
+- Row 10: a public README read as `login-wall`, because the page's chrome repeats
+  "Sign in". The loud failure is right in kind and wrong in reason.
+- Row 11: a list page the extractor flattens to one token per line, with no note
+  that the list was not rebuilt. Same on `origin/main`.
+- F24b `__NEXT_DATA__` is not read (no real page found where it beats the
+  extract). F24b's JSON-LD path is proved on fixtures only.
+- The browser rung was never run here, so no JS-app page was read, only named.
