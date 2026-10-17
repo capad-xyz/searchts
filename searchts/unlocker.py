@@ -1288,6 +1288,22 @@ def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:
         return pool.submit(fn, *args, **kwargs).result()
 
 
+def _expand_clicks(expand_sink: Optional["_ExpandSink"]) -> int:
+    """How many presses an expand pass may spend. The knobs answer (F23e).
+
+    The sink carries the budget the read already resolved, so the generic pass
+    and a known host's own controls spend **one** budget, not two. A caller that
+    reaches the rung without a sink still gets the user's
+    ``SEARCHTS_MAX_EXPAND_CLICKS`` rather than a literal: a read has one click
+    budget, and it is the ceiling either way (F5f).
+    """
+    if expand_sink is not None:
+        return expand_sink.max_clicks
+    from searchts import knobs as _expand_knobs
+
+    return _expand_knobs.resolve().expand_clicks
+
+
 def _fetch_stealth(
     url: str, timeout: int = 60, progress: Optional[bool] = None,
     proxy: Optional[Dict[str, Any]] = None,
@@ -1418,7 +1434,7 @@ def _fetch_stealth_impl(
                 opened = _expand_mod.open_details_in_page(page)
                 if opened:
                     html = _page_content(page, progress=want_tick)
-                clicks = expand_sink.max_clicks if expand_sink else 8
+                clicks = _expand_clicks(expand_sink)
                 report = _expand_mod.click_in_page(page, clicks)
                 report.details = opened
                 report.pin_paywall(_page_content(page, progress=False))
@@ -2133,13 +2149,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 # wall reports itself and the ladder keeps going, so a private,
                 # banned, quarantined, gone or NSFW page never comes back as
                 # navigation chrome wearing a URL.
-                reddit_hit = _reddit_listing.extract_page(
-                    url, body,
-                    # Only the rung that opened controls gets the raised ceiling.
-                    # The same HTML from curl has them shut, so a higher cap
-                    # there would print a promise the page cannot keep.
-                    expand=bool(expand and backend == "stealth-browser"),
-                )
+                reddit_hit = _reddit_listing.extract_page(url, body)
                 if reddit_hit is not None:
                     if reddit_hit.failure:
                         attempts.append((backend, reddit_hit.failure))

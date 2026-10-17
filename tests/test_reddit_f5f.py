@@ -66,8 +66,8 @@ def fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def page(url: str, name: str, expand: bool = False):
-    return reddit.extract_page(url, fixture(name), expand=expand)
+def page(url: str, name: str):
+    return reddit.extract_page(url, fixture(name))
 
 
 # ── page kinds ───────────────────────────────────────────────────────────────
@@ -241,57 +241,105 @@ def test_a_community_page_with_no_cards_still_falls_through():
 # ── deeper comments ──────────────────────────────────────────────────────────
 
 
-def test_thread_default_cap_and_the_expand_cap():
+def test_a_thread_reads_every_comment_the_page_holds():
     first = page(THREAD, "reddit_thread_first_window.html")
     assert first.failure is None
     assert first.markdown.count(" pts)") == 14
     assert "[truncated:" not in first.markdown
     # The same thread after its "more replies" controls were opened: 31
-    # comments, so the default 30-comment cap cuts one and says so.
-    default = page(THREAD, "reddit_thread_expanded.html")
-    assert default.markdown.count(" pts)") == 30
-    assert "[truncated: 1 more comments in the page were cut at the 30-comment cap]" in default.markdown
-    # Asking for more raises the cap to the user's items ceiling, so the 31st
-    # comment is there and nothing says it was cut.
-    expanded = page(THREAD, "reddit_thread_expanded.html", expand=True)
-    assert expanded.markdown.count(" pts)") == 31
-    assert "[truncated:" not in expanded.markdown
+    # comments in the page, and the rows knob is 300 by default, so all 31 come
+    # back. Nothing is cut and no note claims a cap that did not bite.
+    opened = page(THREAD, "reddit_thread_expanded.html")
+    assert opened.markdown.count(" pts)") == 31
+    assert "[truncated:" not in opened.markdown
 
 
 def test_the_comment_ceiling_is_the_items_knob_and_never_above_it(monkeypatch):
     """F23e: a comment is a row, so ``SEARCHTS_MAX_ITEMS`` is what caps it.
 
-    Both directions matter. A raised ceiling lets ``--expand`` reach every comment
-    the browser opened, and a lowered one is the user saying "fewer rows", which
-    the plain read obeys too. The default read is still bounded by the product's
-    own 30, which is why lowering to 12 cuts it and raising does not.
+    Both directions matter. A raised ceiling is the read the user asked for, and a
+    lowered one is the user saying "fewer rows", which the plain read obeys too.
+    There is no second, hidden ceiling under it: a ``--items 250`` that printed
+    30 comments said the ceiling was 300 and lied about the other number.
     """
     monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "300")
-    assert reddit._comment_ceiling(expand=True) == 300
-    assert reddit._comment_ceiling(expand=False) == reddit._MAX_COMMENTS
+    assert reddit._row_ceiling() == 300
 
     monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "12")
-    assert reddit._comment_ceiling(expand=False) == 12
-    assert reddit._comment_ceiling(expand=True) == 12
+    assert reddit._row_ceiling() == 12
 
-    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "12")
-    md = page(THREAD, "reddit_thread_expanded.html", expand=True).markdown
+    md = page(THREAD, "reddit_thread_expanded.html").markdown
     assert md.count(" pts)") == 12
     assert "[truncated: 19 more comments in the page were cut at the 12-comment cap]" in md
     # And the note the ceiling buys is named on the read, not left to be found.
-    kinds = [m["kind"] for m in page(THREAD, "reddit_thread_expanded.html", expand=True).more]
+    kinds = [m["kind"] for m in page(THREAD, "reddit_thread_expanded.html").more]
     assert "count" in kinds
 
 
 def test_a_broken_items_knob_falls_back_to_the_default_instead_of_failing(monkeypatch):
     monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "not-a-number")
-    assert reddit._comment_ceiling(expand=True) == 300
+    assert reddit._row_ceiling() == 300
 
 
 def test_thread_always_says_how_many_comments_reddit_reports():
     for name in ("reddit_thread_first_window.html", "reddit_thread_expanded.html"):
-        md = page(THREAD, name, expand=True).markdown
+        md = page(THREAD, name).markdown
         assert "[partial: Reddit reports 195 comments;" in md
+
+
+def test_the_json_ring_row_caps_are_the_knob_and_never_a_literal(monkeypatch):
+    """The ``.json`` ring used to slice both renderers at a module literal.
+
+    A post card and a comment are both rows, so one knob answers for them here
+    too. Lowering ``SEARCHTS_MAX_ITEMS`` lowers the JSON listing *and* the JSON
+    thread at once, and nothing in this file can raise it back.
+    """
+    posts = [
+        {"kind": "t3", "data": {"title": f"post {i}", "author": "a", "score": i,
+                                "permalink": f"/r/x/comments/{i}/p/"}}
+        for i in range(12)
+    ]
+    comments = [
+        {"kind": "t1", "data": {"body": f"comment body number {i}", "author": "a",
+                                "score": i, "permalink": f"/r/x/comments/1/p/{i}/"}}
+        for i in range(12)
+    ]
+
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "300")
+    long_listing = reddit._render_subreddit_from_children(posts)
+    long_thread = reddit._render_thread({"title": "t"}, comments)
+    assert long_listing.count("- **") == 12
+    assert long_thread.count(" pts)") == 12
+
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "4")
+    short_listing = reddit._render_subreddit_from_children(posts)
+    short_thread = reddit._render_thread({"title": "t"}, comments)
+    assert short_listing.count("- **") == 4, "the listing's rows are capped too"
+    assert short_thread.count(" pts)") == 4
+    assert "comment body number 4" not in short_thread
+
+    # And no literal is left in this file to answer "how many" on its own.
+    assert not hasattr(reddit, "_MAX_COMMENTS")
+
+
+def test_the_click_budget_has_no_default_and_the_rung_without_a_sink_reads_the_knob(
+    monkeypatch,
+):
+    """F23e/F5f: the press budget is ``SEARCHTS_MAX_EXPAND_CLICKS``, always.
+
+    ``expand_more`` takes the budget instead of carrying one, and the rung's
+    no-sink path resolves the knob rather than a literal 8 that no user policy
+    could lower.
+    """
+    import inspect
+
+    params = inspect.signature(reddit.expand_more).parameters
+    assert params["clicks"].default is inspect.Parameter.empty
+    assert params["want"].default is inspect.Parameter.empty
+
+    monkeypatch.setenv("SEARCHTS_MAX_EXPAND_CLICKS", "3")
+    assert unlocker._expand_clicks(None) == 3
+    assert unlocker._expand_clicks(unlocker._ExpandSink(max_clicks=11)) == 11
 
 
 def test_expand_more_clicks_until_quiet_and_never_raises():
@@ -430,7 +478,7 @@ def test_expand_more_stops_at_the_count_it_was_asked_for():
             pass
 
     p = Page()
-    reddit.expand_more(p, 5)
+    reddit.expand_more(p, 5, clicks=8)
     # 50 comments are already there, so no round is spent clicking.
     assert p.calls == 0
 
@@ -440,7 +488,7 @@ def test_expand_more_on_a_page_that_raises_content_just_stops():
         def content(self):
             raise RuntimeError("page is navigating")
 
-    reddit.expand_more(Page(), 100)  # must not raise
+    reddit.expand_more(Page(), 100, clicks=8)  # must not raise
 
 
 # ── the walls, each named ────────────────────────────────────────────────────

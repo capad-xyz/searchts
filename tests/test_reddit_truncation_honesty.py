@@ -41,14 +41,30 @@ def test_unfolded_op_has_no_truncation_note():
     assert md is not None and "[truncated" not in md and "[partial" not in md
 
 
-def test_comment_cap_is_reported():
-    comments = "".join(_comment(i) for i in range(reddit._MAX_COMMENTS + 5))
-    html = _post("Busy thread", "Body text here.", comment_count=str(reddit._MAX_COMMENTS + 5)) + comments
+def test_comment_cap_is_reported(monkeypatch):
+    # The cap is the user's rows knob (F5f: SEARCHTS_MAX_ITEMS), not a literal
+    # baked into the parser, so this reads 30 because the test set 30.
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "30")
+    comments = "".join(_comment(i) for i in range(35))
+    html = _post("Busy thread", "Body text here.", comment_count="35") + comments
     md = reddit.parse_reddit_thread_html(html, THREAD)
     assert md is not None
-    assert md.count("**/u/user") == reddit._MAX_COMMENTS
-    assert f"[truncated: 5 more comments in the page were cut at the {reddit._MAX_COMMENTS}-comment cap]" in md
+    assert md.count("**/u/user") == 30
+    assert "[truncated: 5 more comments in the page were cut at the 30-comment cap]" in md
     assert "[partial" not in md
+
+
+def test_a_lowered_ceiling_lowers_a_read_that_never_passed_one(monkeypatch):
+    # The default cap used to be a module literal frozen at import, so a
+    # lowered SEARCHTS_MAX_ITEMS could not lower a read that forgot to pass a
+    # cap. It answers for itself now.
+    monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "4")
+    comments = "".join(_comment(i) for i in range(9))
+    html = _post("Busy thread", "Body text here.", comment_count="9") + comments
+    md = reddit.parse_reddit_thread_html(html, THREAD)
+    assert md is not None
+    assert md.count("**/u/user") == 4
+    assert "cut at the 4-comment cap" in md
 
 
 def test_claimed_comments_beyond_the_page_are_reported():
