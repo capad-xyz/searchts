@@ -16,6 +16,10 @@ What each fixture is, and what it proved:
 ``reddit_thread_expanded``  the same thread after its "more replies" controls
                             were opened: 31 comments, past the 30 cap.
 ``reddit_post_archived``    a thread whose OP Reddit archived (its text is gone).
+``reddit_post_quoting_archived``
+                            a live thread whose OP quotes "Archived post. New
+                            comments cannot be posted" in its own body, and is
+                            not archived: the notice as prose, not as a wall.
 ``reddit_profile``          /user/spez/ as served: header fields plus cards.
 ``reddit_profile_batch``    that profile's cursor: posts and comments mixed.
 ``reddit_search``           /search/?q=searchts as served: result cards.
@@ -51,6 +55,12 @@ THREAD = (
 ARCHIVED = (
     "https://www.reddit.com/r/findareddit/comments/17k6a07/"
     "can_someone_list_some_subreddits_that_are_private/"
+)
+#: A live thread whose OP *quotes* the archived notice in its own body text
+#: (``reddit_post_quoting_archived.html``). Nothing about this page is a wall.
+QUOTING_ARCHIVED = (
+    "https://www.reddit.com/r/NoStupidQuestions/comments/1x4uke7/"
+    "is_it_possible_to_read_the_body_text_to_an/"
 )
 PROFILE = "https://www.reddit.com/user/spez/"
 PROFILE_BATCH = (
@@ -649,6 +659,82 @@ def test_archived_post_is_named_and_its_comments_still_read():
     assert "removed" in kinds
     # The comments are real content and are still read.
     assert "**/u/thatguy99911**" in p.markdown
+
+
+def _op_attrs(html: str) -> set:
+    """The OP element's own attribute names (the test's own reader, no private API)."""
+    import re
+
+    from searchts.known_hosts.reddit import _attrs_of
+
+    for tag in re.findall(r"<shreddit-post\b[^>]*>", html):
+        names = {k.lower() for k, _v in _attrs_of(tag)}
+        if "post-title" in names:
+            return names
+    return set()
+
+
+def test_a_thread_that_quotes_the_archived_notice_is_not_archived():
+    """Reddit serves threads *about* archived posts, and they quote the notice.
+
+    Measured live 2026-10-17 on r/NoStupidQuestions 1x4uke7, fetched on the
+    stealth rung and trimmed to ``reddit_post_quoting_archived.html``: a text
+    post whose own body says it saw "Archived post. New comments cannot be
+    posted" on *another* post. The OP element carries no ``archived``
+    attribute. Both detectors matched the bare sentence, so the read opened
+
+        **Post:** archived by Reddit. Its text is not available.
+
+    and printed the text on the next lines. The element that says a post is
+    archived is the one carrying ``archived``, so that is the only signal.
+    """
+    html = fixture("reddit_post_quoting_archived.html")
+    assert "archived" not in _op_attrs(html), "the OP here is not archived"
+    assert reddit.page_state(QUOTING_ARCHIVED, html) == ""
+    p = reddit.extract_page(QUOTING_ARCHIVED, html)
+    assert p.failure is None
+    assert "archived by Reddit" not in p.markdown
+    assert "[removed:" not in p.markdown
+    # The post reads as itself: title, body, and the comments Reddit served.
+    assert p.markdown.startswith("# Is it possible to read the body text")
+    assert "I’m trying to figure out something simple" in p.markdown
+    assert p.markdown.count(" pts)") == 4
+    # And a post Reddit really did archive still says so, from its own attribute.
+    assert "archived" in _op_attrs(fixture("reddit_post_archived.html"))
+    assert reddit.page_state(ARCHIVED, fixture("reddit_post_archived.html")) == (
+        "reddit-post-archived"
+    )
+
+
+def test_a_notice_quoted_in_a_page_is_not_the_notice():
+    """Same rule for the three strings this file still reads as bare text.
+
+    ``subreddit-content-error``, ``shreddit-forbidden`` and "NSFW search results
+    are hidden" are each things Reddit's own pages say *about* a wall, so a
+    search page can carry them in a result snippet or a thread can quote them.
+    The element is what says a wall happened; the words only say somebody
+    talked about one. Each real wall still fires, checked on its own fixture.
+    """
+    prose = (
+        '<html><body><shreddit-post post-title="How do I search this" '
+        'author="u/op" permalink="/r/x/comments/abc/q/">'
+        "<div slot=\"text-body\"><p>When a subreddit is gone Reddit serves "
+        '<span class="subreddit-content-error">Sorry, there aren’t any '
+        "communities on Reddit with that name.</span> and for a removed post "
+        'it serves <span id="shreddit-forbidden">Page not found</span>. Search '
+        "for gore and it says NSFW search results are hidden.</p></div>"
+        "</shreddit-post></body></html>"
+    )
+    assert reddit.page_state(THREAD, prose) == "", "prose about a wall is not the wall"
+    assert reddit.extract_page(THREAD, prose).failure is None
+    # The real walls, still named, from their own pages.
+    assert reddit.page_state("https://www.reddit.com/r/nsfw/", fixture("reddit_community_gone.html")) == (
+        "reddit-community-not-found"
+    )
+    assert reddit.page_state(GONE, fixture("reddit_post_gone.html")) == "reddit-post-gone"
+    assert reddit.page_state(SEARCH_NSFW, fixture("reddit_search_nsfw.html")) == (
+        "reddit-nsfw-gate"
+    )
 
 
 def test_state_note_only_offers_the_browser_where_a_person_can_act():

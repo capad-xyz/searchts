@@ -1141,11 +1141,40 @@ def _row_ceiling() -> int:
 _MORE_COMMENTS_SELECTOR = "faceplate-partial.more-comments-partial"
 _TOP_LEVEL_MORE_SELECTOR = "faceplate-partial#top-level-more-comments-partial"
 
-#: Reddit archived this post (its text is gone; comments may remain).
-_ARCHIVED_RE = re.compile(
-    r"<shreddit-post\b[^>]*\barchived(?:=|\s|>)", re.IGNORECASE
-)
-_ARCHIVED_TEXT_RE = re.compile(r"Archived post\. New comments cannot be posted", re.I)
+#: Reddit archived this post (its text is gone; comments may remain). The
+#: signal is the ``archived`` attribute on the post element itself, and nothing
+#: else. The words "Archived post. New comments cannot be posted" do sit on every
+#: archived page, but they sit anywhere too, and Reddit serves threads *about*
+#: archiving: measured live 2026-10-17 on r/NoStupidQuestions 1x4uke7, a post
+#: whose own body quotes that phrase because its author was reading one. The
+#: phrase said "Its text is not available" and the next line printed the text
+#: (``tests/fixtures/reddit_post_quoting_archived.html``). A page that mentions
+#: the words is not archived; the element is what says so.
+_OP_TAG_RE = re.compile(r"<shreddit-post\b[^>]*>", re.IGNORECASE)
+_ARCHIVED_ATTR = "archived"
+_POST_TITLE_ATTR = "post-title"
+
+
+def _op_is_archived(html: str) -> bool:
+    """True when the OP element itself carries Reddit's ``archived`` attribute.
+
+    Both attributes are required: ``archived`` alone also rides the post cards
+    in a community's "more posts" strip, and ``post-title`` alone is every
+    readable post. The element that has both is the post a thread URL is about.
+    """
+    for tag in _OP_TAG_RE.findall(html or ""):
+        names = {k.lower() for k, _v in _attrs_of(tag)}
+        if _ARCHIVED_ATTR in names and _POST_TITLE_ATTR in names:
+            return True
+    return False
+
+
+def _has_titled_post(html: str) -> bool:
+    """True when the page carries at least one post element with a title."""
+    return any(
+        _POST_TITLE_ATTR in {k.lower() for k, _v in _attrs_of(tag)}
+        for tag in _OP_TAG_RE.findall(html or "")
+    )
 
 
 def _comment_body_count(html: str) -> int:
@@ -1178,7 +1207,7 @@ def parse_reddit_thread_html(
     op = next((a for a in posts if (a.get("post-title") or "").strip()), None)
     if op is None:
         return None
-    archived = bool(_ARCHIVED_RE.search(html) or _ARCHIVED_TEXT_RE.search(html or ""))
+    archived = _ARCHIVED_ATTR in op
     title = (op.get("post-title") or "").strip()
     author = (op.get("author") or "").strip()
     if author.startswith("u/"):
@@ -1650,6 +1679,24 @@ _CHALLENGE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The same rule for the other three notices: the element Reddit puts them in,
+# never the words alone. Every one of these strings is also something a readable
+# Reddit page can carry in a comment or in a post's own body, because Reddit has
+# threads about all four (one of them fetched live for this: a post quoting the
+# archived notice in its selftext). Matching the bare string anywhere turns a
+# thread about a wall into a wall.
+_COMMUNITY_ERROR_RE = re.compile(
+    r'<[a-z][\w-]*\b[^>]*\bclass="[^"]*\bsubreddit-content-error\b', re.IGNORECASE
+)
+_FORBIDDEN_RE = re.compile(r'<[a-z][\w-]*\b[^>]*\bid="shreddit-forbidden"', re.IGNORECASE)
+#: The over-18 notice is a heading on a search page. A result snippet is a
+#: ``<div>``, so a search page that merely *mentions* the sentence in a result
+#: does not match this.
+_NSFW_GATE_RE = re.compile(
+    r"<h[12]\b[^>]*>(?:(?!</h[12]>).)*?NSFW search results are hidden",
+    re.IGNORECASE | re.DOTALL,
+)
+
 #: Every state the page names about itself, in the order they are checked. The
 #: reason is what the ladder reports, so it says which one it was.
 _STATES = (
@@ -1688,13 +1735,18 @@ def page_state(url: str, html: str) -> str:
                 return state
     if _CHALLENGE_RE.search(text):
         return _STATE_CHALLENGE
-    if 'class="subreddit-content-error' in text or "subreddit-content-error" in text:
+    # The two "this is not here" wrappers only count on a page with nothing in
+    # it. A thread that explains the wrapper carries the class name and the id,
+    # and it has a post of its own; a page Reddit refused has no post element at
+    # all (checked on every wall fixture saved here).
+    bare = not _has_titled_post(text)
+    if bare and _COMMUNITY_ERROR_RE.search(text):
         return _STATE_NOT_FOUND
-    if 'id="shreddit-forbidden"' in text:
+    if bare and _FORBIDDEN_RE.search(text):
         return _STATE_POST_GONE
-    if _ARCHIVED_TEXT_RE.search(text) or _ARCHIVED_RE.search(text):
+    if _op_is_archived(text):
         return _STATE_ARCHIVED
-    if "NSFW search results are hidden" in text:
+    if _NSFW_GATE_RE.search(text):
         return _STATE_NSFW
     return ""
 
