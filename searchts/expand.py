@@ -40,6 +40,7 @@ without ``patchright``.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
@@ -55,6 +56,8 @@ __all__ = [
     "REFUSE_LABELS",
     "EXPAND_RE",
     "EXPAND_EXACT_RE",
+    "FEED_NOUNS",
+    "FEED_FOLD_RE",
 ]
 
 
@@ -76,6 +79,22 @@ EXPAND_EXACT_RE = re.compile(rf"^{_FOLD_PHRASE}[\s.…»›>]*$", re.I)
 #: "Load more" is excluded here on purpose: that is a feed, and
 #: :mod:`searchts.scroll` owns it.
 EXPAND_RE = re.compile(rf"^{_FOLD_PHRASE}(?:\s+\w+)?[\s.…»›>]*$", re.I)
+
+#: Nouns that make "Show more X" a request for more items, not more of one
+#: item: that is a feed, and :mod:`searchts.scroll` owns it. One list, read by
+#: the detector's feed test in :mod:`searchts.more`, by :func:`_verdict` and by
+#: the browser finder, so none of the three can drift from the others.
+FEED_NOUNS: Tuple[str, ...] = (
+    "posts", "stories", "results", "items", "articles", "comments", "replies",
+    "products", "videos", "news",
+)
+
+#: "Show more results", "See all products": the fold phrase followed by one of
+#: :data:`FEED_NOUNS`. Never a fold, whether the label says "more" or "all".
+FEED_FOLD_RE = re.compile(
+    r"^(?:show|see|view)\s+(?:more|all)\s+(?:" + "|".join(FEED_NOUNS) + r")[\s.…]*$",
+    re.I,
+)
 
 #: Labels that mean the rest of the page is sold, not folded. Named, never
 #: pressed. ``read more`` is deliberately absent: on its own it is a fold.
@@ -339,7 +358,7 @@ def _verdict(label: str, tag: str, href: Optional[str], in_form: bool,
         return "no"
     if any(bad in low for bad in REFUSE_LABELS):
         return "no"
-    if not EXPAND_RE.match(label):
+    if not EXPAND_RE.match(label) or FEED_FOLD_RE.match(label):
         return "no"
     if in_form:
         return "no"
@@ -418,17 +437,12 @@ def expand_html(html: str, max_details: int = 200) -> Report:
 #: :func:`_verdict` shape decides. A control that is hidden, disabled, inside a
 #: form, or an anchor that navigates is skipped here as well as in Python, so
 #: the two halves cannot disagree about the same button.
-_FIND_JS = r"""
+_FIND_JS_TEMPLATE = r"""
 () => {
-  const PAY = ["continue reading", "continue to read", "subscribe to continue",
-    "subscribe to read", "sign in to continue", "unlock this article",
-    "unlock this story", "this article is for subscribers", "for subscribers only",
-    "become a subscriber to read"];
-  const NO = ["sign in", "sign up", "log in", "log on", "register", "subscribe",
-    "buy", "purchase", "pay", "checkout", "donate", "tip", "accept", "agree",
-    "consent", "cookie", "newsletter", "uninstall", "download", "vote", "reply",
-    "comment", "share", "save", "bookmark", "follow", "like"];
-  const RE = /^(?:read|show|see|view)\s+(?:more|all|full|the\s+(?:rest|full\s+\w+))(?:\s+(?:post|article|text|story|description|details|comments?|replies))?[\s.…»›>]*$/i;
+  const PAY = __PAY__;
+  const NO = __NO__;
+  const RE = new RegExp(__RE__, "i");
+  const FEED = new RegExp(__FEED__, "i");
   const seen = new Set();
   const out = [];
   let n = 0;
@@ -441,7 +455,7 @@ _FIND_JS = r"""
       const low = raw.toLowerCase().replace(/[ .…»›>]+$/, '');
       if (PAY.some((x) => low.includes(x))) { out.push({label: raw, why: 'paywall'}); continue; }
       if (NO.some((x) => low.includes(x))) continue;
-      if (!RE.test(raw)) continue;
+      if (!RE.test(raw) || FEED.test(raw)) continue;
       if (el.closest('form, header, footer, aside, nav, dialog')) continue;
       if (el.tagName === 'A') {
         const href = el.getAttribute('href') || '';
@@ -467,6 +481,16 @@ _FIND_JS = r"""
   return out;
 }
 """
+
+#: The finder as the browser runs it. Every list and pattern is generated from
+#: the Python ones above, so ``--expand`` presses what the HTML count named.
+_FIND_JS = (
+    _FIND_JS_TEMPLATE
+    .replace("__PAY__", json.dumps(list(PAY_LABELS)))
+    .replace("__NO__", json.dumps(list(REFUSE_LABELS)))
+    .replace("__RE__", json.dumps(EXPAND_RE.pattern))
+    .replace("__FEED__", json.dumps(FEED_FOLD_RE.pattern))
+)
 
 
 def find_in_page(page) -> List[Dict[str, Any]]:

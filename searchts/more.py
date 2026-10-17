@@ -29,6 +29,8 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from searchts.expand import EXPAND_EXACT_RE as _EXPAND_EXACT_RE
 from searchts.expand import EXPAND_RE as _EXPAND_RE
+from searchts.expand import FEED_FOLD_RE as _FEED_FOLD_RE
+from searchts.expand import FEED_NOUNS as _FEED_NOUNS
 
 #: Page chrome. A control or list inside these never counts.
 _CHROME_TAGS = frozenset({"header", "footer", "aside", "form", "dialog", "menu", "template"})
@@ -40,8 +42,7 @@ _SKIP_TEXT_TAGS = frozenset({"script", "style", "noscript", "template", "svg"})
 
 #: "Load more" and "Show more posts": more items, not more of one item.
 _FEED_RE = re.compile(
-    r"^(?:load\s+more\b.*|(?:show|see|view)\s+more\s+"
-    r"(?:posts|stories|results|items|articles|comments|replies|products|videos|news))[\s.…]*$",
+    r"^(?:load\s+more\b.*|(?:show|see|view)\s+more\s+(?:" + "|".join(_FEED_NOUNS) + r"))[\s.…]*$",
     re.I,
 )
 #: "Read more" and "Show more": the rest of one item. Imported from
@@ -581,7 +582,7 @@ def _folds(doc) -> Tuple[int, str]:
         if _in_chrome(el) or _in_nav(el):
             continue
         label = _norm(el.text_content())
-        if len(label) <= 60 and _FOLD_ANY_RE.match(label) and not _FEED_RE.match(label):
+        if len(label) <= 60 and _FOLD_ANY_RE.match(label) and not _FEED_FOLD_RE.match(label):
             count += 1
             first = first or label
     return count, first

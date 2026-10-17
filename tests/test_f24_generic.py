@@ -851,3 +851,73 @@ def test_a_stale_kept_login_says_so_and_still_names_the_fence(capsys, tmp_home):
     err = capsys.readouterr().err
     assert "already in the searchts store" in err
     assert "the browser tier is sent none of them" in err
+
+
+# ── --expand: the HTML count and the browser finder are one list ─────────────
+
+_PARITY_LABELS = [
+    "Read more", "Show more", "See all", "View full", "Read the rest",
+    "Show all reviews", "See full compatibility", "Show all 42",
+    "Show more results", "See more videos", "View all products",
+    "Show more posts", "View more news", "Load more",
+    "Show Search", "See also", "Open source", "Show more comments",
+    "Continue reading", "Read the rest with a subscription",
+]
+
+
+def _browser_verdicts(labels):
+    """Run the real _FIND_JS in node against a fake DOM of one button per label."""
+    import json
+    import shutil
+    import subprocess
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    from searchts import expand
+
+    script = (
+        "const labels = %s;\n"
+        "const mk = (t) => ({innerText: t, textContent: t, tagName: 'BUTTON',\n"
+        "  offsetWidth: 10, offsetHeight: 10, disabled: false,\n"
+        "  getClientRects: () => [1], getAttribute: () => null,\n"
+        "  closest: () => null, matches: () => true, setAttribute: () => {}});\n"
+        "const els = labels.map(mk);\n"
+        "const document = {querySelectorAll: () => els};\n"
+        "const f = %s;\n"
+        "console.log(JSON.stringify(f().map(o => [o.label, o.why])));\n"
+    ) % (json.dumps(labels), expand._FIND_JS.replace("() => {", "function () {", 1))
+    done = subprocess.run([node, "-e", script], capture_output=True, text=True, timeout=30)
+    assert done.returncode == 0, done.stderr
+    return {label: why for label, why in json.loads(done.stdout)}
+
+
+def test_the_browser_finder_and_the_html_count_agree_on_every_label():
+    from searchts import expand
+
+    seen = _browser_verdicts(_PARITY_LABELS)
+    for label in _PARITY_LABELS:
+        python = expand._verdict(label, tag="button", href=None, in_form=False)
+        assert seen.get(label, "no") == python, (label, seen.get(label), python)
+
+
+@pytest.mark.parametrize(
+    "label",
+    ["Show more results", "See more videos", "View all products", "Show more posts",
+     "View more news"],
+)
+def test_a_feed_control_is_not_a_fold_for_expand(label):
+    from searchts import expand
+
+    html = f"<main><p>x</p><button>{label}</button></main>"
+    assert expand.eligible_labels(html) == (0, "")
+    import lxml.html
+
+    assert more._folds(lxml.html.fromstring(html)) == (0, "")
+
+
+def test_a_review_fold_is_pressed_by_the_browser_as_well_as_counted():
+    from searchts import expand
+
+    assert expand.eligible_labels("<main><button>Show all reviews</button></main>")[0] == 1
+    assert _browser_verdicts(["Show all reviews"]) == {"Show all reviews": "yes"}
