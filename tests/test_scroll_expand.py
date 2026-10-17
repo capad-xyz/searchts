@@ -685,3 +685,107 @@ def test_a_plain_read_of_a_page_with_no_folds_ends_byte_identical(monkeypatch):
     assert expand.expand_html("<html><body><p>hi</p></body></html>").details == 0
     assert expand.expand_html(plain).html  # has one to open, so it changed
     assert html  # the fixture is real
+
+
+# ── review fixes: a ceiling is not a request, a proxy is not optional, a label
+# is not an identity ──────────────────────────────────────────────────────────
+
+
+def test_a_lower_pages_ceiling_does_not_print_a_clamp_the_caller_never_asked_for(
+    monkeypatch,
+):
+    # `--items` never asked for pages. The user's ceiling of 3 must not turn
+    # into "[pages: asked for 5, the ceiling is 3]" on the text the agent reads.
+    monkeypatch.setenv("SEARCHTS_MAX_PAGES", "3")
+    monkeypatch.setattr(scroll, "browser_available", lambda: False)
+    rows = "\n".join("- [Row %d](https://example.org/r/%d)" % (i, i) for i in range(6))
+    _stub_read(monkeypatch, rows, backend="curl_cffi", next_url=None)
+    got = unlocker.read_items("https://example.org/list", 90)
+    assert "[pages:" not in got[0].text
+
+
+@pytest.mark.parametrize("carry", [{"proxy": {"server": "http://p:1"}},
+                                   {"cookies": [object()]}])
+def test_a_read_with_a_proxy_or_cookies_never_opens_the_scroll_browser(
+    monkeypatch, carry
+):
+    # The scroll launches its own Chromium. It would carry neither the proxy
+    # (the user's real address reaches a site they routed around) nor the
+    # cookies (an anonymous page replaces the authenticated one).
+    rows = "\n".join("- [Row %d](https://example.org/r/%d)" % (i, i) for i in range(6))
+    _stub_read(monkeypatch, rows, backend="curl_cffi", next_url=None)
+    monkeypatch.setattr(scroll, "browser_available", lambda: True)
+
+    def boom(*a, **k):
+        raise AssertionError("the scroll must not run on a read with a proxy or cookies")
+
+    monkeypatch.setattr(scroll, "collect_url", boom)
+    got = unlocker.read_items("https://example.org/list", 90, **carry)
+    assert "[scroll: not run." in got[0].text
+
+
+def test_a_press_goes_to_the_element_the_finder_vetted_not_to_the_first_same_label():
+    # A form can hold a "Show more" too. The finder marks only the one it
+    # vetted, and the press must be made on that mark.
+    clicked = []
+
+    class _H:
+        def __init__(self, tag):
+            self.tag = tag
+
+        def click(self, timeout=None):
+            clicked.append(self.tag)
+
+    class _Page:
+        def evaluate(self, js):
+            return [{"label": "Show more", "why": "yes", "tag": "BUTTON", "idx": 0}]
+
+        def query_selector(self, sel):
+            return _H(sel)
+
+        def query_selector_all(self, sel):  # the old label lookup; must not be used
+            raise AssertionError("a label is not an identity")
+
+        def wait_for_timeout(self, ms):
+            pass
+
+    rep = expand.click_in_page(_Page(), max_clicks=8)
+    assert clicked == ['[data-searchts-expand="0"]']
+    assert rep.clicks == 1 and rep.clicked == ["Show more"]
+
+
+def test_a_found_control_with_no_mark_is_counted_but_never_pressed():
+    class _Page:
+        def evaluate(self, js):
+            return [{"label": "Show more", "why": "yes", "tag": "SUMMARY", "idx": None}]
+
+        def query_selector(self, sel):
+            raise AssertionError("nothing was marked, so nothing is looked up")
+
+        def wait_for_timeout(self, ms):
+            pass
+
+    assert expand.click_in_page(_Page(), max_clicks=8).clicks == 0
+
+
+def test_expand_with_only_the_relay_named_says_why_nothing_ran():
+    with pytest.raises(unlocker.UnlockerError) as err:
+        unlocker.fetch("https://example.org", backends=["Jina Reader"],
+                       expand=True, progress=False)
+    assert any("--expand" in why for _b, why in err.value.attempts)
+
+
+def test_an_expand_read_whose_browser_failed_says_the_browser_failed(monkeypatch):
+    # The browser is installed and cannot open the page (a Turnstile, measured
+    # on kickstarter.com from a datacenter address). "Nothing in this page's
+    # markup answered" alone reads as "the page has nothing to open".
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (
+        200, "<html><body><p>" + ("word " * 300) + "</p></body></html>", url, {},
+    ))
+    monkeypatch.setattr(scroll, "browser_available", lambda: True)
+
+    monkeypatch.setattr(unlocker, "_fetch_stealth", lambda *a, **k: (403, "", "", {}))
+    got = unlocker.fetch("https://example.org/a", expand=True)
+    assert got.backend == "curl_cffi"
+    assert "the browser could not open this page" in got.text
+    assert "x-searchts-expand-deferred" in (got.headers or {})
