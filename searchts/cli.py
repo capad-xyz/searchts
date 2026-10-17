@@ -2106,6 +2106,11 @@ def _print_login_wall_hint(url: str) -> None:
     that already carried cookies -- in that case ``unlocker`` has its own
     ``hint`` naming the real cause, and two competing explanations would be
     worse than one.
+
+    Both ways past the wall end the same way, and that is said out loud: the
+    cookies ride the direct request only. The browser tier is sent none of
+    them, which is the fence that stops a live login reaching a third party,
+    so nobody should expect a logged-in browser to make ``read`` work.
     """
     from searchts.login_store import host_of, kept
 
@@ -2122,11 +2127,17 @@ def _print_login_wall_hint(url: str) -> None:
             f"`searchts login signin {url}`.",
             file=sys.stderr,
         )
-        return
+    else:
+        print(
+            f"  {host} is behind a login. Two ways past it, your call:\n"
+            f"    searchts login signin {url}          sign in once in a browser searchts opens\n"
+            f"    searchts read {url} --cookies-from-browser firefox   copy from a browser you already signed into",
+            file=sys.stderr,
+        )
     print(
-        f"  {host} is behind a login. Two ways past it, your call:\n"
-        f"    searchts login signin {url}          sign in once in a browser searchts opens\n"
-        f"    searchts read {url} --cookies-from-browser firefox   copy from a browser you already signed into",
+        "  Either way those cookies ride the direct request only: the browser "
+        "tier is sent none of them, so a logged-in browser is not what makes "
+        "the next read work.",
         file=sys.stderr,
     )
 

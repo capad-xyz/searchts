@@ -2611,8 +2611,9 @@ def _cookie_login_hint(
     return (
         "cookies were sent for this host and the site still returned a login "
         "page: the session is probably expired, or these cookies belong to a "
-        "different profile. Only the direct request carries them, so the "
-        "browser and reader rungs can never satisfy a logged-in read."
+        "different profile. They ride the direct request only - the browser "
+        "tier is sent no cookies at all - so a logged-in read cannot be fixed "
+        "by making the browser logged in."
     )
 
 

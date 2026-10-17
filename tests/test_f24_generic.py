@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from searchts import expand, more, unlocker
+from searchts.session_cookies import CookieRecord
 
 URL = "https://example.org/article/"
 
@@ -693,3 +694,47 @@ def test_the_media_note_is_carried_on_the_read(monkeypatch):
     assert "[media: 1 image in the main content: https://example.org/photo.jpg]" in result.text
     assert [m["kind"] for m in result.more if m["kind"] == "media"]
     assert "media" in more.summary(more.detect(html, URL, _kept(40)))
+
+
+# ── the login wall hint says the browser tier is sent no cookies ─────────────
+
+
+def test_the_cookie_hint_says_the_browser_tier_gets_no_cookies(monkeypatch):
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda url, **kw: (200, "<html><body><p>Sign in to continue</p></body></html>", url, {}),
+    )
+    with pytest.raises(unlocker.UnlockerError) as raised:
+        unlocker.fetch(
+            "https://example.org/account", backends=["curl_cffi"], use_memory=False,
+            cookies=[
+                CookieRecord(name="session", value="abc", domain="example.org")
+            ],
+        )
+    hint = raised.value.hint
+    assert "browser tier is sent no cookies at all" in hint
+    assert "ride the direct request only" in hint
+
+
+def test_the_login_wall_hint_names_the_fence_on_stderr(capsys):
+    from searchts import cli
+
+    cli._print_login_wall_hint("https://example.org/private/page")
+    err = capsys.readouterr().err
+    assert "the browser tier is sent none of them" in err
+    assert "searchts login signin https://example.org/private/page" in err
+
+
+def test_a_stale_kept_login_says_so_and_still_names_the_fence(capsys, tmp_home):
+    from searchts import cli
+    from searchts.session_cookies import save_owned_site
+
+    save_owned_site(
+        "https://example.org",
+        [CookieRecord(name="session", value="abc", domain="example.org")],
+    )
+    cli._print_login_wall_hint("https://example.org/private/page")
+    err = capsys.readouterr().err
+    assert "already in the searchts store" in err
+    assert "the browser tier is sent none of them" in err
