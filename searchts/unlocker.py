@@ -1540,13 +1540,33 @@ class _ExpandSink:
         self._buttons += getattr(report, "buttons", 0)
         self._paywall = self._paywall or bool(getattr(report, "paywall", False))
         stop = getattr(report, "stop", "")
-        if stop and not self._stop:
+        if getattr(report, "produced", bool)():
+            # A report that found something supersedes an earlier "nothing
+            # here". The markup rung cannot see a control the page builds in
+            # JavaScript, so its "nothing in this page's markup answered" is
+            # stale the moment the browser presses it: measured on
+            # kickstarter.com/discover/advanced, two "Show more" presses and
+            # the same read also claiming nothing was found is a note nobody
+            # can act on. Its own stop is kept when it has one.
+            self._stop = stop
+        elif stop and not self._stop:
             self._stop = stop
 
     def note(self) -> str:
         if not self.ran:
             return ""
         return self.report().note()
+
+    @property
+    def buttons(self) -> int:
+        """Eligible buttons seen in the markup so far, across every rung.
+
+        Read by the ladder to decide whether the markup could answer ``--expand``
+        at all, and by the deferred branch to decide whether the note still needs
+        to say a browser is missing: when the markup *did* find buttons, the
+        expand report already named the command.
+        """
+        return self._buttons
 
     def produced(self) -> bool:
         """True when any rung that ran the pass actually opened or found something.
@@ -1795,6 +1815,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     # read, not to the rung.
     from searchts import expand as _expand
     from searchts import knobs as _knobs
+    from searchts import scroll as _scroll
 
     # The click ceiling is policy, not argument (F23e): `--expand` says yes to
     # expanding and the user's ceiling says how far. Nothing here raises it.
@@ -2073,11 +2094,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 # more" in JavaScript leaves nothing in its markup for the
                 # first check to find, and only the rendered DOM can answer.
                 if expand and backend == "curl_cffi" and (
-                    expand_sink._buttons or not expand_sink.produced()
+                    expand_sink.buttons or not expand_sink.produced()
                 ):
                     why = (
-                        f"expand-needed-{expand_sink._buttons}-control(s)"
-                        if expand_sink._buttons
+                        f"expand-needed-{expand_sink.buttons}-control(s)"
+                        if expand_sink.buttons
                         else "expand-not-satisfied-by-markup"
                     )
                     attempts.append((backend, why))
@@ -2241,6 +2262,17 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         deferred.headers["x-searchts-expand-deferred"] = "; ".join(
             f"{b}: {w}" for b, w in attempts[-2:]
         )
+        if expand and not expand_sink.buttons and not _scroll.browser_available():
+            # F23d, fail loud. The page may well hold text behind a "Show more"
+            # it builds in JavaScript: nothing in the markup says so, the rung
+            # that could have pressed it never ran, and the read would otherwise
+            # come back as a clean success with the folds still shut. Saying
+            # what to run is the whole point of `--expand` not existing yet.
+            deferred.extra_notes = list(deferred.extra_notes or []) + [
+                "[expand: this page may hold text behind a control only the "
+                "browser can see, and no browser is installed, so nothing was "
+                "opened. Run: searchts install --browser]"
+            ]
         return _with_auth(deferred)
 
     raise UnlockerError(url, attempts, _cookie_login_hint(cookie_header, attempts))
@@ -2411,14 +2443,6 @@ def _note_walk_stopped(last: "FetchResult", url: str, err: UnlockerError) -> Non
     last.text = (last.text or "").rstrip() + f"\n\n{note.text}"
 
 
-def _browser_installed() -> bool:
-    try:
-        import patchright  # noqa: F401
-        return True
-    except Exception:  # noqa: BLE001 - a missing extra is the normal case
-        return False
-
-
 def item_count(text: str) -> int:
     """Index rows already rendered as markdown links."""
     return len(_ITEM_LINE.findall(text or ""))
@@ -2502,7 +2526,6 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     if (
         not broke
         and got < want
-        and _has_markup(out[0])
         # The scroll is the *second* mechanism, so it is tried whenever the
         # first one did not deliver: the walk ended with no next URL, or it ran
         # out of pages with rows still coming. A page that has both (Discourse's
@@ -2513,11 +2536,17 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     ):
         # F23c: the list did not fill by following URLs, so try the other
         # mechanism. The probe inside decides whether this page even is a feed,
-        # which is why the gate is "we hold this page's markup" rather than "we
-        # think it is a feed": a virtualized feed (measured on reddit.com) marks
-        # itself with neither `role=feed` nor a "Load more" control, and the
-        # probe is the only thing that can tell.
-        note, rep = _scroll_feed(url, want - got, limits)
+        # which is why nothing here asks whether the walk "looked like a list":
+        # a virtualized feed (measured on reddit.com) marks itself with neither
+        # `role=feed` nor a "Load more" control, and the probe is the only
+        # thing that can tell.
+        #
+        # The gate is deliberately *not* "the winning rung held the markup". A
+        # relay win means the local rungs could not read the page at all, which
+        # is the case where a browser is most likely to, and the old gate left
+        # that read short with nothing on it saying why.
+        note, rep = _scroll_feed(url, want - got, limits,
+                                 relay_only=not _has_markup(out[0]))
         if note:
             extra += f"\n\n{note}"
         if rep is not None and rep.stop != "not-a-feed" and rep.html:
@@ -2580,12 +2609,14 @@ def _has_markup(page: "FetchResult") -> bool:
 
     The relay is the only rung that does not, and a markdown answer from it
     cannot be scanned for a feed, so it is not a page the scroll pass could
-    have grown.
+    have grown. Only used to *word* the note: the scroll itself opens the URL
+    in the browser and needs nothing from this result.
     """
     return "jina" not in (page.backend or "").lower()
 
 
-def _scroll_feed(url: str, want: int, limits) -> Tuple[str, Any]:
+def _scroll_feed(url: str, want: int, limits, *,
+                  relay_only: bool = False) -> Tuple[str, Any]:
     """Scroll ``url`` for ``want`` more rows: ``(note, report)``.
 
     Every outcome is a note, including "this is not a feed": the caller asked
@@ -2593,10 +2624,23 @@ def _scroll_feed(url: str, want: int, limits) -> Tuple[str, Any]:
     growing", "a login wall replaced the page" and "you have no browser
     installed" is exactly what makes the answer actionable. The report is
     ``None`` unless there is collected HTML worth reading.
+
+    ``relay_only`` says the read that came back was the Jina relay's markdown
+    and not the page's own markup. That changes only the wording, and only when
+    there is no browser to scroll with: the relay's markdown is what the caller
+    has, so saying "install a browser" without saying why the relay could not
+    help would leave the obvious question open.
     """
     from searchts import scroll
 
     if not scroll.browser_available():
+        if relay_only:
+            return (
+                "[scroll: this read came from the Jina relay, which returns "
+                "markdown and cannot be scrolled for more rows, and no browser "
+                "is installed to read the list itself. Run: "
+                "searchts install --browser]"
+            ), None
         return scroll.NO_BROWSER, None
     rep, why = scroll.collect_url(
         url, want_rows=want, max_clicks=limits.expand_clicks,
