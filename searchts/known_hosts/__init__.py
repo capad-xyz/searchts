@@ -16,6 +16,11 @@ module defines:
 
 Adding a host is dropping in a new module — no registry edits needed.
 
+Those two names are the whole contract (**N4**): a ladder that needed a third
+one per host would be a plugin framework wearing a ring's clothes, so a caller
+that wants something host-specific imports that host's file and asks it, the way
+:func:`unlocker._host_wall_reason` does.
+
 Public API: ``matches(url)`` and ``extract(url)``. ``extract`` never raises,
 so ``unlocker.fetch`` can always fall through to the normal ladder.
 
@@ -29,7 +34,6 @@ from __future__ import annotations
 import importlib
 import pkgutil
 import re
-import sys
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
@@ -89,83 +93,6 @@ def extract(url: str) -> Optional[KnownResult]:
             return fn(url, m)
         except Exception:  # noqa: BLE001 - extractor failure must not break fetch
             return None
-    return None
-
-
-def needs_browser_hop(url: str, reasons) -> bool:
-    """True when the wall that stopped a next-page hop is one a browser can pass.
-
-    F5f. A next-page hop is fetched curl-only (F23b), which is right for a static
-    pager and wrong for a site that judges the *request* rather than the address:
-    measured on Reddit, a direct request for its ``/svc/shreddit/…`` feed cursor
-    was answered with the "Prove your humanity" interstitial while the browser
-    rung read the same URL with 24 cards in the same minute. Without this the
-    walk ends at the first window of every feed, on a cold profile.
-
-    Only a host that declares :data:`HOSTS` and answers :func:`hop_needs_browser`
-    can say yes, and the ring asks one file. False for everything else, so no
-    other walk changes.
-    """
-    host = ""
-    try:
-        host = (url or "").split("//", 1)[-1].split("/", 1)[0].split(":")[0].lower()
-    except Exception:  # noqa: BLE001 - an unparsable URL is not a known host
-        return False
-    if not host:
-        return False
-    for info in pkgutil.iter_modules(__path__):
-        if info.name.startswith("_"):
-            continue
-        try:
-            mod = importlib.import_module(f"{__name__}.{info.name}")
-        except Exception:  # noqa: BLE001 - a broken module must not break a walk
-            continue
-        hosts = getattr(mod, "HOSTS", None)
-        checker = getattr(mod, "hop_needs_browser", None)
-        if not isinstance(hosts, (set, frozenset)) or not callable(checker):
-            continue
-        if host not in {str(h).lower() for h in hosts}:
-            continue
-        try:
-            return bool(checker(url, reasons))
-        except Exception:  # noqa: BLE001 - a broken check must not break a walk
-            return False
-    return False
-
-
-def expand_page(
-    page, url: str, html: str, want: int, clicks: int, tick=None
-) -> Optional[str]:
-    """Open what a known host's own page hides behind controls; None if none.
-
-    F5f. Some sites serve the first window of a document and keep the rest
-    behind controls the page itself renders (Reddit's "more replies"). Opening
-    them needs the live page, so this is the one place the ring meets a browser:
-    the caller passes the page, the ring owns the selectors, and the return is
-    the fullest HTML seen.
-
-    ``want`` and ``clicks`` are budgets, and they arrive from the knobs
-    (:mod:`searchts.knobs`), never from a flag: ``want`` is how many rows the
-    read may print, ``clicks`` how many presses the loop may spend. ``tick`` is
-    the caller's stderr narrator, passed straight through so a host's loop obeys
-    P4.6 without this file printing anything. A host module that has no opener of
-    its own contributes nothing and returns None.
-
-    None means "this host has nothing of its own to open", which is not a
-    failure: the caller keeps the HTML it had. The generic path (accordions,
-    buttons labelled read/show/see-more) is **F23d** and lives with the ring
-    rather than in the ladder, so a host either knows its own controls or does
-    not.
-    """
-    for pat, fn in _EXTRACTORS:
-        if not pat.match(url):
-            continue
-        mod = sys.modules.get(getattr(fn, "__module__", "") or "")
-        opener = getattr(mod, "expand_more", None)
-        if callable(opener):
-            opener(page, want, clicks, tick)
-            return page.content()
-        return None
     return None
 
 

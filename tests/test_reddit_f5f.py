@@ -882,13 +882,11 @@ def test_the_known_host_expand_budget_is_the_knob_not_a_constant(monkeypatch):
     _no_reddit_json(monkeypatch)
     asked = []
 
-    import searchts.known_hosts as ring
+    def spy(page, want, clicks, tick=None):
+        asked.append((want, clicks))
+        page.said = "opened"
 
-    def spy(page, url, html, want, clicks, tick=None):
-        asked.append((url, want, clicks))
-        return html
-
-    monkeypatch.setattr(ring, "expand_page", spy)
+    monkeypatch.setattr(reddit, "expand_more", spy)
     monkeypatch.setenv("SEARCHTS_MAX_EXPAND_CLICKS", "3")
     monkeypatch.setenv("SEARCHTS_MAX_ITEMS", "77")
 
@@ -896,8 +894,10 @@ def test_the_known_host_expand_budget_is_the_knob_not_a_constant(monkeypatch):
         def content(self):
             return "<html><body>hi</body></html>"
 
-    unlocker._expand_known_host(Page(), THREAD, "<html>a</html>", clicks=3)
-    assert asked == [(THREAD, 77, 3)], asked
+    page = Page()
+    out = unlocker._expand_known_host(page, THREAD, "<html>a</html>", clicks=3)
+    assert asked == [(77, 3)], asked
+    assert out == page.content()
 
     # A host the ring does not know is left alone: no click, no change, no error.
     class Other:
@@ -907,6 +907,49 @@ def test_the_known_host_expand_budget_is_the_knob_not_a_constant(monkeypatch):
     assert unlocker._expand_known_host(
         Other(), "https://example.test/post", "<html>a</html>", clicks=2
     ) == "<html>a</html>"
+
+
+def test_the_ring_declares_no_hook_beyond_pattern_and_extract_known():
+    """N4: the ring is a ring, not a plugin framework (the hooks are gone).
+
+    A per-module ``HOSTS`` + ``hop_needs_browser`` / ``expand_more`` pair read by
+    ``getattr`` was a second, optional protocol inside the one place that already
+    promised a single contract. The ladder now imports the host file it needs the
+    way it already did for :func:`unlocker._host_wall_reason`, so this pins that
+    nothing crept back in.
+    """
+    import searchts.known_hosts as ring
+
+    for gone in ("needs_browser_hop", "expand_page"):
+        assert not hasattr(ring, gone), f"the ring grew {gone} again"
+    for banned in ("HOSTS", "hop_needs_browser", "expand_more"):
+        assert not hasattr(ring, banned), f"the ring advertises {banned} again"
+
+
+def test_the_hop_retry_is_asked_of_reddit_itself_not_the_ring(monkeypatch):
+    """A walled-off cursor hop is offered to the browser by the host's own answer."""
+    asked = []
+    monkeypatch.setattr(
+        reddit, "hop_needs_browser", lambda url, reasons: asked.append(url) or True
+    )
+    calls = []
+    monkeypatch.setattr(
+        unlocker, "fetch", lambda url, **kw: calls.append((url, kw)) or "fetched"
+    )
+    err = unlocker.UnlockerError(BATCH, [("curl_cffi", "challenge")])
+
+    assert unlocker._retry_hop_on_browser(BATCH, err, {"timeout": 30}) == "fetched"
+    assert asked == [BATCH]
+    assert calls[0][1]["backends"] == ["stealth-browser"]
+    assert calls[0][1]["allow_human"] is False
+
+    # A host that is not Reddit is never retried, whatever it said.
+    asked.clear()
+    calls.clear()
+    assert unlocker._retry_hop_on_browser(
+        "https://example.test/next", err, {"timeout": 30}
+    ) is None
+    assert asked == [] and calls == []
 
 
 def test_no_expand_means_the_browser_rung_is_called_exactly_as_before(monkeypatch):

@@ -1510,6 +1510,10 @@ def _expand_known_host(
     a routing decision and never a silent one: only ``expand`` reaches here, and
     only after the caller asked.
 
+    Asked the same way as :func:`_host_wall_reason`: import the one host file
+    that has an answer, check the host, call it. The ring gains no third hook for
+    it (**N4**).
+
     ``clicks`` is the press budget the caller already resolved from
     ``SEARCHTS_MAX_EXPAND_CLICKS`` (the same number the generic pass spent, so a
     read has one click budget and not two). ``want`` is the row ceiling,
@@ -1524,14 +1528,25 @@ def _expand_known_host(
     """
     try:
         from searchts import knobs
-        from searchts.known_hosts import expand_page
-
+        from searchts.known_hosts import reddit as _reddit
+    except Exception:  # noqa: BLE001 - the ring must never break the ladder
+        return html
+    try:
         limits = knobs.resolve()
     except Exception:  # noqa: BLE001 - the ring must never break the ladder
         return html
     try:
-        return expand_page(page, url, html, limits.items, clicks, tick) or html
+        if not _reddit.is_reddit_url(url or ""):
+            return html
+    except Exception:  # noqa: BLE001 - a named host must never break the ladder
+        return html
+    try:
+        _reddit.expand_more(page, limits.items, clicks, tick)
     except Exception:  # noqa: BLE001 - a failed expand is a shorter read, not a failure
+        return html
+    try:
+        return page.content() or html
+    except Exception:  # noqa: BLE001 - the page's own HTML is still worth returning
         return html
 
 
@@ -2585,19 +2600,22 @@ def _retry_hop_on_browser(url: str, err: "UnlockerError", call: Dict[str, Any]):
     cards in the browser rung. Without this, ``--items`` on Reddit stops at the
     first window forever.
 
-    Whether the wall is that kind is the ring's call
-    (:func:`searchts.known_hosts.needs_browser_hop`), so nothing here knows what
-    Reddit is. The retry carries the same cookies-free, proxy-free arguments the
-    first hop had - a proxy or cookies the walk cannot carry is dropped by the
-    same rules the scroll uses - and returns ``None`` if it fails, so the caller
-    reports the original failure unchanged.
+    Whether the wall is that kind is Reddit's own answer, asked the way
+    :func:`_host_wall_reason` asks it: import the one file that knows the host,
+    check the host, call it. Nothing here knows what Reddit is and the ring gains
+    no hook for it (**N4**). The retry carries the same cookies-free, proxy-free
+    arguments the first hop had - a proxy or cookies the walk cannot carry is
+    dropped by the same rules the scroll uses - and returns ``None`` if it fails,
+    so the caller reports the original failure unchanged.
     """
     try:
-        from searchts.known_hosts import needs_browser_hop
+        from searchts.known_hosts import reddit as _reddit
     except Exception:  # noqa: BLE001 - the ring must never break a walk
         return None
     try:
-        if not needs_browser_hop(url, err.attempts):
+        if not _reddit.is_reddit_url(url or ""):
+            return None
+        if not _reddit.hop_needs_browser(url, err.attempts):
             return None
     except Exception:  # noqa: BLE001
         return None

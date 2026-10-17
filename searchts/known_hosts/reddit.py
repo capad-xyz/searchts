@@ -452,12 +452,6 @@ def is_reddit_url(url: str) -> bool:
     return _host_of(url) in REDDIT_HOSTS
 
 
-#: The hosts this file's own wall knowledge covers. Read by the ring's
-#: :func:`searchts.known_hosts.needs_browser_hop` for paths ``PATTERN`` does not
-#: claim, which is where the feed cursors live.
-HOSTS = REDDIT_HOSTS
-
-
 def hop_needs_browser(url: str, reasons) -> bool:
     """True when this hop failed on a Reddit wall only the browser rung passes.
 
@@ -1296,7 +1290,7 @@ def expand_more(page, want: int, clicks: int, tick=None) -> None:
     (Reddit's "no more" answer), or on the round cap, and never raises.
 
     Both numbers arrive from the knobs (:mod:`searchts.knobs`) through
-    :func:`searchts.known_hosts.expand_page`, and neither has a default here:
+    :func:`unlocker._expand_known_host`, and neither has a default here:
     ``want`` is the row ceiling (``SEARCHTS_MAX_ITEMS``) and ``clicks`` the press
     budget (``SEARCHTS_MAX_EXPAND_CLICKS``). A default in this signature would be
     a second answer to "how many" that no knob could lower. ``tick`` is the
