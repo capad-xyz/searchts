@@ -2425,8 +2425,13 @@ def _note_walk_capped(
     """
     from searchts import sanitize
 
-    got = f"asked for {asked}, got {got_pages}"
-    got = f"{rows}, {got}" if rows else got
+    if rows:
+        # A row walk: ``asked`` is rows here, not pages, so "asked for 70, got
+        # 5" set a row count beside a page count. Rows against the ceiling that
+        # applied, and the pages as pages.
+        got = f"{rows}, stopped after {got_pages} page{'s' if got_pages != 1 else ''}"
+    else:
+        got = f"asked for {asked}, got {got_pages}"
     note = sanitize.scrub(f"[pages: {got}. The next page is {nxt}]", redact=True)
     last.warnings = list(last.warnings or []) + note.findings
     last.text = (last.text or "").rstrip() + f"\n\n{note.text}"
@@ -2437,6 +2442,16 @@ _MAX_ITEMS = 300
 # "1. [". Matching only the unordered form counted every ordered list as zero
 # rows, so --items walked the whole page cap and reported nothing.
 _ITEM_LINE = re.compile(r"(?m)^(?:-|\d+\.)\s+\[")
+# A table-shaped feed (Discourse's /latest, a forum index, a ranking) extracts
+# to one pipe row per item, not to a list. Matching only list lines counted
+# every one of those rows as zero, so `--items` and the user's ceiling never
+# saw a row, and the walk ran to the page cap. A row counts when it carries a
+# link: the header and the `| --- |` rule do not, and a table of plain data is
+# not a list of things to open.
+_TABLE_ROW = re.compile(r"(?m)^[ \t]*\|[^\n]*\]\(https?://")
+# The first link on a row: the identity of the row across the scroll and the
+# pages that follow it.
+_ROW_LINK = re.compile(r"\]\((https?://[^)\s]+)\)")
 
 
 def _is_refusal(err: UnlockerError) -> bool:
@@ -2465,7 +2480,40 @@ def _note_walk_stopped(last: "FetchResult", url: str, err: UnlockerError) -> Non
 
 def item_count(text: str) -> int:
     """Index rows already rendered as markdown links."""
-    return len(_ITEM_LINE.findall(text or ""))
+    text = text or ""
+    return len(_ITEM_LINE.findall(text)) + len(_TABLE_ROW.findall(text))
+
+
+def _row_keys(text: str) -> set:
+    """First link of every row in ``text``: what makes a row the same row."""
+    keys = set()
+    for line in (text or "").splitlines():
+        if _ITEM_LINE.match(line) or _TABLE_ROW.match(line):
+            m = _ROW_LINK.search(line)
+            if m:
+                keys.add(m.group(1))
+    return keys
+
+
+def _drop_repeated_rows(text: str, seen: set) -> str:
+    """``text`` without the rows whose link is already in ``seen``.
+
+    A list row drags its indented byline and snippet lines with it; a table row
+    is one line. Everything that is not a repeated row stays byte for byte.
+    """
+    out: List[str] = []
+    skipping = False
+    for line in (text or "").splitlines():
+        is_row = bool(_ITEM_LINE.match(line) or _TABLE_ROW.match(line))
+        if is_row:
+            m = _ROW_LINK.search(line)
+            skipping = bool(m and m.group(1) in seen)
+        elif skipping and line.strip() and not line.startswith((" ", "\t")):
+            skipping = False
+        if skipping:
+            continue
+        out.append(line)
+    return "\n".join(out)
 
 
 def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]:
@@ -2541,7 +2589,9 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         if out and got < want and out[-1].next_url and not broke:
             _note_walk_capped(
                 out[-1], len(out), asked, out[-1].next_url,
-                rows=f"{got} rows of {asked}" if got else "no rows",
+                # `want` is the ceiling that applied, not the unclamped ask:
+                # the clamp note on page one already names the difference.
+                rows=f"{got} rows of {want}" if got else "no rows",
             )
     if not out:
         return out
@@ -2581,12 +2631,23 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
                 "the feed without it to scroll]"
             ), None
         else:
-            note, rep = _scroll_feed(url, want - got, limits,
+            # The scroll starts at the top of the feed, so it is asked for the
+            # rows wanted in all, not for what the page walk left over: it
+            # re-reads the rows the walk already has, and asking for the
+            # remainder ended it early or handed back rows the walk repeated.
+            note, rep = _scroll_feed(url, want, limits,
                                      relay_only=not _has_markup(out[0]))
         if note:
             extra += f"\n\n{note}"
         if rep is not None and rep.stop != "not-a-feed" and rep.html:
             out[0] = _scrolled(out[0], rep, url, kwargs)
+            # The scrolled page one is the feed from the top, so the later
+            # pages of the walk (the same feed, a window further down) repeat
+            # its rows. Each row is returned once, in the place it came first.
+            seen = _row_keys(out[0].text)
+            for later in out[1:]:
+                later.text = _drop_repeated_rows(later.text, seen)
+                seen |= _row_keys(later.text)
     if extra:
         first = out[0]
         first.text = (first.text or "").rstrip() + extra
