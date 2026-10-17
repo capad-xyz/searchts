@@ -196,7 +196,8 @@ def _run():
         "--expand",
         action="store_true",
         help="Open the text the page is holding back: closed <details> and buttons "
-             "labelled read/show/see more. Off by default. Never follows a link, a form "
+             "labelled read/show/see more, and a known host's own controls (a Reddit "
+             "thread's 'more replies'). Off by default. Never follows a link, a form "
              "or a sign-in; a 'continue reading' paywall is named, not opened "
              "(ceiling SEARCHTS_MAX_EXPAND_CLICKS)",
     )

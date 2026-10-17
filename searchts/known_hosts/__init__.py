@@ -29,6 +29,7 @@ from __future__ import annotations
 import importlib
 import pkgutil
 import re
+import sys
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple
 
@@ -88,6 +89,33 @@ def extract(url: str) -> Optional[KnownResult]:
             return fn(url, m)
         except Exception:  # noqa: BLE001 - extractor failure must not break fetch
             return None
+    return None
+
+
+def expand_page(page, url: str, html: str, want: int) -> Optional[str]:
+    """Open what a known host's own page hides behind controls; None if none.
+
+    F5f. Some sites serve the first window of a document and keep the rest
+    behind controls the page itself renders (Reddit's "more replies"). Opening
+    them needs the live page, so this is the one place the ring meets a browser:
+    the caller passes the page, the ring owns the selectors, and the return is
+    the fullest HTML seen.
+
+    None means "this host has nothing of its own to open", which is not a
+    failure: the caller keeps the HTML it had. The generic path (accordions,
+    buttons labelled read/show/see-more) is **F23d** and lives with the ring
+    rather than in the ladder, so a host either knows its own controls or does
+    not.
+    """
+    for pat, fn in _EXTRACTORS:
+        if not pat.match(url):
+            continue
+        mod = sys.modules.get(getattr(fn, "__module__", "") or "")
+        opener = getattr(mod, "expand_more", None)
+        if callable(opener):
+            opener(page, want)
+            return page.content()
+        return None
     return None
 
 
