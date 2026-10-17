@@ -23,6 +23,9 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
+from searchts.expand import EXPAND_EXACT_RE as _EXPAND_EXACT_RE
+from searchts.expand import EXPAND_RE as _EXPAND_RE
+
 #: Page chrome. A control or list inside these never counts.
 _CHROME_TAGS = frozenset({"header", "footer", "aside", "form", "dialog", "menu", "template"})
 _CHROME_ROLES = frozenset(
@@ -37,12 +40,12 @@ _FEED_RE = re.compile(
     r"(?:posts|stories|results|items|articles|comments|replies|products|videos|news))[\s.…]*$",
     re.I,
 )
-#: "Read more" and "Show more": the rest of one item.
-_FOLD_RE = re.compile(
-    r"^(?:read|show|see|view)\s+(?:more|all|full|the\s+rest)"
-    r"(?:\s+(?:post|article|text|story|description|details))?[\s.…>»›]*$",
-    re.I,
-)
+#: "Read more" and "Show more": the rest of one item. Imported from
+#: :mod:`searchts.expand` so the fold this names is the fold ``--expand`` opens.
+#: The exact form is kept for :func:`_accordion_toggles`, which must not mistake
+#: a fold for a question to open; the wide form counts folds for the note.
+_FOLD_RE = _EXPAND_EXACT_RE
+_FOLD_ANY_RE = _EXPAND_RE
 _NEXT_TEXT_RE = re.compile(r"^(?:next(?:\s+page)?|older(?:\s+(?:posts|entries))?|[›»>])[\s›»>]*$", re.I)
 _PAGER_HINT_RE = re.compile(r"pagination|pager|paging|page\s+navigation|more\s+results", re.I)
 #: A link's own name (aria-label or title) that says it is the next page (Bing, Google).
@@ -503,13 +506,18 @@ def _feed(doc, base: str, url: str) -> Tuple[bool, Optional[str]]:
 
 
 def _folds(doc) -> Tuple[int, str]:
-    """(count, first label) of "Read more" style controls that stay on the page."""
+    """(count, first label) of the controls that say the rest of it is behind them.
+
+    A fold is the phrase whatever noun follows it: ``Show all reviews`` is the
+    same claim as ``Show more``, and only the exact form used to be counted, so
+    a product page named one fold where it had five.
+    """
     count, first = 0, ""
     for el in _controls(doc):
         if _in_chrome(el) or _in_nav(el):
             continue
         label = _norm(el.text_content())
-        if len(label) <= 40 and _FOLD_RE.match(label) and not _FEED_RE.match(label):
+        if len(label) <= 60 and _FOLD_ANY_RE.match(label) and not _FEED_RE.match(label):
             count += 1
             first = first or label
     return count, first

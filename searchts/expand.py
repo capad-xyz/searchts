@@ -54,19 +54,28 @@ __all__ = [
     "PAY_LABELS",
     "REFUSE_LABELS",
     "EXPAND_RE",
+    "EXPAND_EXACT_RE",
 ]
 
 
-#: A control whose whole label says "the rest of this item is behind me".
-#: Same family the detector already calls a fold (``more._FOLD_RE``), so
-#: ``--expand`` opens exactly what the read said was folded. "Load more" is
-#: excluded here: that is a feed, and :mod:`searchts.scroll` owns it.
-EXPAND_RE = re.compile(
-    r"^(?:read|show|see|view)\s+(?:more|all|full|"
-    r"the\s+(?:rest|full\s+\w+))"
-    r"(?:\s+(?:post|article|text|story|description|details|comments?|replies))?[\s.…»›>]*$",
-    re.I,
-)
+#: The phrase that says "the rest of this item is behind me", before any noun
+#: that follows it. Shared with the detector in :mod:`searchts.more` so the note
+#: a read prints and the control ``--expand`` presses are the same list, by
+#: construction rather than by a comment staying true.
+_FOLD_PHRASE = r"(?:read|show|see|view)\s+(?:more|all|full|the\s+(?:rest|full\s+\w+))"
+
+#: A control whose whole label is that phrase and nothing else.
+EXPAND_EXACT_RE = re.compile(rf"^{_FOLD_PHRASE}[\s.…»›>]*$", re.I)
+
+#: The same phrase with one word after it, which is how the noun arrives on a
+#: real page: "Show all reviews", "See full compatibility", "Show all 42
+#: comments". Measured on 26 unknown hosts this adds the folds the exact form
+#: missed and nothing else: "Show Search", "load()", "See also" and "Open
+#: source" are all rejected, because the phrase has to come first.
+#:
+#: "Load more" is excluded here on purpose: that is a feed, and
+#: :mod:`searchts.scroll` owns it.
+EXPAND_RE = re.compile(rf"^{_FOLD_PHRASE}(?:\s+\w+)?[\s.…»›>]*$", re.I)
 
 #: Labels that mean the rest of the page is sold, not folded. Named, never
 #: pressed. ``read more`` is deliberately absent: on its own it is a fold.

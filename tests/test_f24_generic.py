@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from searchts import more, unlocker
+from searchts import expand, more, unlocker
 
 URL = "https://example.org/article/"
 
@@ -211,4 +211,72 @@ def test_a_real_read_on_that_page_is_half_the_page_and_says_so(monkeypatch):
     have = more.page_text_chars(more._parse(html))
     assert kept < 0.55 * have
     assert f"of {have:,} characters" in share[0]["note"]
+
+
+# ── one fold label family, shared with what --expand presses ─────────────────
+
+
+def _fold_page(labels: tuple) -> str:
+    buttons = "".join(f'<button type="button">{label}</button>' for label in labels)
+    return f"<html><body><main><h1>A page</h1>{_prose(40)}{buttons}</main></body></html>"
+
+
+@pytest.mark.parametrize("label", ["Read more", "Show more", "Show all reviews", "View all files"])
+def test_a_control_that_says_the_rest_is_behind_it_is_a_fold(label):
+    count, first = more._folds(more._parse(_fold_page((label,))))
+    assert count == 1 and first == label
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Show Search",  # the phrase has to come first
+        "load()",  # no space after the verb
+        "See also",
+        "Open source",
+        "Continue reading",  # a paywall, named elsewhere and never pressed
+    ],
+)
+def test_a_control_that_does_not_say_it_is_not_a_fold(label):
+    assert more._folds(more._parse(_fold_page((label,)))) == (0, "")
+
+
+def test_every_fold_the_note_names_is_one_expand_would_press():
+    """The note and the feature have to be the same list, or the note lies."""
+    labels = ("Read more", "Show more", "Show all reviews", "View all files", "Show Search", "See also")
+    html = _fold_page(labels)
+    count, _first = more._folds(more._parse(html))
+    eligible, first = expand.eligible_labels(html)
+    assert count == 4, "Show Search and See also are not folds"
+    assert eligible == 4 and first == "Read more"
+
+
+def test_the_label_policy_is_one_object():
+    assert more._FOLD_ANY_RE is expand.EXPAND_RE
+    assert more._FOLD_RE is expand.EXPAND_EXACT_RE
+
+
+def test_a_disclosure_named_like_a_fold_is_still_opened_in_the_markup():
+    """``prepare_panels`` un-hides panels, and must not skip one over the label.
+
+    The wide family exists to count folds. It must not reach the pass that
+    opens hidden answers, or a docs page's hidden table stops being read.
+    """
+    html = (
+        "<html><body><main><h2>Support</h2>"
+        '<button aria-expanded="false" aria-controls="bc">See full compatibility</button>'
+        '<table id="bc"><tr><td>Chrome 120</td><td>yes</td></tr></table></main></body></html>'
+    )
+    opened = more.prepare_panels(html)
+    assert "display:none" not in opened
+    assert "See full compatibility" in opened
+
+
+def test_the_note_counts_every_fold_on_the_page():
+    html = _fold_page(("Show more", "Show all reviews", "Show all reviews", "Show all accessories"))
+    notes = [m.note for m in more.detect(html, URL, _kept(40)) if m.kind == "fold"]
+    assert notes == [
+        '[folded: 4 controls like "Show more" on the page; the text behind them may be missing]'
+    ]
+
 
