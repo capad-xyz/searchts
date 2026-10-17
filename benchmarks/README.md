@@ -80,7 +80,11 @@ Python ran it and carries the network note you pass with `--where`.
 `Secs` is wall-clock time for that run.
 A datacenter, CI, or some VPN connections can report a lower pass rate or more
 fallback-tier usage because their IP reputation and TLS fingerprint differ from
-a normal residential connection.
+a normal residential connection. The Reddit rows are additionally a **warm**
+profile: Reddit decides whether to serve its "Prove your humanity" check from
+the browser profile's standing rather than from the address, so the same machine
+gets challenged on its first runs and reads later. A throwaway `HOME` (which
+loses `~/.searchts/browser-profile`) measures the cold answer.
 
 Generate a local scorecard and its raw data with:
 
