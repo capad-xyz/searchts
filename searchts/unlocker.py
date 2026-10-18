@@ -1003,6 +1003,13 @@ _APP_SHELL_MAX_VISIBLE = 1_200
 _APP_SHELL_MIN_INLINE = 50_000
 _TAG_RE = re.compile(r"(?s)<[^>]*>")
 _INLINE_SCRIPT_RE = re.compile(r"(?is)<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script\s*>")
+#: Visible characters in a rendered DOM below which the page has not painted for
+#: a reader yet. Measured 2026-10-18 on a served app shell: 8 characters of
+#: visible markup (a ``<title>``) held steady for 2.0s while the module bundle
+#: downloaded, then the same document showed 308 the moment the bundle ran.
+#: Anything a reader came for is far above this, so the floor only decides how
+#: long a client app is given before it is called settled.
+_PAINTED_MIN_VISIBLE = 200
 
 
 def _visible_markup_len(markup: str) -> int:
@@ -1069,6 +1076,45 @@ def _is_app_shell(html: str, text: str) -> bool:
             or _inline_script_chars(html) >= _APP_SHELL_MIN_INLINE
         )
     )
+
+
+def _is_unpainted(html: str) -> bool:
+    """True when a rendered DOM shows too little text to be the page.
+
+    The rendered document, not the extract: this asks whether the *browser* has
+    shown the reader anything, and it is the question the hydration wait needs.
+    A shell and a settled page look identical at ``domcontentloaded``, and the
+    only difference arrives later, so a caller that stops at "the length did
+    not change" reads the shell and calls the page thin.
+
+    The floor is deliberately loose: 200 visible characters is below any real
+    article and above the title-only document an app shows before its bundle
+    runs. It is a "has anything happened yet" test, not a quality one, so it
+    never decides a page is good. Only the extractor does that.
+    """
+    if not html:
+        return True
+    return _visible_markup_len(_SCRIPTISH_RE.sub(" ", html)) < _PAINTED_MIN_VISIBLE
+
+
+def _is_refused_render(html: str, status: Optional[int]) -> bool:
+    """A browser navigation that came back refused and rendered nothing.
+
+    The empty ``<html><head></head><body></body></html>`` a server sends beside
+    a 403 carries no challenge phrase and no text, so every block test passes
+    it and the rung below promotes the status to 200: a refusal becomes a
+    thin page. Measured 2026-10-18 driving the stealth rung against
+    ``x.com``: ``page.goto`` answered 403, the DOM stayed at 39 bytes of empty
+    document for 48s, and the ladder reported ``stealth-browser: thin-0b``.
+
+    Three conditions, all needed. A 4xx that rendered text is a real page (a
+    styled error page, a challenge that cleared) and stays a 200. A 2xx that
+    rendered nothing is a broken page and is already thin. Only a refusal with
+    no rendered text at all is the case that was being laundered.
+    """
+    if status is None or status < 400:
+        return False
+    return _visible_markup_len(_SCRIPTISH_RE.sub(" ", html or "")) == 0
 
 
 def whole_short_page(html: str, text: str) -> bool:
@@ -1421,6 +1467,21 @@ def _await_hydration(
     Stops as soon as two consecutive reads agree, so an already-rendered page
     costs one extra step rather than the whole budget. A persistent
     navigation race fails loud instead of returning the last partial HTML.
+
+    "Stopped growing" is not the same as "finished", though, and on a client
+    app the two are indistinguishable at first: measured 2026-10-18 on a served
+    page whose module bundle mounts its body 2.2s after load, the DOM held the
+    same 146 bytes through +0.25s, +0.50s ... +2.00s and jumped to 488 at
+    +2.25s. Length stability read that as "settled" on the first poll, and the
+    rung returned the shell: 146 bytes, 8 characters of text, and a page the
+    browser was fully able to read.
+
+    So an unpainted DOM does not end the wait. While the rendered document
+    still shows less than :data:`_PAINTED_MIN_VISIBLE` characters, keep polling
+    to the budget. The cost is bounded and only paid by pages that have not
+    painted: a page with real content keeps the one-extra-step behaviour above,
+    and a page that never paints ends at the budget and is then judged thin by
+    the extractor, which is the honest verdict for it.
     """
     waited = 0
     while waited < budget_ms:
@@ -1432,9 +1493,11 @@ def _await_hydration(
             if _is_nav_race(e):
                 raise
             break
-        if len(current) <= len(html):
-            break  # stopped growing: hydrated, or static all along
-        html = current
+        if len(current) > len(html):
+            html = current
+            continue
+        if not _is_unpainted(current):
+            break  # stopped growing, and the page is showing its text
     return html
 
 
@@ -1514,6 +1577,40 @@ def _fetch_stealth(
     return _call_sync_browser(_fetch_stealth_impl, url, timeout, progress)
 
 
+#: A Chromium that was never downloaded. Patchright's own text for it is a
+#: seven-line box naming ``patchright install``, a command that does not exist
+#: in the user's environment and does not install what searchts needs. Matched
+#: on the sentence, not the box.
+_MISSING_CHROMIUM = (
+    "executable doesn't exist",
+    "playwright was just installed or updated",
+)
+
+#: The one sentence for "the browser rung is not there". Named in both spellings
+#: because they are different fixes for different machines: pip is what puts the
+#: extra in an ordinary venv, and ``searchts install --browser`` is what puts it
+#: in a pipx or uv tool env where a bare pip write is wiped by the next upgrade.
+_BROWSER_MISSING_HINT = (
+    'install the browser tier: pip install "searchts[browser]" (or '
+    "searchts install --browser), then read again"
+)
+
+
+def _browser_missing_reason(exc: BaseException) -> Optional[str]:
+    """The browser-rung reason for a launch that failed because Chromium is
+    absent, or ``None`` when the launch failed for any other reason.
+
+    Only the one case is renamed. Every other launch failure keeps Playwright's
+    own message, because "the browser would not start" and "the browser was
+    never installed" are different facts and the fix is only known for one of
+    them.
+    """
+    msg = str(exc).lower()
+    if any(needle in msg for needle in _MISSING_CHROMIUM):
+        return f"browser not installed: {_BROWSER_MISSING_HINT}"
+    return None
+
+
 def _fetch_stealth_impl(
     url: str, timeout: int = 60, progress: Optional[bool] = None,
     proxy: Optional[Dict[str, Any]] = None,
@@ -1524,7 +1621,7 @@ def _fetch_stealth_impl(
     except ImportError as e:  # pragma: no cover - environment dependent
         raise RuntimeError(
             "stealth-browser backend needs patchright: "
-            "searchts install --browser"
+            + _BROWSER_MISSING_HINT
         ) from e
 
     ms = int(timeout * 1000)
@@ -1536,18 +1633,24 @@ def _fetch_stealth_impl(
     proxy_kwargs: Dict[str, Any] = {"proxy": proxy} if proxy else {}
     with sync_playwright() as p:
         persistent = _use_persistent_profile()
-        if persistent:
-            profile_dir = _profile_path()
-            browser = p.chromium.launch_persistent_context(
-                str(profile_dir), headless=True,
-                args=pin_args,
-                user_agent=_UA_REAL, locale="en-US",
-                viewport={"width": 1280, "height": 800},
-                **proxy_kwargs,
-            )
-        else:
-            browser = p.chromium.launch(headless=True, args=pin_args,
-                                        **proxy_kwargs)
+        try:
+            if persistent:
+                profile_dir = _profile_path()
+                browser = p.chromium.launch_persistent_context(
+                    str(profile_dir), headless=True,
+                    args=pin_args,
+                    user_agent=_UA_REAL, locale="en-US",
+                    viewport={"width": 1280, "height": 800},
+                    **proxy_kwargs,
+                )
+            else:
+                browser = p.chromium.launch(headless=True, args=pin_args,
+                                            **proxy_kwargs)
+        except Exception as e:  # noqa: BLE001 - one launch failure, one reason
+            missing = _browser_missing_reason(e)
+            if missing:
+                raise RuntimeError(missing) from e
+            raise
         try:
             if persistent:
                 page = browser.new_page()
@@ -1622,7 +1725,14 @@ def _fetch_stealth_impl(
                     html = host_html
             # If the challenge cleared, the real status is 200 regardless of the
             # initial challenge response; otherwise keep the original status.
-            status = 200 if looks_blocked(200, html) is None else init_status
+            # A refusal that rendered nothing is the one case the promotion would
+            # get wrong: the DOM is an empty document, so it carries no challenge
+            # phrase, and 403 would come back as a thin page. Checked before it
+            # happens, because afterwards there is nothing left to check.
+            status = 200 if (
+                looks_blocked(200, html) is None
+                and not _is_refused_render(html, init_status)
+            ) else init_status
             final = page.url or url
             # page.goto headers can still say "challenge" after the DOM cleared.
             headers = _drop_stale_challenge_headers(headers, html)
