@@ -53,7 +53,9 @@ No host in this table is in `searchts/known_hosts` or `searchts/share_extractors
   **At the branch tip (2026-10-18, table below): 16 of 20**, because row 16
   was refused with 403 on the re-run.
 - **Three refused in the first run for a real wall or a real shell** (7, 14) or
-  for a false wall the classifier can name but not read through (10).
+  for a false wall the classifier can name but not read through (10). Row 10 was
+  that false wall; it reads now, so at the tip only two are refusals of that kind
+  (7 and 14). Rows 7 and 16 are address-level and were not re-driven after that.
 - **No row silently passed a thin page** in the sense of an empty or
   mid-sentence read. The silent failures in this set are *partial*, not empty:
   row 20 keeps 16% of the page's visible text and says only that 8 items were
@@ -95,7 +97,7 @@ code (rows 11 and 13 changed most).
 | 7 | stackoverflow.com/questions/11227809/… | 0 | 1 | refused: `curl_cffi: http-403`, `Jina Reader: 403` |
 | 8 | www.ikea.com/us/en/p/markus-office-chair-… | 18,736 | 0 | `[folded: 5 controls like "Show more"]`, media |
 | 9 | en.wikipedia.org/wiki/Web_scraping | 44,530 | 0 | context line, media |
-| 10 | github.com/psf/requests | 0 | 1 | refused: `login-wall` on curl and Jina; the hint now says the browser tier is sent no cookies. Still a **false wall** (see gaps). |
+| 10 | github.com/psf/requests | 7,384 | 0 | **reads.** `[folded: 1 control like "View all files"]`, `[media: 7 images]` |
 | 11 | news.ycombinator.com/news?p=2 | 3,952 | 0 | `[more: next page …]`, media. No `[list:]` note this run, and the text is one token per line (same on `origin/main`: 3,877 chars). |
 | 12 | developer.mozilla.org/…/Elements/details | 11,165 | 0 | `[folded: 1 …]`, `[media: 4 embeds …; media present, not resolved]`, `[left out: "In this article"]` |
 | 13 | news.ycombinator.com/item?id=50126253 | 10,287 | 0 | `[list: 35 items rebuilt …]`, media (the thread grew since the first run) |
@@ -111,7 +113,21 @@ What changed against the first table: rows 2 and 20, the two "kept a small
 share, said nothing about the size" cases, now say the share and both numbers;
 row 20 also says the last line stops mid-sentence. Every read that has media in
 its main content lists it, with at most four URLs, or says "media present, not
-resolved". Row 14 gets the JS-app hint and row 10 the no-cookies hint.
+resolved". Row 14 gets the JS-app hint. Row 10 is re-driven below rather than
+being left in this table's snapshot.
+
+Row 10 was re-driven on 2026-10-18 after the wall classifier stopped letting a
+marker outvote a page's own vocabulary (`searchts/walls.py`, `_marker_wall`). The
+live extract was 845 words with **two** auth sentences in it, GitHub's star button
+tooltip and its notification button `aria-label`, both saying "You must be signed
+in": 0.59 auth hits per 100 words against a threshold of 2.0. GitHub's real login
+page, measured the same way from the same box, is 76 words at 6.58. Every layer
+that has a denominator already had this right; only the marker layer, which had
+none, refused a public page. Row 10 now reads: exit `0`, 7,384 characters, the
+README in the text, the two "must be signed in" labels still visibly in it as
+what they are (nav chrome), and the media note. `linkedin.com/feed` was driven in
+the same session and still refuses with `login-wall` on curl, exit `1`, stdout
+empty.
 
 ### JSON-LD (F24b) on real pages
 
@@ -133,8 +149,10 @@ candidate recipe/Q&A pages returned 403 and were not measured.
 
 ## Open gaps
 
-- Row 10: a public README read as `login-wall`, because the page's chrome repeats
-  "Sign in". The loud failure is right in kind and wrong in reason.
+- Row 10 was a public README read as `login-wall`, because the page's chrome
+  repeats "Sign in". **Closed on 2026-10-18**: a marker phrase no longer calls a
+  page a wall once the page is long enough for its own family to be measured.
+  The page reads, and a real login page on the same host still does not.
 - Row 11: a list page the extractor flattens to one token per line, with no note
   that the list was not rebuilt. Same on `origin/main`.
 - F24b `__NEXT_DATA__` is not read (no real page found where it beats the

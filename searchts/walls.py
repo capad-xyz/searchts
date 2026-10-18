@@ -193,11 +193,24 @@ def distinct_term_count(text: str, words: "re.Pattern[str]") -> int:
     return len(seen)
 
 
-#: Phrases so specific that no ordinary page contains them. These fire at any
-#: length, including a fourteen-word extract, because "sign in to continue" and
-#: "you must be logged in" are not things an article says. The density families
-#: below cannot do this job: they need a word count to have a denominator, and
-#: a short auth shell does not have one. That is why both layers exist.
+#: Phrases so specific that no *wall* contains them without anything else: these
+#: are what catches a fourteen-word extract, because the density families below
+#: cannot do that job. They need a word count to have a denominator, and a short
+#: auth shell does not have one. That is why both layers exist.
+#:
+#: "Specific no ordinary page contains them" was the claim, and it was measured
+#: false on 2026-10-18. ``searchts read https://github.com/psf/requests`` is a
+#: public repo page, and its extract (845 words, 6,414 characters) contains
+#: "You must be signed in to star a repository" and "You must be signed in to
+#: change notification settings", because that is what GitHub's star button and
+#: its notification button put in ``aria-label`` and a tooltip. Every rung
+#: refused the page with ``login-wall`` and the CLI told the caller to sign in.
+#: The page's auth density was 0.59 per 100 words against a threshold of 2.0, so
+#: every layer that has a denominator already had it right; only the marker
+#: layer, which had none, said no.
+#:
+#: So a marker is now what it was always for: the answer where a ratio cannot be
+#: computed. See :func:`classify`.
 MARKERS: "Dict[str, Tuple[str, ...]]" = {
     "auth": (
         "sign in to continue",
@@ -244,15 +257,50 @@ MARKERS: "Dict[str, Tuple[str, ...]]" = {
 #: one link does not reach the bar on its own.
 SHORT_SHELL_MIN_TERMS = 3
 
+#: Family lookup by name, for the one rule that needs a marker's own family.
+_BY_NAME: Dict[str, Family] = {f.name: f for f in FAMILIES}
+
+
+def _marker_wall(kind: str, raw: str) -> Optional[Wall]:
+    """Does a marker in ``kind`` call this extract a wall?
+
+    A marker exists for the extract with no denominator: "sign in to continue"
+    is four words, and no ratio can be a ratio against four words. That is the
+    whole of its job, and it is a good one. Past the family's own word floor
+    there *is* a denominator, so the marker's family gets to vote, and the
+    marker only carries the page when that family already says the page is
+    about the wall.
+
+    This is not a new threshold and it is not a list of sites. It is the
+    sentence the module has claimed since it was written - a wall is a page
+    whose *subject* is the wall - applied to the one layer that was not
+    applying it. Measured on two real GitHub pages that are the same shape and
+    opposite answers (2026-10-18, ``curl_cffi`` impersonating Chrome):
+
+    * ``github.com/login``, a wall: 76 words, 6.58 auth hits per 100
+    * ``github.com/psf/requests``, public and not a wall: 845 words, 0.59
+
+    The wall is 3.3x over its threshold and the page that is not a wall is 3.4x
+    under it, so the family threshold decides both and the marker is silent on
+    both. Neither is near the line, which is what makes reusing the existing
+    threshold here defensible rather than a guess.
+    """
+    fam = _BY_NAME[kind]
+    _hits, total, per_100 = density(raw, fam.words)
+    if total < fam.min_words or per_100 >= fam.per_100:
+        return Wall(kind, 100.0, total)
+    return None
+
 
 def classify(text: str) -> Optional[Wall]:
     """Return the wall this extract is, or None if it looks like content.
 
     Three layers, because they fail in different ways. Markers are exact and
-    fire anywhere, including a fourteen-word extract. Families are a ratio and
-    need a denominator, so they catch the walls whose copy we never wrote down
-    and are what makes this work on a site nobody has heard of. Breadth covers
-    the gap between them, where a ratio has no denominator to divide by.
+    fire where no ratio has a denominator yet, including a fourteen-word
+    extract; above that floor they have to agree with their own family. Families
+    are a ratio, so they catch the walls whose copy we never wrote down and are
+    what makes this work on a site nobody has heard of. Breadth covers the gap
+    between them, where a ratio has no denominator to divide by.
 
     Accepts either an extract or raw HTML. Script and style bodies are dropped
     first, because a wall is something a page shows a person and copy inside a
@@ -264,7 +312,13 @@ def classify(text: str) -> Optional[Wall]:
     low = raw.lower()
     for kind, phrases in MARKERS.items():
         if any(p in low for p in phrases):
-            return Wall(kind, 100.0, len(raw.split()))
+            # Kept for the kind it named rather than breaking on the first
+            # marker that matched: a page whose chrome carries one family's
+            # marker can still be that family's wall, and the family layers
+            # below are what decide it.
+            found = _marker_wall(kind, raw)
+            if found is not None:
+                return found
     for fam in FAMILIES:
         hits, total, per_100 = density(raw, fam.words)
         if total < fam.min_words:
