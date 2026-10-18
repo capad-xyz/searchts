@@ -2,16 +2,16 @@
 
 Every finding Hare posted here, what became of it, and what the owner said. Built by `scripts/hare_ledger.py` from the notes, the Since lines, resolved threads, `/hare score` and `/hare fate` comments; a PR closed unmerged drops its open findings. PLAN R2b.
 
-Built 2026-10-11. 214 PRs, 293 notes, 41 real and 181 skip findings, 23 notes cut at the budget, 147 runs where no hop answered.
+Built 2026-10-18. 233 PRs, 350 notes, 62 real and 225 skip findings, 32 notes cut at the budget, 147 runs where no hop answered.
 
-**Hit rate:** 13 of 41 real findings fixed or resolved (31%); 24 judged, 6 wrong, 2 wontfix, 1 dropped with a closed PR.
+**Hit rate:** 15 of 62 real findings fixed or resolved (24%); 26 judged, 5 wrong, 2 wontfix, 1 dropped with a closed PR.
 **Owner scores:** 45 given, average 3.67 of 5.
 
 | Hop | Notes |
 | --- | --- |
-| `nous:poolside/laguna-s-2.1:free` | 106 |
+| `nous:poolside/laguna-s-2.1:free` | 143 |
 | `openrouter:qwen/qwen3.8-27b:free` | 59 |
-| `nous:meituan/longcat-2.5-preview:free` | 39 |
+| `nous:meituan/longcat-2.5-preview:free` | 55 |
 | `openrouter:nex-agi/nex-n2.5-pro:free` | 24 |
 | `openrouter:poolside/laguna-s-2.1:free` | 18 |
 | `groq:openai/gpt-oss-120b` | 15 |
@@ -19,19 +19,49 @@ Built 2026-10-11. 214 PRs, 293 notes, 41 real and 181 skip findings, 23 notes cu
 | `openrouter:stealth/space-bunny-alpha` | 7 |
 | `gemini:gemini-3.1-flash-lite` | 4 |
 | `openrouter:qwen/qwen3.8-27b:free · deep` | 3 |
+| `openrouter:nvidia/nemotron-3-super-120b-a12b:free` | 2 |
 | `nous:stealth/space-bunny-alpha` | 2 |
+| `nous:poolside/laguna-s-2.1:free · deep` | 1 |
+| `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free` | 1 |
 | `groq:openai/gpt-oss-120b · deep` | 1 |
 | `nous:inclusionai/ling-3.0-flash-sante:free` | 1 |
 | `nous:meituan/longcat-2.5-preview:free · deep` | 1 |
 | `gemini:gemini-3.1-flash-lite · deep` | 1 |
 | `gemini:gemini-3.5-flash` | 1 |
 
+## Caps
+
+- caps that fired: 21 across 350 notes (reasoning retry 19, rate limit 2)
+- median reasoning tokens per note: 0
+
+Sources for each default are in `docs/hare-next.md`. `0` is uncapped for the reasoning
+budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
+
 ## By PR
 
 | PR | Notes | Real | Skip | Fates of real | Scores |
 | --- | --- | --- | --- | --- | --- |
-| #361 | 1 | 0 | 0 |  |  |
-| #359 | 12 | 6 | 6 | open 4, still applies 1, wrong 1 |  |
+| #382 | 1 | 2 | 1 | open 2 |  |
+| #381 | 2 | 0 | 0 |  |  |
+| #380 | 3 | 2 | 3 | open 1, still applies 1 |  |
+| #377 | 3 | 0 | 2 |  |  |
+| #376 | 1 | 0 | 0 |  |  |
+| #375 | 3 | 1 | 4 | open 1 |  |
+| #374 | 1 | 0 | 0 |  |  |
+| #373 | 1 | 0 | 0 |  |  |
+| #372 | 2 | 1 | 0 | fixed 1 |  |
+| #371 | 5 | 0 | 3 |  |  |
+| #370 | 2 | 2 | 1 | open 2 |  |
+| #369 | 1 | 0 | 1 |  |  |
+| #368 | 2 | 2 | 7 | open 2 |  |
+| #367 | 1 | 0 | 0 |  |  |
+| #366 | 1 | 0 | 1 |  |  |
+| #365 | 13 | 5 | 13 | fixed 2, open 3 |  |
+| #364 | 1 | 0 | 0 |  |  |
+| #363 | 5 | 3 | 2 | open 3 |  |
+| #362 | 1 | 0 | 1 |  |  |
+| #361 | 2 | 0 | 2 |  |  |
+| #359 | 17 | 7 | 8 | open 5, still applies 1, wrong 1 |  |
 | #358 | 1 | 0 | 1 |  |  |
 | #357 | 3 | 0 | 1 |  |  |
 | #356 | 3 | 0 | 2 |  |  |
@@ -40,7 +70,7 @@ Built 2026-10-11. 214 PRs, 293 notes, 41 real and 181 skip findings, 23 notes cu
 | #353 | 1 | 0 | 1 |  |  |
 | #351 | 3 | 0 | 2 |  |  |
 | #350 | 1 | 0 | 2 |  |  |
-| #349 | 9 | 8 | 16 | fixed 4, open 3, still applies 1 |  |
+| #349 | 11 | 10 | 17 | fixed 4, open 5, still applies 1 |  |
 | #348 | 1 | 0 | 1 |  |  |
 | #347 | 1 | 0 | 4 |  |  |
 | #344 | 1 | 0 | 2 |  |  |
@@ -130,7 +160,7 @@ Built 2026-10-11. 214 PRs, 293 notes, 41 real and 181 skip findings, 23 notes cu
 | #261 | 1 | 0 | 0 |  |  |
 | #260 | 1 | 0 | 0 |  |  |
 | #259 | 1 | 0 | 0 |  |  |
-| #258 | 2 | 1 | 3 | wrong 1 |  |
+| #258 | 2 | 1 | 3 | open 1 |  |
 | #257 | 1 | 0 | 1 |  |  |
 | #256 | 1 | 0 | 0 |  |  |
 | #255 | 1 | 0 | 1 |  |  |
@@ -140,7 +170,7 @@ Built 2026-10-11. 214 PRs, 293 notes, 41 real and 181 skip findings, 23 notes cu
 | #251 | 1 | 0 | 0 |  |  |
 | #250 | 1 | 0 | 1 |  |  |
 | #249 | 1 | 0 | 0 |  |  |
-| #248 | 2 | 1 | 1 | fixed 1 |  |
+| #248 | 2 | 1 | 1 | open 1 |  |
 | #247 | 1 | 1 | 0 | resolved 1 |  |
 | #246 | 1 | 0 | 2 |  |  |
 | #245 | 1 | 1 | 0 | resolved 1 |  |
