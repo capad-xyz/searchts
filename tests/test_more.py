@@ -28,7 +28,9 @@ def _kinds(found):
 
 def test_link_rel_next_in_head():
     found = more.detect(_page("", head='<link rel="next" href="/blog/page/2/">'), URL, "text")
-    assert _kinds(found) == ["next-page"]
+    # A next page now also says which knob asks for it (F23e). The next-page
+    # note itself is unchanged.
+    assert _kinds(found) == ["next-page", "paginated"]
     assert found[0].url == "https://example.org/blog/page/2/"
     assert "https://example.org/blog/page/2/" in found[0].note
 
@@ -82,7 +84,7 @@ def test_load_more_button_is_a_feed():
 
 def test_load_more_link_is_the_next_page():
     found = more.detect(_page('<a href="/blog/page/2/">Load more posts</a>'), URL, "t")
-    assert _kinds(found) == ["next-page"]
+    assert _kinds(found) == ["next-page", "paginated"]
     assert found[0].url == "https://example.org/blog/page/2/"
 
 
@@ -646,9 +648,10 @@ def test_fetch_carries_next_url_and_a_trailing_note(monkeypatch):
     _curl(monkeypatch, html)
     r = unlocker.fetch(URL, backends=["curl_cffi"], use_memory=False)
     assert r.next_url == "https://example.org/blog/page/2/"
-    assert r.more == [{"kind": "next-page", "note": "[more: the next page is https://example.org/blog/page/2/]",
-                       "url": "https://example.org/blog/page/2/"}]
-    assert r.text.rstrip().endswith("[more: the next page is https://example.org/blog/page/2/]")
+    assert r.more[0] == {"kind": "next-page", "note": "[more: the next page is https://example.org/blog/page/2/]",
+                         "url": "https://example.org/blog/page/2/"}
+    assert [m["kind"] for m in r.more] == ["next-page", "paginated"]
+    assert r.text.rstrip().endswith(more.PAGINATED_NOTE)
     assert r.page_html is None  # the HTML is never returned
 
 

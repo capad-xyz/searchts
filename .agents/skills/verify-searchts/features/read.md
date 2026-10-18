@@ -11,6 +11,9 @@ prints nothing and fails loudly when no tier produced real content.
   content, and names the one that answered.
 - `read-json` emits the same result as a parseable object.
 - `read-pages` follows the next page on the same site up to `--pages`.
+- `read-paginated` names the next page of a paginated list, and says which knob
+  asks for the rest (`--pages`, `--items`), and stays silent on a page that is
+  not paginated.
 - `read-items` follows list pages until `--items` rows are kept, and scrolls a
   list that only grows that way.
 - `read-expand` opens closed `<details>` and read/show/see-more buttons with
@@ -53,6 +56,7 @@ Preconditions:
 - **Which tier answered.** Read the `backend` field. A `backend` of `curl_cffi` on a site that needs a browser is the ladder having answered early, which is a pass. An empty or `null` `backend` beside a long `text` is not.
 - **Fail loud.** Read a URL that does not exist. Run `.venv/bin/python -m searchts read https://raw.githubusercontent.com/pstack-dev/pstack/main/README.md > artifacts/read/missing.out 2> artifacts/read/missing.err`. Exit code is non-zero, `artifacts/read/missing.out` is empty, and `artifacts/read/missing.err` names every tier that was tried and why each gave up.
 - **Pagination.** Run `.venv/bin/python -m searchts read https://example.com --pages 2 --json > artifacts/read/pages.json 2> artifacts/read/pages.err`. Exit code `0` and the object carries a `pages` array with one entry per page actually followed, which on a single-page site is one entry and not the two that were asked for. Assert on the array's presence, not on its length matching the flag.
+- **A paginated list says so.** Run `.venv/bin/python -m searchts read "https://news.ycombinator.com/news?p=2" --json > artifacts/read/paginated.json 2> artifacts/read/paginated.err`. Exit code `0`, `more` carries a `next-page` entry with `next_url` set to the page after this one and a `paginated` entry naming `--pages` / `--items`, and the last line of `text` is that same paginated note. On a page with no pagination at all, `more` must carry neither entry: the note may not appear where there is no next page.
 - **Proof.** Open `artifacts/read/example.json` and `artifacts/read/missing.err` side by side. Together they show one fetch that returned content and named its tier, and one that returned nothing on stdout and named all three tiers.
 - **Report an unreachable tier.** If `doctor`'s `web` entry shows a tier missing, do not drive a bot-walled URL and call the failure a bug. Record the missing tier and the command attempted.
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 import base64
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from searchts.expand import EXPAND_EXACT_RE as _EXPAND_EXACT_RE
@@ -55,8 +55,29 @@ _NEXT_TEXT_RE = re.compile(r"^(?:next(?:\s+page)?|older(?:\s+(?:posts|entries))?
 _PAGER_HINT_RE = re.compile(r"pagination|pager|paging|page\s+navigation|more\s+results", re.I)
 #: A link's own name (aria-label or title) that says it is the next page (Bing, Google).
 _NEXT_LABEL_RE = re.compile(r"^next(?:\s+(?:page|results?))?[\s›»>]*$", re.I)
+#: What to do about the next page, in the knobs both surfaces already carry
+#: (F23e): the CLI's ``--pages`` / ``--items``, the MCP tool's ``max_pages`` /
+#: ``max_items``. It carries no URL on purpose, so the MCP envelope's page-URL
+#: scrubber (``mcp_server._more_without_urls``) leaves this line standing
+#: instead of blanking it, and an agent on either surface reads the same knob.
+PAGINATED_NOTE = (
+    "[paginated: this URL is one page of a paginated list, and there are more; "
+    "--pages N (MCP max_pages) reads the next pages, "
+    "--items N (MCP max_items) reads their rows]"
+)
 #: Trailing page markers: /page/2, /page-2, /2 (a short number).
 _PAGE_SEG_RE = re.compile(r"/(?:page[-_/]?\d{1,4}|\d{1,3})$", re.I)
+#: The page a URL names for itself, read off that URL. Only the forms that say
+#: "page" outright: ``?page=3``, ``?p=3`` (Hacker News), ``/page/3/``. The bare
+#: ``/3/`` form is left out on purpose, because as often as not it is a year, a
+#: date or a category id, and calling it a page number would be a guess.
+_URL_PAGE_RE = re.compile(r"(?:^|[?&])(?:page|p|pg|pn)=(\d{1,4})(?![0-9])", re.I)
+_PATH_PAGE_RE = re.compile(r"/page[-_/]?(\d{1,4})/?$", re.I)
+#: A container that reads as navigation, so a link naming itself the next page
+#: inside one is this page's next page even when no pager class says so. The
+#: leading ``\b`` is deliberately absent: real class names run the word into
+#: another one ("postnav", "mainnav") far more often than they isolate it.
+_NAV_HINT_RE = re.compile(r"nav(?:igation)?\b|pagin|pager|paging", re.I)
 _SHOWING_RE = re.compile(
     r"\bshowing\s+(\d[\d,]*)\s*(?:-|–|—|to)\s*(\d[\d,]*)\s+of\s+(\d[\d,]*)", re.I
 )
@@ -175,6 +196,44 @@ def _continues(target: str, url: str) -> bool:
     those have their own path, so they are not "more of this page".
     """
     return _page_base(target) == _page_base(url)
+
+
+def _url_page(url: str) -> Optional[int]:
+    """The page number ``url`` names for itself, or None when it names none.
+
+    Read from the address, never guessed from the markup. A URL with no marker
+    is the unmarked first page of its own path, which is what ``_page_base``
+    assumes too, but the caller decides whether that is enough to claim.
+    """
+    parts = urlsplit(url)
+    found = _URL_PAGE_RE.search(parts.query or "")
+    if found:
+        return int(found.group(1))
+    found = _PATH_PAGE_RE.search(parts.path or "")
+    if found:
+        return int(found.group(1))
+    return None
+
+
+def _nav_chrome(el) -> bool:
+    """True when ``el`` sits in navigation: a ``nav``, or a named container.
+
+    A pager is a navigation block by another name, so this only widens where a
+    self-naming "Next" / "Older posts" link may sit. The target still has to
+    pass :func:`_good_next`, so a "Next slide" in a carousel on the same host
+    is still refused: a carousel's next image is not a next page.
+    """
+    if _in_nav(el):
+        return True
+    node = el.getparent()
+    for _ in range(3):
+        if node is None or not isinstance(node.tag, str):
+            return False
+        hint = " ".join(node.get(a) or "" for a in ("class", "id", "aria-label"))
+        if _NAV_HINT_RE.search(hint):
+            return True
+        node = node.getparent()
+    return False
 
 
 def _good_next(href: str, base: str, url: str) -> Optional[str]:
@@ -529,7 +588,7 @@ def _next_page(doc, base: str, url: str) -> Optional[str]:
             # A rel=next to another post or chapter fails _good_next's same-URL rule.
             is_next = True
         else:
-            is_next = says_next and _pager_of(a) is not None
+            is_next = says_next and (_pager_of(a) is not None or _nav_chrome(a))
         if is_next:
             good = _good_next(a.get("href"), base, url)
             if good:
@@ -543,11 +602,56 @@ def _next_page(doc, base: str, url: str) -> Optional[str]:
             continue
         current = _current_page(pager)
         if current is None:
+            # No page marks itself current. The address is the next best
+            # evidence: it names the page, and a URL that names none is the
+            # unmarked first page of its own path. A pager window that does
+            # not even link page 1 is somebody else's, so it is left alone.
+            current = _url_page(url)
+            if current is None and 1 in _pager_numbers(pager):
+                current = 1
+        if current is None:
             continue
         for a in pager.xpath(".//a[@href]"):
             txt = _norm(a.text_content())
             if txt.isdigit() and int(txt) == current + 1:
                 good = _good_next(a.get("href"), base, url)
+                if good:
+                    return good
+    return None
+
+
+def _pager_numbers(pager) -> set:
+    """The page numbers this pager links, by the digits it labels them with."""
+    out = set()
+    for a in pager.xpath(".//a[@href]"):
+        txt = _norm(a.text_content())
+        if txt.isdigit() and len(txt) <= 3:
+            out.add(int(txt))
+    return out
+
+
+def _header_next(headers: Optional[Mapping[str, str]], base: str, url: str) -> Optional[str]:
+    """The next page a ``Link: <url>; rel="next"`` response header declares.
+
+    RFC 8288, and a real signal: a page can paginate with no rel=next link and
+    no pager markup at all, and say so in the one header the markup does not
+    carry. Each link is taken whole (``[^<>]*``), since a URL may hold a comma
+    and only the parameters after it are split on ``;``.
+    """
+    if not headers:
+        return None
+    raw = ""
+    for name, value in headers.items():
+        if str(name).lower() == "link":
+            raw = str(value or "")
+            break
+    for match in re.finditer(r"<([^<>]*)>\s*;\s*([^<>]*)", raw):
+        for param in match.group(2).split(";"):
+            key, _, value = param.partition("=")
+            if key.strip().lower() != "rel":
+                continue
+            if "next" in {r.strip().lower() for r in value.strip().strip('",').split()}:
+                good = _good_next(match.group(1).strip(), base, url)
                 if good:
                     return good
     return None
@@ -1056,8 +1160,18 @@ def media_note(region, base: str = "") -> Optional[More]:
     return More("media", f"[media: {said} in the main content: {listed}{rest}]")
 
 
-def detect(html: str, url: str, text: str) -> List[More]:
-    """Findings for one read: the page HTML, its URL, and the extracted text."""
+def detect(
+    html: str,
+    url: str,
+    text: str,
+    headers: Optional[Mapping[str, str]] = None,
+) -> List[More]:
+    """Findings for one read: the page HTML, its URL, and the extracted text.
+
+    ``headers`` is the winning rung's response headers, read for a
+    ``Link: rel="next"`` the markup does not declare. Markup wins; the header
+    is only consulted when the page says nothing else.
+    """
     doc = _parse(html)
     if doc is None:
         return []
@@ -1071,9 +1185,10 @@ def detect(html: str, url: str, text: str) -> List[More]:
         base = _base_url(doc, url)
         nxt = _next_page(doc, base, url)
         is_feed, load_more_url = _feed(doc, base, url)
-        nxt = nxt or load_more_url
+        nxt = nxt or load_more_url or _header_next(headers, base, url)
         if nxt:
             found.append(More("next-page", f"[more: the next page is {nxt}]", nxt))
+            found.append(More("paginated", PAGINATED_NOTE))
         if is_feed:
             found.append(
                 More(
@@ -1329,7 +1444,7 @@ def annotate(text: str, found: List[More]) -> str:
 
 def summary(found: List[More]) -> str:
     """Short stderr tick, e.g. ``more: next page, folded``."""
-    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read", "context": "context",
+    names = {"next-page": "next page", "paginated": "paginated", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read", "context": "context",
            "media": "media"}
     seen: List[str] = []
     for m in found:

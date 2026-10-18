@@ -1910,7 +1910,7 @@ def _finalize(
         rebuilt = more.list_index(result.page_html, result.final_url or "", result.text)
         if rebuilt:
             result.text = rebuilt[0]
-        found = more.detect(result.page_html, result.final_url or "", result.text)
+        found = more.detect(result.page_html, result.final_url or "", result.text, headers=result.headers)
         if rebuilt:
             found.insert(0, rebuilt[1])
         if found:
