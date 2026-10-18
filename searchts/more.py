@@ -11,9 +11,10 @@ Trafilatura drops ``<button>`` labels (the questions) and inline
 ``display:none`` panels (the answers). ``tidy_markdown`` puts headings and
 code fences back on their own lines after extraction, and
 :func:`space_after_inline` puts back a space the extractor drops next to
-inline code or bold. :func:`structured_text` reads the page's own JSON-LD, so
-a page that ships its body as data instead of markup can still be read from
-the bytes already downloaded.
+inline code or bold. :func:`page_data_blocks` reads the page's own data, the
+typed ``<script type="application/ld+json">`` and the app state an inline
+script named ``__SOMETHING__`` holds, so a page that ships its body as data
+instead of markup can still be read from the bytes already downloaded.
 
 No note is not a promise that the page is complete. These are page signals,
 not per-host code (Reddit keeps its own ring in ``known_hosts``).
@@ -1068,6 +1069,11 @@ def detect(html: str, url: str, text: str) -> List[More]:
             # First, so it reads as a header on the notes rather than as one
             # more thing the page was missing.
             found.append(More("context", where))
+        # F24b: the read came out of the page's own data, say which blob and
+        # how much of it the markup did not show.
+        source = data_source_note(html, text)
+        if source:
+            found.append(source)
         base = _base_url(doc, url)
         nxt = _next_page(doc, base, url)
         is_feed, load_more_url = _feed(doc, base, url)
@@ -1330,7 +1336,7 @@ def annotate(text: str, found: List[More]) -> str:
 def summary(found: List[More]) -> str:
     """Short stderr tick, e.g. ``more: next page, folded``."""
     names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read", "context": "context",
-           "media": "media"}
+           "media": "media", "source": "page data"}
     seen: List[str] = []
     for m in found:
         name = names.get(m.kind, m.kind)
@@ -1343,8 +1349,9 @@ def summary(found: List[More]) -> str:
 
 #: Below this a structured body is a teaser, not the page's text.
 _STRUCTURED_MIN_CHARS = 400
+_LD_MARKER = "application/ld+json"
 _LD_SCRIPT_RE = re.compile(
-    r"<script[^>]*type\s*=\s*[\"']application/ld\+json[\"'][^>]*>(.*?)</script\s*>",
+    r"<script[^>]*type\s*=\s*[\"']" + re.escape(_LD_MARKER) + r"[\"'][^>]*>(.*?)</script\s*>",
     re.I | re.S,
 )
 #: schema.org types, compared on the last segment so a full URL and a bare name
@@ -1412,12 +1419,38 @@ def _ld_nodes(html: str) -> List[Dict[str, Any]]:
     return out
 
 
+#: Markup that carries no reading text. A body kept as a string is full of it,
+#: and emitting it verbatim would put ``<p>`` in a reader's face.
+_VALUE_SCRIPTISH_RE = re.compile(
+    r"(?is)<(script|style|noscript|template|svg|iframe)\b[^>]*>.*?</\1\s*>"
+)
+_VALUE_BREAK_RE = re.compile(r"(?i)<\s*(?:br\s*/?|/\s*(?:p|div|li|tr|h[1-6])\s*)>")
+
+
+def _plain_value(value: str) -> str:
+    """A JSON string as text: tags dropped, blocks kept as line breaks.
+
+    Pages put their body in the data as HTML often enough that emitting it
+    verbatim is a visible fault, and a ``<script>`` smuggled into a data field
+    would be a hole in the "never emit scripts or HTML as text" rule. Both are
+    stripped here, once, for every value whichever blob it came from.
+    """
+    import html as _html
+
+    t = _VALUE_SCRIPTISH_RE.sub(" ", value or "")
+    if "<" in t and ">" in t:
+        t = _VALUE_BREAK_RE.sub("\n", t)
+        t = re.sub(r"(?s)<[^>]*>", "", t)
+        t = _html.unescape(t)
+    return t.strip()
+
+
 def _strings(node: Any) -> List[str]:
     """Every prose string under ``node``: a string, a dict's text, or a list."""
     out: List[str] = []
     if isinstance(node, str):
         if node.strip():
-            out.append(node.strip())
+            out.append(_plain_value(node))
     elif isinstance(node, dict):
         for key in ("text", "name", "itemListElement", "acceptedAnswer", "suggestedAnswer"):
             out.extend(_strings(node.get(key)))
@@ -1503,33 +1536,485 @@ def _pays_for_the_rest(html_or_text: str) -> bool:
     return any(label in low for label in PAY_LABELS)
 
 
+# ── F24b: app state in the page ───────────────────────────────────────────────
+
+#: A script whose id is wrapped in double underscores: the shape a client app
+#: gives its own state blob (``__NEXT_DATA__``, ``__NUXT__``,
+#: ``__APOLLO_STATE__``, ``__INITIAL_STATE__`` and the rest). The shape is the
+#: test, not a list of names, so a state blob this code has never heard of is
+#: read the same way.
+_STATE_ID_RE = re.compile(r"""\bid\s*=\s*["']\s*(__[A-Za-z0-9_$]+__)\s*["']""")
+_SCRIPT_TAG_RE = re.compile(r"(?is)<script\b([^>]*)>(.*?)</script\s*>")
+_TAG_RE_ALL = re.compile(r"(?s)<[^>]*>")
+#: A state blob this big is a bundle or a data dump, not a page's words.
+_STATE_MAX_BLOB = 4 * 1024 * 1024
+#: Dicts walked before the walk gives up, and characters emitted from them.
+_STATE_MAX_NODES = 20_000
+_STATE_MAX_CHARS = 40_000
+#: Below this a field is a label, a caption or a config value, not prose.
+_STATE_MIN_FIELD = 120
+_STATE_MIN_WORDS = 12
+#: A heading out of a data blob: short, a few words, and not a sentence.
+_STATE_MAX_HEADING = 200
+_STATE_MAX_HEADING_WORDS = 24
+#: Subtrees that never hold prose. Identifiers, addresses, media, style blocks,
+#: build metadata, callbacks and the page's own chrome: cheap, structural, and
+#: never a key path to a host. The chrome names are the ones
+#: :data:`_CHROME_TAGS` and :data:`_CHROME_ROLES` already use, so a navigation
+#: blob in the data is dropped for the same reason a navigation menu in the
+#: markup is.
+_STATE_SKIP_KEYS = frozenset(
+    {
+        "id", "ids", "_id", "uuid", "guid", "slug", "hash", "checksum", "etag",
+        "url", "urls", "uri", "href", "link", "links", "permalink", "canonical",
+        "src", "source", "srcset", "sizes", "alt", "alttext", "caption",
+        "width", "height", "ratio",
+        "image", "images", "img", "icon", "icons", "thumb", "thumbnail",
+        "class", "classname", "style", "styles", "css", "svg", "font", "fonts",
+        "color", "colors", "radius", "border", "padding", "margin",
+        "buildid", "buildmanifest", "webpack", "runtimeconfig", "config",
+        "env", "environment", "locale", "locales", "lang", "languages",
+        "timezone", "currency", "lat", "lng", "latitude", "longitude",
+        "token", "tokens", "secret", "secrets", "apikey", "password", "cookie",
+        "cookies", "event", "events", "handler", "handlers", "callback",
+        "callbacks", "script", "scripts", "chunk", "chunks", "route",
+        "navigation", "nav", "navbar", "menu", "menubar", "header", "footer",
+        "sidebar", "breadcrumb", "breadcrumbs", "banner", "promo", "promos",
+        "advert", "adverts", "ads", "social", "share", "sharing", "legal",
+    }
+)
+#: A field that is this shaped is a person's reading, not a value a page keeps.
+_STATE_BODY_KEYS = (
+    "articlebody", "body", "content", "bodytext", "contenttext", "plaintext",
+    "text", "description", "summary", "excerpt", "answer", "answertext",
+    "acceptedanswer", "suggestedanswer", "value",
+)
+_STATE_HEADING_KEYS = ("headline", "title", "name", "question", "questiontext")
+#: Characters that give a string away as code, markup or an address.
+_CODE_CHARS = frozenset("{}<>;|\\=")
+#: A token that is an address, a path or a handle rather than a word.
+_LINKISH_RE = re.compile(r"^(?:https?://|www\.|//|mailto:|\S+@\S+\.\w+)")
+
+
+def _plain(text: str) -> str:
+    """Whitespace-collapsed, mark-free, lowercased: two texts that mean the same
+    thing compare equal even when one is Markdown and the other is a JSON string.
+    """
+    return _norm(re.sub(r"[#*_>`\[\]]", "", text or "")).lower()
+
+
+#: Two windows are enough to call a field already said: one at a third of the
+#: way in and one at two thirds, so an edit to the first or the last paragraph
+#: does not hide the rest.
+_HELD_WINDOW = 30
+#: Markup past this is more than one note about it is worth: the source note
+#: that counts what the markup did not show has to read the whole markup to say
+#: it, and on the largest pages here that is most of a second.
+_NOTE_MAX_HTML = 4_000_000
+
+
+class _Held:
+    """What the read already has, so the same words are not said twice."""
+
+    def __init__(self, seen: str = "") -> None:
+        self.buf = _plain(seen) if seen else ""
+
+    def has(self, prose: str) -> bool:
+        window = _HELD_WINDOW
+        text = _plain(prose)
+        if len(text) < window:
+            return bool(self.buf) and text in self.buf
+        for at in (len(text) // 3, 2 * len(text) // 3):
+            if text[at : at + window] in self.buf:
+                return True
+        return False
+
+    def add(self, prose: str) -> None:
+        self.buf += "\n" + _plain(prose)
+
+
+def _prose(value: str) -> str:
+    """A string is reading text: long enough, enough words, not code or a name.
+
+    The tests are shape, not vocabulary, so they hold on a page this code has
+    never seen: a few hundred characters of sentences with letters, spaces and
+    ordinary punctuation in them, none of the punctuation that marks a
+    stylesheet or a script, and not one token in five that is an address. A
+    block of links is navigation wherever it is written, and navigation is not
+    the body of anything.
+    """
+    text = _plain_value(value)
+    flat = _norm(text)
+    if len(flat) < _STATE_MIN_FIELD or len(flat.split()) < _STATE_MIN_WORDS:
+        return ""
+    if sum(1 for c in flat if c in _CODE_CHARS) > len(flat) // 100 + 1:
+        return ""
+    if flat.lower().startswith(("http://", "https://", "data:", "javascript:", "//")):
+        return ""
+    tokens = flat.split()
+    if sum(1 for token in tokens if _LINKISH_RE.match(token)) > len(tokens) // 5:
+        return ""
+    return text
+
+
+def _heading(node: Dict[str, Any]) -> str:
+    """A name to put above the prose beside it, or nothing."""
+    for key in _STATE_HEADING_KEYS:
+        value = node.get(key)
+        if not isinstance(value, str):
+            continue
+        text = _norm(_plain_value(value))
+        if not text or len(text) > _STATE_MAX_HEADING:
+            continue
+        if len(text.split()) <= _STATE_MAX_HEADING_WORDS and "\n" not in text:
+            return text
+    return ""
+
+
+class _StateWalk:
+    """Read one app-state blob as Markdown: the prose under the content keys.
+
+    Structural throughout. A dict that carries both a short name and a long
+    string becomes a heading and a paragraph, an FAQ pair becomes a question
+    and its answer, and everything else is walked in the order the page wrote
+    it. Nothing is matched by a key path to a site, and a value that fails the
+    prose test is never emitted, so a state blob that is only build metadata
+    and navigation comes back empty and the read still fails as thin.
+    """
+
+    def __init__(self, held: _Held) -> None:
+        self.held = held
+        self.chunks: List[Tuple[str, List[str]]] = []
+        self.chars = 0
+        self.nodes = 0
+
+    def out_of_budget(self) -> bool:
+        return self.nodes > _STATE_MAX_NODES or self.chars >= _STATE_MAX_CHARS
+
+    def walk(self, node: Any, key: str = "") -> None:
+        if self.out_of_budget():
+            return
+        if isinstance(node, list):
+            for item in node:
+                self.walk(item, key)
+            return
+        if not isinstance(node, dict):
+            return
+        self.nodes += 1
+        if self.out_of_budget():
+            return
+        bodies: List[str] = []
+        used: List[str] = []
+        for name, value in node.items():
+            lower = str(name).lower()
+            if lower in _STATE_SKIP_KEYS or lower not in _STATE_BODY_KEYS:
+                continue
+            if not isinstance(value, (str, list, dict)):
+                continue
+            for text in _strings(value):
+                prose = _prose(text)
+                if not prose or self.held.has(prose):
+                    continue
+                bodies.append(prose)
+            used.append(str(name))
+        if bodies:
+            heading = _heading(node)
+            lines: List[str] = []
+            if heading and not self.held.has(heading):
+                lines += [f"## {heading}", ""]
+            for prose in bodies:
+                self.held.add(prose)
+                # The blob's own paragraph breaks survive: a body written as
+                # twelve <p> blocks reads as twelve paragraphs, not one line.
+                for para in prose.split("\n"):
+                    if para.strip():
+                        lines += [para.strip(), ""]
+            self.chars += sum(len(line) for line in bodies)
+            self.chunks.append(("\n\n".join(bodies), lines))
+        for name, value in node.items():
+            if str(name) in used:
+                continue
+            if str(name).lower() in _STATE_SKIP_KEYS:
+                continue
+            self.walk(value, str(name))
+
+
+def _state_blobs(html: str) -> List[Tuple[str, Any]]:
+    """``(id, parsed)`` for every app-state script the page ships."""
+    import json
+
+    out: List[Tuple[str, Any]] = []
+    seen: set = set()
+    for match in _SCRIPT_TAG_RE.finditer(html or ""):
+        attrs, body = match.group(1) or "", match.group(2) or ""
+        name_match = _STATE_ID_RE.search(attrs)
+        if not name_match or not body.strip() or len(body) > _STATE_MAX_BLOB:
+            continue
+        name = name_match.group(1)
+        if name in seen:
+            continue
+        seen.add(name)
+        try:
+            data = json.loads(body)
+        except Exception:  # noqa: BLE001 - an assignment is not the whole body
+            data = _loads_assignment(body)
+        if isinstance(data, (dict, list)):
+            out.append((name, data))
+    return out
+
+
+def _loads_assignment(body: str) -> Any:
+    """The JSON in ``window.__STATE__ = {...}``, or ``None``.
+
+    Half the app-state blobs this walks are written as an assignment rather
+    than as the whole script body. Slicing from the first brace to the last is
+    enough for that shape, and anything it cannot read is left unread rather
+    than guessed at.
+    """
+    import json
+
+    starts = [i for i in (body.find("{"), body.find("[")) if i >= 0]
+    lo = min(starts) if starts else -1
+    hi = max(body.rfind("}"), body.rfind("]"))
+    if lo < 0 or hi <= lo:
+        return None
+    try:
+        return json.loads(body[lo : hi + 1])
+    except Exception:  # noqa: BLE001 - not JSON, so not prose either
+        return None
+
+
+def _state_chunks(data: Any, held: _Held) -> List[Tuple[str, List[str]]]:
+    """``(prose, markdown lines)`` for each piece of prose in one state blob."""
+    walk = _StateWalk(held)
+    walk.walk(data)
+    return walk.chunks
+
+
+def has_page_data(html: str) -> bool:
+    """True when the page ships structured data of either kind.
+
+    One substring test for JSON-LD and one scan for a state script, so a page
+    that ships neither costs nothing.
+    """
+    if not html:
+        return False
+    if _LD_MARKER in html:
+        return True
+    return any(
+        _STATE_ID_RE.search(m.group(1) or "")
+        for m in _SCRIPT_TAG_RE.finditer(html)
+    )
+
+
+def drop_data_scripts(html: str) -> str:
+    """The page with the scripts this module reads taken out of it.
+
+    The extractor is not asked to read them. Left in, it hands back the body of
+    a JSON-LD script as though it were the article: one line of punctuation and
+    quotes, which is not a read and must not be mistaken for a thin one that
+    the data could rescue. These blobs are read by :func:`page_data_chunks`
+    instead, so nothing is lost by removing them here.
+    """
+    if not html or not has_page_data(html):
+        return html
+    out: List[str] = []
+    last = 0
+    for match in _SCRIPT_TAG_RE.finditer(html):
+        attrs = match.group(1) or ""
+        if _LD_MARKER in attrs or _STATE_ID_RE.search(attrs):
+            out.append(html[last : match.start()])
+            last = match.end()
+    out.append(html[last:])
+    return "".join(out)
+
+
+def page_data_chunks(html: str) -> List[Tuple[str, str, List[str]]]:
+    """``(blob, prose, lines)`` for every piece of prose the page's data holds.
+
+    The one walk both readers use: the body of a JSON-LD node, and each field
+    an app-state blob carries under a content key. JSON-LD comes first, then
+    the app state in the order the page wrote it. A piece the page repeats (the
+    same article in two blobs) is emitted once, because the walk is what the
+    caller reads, not the walker's own opinion of it.
+
+    A paywalled page returns nothing here on purpose. Its structured body is
+    the copy the paywall is charging for, and reading it out of the markup
+    would be the thing ``--expand`` refuses to do with a "continue reading"
+    button.
+    """
+    if not html or not has_page_data(html):
+        return []
+    try:
+        if _pays_for_the_rest(html):
+            return []
+        out: List[Tuple[str, str, List[str]]] = []
+        said: _Held = _Held()
+        for node in _ld_nodes(html):
+            kind = _node_kind(node)
+            if not kind:
+                continue
+            lines = _node_lines(node, kind)
+            prose = _plain("\n".join(lines))
+            if not prose or said.has(prose):
+                continue
+            said.add(prose)
+            out.append(("JSON-LD", prose, lines))
+        for name, data in _state_blobs(html):
+            for prose, lines in _state_chunks(data, said):
+                out.append((name, prose, lines))
+        return out
+    except Exception:  # noqa: BLE001 - structured data is an extra, never a failure
+        return []
+
+
+def page_data_blocks(html: str, seen: str = "") -> List[Tuple[str, str]]:
+    """``(source, text)`` for each blob that holds prose this read does not have.
+
+    A piece of data the extract already said is dropped (``seen``), so the data
+    never repeats the article next to it and a page whose markup already reads
+    well comes back with nothing here.
+    """
+    held = _Held(seen)
+    order: List[str] = []
+    grouped: Dict[str, List[str]] = {}
+    for name, prose, lines in page_data_chunks(html):
+        if held.has(prose):
+            continue
+        held.add(prose)
+        if name not in grouped:
+            grouped[name] = []
+            order.append(name)
+        grouped[name].extend(lines)
+    out: List[Tuple[str, str]] = []
+    for name in order:
+        text = "\n".join(grouped[name]).strip()
+        if len(_norm(text)) >= _STRUCTURED_MIN_CHARS:
+            out.append((name, text))
+    return out
+
+
+def page_state_blocks(html: str, seen: str = "") -> List[Tuple[str, str]]:
+    """The app state's own words that this read does not already have.
+
+    The same answer as :func:`page_data_blocks`, without the JSON-LD. That
+    blob is a machine-readable description of whatever entities the page is
+    *about*, and on a page that already reads well those entities are usually
+    not this page: a related article's blurb, the publisher's about text, a
+    list of social profiles. App state is the page's own content model, the
+    text the browser was going to draw, so that is what is worth adding to a
+    read that has one already.
+    """
+    return [
+        (name, text)
+        for name, text in page_data_blocks(html, seen)
+        if name != "JSON-LD"
+    ]
+
+
+def page_data_text(html: str) -> str:
+    """The page's own data as Markdown, or ``""`` when it holds no body.
+
+    Every piece the blobs hold, said once. The caller compares this against the
+    extract to decide whether the data replaces it (:func:`_Held` is how
+    :func:`page_data_blocks` decides what is new).
+    """
+    lines: List[str] = []
+    for _, _, chunk in page_data_chunks(html):
+        lines.extend(chunk)
+    return "\n".join(lines).strip()
+
+
 def structured_text(html: str) -> str:
-    """The page's own JSON-LD as Markdown, or ``""`` when it holds no body.
+    """The page's own data as Markdown, or ``""`` when it holds no body.
 
     F24b. No second request and no guess about the host: the bytes already
     downloaded often carry the whole article as data, and a client-rendered
-    page serves almost nothing else. This only *supplies* text; it never
-    replaces a longer extract, so a page whose markup reads well is untouched.
+    page serves almost nothing else. Both shapes count, the typed
+    ``<script type="application/ld+json">`` and the app state an inline script
+    named ``__SOMETHING__`` holds. This only *supplies* text; the caller decides
+    whether that text replaces a thinner extract or sits under it.
 
     A paywalled page is refused here on purpose. Its structured body is the
     copy the paywall is charging for, and reading it out of the markup would be
     the thing ``--expand`` refuses to do with a "continue reading" button.
     """
-    if not html or "application/ld+json" not in html:
-        return ""
-    try:
-        if _pays_for_the_rest(html):
-            return ""
-        lines: List[str] = []
-        for node in _ld_nodes(html):
-            kind = _node_kind(node)
-            if not kind:
-                continue
-            lines.extend(_node_lines(node, kind))
-        text = "\n".join(lines).strip()
-        return text if len(_norm(text)) >= _STRUCTURED_MIN_CHARS else ""
-    except Exception:  # noqa: BLE001 - structured data is an extra, never a failure
-        return ""
+    return page_data_text(html)
+
+
+def visible_text(html: str) -> str:
+    """What the markup shows a reader: no tags, no script bodies.
+
+    The other side of :func:`_Held` for the note. A word is *not* shown if the
+    page never put it in the document, as opposed to putting it somewhere the
+    extractor did not look. Script bodies go by span rather than by pattern, so
+    this is one pass over the markup and not a backtracking one.
+    """
+    import html as _html
+
+    out: List[str] = []
+    last = 0
+    for match in _SCRIPT_TAG_RE.finditer(html or ""):
+        out.append(html[last : match.start()])
+        last = match.end()
+    out.append(html[last:])
+    return _plain(_html.unescape(_TAG_RE_ALL.sub(" ", "".join(out))))
+
+
+def data_source_note(html: str, text: str) -> Optional[More]:
+    """F24b: where the read's text came from, when the page's data supplied it.
+
+    A fact about these two strings rather than a second opinion about the page.
+    Either the read *is* the data (:func:`page_data_text`), or the app state
+    holds words the markup never showed and they are at the end of the read. A
+    page whose data says what its markup says gets no note: the extract and the
+    data are two descriptions of one article and only one of them was used.
+
+    The second question is asked of the page's visible text rather than of the
+    read, so on a page far past :data:`_NOTE_MAX_HTML` it costs more markup
+    than the note is worth; those pages say nothing here rather than say it
+    late.
+    """
+    if not html or not text:
+        return None
+    whole = page_data_text(html)
+    if whole and _norm(text) == _norm(whole) and plain_len(whole) >= _STRUCTURED_MIN_CHARS:
+        return More(
+            "source",
+            f"[source: {_source_names(html)}, the page's own data; "
+            f"{plain_len(whole):,} characters read from it]",
+        )
+    if len(html) > _NOTE_MAX_HTML:
+        return None
+    # The words the markup does not carry are the ones the data had to supply,
+    # because an extract is made of markup. The same answer the read gave,
+    # asked of the page instead of of the text.
+    blocks = page_state_blocks(html, visible_text(html))
+    if not blocks:
+        return None
+    data = _plain("\n\n".join(body for _, body in blocks))
+    read = _plain(text)
+    at = read.find(data[:_HELD_WINDOW])
+    # The data is at the end, so what came before it is the extract. A match at
+    # the very start is the extract saying the same thing, which is the other
+    # case and has no note.
+    if at < _HELD_WINDOW or read.find(data[-_HELD_WINDOW:], at) < 0:
+        return None
+    added = sum(plain_len(body) for _, body in blocks)
+    if added < _STRUCTURED_MIN_CHARS:
+        return None
+    return More(
+        "source",
+        f"[source: {', '.join(name for name, _ in blocks)}, the page's own data; "
+        f"{added:,} characters the markup did not show]",
+    )
+
+
+def _source_names(html: str) -> str:
+    """The blobs this page ships, in the order the read walks them."""
+    names = ["JSON-LD"] if _LD_MARKER in (html or "") else []
+    names.extend(name for name, _ in _state_blobs(html))
+    return ", ".join(names) or "the page's own data"
 
 
 # ── F24c: one line saying where this page came from ───────────────────────────

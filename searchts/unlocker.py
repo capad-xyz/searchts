@@ -766,10 +766,13 @@ MAX_HTML_BYTES = 20 * 1024 * 1024
 #: book page is already beyond what an agent will read, and every consumer here
 #: (MCP response, search index, transcript) pays for it more than once.
 MAX_TEXT_CHARS = 400_000
-#: F24b: how much bigger the page's structured body has to be than the extract
-#: to replace it. One word in ten, so a formatted article that says the same
+#: F24b: how much bigger the page's own data has to be than the extract to
+#: replace it. One word in ten, so a formatted article that says the same
 #: thing keeps its Markdown.
 _STRUCTURED_MARGIN = 1.1
+#: Below this the data is a caption or a teaser, so it sits under the extract
+#: only when there is a paragraph's worth of it.
+_SUPPLEMENT_MIN_CHARS = 600
 
 #: Wall-clock budget for the extraction parse itself. This is the CPU class the
 #: other two caps do not cover: a small, pathological document can burn arbitrary
@@ -868,13 +871,18 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     and comes back as navigation, so on those the crude strip wins: whole beats
     clean when clean is chrome.
 
-    F24b: when that all comes back thinner than the JSON-LD the same bytes
-    carry, the structured body wins. Same download, no second request, and only
-    ever as the *richer* of the two.
+    F24b: when that all comes back thinner than the data the same bytes carry,
+    the data wins. Same download, no second request: either it is the *richer*
+    of the two and replaces the extract, or it holds a paragraph the extract
+    never showed and sits under it. A page that ships no data costs one
+    substring test, and one that ships data this cannot read costs a failed
+    ``json.loads``.
     """
     body = cap_html(html)
     try:
-        text = cap_text(_extract_within(body, url, EXTRACTION_TIMEOUT) or "")
+        text = cap_text(
+            _extract_within(_without_page_data(body), url, EXTRACTION_TIMEOUT) or ""
+        )
     except _ExtractionTimeout:
         text = cap_text(_tidy_crude(_strip_html(body), url))
     except Exception:
@@ -882,22 +890,39 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     return _prefer_structured(body, text)
 
 
+def _without_page_data(html: str) -> str:
+    """The page with the scripts the page-data reader owns taken out of it."""
+    from searchts.more import drop_data_scripts
+
+    return drop_data_scripts(html)
+
+
 def _prefer_structured(html: str, text: str) -> str:
-    """F24b: the page's own JSON-LD, when the extractor came back thinner.
+    """F24b: the page's own data, against an extract that may already say it.
+
+    Two ways in, in that order. The data replaces the extract when it is the
+    richer of the two by :data:`_STRUCTURED_MARGIN`, because a shell page that
+    carries its article in a script has nothing else to give. Failing that the
+    page's own app state is asked what the extract never said, and sits under
+    it as a section when that is a paragraph or more, so a page whose markup
+    reads well gains the answers the markup hid instead of repeating itself.
 
     Both sides are compared the same way (:func:`_plain_len`), so "thinner"
-    means fewer visible characters rather than fewer bytes of markup, and the
-    data has to win by a margin so a flat blob never replaces formatted prose
-    that says the same thing. A page that ships no data costs one substring
-    test, and one that ships data it cannot read costs a failed ``json.loads``.
+    means fewer visible characters rather than fewer bytes of markup.
     """
-    if "application/ld+json" not in html:
-        return text
-    from searchts.more import plain_len, structured_text
+    from searchts.more import has_page_data, page_data_text, page_state_blocks, plain_len
 
-    data = structured_text(html)
-    if data and plain_len(data) >= _STRUCTURED_MARGIN * plain_len(text):
-        return cap_text(data)
+    if not has_page_data(html):
+        return text
+    whole = page_data_text(html)
+    if plain_len(whole) >= _STRUCTURED_MARGIN * plain_len(text):
+        return cap_text(whole)
+    data = page_state_blocks(html, text)
+    kept = sum(plain_len(body) for _, body in data)
+    if kept >= _SUPPLEMENT_MIN_CHARS:
+        return cap_text(
+            (text or "").rstrip() + "\n\n" + "\n\n".join(body for _, body in data)
+        )
     return text
 
 
