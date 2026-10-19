@@ -66,8 +66,10 @@ PAGINATED_NOTE = (
     "--pages N (MCP max_pages) reads the next pages, "
     "--items N (MCP max_items) reads their rows]"
 )
-#: Trailing page markers: /page/2, /page-2, /2 (a short number).
-_PAGE_SEG_RE = re.compile(r"/(?:page[-_/]?\d{1,4}|\d{1,3})$", re.I)
+#: Explicit trailing page markers. Bare numeric suffixes are compared as URL
+#: pairs in :func:`_continues`, where sibling post IDs can be refused.
+_PAGE_SEG_RE = re.compile(r"/page[-_/]?\d{1,4}$", re.I)
+_BARE_PAGE_SEG_RE = re.compile(r"/\d{1,3}$")
 #: The page a URL names for itself, read off that URL. Only the forms that say
 #: "page" outright: ``?page=3``, ``?p=3`` (Hacker News), ``/page/3/``. The bare
 #: ``/3/`` form is left out on purpose, because as often as not it is a year, a
@@ -196,7 +198,55 @@ def _continues(target: str, url: str) -> bool:
     next *post* of every single post, and docs sites on the next *chapter*;
     those have their own path, so they are not "more of this page".
     """
-    return _page_base(target) == _page_base(url)
+    target_parts = urlsplit(target)
+    current_parts = urlsplit(url)
+    target_path = (target_parts.path or "/").lower().rstrip("/") or "/"
+    current_path = (current_parts.path or "/").lower().rstrip("/") or "/"
+    if _page_base(target) == _page_base(url):
+        # WordPress uses ?p=<post id> at the site root; Hacker News uses the
+        # same key for its /news?page=N listing. Do not call root post IDs a
+        # pagination sequence.
+        if target_path == current_path == "/":
+            target_query = dict(parse_qsl(target_parts.query))
+            current_query = dict(parse_qsl(current_parts.query))
+            target_post = target_query.get("p")
+            current_post = current_query.get("p")
+            if target_post and current_post:
+                if target_post != current_post:
+                    return False
+                target_page = target_query.get("page")
+                current_page = current_query.get("page")
+                return bool(target_page and current_page and target_page != current_page)
+        return True
+    # A bare number is only a page marker when it is appended to the other
+    # URL's path (for example /article/123/2). Two sibling numeric IDs such as
+    # /posts/123 and /posts/124 are separate documents.
+    for longer, shorter in ((target_path, current_path), (current_path, target_path)):
+        prefix = shorter.rstrip("/")
+        if not longer.startswith(prefix + "/"):
+            continue
+        suffix = longer[len(prefix) :]
+        if _BARE_PAGE_SEG_RE.fullmatch(suffix):
+            return True
+    target_number = _BARE_PAGE_SEG_RE.search(target_path)
+    current_number = _BARE_PAGE_SEG_RE.search(current_path)
+    if target_number and current_number:
+        target_base = target_path[: target_number.start()]
+        current_base = current_path[: current_number.start()]
+        # Once a multipage article is on a numeric continuation, allow the
+        # next consecutive segment. Requiring an existing article path avoids
+        # treating /posts/123 -> /posts/124 as a page walk.
+        target_num = int(target_number.group()[1:])
+        current_num = int(current_number.group()[1:])
+        slug = target_base.rstrip("/").rsplit("/", 1)[-1]
+        if (
+            target_base == current_base
+            and target_num == current_num + 1
+            and 2 <= current_num < 20
+            and ("-" in slug or len(slug) >= 12)
+        ):
+            return True
+    return False
 
 
 def _url_page(url: str) -> Optional[int]:
@@ -1553,25 +1603,35 @@ def _plain_value(value: str) -> str:
     import html as _html
 
     t = _VALUE_SCRIPTISH_RE.sub(" ", value or "")
-    if "<" in t and ">" in t:
+    if re.search(r"</?[A-Za-z][^>]*>", t):
         t = _VALUE_BREAK_RE.sub("\n", t)
-        t = re.sub(r"(?s)<[^>]*>", "", t)
+        t = re.sub(r"(?s)</?[A-Za-z][^>]*>", "", t)
         t = _html.unescape(t)
     return t.strip()
 
 
-def _strings(node: Any) -> List[str]:
-    """Every prose string under ``node``: a string, a dict's text, or a list."""
+def _strings(node: Any, *, on_truncate=None) -> List[str]:
+    """Boundedly collect prose strings under a structured content value."""
     out: List[str] = []
-    if isinstance(node, str):
-        if node.strip():
-            out.append(_plain_value(node))
-    elif isinstance(node, dict):
-        for key in ("text", "name", "itemListElement", "acceptedAnswer", "suggestedAnswer"):
-            out.extend(_strings(node.get(key)))
-    elif isinstance(node, list):
-        for item in node:
-            out.extend(_strings(item))
+    stack = [node]
+    visited = chars = 0
+    while stack and visited < _STATE_MAX_NODES and chars < _STATE_MAX_CHARS:
+        value = stack.pop()
+        visited += 1
+        if isinstance(value, str):
+            if value.strip() and len(value) <= _STATE_MAX_CHARS - chars:
+                out.append(_plain_value(value))
+                chars += len(value)
+            elif value.strip() and on_truncate is not None:
+                on_truncate()
+        elif isinstance(value, dict):
+            keys = (
+                "text", "name", "itemListElement", "acceptedAnswer", "suggestedAnswer",
+                "body", "content", "children", "rendered", "value",
+            )
+            stack.extend(value[key] for key in reversed(keys) if key in value)
+        elif isinstance(value, list):
+            stack.extend(reversed(value))
     return out
 
 
@@ -1802,6 +1862,7 @@ class _StateWalk:
         self.chunks: List[Tuple[str, List[str]]] = []
         self.chars = 0
         self.nodes = 0
+        self.truncated = False
 
     def out_of_budget(self) -> bool:
         return self.nodes > _STATE_MAX_NODES or self.chars >= _STATE_MAX_CHARS
@@ -1820,18 +1881,29 @@ class _StateWalk:
             return
         bodies: List[str] = []
         used: List[str] = []
+        pending_chars = 0
         for name, value in node.items():
             lower = str(name).lower()
             if lower in _STATE_SKIP_KEYS or lower not in _STATE_BODY_KEYS:
                 continue
             if not isinstance(value, (str, list, dict)):
                 continue
-            for text in _strings(value):
+            field_bodies: List[str] = []
+            for text in _strings(
+                value, on_truncate=lambda: setattr(self, "truncated", True)
+            ):
                 prose = _prose(text)
                 if not prose or self.held.has(prose):
                     continue
-                bodies.append(prose)
-            used.append(str(name))
+                field_bodies.append(prose)
+            if field_bodies:
+                field_chars = sum(len(body) for body in field_bodies)
+                if self.chars + pending_chars + field_chars > _STATE_MAX_CHARS:
+                    self.truncated = True
+                    continue
+                bodies.extend(field_bodies)
+                pending_chars += field_chars
+                used.append(str(name))
         if bodies:
             heading = _heading(node)
             lines: List[str] = []
@@ -1844,7 +1916,7 @@ class _StateWalk:
                 for para in prose.split("\n"):
                     if para.strip():
                         lines += [para.strip(), ""]
-            self.chars += sum(len(line) for line in bodies)
+            self.chars += pending_chars
             self.chunks.append(("\n\n".join(bodies), lines))
         for name, value in node.items():
             if str(name) in used:
@@ -1899,11 +1971,16 @@ def _loads_assignment(body: str) -> Any:
         return None
 
 
-def _state_chunks(data: Any, held: _Held) -> List[Tuple[str, List[str]]]:
-    """``(prose, markdown lines)`` for each piece of prose in one state blob."""
+def _state_walk(data: Any, held: _Held) -> _StateWalk:
+    """Walk one state blob and retain its output and cap status."""
     walk = _StateWalk(held)
     walk.walk(data)
-    return walk.chunks
+    return walk
+
+
+def _state_chunks(data: Any, held: _Held) -> List[Tuple[str, List[str]]]:
+    """``(prose, markdown lines)`` for each piece of prose in one state blob."""
+    return _state_walk(data, held).chunks
 
 
 def has_page_data(html: str) -> bool:
@@ -1976,14 +2053,24 @@ def page_data_chunks(html: str) -> List[Tuple[str, str, List[str]]]:
             said.add(prose)
             out.append(("JSON-LD", prose, lines))
         for name, data in _state_blobs(html):
-            for prose, lines in _state_chunks(data, said):
-                out.append((name, prose, lines))
+            try:
+                walk = _state_walk(data, said)
+            except Exception:  # noqa: BLE001 - a malformed state blob cannot erase JSON-LD
+                continue
+            source = f"{name} (partial: extraction cap reached)" if walk.truncated else name
+            for prose, lines in walk.chunks:
+                out.append((source, prose, lines))
         return out
     except Exception:  # noqa: BLE001 - structured data is an extra, never a failure
         return []
 
 
-def page_data_blocks(html: str, seen: str = "") -> List[Tuple[str, str]]:
+def page_data_blocks(
+    html: str,
+    seen: str = "",
+    *,
+    chunks: Optional[List[Tuple[str, str, List[str]]]] = None,
+) -> List[Tuple[str, str]]:
     """``(source, text)`` for each blob that holds prose this read does not have.
 
     A piece of data the extract already said is dropped (``seen``), so the data
@@ -1993,7 +2080,8 @@ def page_data_blocks(html: str, seen: str = "") -> List[Tuple[str, str]]:
     held = _Held(seen)
     order: List[str] = []
     grouped: Dict[str, List[str]] = {}
-    for name, prose, lines in page_data_chunks(html):
+    pieces = chunks if chunks is not None else page_data_chunks(html)
+    for name, prose, lines in pieces:
         if held.has(prose):
             continue
         held.add(prose)
@@ -2009,7 +2097,12 @@ def page_data_blocks(html: str, seen: str = "") -> List[Tuple[str, str]]:
     return out
 
 
-def page_state_blocks(html: str, seen: str = "") -> List[Tuple[str, str]]:
+def page_state_blocks(
+    html: str,
+    seen: str = "",
+    *,
+    chunks: Optional[List[Tuple[str, str, List[str]]]] = None,
+) -> List[Tuple[str, str]]:
     """The app state's own words that this read does not already have.
 
     The same answer as :func:`page_data_blocks`, without the JSON-LD. That
@@ -2022,12 +2115,17 @@ def page_state_blocks(html: str, seen: str = "") -> List[Tuple[str, str]]:
     """
     return [
         (name, text)
-        for name, text in page_data_blocks(html, seen)
+        for name, text in page_data_blocks(html, seen, chunks=chunks)
         if name != "JSON-LD"
     ]
 
 
-def page_data_text(html: str) -> str:
+def page_data_text(
+    html: str,
+    *,
+    source: Optional[str] = None,
+    chunks: Optional[List[Tuple[str, str, List[str]]]] = None,
+) -> str:
     """The page's own data as Markdown, or ``""`` when it holds no body.
 
     Every piece the blobs hold, said once. The caller compares this against the
@@ -2035,7 +2133,10 @@ def page_data_text(html: str) -> str:
     :func:`page_data_blocks` decides what is new).
     """
     lines: List[str] = []
-    for _, _, chunk in page_data_chunks(html):
+    pieces = chunks if chunks is not None else page_data_chunks(html)
+    for name, _, chunk in pieces:
+        if source is not None and name != source:
+            continue
         lines.extend(chunk)
     return "\n".join(lines).strip()
 
@@ -2127,8 +2228,10 @@ def data_source_note(html: str, text: str) -> Optional[More]:
 
 def _source_names(html: str) -> str:
     """The blobs this page ships, in the order the read walks them."""
-    names = ["JSON-LD"] if _LD_MARKER in (html or "") else []
-    names.extend(name for name, _ in _state_blobs(html))
+    names = list(dict.fromkeys(name for name, _, _ in page_data_chunks(html)))
+    if not names:
+        names = ["JSON-LD"] if _LD_MARKER in (html or "") else []
+        names.extend(name for name, _ in _state_blobs(html))
     return ", ".join(names) or "the page's own data"
 
 

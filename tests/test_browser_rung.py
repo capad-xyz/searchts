@@ -107,6 +107,36 @@ def test_a_painted_page_still_costs_one_poll():
     assert len(page.timeouts) == 1
 
 
+def test_a_shorter_painted_dom_replaces_a_longer_unpainted_shell():
+    shell = "<html><body><script>" + ("loader " * 250) + "</script><p>Loading</p></body></html>"
+    painted = "<html><body><main><p>" + ("The page is now painted with readable article text. " * 8) + "</p></main></body></html>"
+    assert len(painted) < len(shell)
+    page = _Page([painted])
+    assert unlocker._await_hydration(page, shell, budget_ms=1000, step_ms=500) == painted
+
+
+def test_a_shorter_header_does_not_end_a_later_hydration():
+    shell = "<html><body><script>" + ("bootstrap " * 450) + "</script><p>Loading</p></body></html>"
+    header = "<html><body><header>" + ("Site navigation, account, and a short welcome title. " * 8) + "</header></body></html>"
+    article = "<html><body><main><p>" + ("The full article is now visible to readers. " * 30) + "</p></main></body></html>"
+    assert len(header) < len(shell) and len(article) < len(shell)
+    page = _Page([header, article, article])
+    assert unlocker._await_hydration(page, shell, budget_ms=2000, step_ms=500) == article
+
+
+def test_latest_shorter_painted_dom_survives_when_it_keeps_changing():
+    shell = "<html><body><script>" + ("bootstrap " * 300) + "</script></body></html>"
+    frames = [
+        "<html><body><main><p>"
+        + (f"Frame {i} shows an already painted page with readable article text. " * 5)
+        + "</p></main></body></html>"
+        for i in range(8)
+    ]
+    assert all(len(frame) < len(shell) for frame in frames)
+    page = _Page(frames)
+    assert unlocker._await_hydration(page, shell, budget_ms=4000, step_ms=500) == frames[-1]
+
+
 def test_a_page_that_never_paints_is_bounded_by_its_budget():
     """Waiting longer must not mean waiting forever.
 
@@ -173,6 +203,15 @@ def test_a_refusal_that_rendered_text_still_reports_200(monkeypatch):
         monkeypatch, frames=[error_page], goto_status=403
     )
     assert status == 200
+
+
+def test_a_title_only_refusal_is_not_promoted_to_200(monkeypatch):
+    title_only = "<html><head><title>403 Forbidden</title></head><body></body></html>"
+    assert unlocker._is_refused_render(title_only, 403) is True
+    status, _html, _final, _headers = _run_rung(
+        monkeypatch, frames=[title_only], goto_status=403
+    )
+    assert status == 403
 
 
 def test_a_broken_page_on_200_is_still_200(monkeypatch):

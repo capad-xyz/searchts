@@ -141,11 +141,13 @@ empty.
 | www.theverge.com | yes | 0 | 20,751 | extract |
 | www.nngroup.com/articles/usability-101-… | yes | 0 | 7,047 | extract |
 
-On all four the page's own markup already beat the data, so the read is
-unchanged, which is the intended rule (the data is used only when it beats the
-extract by 10%). **No real page was found where the data wins**; that path is
-proved by hand-written fixtures only (`tests/test_f24_generic.py`). Four other
-candidate recipe/Q&A pages returned 403 and were not measured.
+On all four the page's own markup already beat the JSON-LD, so that typed
+article data did not replace the extract. App state is also read when it adds
+substantial words the markup did not show; this was proven on VEED on
+2026-10-19. Shell replacement remains fixture-proved
+(`tests/test_f24b_page_data.py`), and state supplements are deduplicated
+against the visible article. Four other candidate recipe/Q&A pages returned
+403 and were not measured.
 
 ## Open gaps
 
@@ -155,6 +157,7 @@ candidate recipe/Q&A pages returned 403 and were not measured.
   The page reads, and a real login page on the same host still does not.
 - Row 11: a list page the extractor flattens to one token per line, with no note
   that the list was not rebuilt. Same on `origin/main`.
-- F24b `__NEXT_DATA__` is not read (no real page found where it beats the
-  extract). F24b's JSON-LD path is proved on fixtures only.
+- F24b's `__NEXT_DATA__` supplement path is proven on VEED. A real live page
+  whose shell contains the article only in `__NEXT_DATA__` has not been found;
+  replacement remains fixture-proved.
 - The browser rung was never run here, so no JS-app page was read, only named.

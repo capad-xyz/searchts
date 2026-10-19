@@ -68,6 +68,61 @@ def test_not_a_next_page(inner):
     assert "next-page" not in _kinds(more.detect(_page(inner), URL, "t"))
 
 
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [
+        ("https://example.org/posts/123", "https://example.org/posts/124"),
+        ("https://example.org/?p=123", "https://example.org/?p=124"),
+    ],
+)
+def test_numeric_post_ids_are_not_pagination(current, target):
+    html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
+    assert "next-page" not in _kinds(more.detect(html, current, "t"))
+
+
+def test_bare_numeric_suffix_is_kept_for_multipage_article():
+    found = more.detect(
+        _page("", head='<link rel="next" href="/blog/long-post/2/">'),
+        "https://example.org/blog/long-post/",
+        "text",
+    )
+    assert found[0].url == "https://example.org/blog/long-post/2/"
+
+
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [
+        (
+            "https://example.org/blog/long-post/2/",
+            "https://example.org/blog/long-post/3/",
+        ),
+        (
+            "https://example.org/long-post/2/",
+            "https://example.org/long-post/3/",
+        ),
+        (
+            "https://example.org/?p=123&page=2",
+            "https://example.org/?p=123&page=3",
+        ),
+    ],
+)
+def test_consecutive_numeric_page_markers_continue(current, target):
+    html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
+    assert "next-page" in _kinds(more.detect(html, current, "t"))
+
+
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [
+        ("https://example.org/posts/123", "https://example.org/posts/124"),
+        ("https://example.org/posts/2", "https://example.org/posts/3"),
+    ],
+)
+def test_sibling_numeric_post_ids_are_not_pages(current, target):
+    html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
+    assert "next-page" not in _kinds(more.detect(html, current, "t"))
+
+
 # ── feeds ────────────────────────────────────────────────────────────────────
 
 

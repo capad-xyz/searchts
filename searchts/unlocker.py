@@ -910,14 +910,35 @@ def _prefer_structured(html: str, text: str) -> str:
     Both sides are compared the same way (:func:`_plain_len`), so "thinner"
     means fewer visible characters rather than fewer bytes of markup.
     """
-    from searchts.more import has_page_data, page_data_text, page_state_blocks, plain_len
+    from searchts.more import page_data_chunks, page_data_text, page_state_blocks, plain_len
 
-    if not has_page_data(html):
+    chunks = page_data_chunks(html)
+    if not chunks:
         return text
-    whole = page_data_text(html)
-    if plain_len(whole) >= _STRUCTURED_MARGIN * plain_len(text):
+    whole = page_data_text(html, chunks=chunks)
+    data = page_state_blocks(html, text, chunks=chunks)
+    jsonld = page_data_text(html, source="JSON-LD", chunks=chunks)
+    # JSON-LD is a typed article body and retains the original replacement
+    # behavior. App state also contains related cards and SEO descriptions;
+    # its total length cannot establish that it is the page's main article.
+    # Let app state replace only a shell extract, and otherwise use the
+    # deduplicated supplement path below.
+    # App state often contains longer related-card descriptions than the
+    # visible article. Only let it replace an effectively empty shell; any
+    # readable visible copy remains the lead and state can supplement it.
+    has_short_sentence = (
+        len(re.findall(r"\b[\w'-]+\b", text)) >= 8
+        and re.search(r"[.!?](?:\s|$)", text) is not None
+    )
+    if (
+        plain_len(text) < 120
+        and not has_short_sentence
+        and plain_len(whole) >= _STRUCTURED_MARGIN * plain_len(text)
+    ):
         return cap_text(whole)
-    data = page_state_blocks(html, text)
+    if jsonld and plain_len(jsonld) >= _STRUCTURED_MARGIN * plain_len(text):
+        text = jsonld
+        data = page_state_blocks(html, text, chunks=chunks)
     kept = sum(plain_len(body) for _, body in data)
     if kept >= _SUPPLEMENT_MIN_CHARS:
         return cap_text(
@@ -1139,7 +1160,8 @@ def _is_refused_render(html: str, status: Optional[int]) -> bool:
     """
     if status is None or status < 400:
         return False
-    return _visible_markup_len(_SCRIPTISH_RE.sub(" ", html or "")) == 0
+    body = re.sub(r"(?is)<head\b[^>]*>.*?</head\s*>", " ", html or "")
+    return _visible_markup_len(_SCRIPTISH_RE.sub(" ", body)) == 0
 
 
 def whole_short_page(html: str, text: str) -> bool:
@@ -1481,7 +1503,7 @@ def _await_hydration(
     step_ms: int = 500,
     progress: bool = False,
 ) -> str:
-    """Poll until the rendered HTML stops growing; return the fullest seen.
+    """Poll until a painted document stabilizes; keep the largest snapshot until then.
 
     A JS app is still an empty shell at ``domcontentloaded``, so reading
     ``page.content()`` immediately yields pre-hydration markup and the caller
@@ -1509,6 +1531,8 @@ def _await_hydration(
     the extractor, which is the honest verdict for it.
     """
     waited = 0
+    painted_candidate: Optional[str] = None
+    latest_painted: Optional[str] = None
     while waited < budget_ms:
         page.wait_for_timeout(step_ms)
         waited += step_ms
@@ -1520,10 +1544,19 @@ def _await_hydration(
             break
         if len(current) > len(html):
             html = current
+            painted_candidate = None
+            if not _is_unpainted(current):
+                latest_painted = current
             continue
         if not _is_unpainted(current):
-            break  # stopped growing, and the page is showing its text
-    return html
+            latest_painted = current
+            if len(current) < len(html) and current != painted_candidate:
+                painted_candidate = current
+                continue
+            html = current
+            break
+        painted_candidate = None
+    return latest_painted or html
 
 
 def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:

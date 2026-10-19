@@ -297,6 +297,114 @@ def test_the_data_that_the_markup_hid_sits_under_the_extract():
     assert any(n.startswith("[source: __NEXT_DATA__") for n in found)
 
 
+def test_related_app_state_cannot_replace_a_visible_article():
+    article = _paras(14, "v")
+    related = [_paras(16, f"r{i}") for i in range(4)]
+    markup_only = "This sentence exists only in the visible article markup."
+    html = (
+        "<html><body><main><article><h1>The article stays</h1>"
+        + article
+        + f"<p>{markup_only}</p>"
+        + "</article></main><script id=\"__NEXT_DATA__\" type=\"application/json\">"
+        + json.dumps(
+            {
+                "props": {
+                    "pageProps": {
+                        "post": {"title": "The article stays", "body": article},
+                        "related": [
+                            {"title": f"Related item {i}", "description": body}
+                            for i, body in enumerate(related)
+                        ],
+                    }
+                }
+            }
+        )
+        + "</script></body></html>"
+    )
+
+    read = _read(html)
+    assert "The article stays" in read
+    assert "v0" in read
+    assert "r0" in read
+    assert markup_only in read
+
+
+def test_short_visible_article_is_not_replaced_by_related_app_state():
+    visible = "This short article sentence is visible on the page and must stay."
+    related = _paras(18, "related")
+    html = (
+        "<html><body><main><article><h1>Short article</h1><p>"
+        + visible
+        + "</p></article></main>"
+        + _state({"pageProps": {"related": [{"description": related}]}})
+        + "</body></html>"
+    )
+    read = _read(html)
+    assert visible in read
+    assert read.startswith("Short article")
+
+
+@pytest.mark.parametrize(
+    "post",
+    [
+        {"content": {"rendered": _paras(12, "wp")}},
+        {"content": {"value": _paras(12, "value")}},
+        {"body": [{"children": [{"text": _paras(12, "sanity")}]}]},
+        {"content": {"content": [{"value": _paras(12, "rich")}]}},
+    ],
+)
+def test_object_valued_content_fields_are_walked(post):
+    read = _read(_shell_with_state({"pageProps": {"post": post}}))
+    assert any(token in read for token in ("wp0", "value0", "sanity0", "rich0"))
+
+
+def test_state_field_cap_preserves_later_article_and_marks_partial_source():
+    oversized = "relatedword " * (more._STATE_MAX_CHARS // 9 + 500)
+    article = _paras(12, "tailword")
+    html = _shell_with_state(
+        {"pageProps": {"body": oversized, "content": article}}
+    )
+    read = _read(html)
+    assert "tailword0" in read
+    assert len(read) < more._STATE_MAX_CHARS
+    notes = [item.note for item in more.detect(html, URL, read)]
+    assert any("partial: extraction cap reached" in note for note in notes)
+
+
+def test_angle_bracket_comparisons_survive_plain_value_cleanup():
+    value = "Before. Use a < b when left is smaller and m > n after. After."
+    cleaned = more._plain_value(value)
+    assert "a < b" in cleaned
+    assert "m > n" in cleaned
+
+
+def test_unseen_app_state_does_not_hide_a_jsonld_article():
+    visible = _paras(5, "nav")
+    article = _words(350, "ld")
+    supplement = _words(150, "app")
+    html = (
+        "<html><body><nav>"
+        + visible
+        + "</nav><main></main>"
+        '<script type="application/ld+json">'
+        + json.dumps(
+            {
+                "@type": "Article",
+                "headline": "Structured article headline",
+                "articleBody": article,
+            }
+        )
+        + "</script><script id=\"__NEXT_DATA__\" type=\"application/json\">"
+        + json.dumps({"props": {"pageProps": {"description": supplement}}})
+        + "</script></body></html>"
+    )
+
+    read = _read(html)
+    assert "Structured article headline" in read
+    assert "ld349" in read
+    assert "app149" in read
+
+
 # ── JSON-LD coverage, the @graph and the FAQ pair ─────────────────────────────
 
 
