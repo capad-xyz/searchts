@@ -152,6 +152,52 @@ def test_latest_shorter_painted_dom_survives_when_it_keeps_changing():
     assert unlocker._await_hydration(page, shell, budget_ms=4000, step_ms=500) == frames[-1]
 
 
+def test_three_identical_header_polls_do_not_adopt_the_header():
+    """The reported defect: three header polls adopted the header, article lost.
+
+    The late paint this wait documents lands at 2.25s, so at the 500ms step
+    three matching polls (1.5s) decide inside that window and a header that
+    painted early was returned before the article ever arrived. The article
+    must win even though the header had already been seen three times.
+    """
+    shell = "<html><body><script>" + ("bootstrap " * 450) + "</script></body></html>"
+    header = "<html><body><header>" + ("Site navigation, account, and a short welcome title. " * 8) + "</header></body></html>"
+    article = "<html><body><main><p>" + ("The full article is now visible to readers. " * 30) + "</p></main></body></html>"
+    page = _Page([header, header, header, article, article])
+    assert unlocker._await_hydration(page, shell, budget_ms=8000, step_ms=500) == article
+
+
+def test_four_identical_header_polls_still_continue_to_the_article():
+    """The raise in words: four matching header polls are not four settled ones.
+
+    Five matching polls adopt a shorter DOM, so the fourth identical one is
+    still waiting, and an article that arrives on the very next poll is kept
+    rather than walked past.
+    """
+    shell = "<html><body><script>" + ("bootstrap " * 450) + "</script></body></html>"
+    header = "<html><body><header>" + ("Site navigation, account, and a short welcome title. " * 8) + "</header></body></html>"
+    article = "<html><body><main><p>" + ("The full article is now visible to readers. " * 30) + "</p></main></body></html>"
+    page = _Page([header, header, header, header, article, article])
+    assert unlocker._await_hydration(page, shell, budget_ms=8000, step_ms=500) == article
+
+
+def test_a_shorter_painted_page_that_never_grows_settles_well_before_its_budget():
+    """The raise may not cost short pages the budget.
+
+    A header that is genuinely all there is stops once it has matched five
+    times — five polls at the 500ms step, not the sixteen polls an 8000ms
+    budget would allow. The cost bound stays far inside the budget ceiling.
+    """
+    shell = "<html><body><script>" + ("bootstrap " * 450) + "</script></body></html>"
+    header = "<html><body><header>" + ("Site navigation, account, and a short welcome title. " * 8) + "</header></body></html>"
+    page = _Page([header])
+    out = unlocker._await_hydration(page, shell, budget_ms=8000, step_ms=500)
+    assert out == header
+    assert len(page.timeouts) < 16, (
+        f"a short page that never grew waited the whole budget: {len(page.timeouts)} poll(s)"
+    )
+
+
 def test_a_page_that_never_paints_is_bounded_by_its_budget():
     """Waiting longer must not mean waiting forever.
 

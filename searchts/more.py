@@ -1624,15 +1624,21 @@ def _ld_nodes(html: str) -> List[Dict[str, Any]]:
 
 
 #: Markup that carries no reading text. A body kept as a string is full of it,
-#: and emitting it verbatim would put ``<p>`` in a reader's face.
+#: and emitting it verbatim would put ``<p>`` in a reader's face. The unclosed
+#: branch covers script-shaped containers whose closer never arrives: script,
+#: style, svg, noscript, template, and iframe all treat everything after the
+#: opener as their own content, so a tag that opened and never closed drops the
+#: rest of the value, exactly as an unclosed ``<script>`` does.
 _VALUE_SCRIPTISH_RE = re.compile(
-    r"(?is)<(script|style|noscript|template|svg|iframe)\b[^>]*>.*?</\1\s*>|<script\b[^>]*>.*\Z"
+    r"(?is)<(script|style|noscript|template|svg|iframe)\b[^>]*>.*?</\1\s*>"
+    r"|<(?:script|style|noscript|template|svg|iframe)\b[^>]*>.*\Z"
 )
 _VALUE_BREAK_RE = re.compile(r"(?i)<\s*(?:br\s*/?|/\s*(?:p|div|li|tr|h[1-6])\s*)>")
 _VALUE_TAG_NAMES = (
     "a|article|aside|b|blockquote|br|caption|code|dd|details|div|dl|dt|em|figcaption|figure|"
     "h[1-6]|hr|i|li|main|ol|p|pre|section|small|span|strong|sub|sup|table|tbody|td|"
-    "th|thead|tr|u|ul|image|iframe|svg|template|style|noscript|script"
+    "th|thead|tr|u|ul|image|iframe|svg|template|style|noscript|script|"
+    "video|audio|summary|picture|form|object|math"
 )
 _VALUE_TAG_RE = re.compile(
     rf"(?is)</?(?P<tag>{_VALUE_TAG_NAMES})\b[^<>]*>"
@@ -1645,6 +1651,41 @@ _VALUE_BLOCK_TAGS = frozenset(
 )
 
 
+def _value_opener_is_markup(match: "re.Match[str]") -> bool:
+    """Whether a recognized opener reads as markup rather than prose.
+
+    An opener whose attributes carry a value (``onclick=``) is markup however
+    many tokens it has. A bare opener and a single boolean attribute token
+    (``<details open>``, ``<b x>``) are markup when a closing tag exists to
+    pair with. Two or more bare tokens read as prose instead: the comparison
+    ``a <b and c > d`` has ``and c`` where attributes would be, and every
+    character of it stays.
+    """
+    raw = match.group(0)
+    if raw.startswith("</"):
+        return False
+    if "=" in raw:
+        return True
+    attr_part = raw[1 + len(match.group("tag")):].rstrip("/>").strip()
+    return not attr_part or len(attr_part.split()) <= 1
+
+
+def _blank_boolean_opener(match: "re.Match[str]") -> str:
+    """Erase an opener whose only attribute is boolean; pass everything else.
+
+    Openers behind a value attribute or a closer were already handled in the
+    bounded passes above; openers with two or more bare tokens are prose and
+    pass through untouched.
+    """
+    raw = match.group(0)
+    if raw.startswith("</") or "=" in raw:
+        return raw
+    attr_part = raw[1 + len(match.group("tag")):].rstrip("/>").strip()
+    if not attr_part or len(attr_part.split()) > 1:
+        return raw
+    return " "
+
+
 def _strip_paired_value_tags(text: str) -> str:
     """Remove recognized paired HTML tags while preserving their text.
 
@@ -1654,15 +1695,14 @@ def _strip_paired_value_tags(text: str) -> str:
     """
     for _ in range(16):
         tags = {
-            match.group("tag").lower()
-            for match in _VALUE_TAG_RE.finditer(text)
-            if not match.group(0).startswith("</")
-            and ("=" in match.group(0) or not re.search(r"\s+[^/\s>]+", match.group(0)[1:]))
+            found.group("tag").lower()
+            for found in _VALUE_TAG_RE.finditer(text)
+            if _value_opener_is_markup(found)
         }
         closers = {
-            match.group("tag").lower()
-            for match in _VALUE_TAG_RE.finditer(text)
-            if match.group(0).startswith("</")
+            found.group("tag").lower()
+            for found in _VALUE_TAG_RE.finditer(text)
+            if found.group(0).startswith("</")
         }
         paired = tags & closers
         if not paired:
@@ -1689,6 +1729,10 @@ def _strip_paired_value_tags(text: str) -> str:
         " ",
         text,
     )
+    # A boolean attribute alone (``<details open>``) carries no value, so the
+    # strip above misses it. A single attribute token is still markup; the
+    # comparison shape lost two or more tokens and keeps its prose.
+    text = re.sub(_VALUE_TAG_RE, _blank_boolean_opener, text)
     return text
 
 

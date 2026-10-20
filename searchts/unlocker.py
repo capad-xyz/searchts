@@ -1562,9 +1562,14 @@ def _await_hydration(
                     painted_stability = 1
                 else:
                     painted_stability += 1
-                # A shorter header can paint before the page body. Require a
-                # third matching poll before treating a shorter DOM as settled.
-                if painted_stability < 3:
+                # A shorter header can paint before the page body. Require five
+                # matching polls before treating a shorter DOM as settled: the
+                # late paint documented above landed at 2.25s, and three polls
+                # (1.5s at the 500ms step) decide inside that window, while a
+                # page that paints at 2.25s has had the article on poll five
+                # (2.5s). Five identical polls = 2.5s, so a short page that
+                # truly is finished still stops far inside the 8s budget.
+                if painted_stability < 5:
                     continue
             html = current
             break

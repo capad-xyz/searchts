@@ -449,9 +449,129 @@ def test_encoded_attribute_tags_are_removed_without_dropping_following_text(tag)
     assert "onerror" not in cleaned and "onclick" not in cleaned and "ontoggle" not in cleaned
 
 
+def test_unclosed_scriptish_container_drops_the_rest():
+    """An unclosed ``<style>``, like an unclosed ``<script>``, hands the value.
+
+    The container is script-shaped: everything after its opener is its own
+    content, and the opener with no closer is never followed by anything the
+    reader was meant to keep. The measured leak was a body that led a value
+    with ``<style>body{color:red}`` and no closing tag, which came back as
+    readable text otherwise.
+    """
+    cleaned = more._plain_value("Before. <style>body{color:red}")
+    assert cleaned == "Before."
+    cleaned = more._plain_value("Before. &lt;style&gt;body{color:red}")
+    assert cleaned == "Before."
+
+
+@pytest.mark.parametrize(
+    "tag",
+    ["svg", "noscript", "template", "iframe"],
+)
+def test_unclosed_scriptish_named_tags_drop_the_rest(tag):
+    """svg, noscript, template, and iframe match the unclosed script rule.
+
+    Each one treats everything after its opener as its own content, and an
+    opener that never closes has the same shape as an unclosed ``<script>``:
+    what follows is container text, not page prose. Raw and entity-encoded
+    values both drop it here.
+    """
+    cleaned = more._plain_value(f"Before. <{tag}>leaked text")
+    assert cleaned == "Before."
+    cleaned = more._plain_value(f"Before. &lt;{tag}&gt;leaked text")
+    assert cleaned == "Before."
+
+
 def test_unclosed_non_script_tag_does_not_discard_following_prose():
-    cleaned = more._plain_value("See the &lt;iframe&gt; element. keep this sentence.")
+    """A container that holds prose (not its own content) keeps what follows.
+
+    An unclosed ``<blockquote>`` in a value may be a mid-sentence comparison or
+    a fragment of markup; the text after it still reads as prose, so it stays.
+    The scriptish containers above are the difference: those own what follows,
+    this one does not.
+    """
+    cleaned = more._plain_value("See the &lt;blockquote&gt; element. keep this sentence.")
     assert "keep this sentence" in cleaned
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (
+            "<video controls onload=alert(1)>caption</video>",
+            "caption",
+        ),
+        (
+            "&lt;video controls onload=alert(1)&gt;caption&lt;/video&gt;",
+            "caption",
+        ),
+        (
+            "<audio controls>sound</audio>",
+            "sound",
+        ),
+        (
+            "&lt;audio controls&gt;sound&lt;/audio&gt;",
+            "sound",
+        ),
+        (
+            "<b x>kept</b>",
+            "kept",
+        ),
+        (
+            "&lt;b x&gt;kept&lt;/b&gt;",
+            "kept",
+        ),
+        (
+            "<details open><summary>Q</summary>Answer</details>",
+            "QAnswer",
+        ),
+        (
+            "&lt;details open&gt;&lt;summary&gt;Q&lt;/summary&gt;Answer&lt;/details&gt;",
+            "QAnswer",
+        ),
+    ],
+)
+def test_media_and_boolean_tags_pair_and_strip_to_prose(value, expected):
+    """Confirmed leaks, raw and entity-encoded, come back as plain prose.
+
+    ``<video controls onload=alert(1)>``, ``<audio controls>``, ``<details
+    open>`` with its ``<summary>``, and ``<b x>`` all carry an attribute with
+    no value or none at all, and none of them was in the recognized tag list,
+    so the pairs went out verbatim with their handlers. Pairing must not
+    depend on the attribute having an ``=``, and none of the tag tokens or
+    ``on*`` handlers may survive.
+    """
+    cleaned = more._plain_value(value)
+    assert cleaned == expected
+
+
+@pytest.mark.parametrize(
+    "opener",
+    [
+        "<details open>",
+        "<b x>",
+        "&lt;details open&gt;",
+        "&lt;b x&gt;",
+    ],
+)
+def test_boolean_openers_without_a_closer_do_not_leak_the_tag_token(opener):
+    """An opener with a single boolean attribute is markup even unpaired.
+
+    The pair rule above needs a matching closer; without one the opener token
+    itself would still reach a reader. ``<b and c >``-shaped prose keeps its
+    two bare tokens, so this removes only the one-token attribute openers.
+    """
+    cleaned = more._plain_value(f"Before. {opener}visible text")
+    assert cleaned == "Before.  visible text"
+
+
+def test_comparison_with_single_token_is_not_treated_as_markup():
+    kept = more._plain_value("a < b")
+    assert kept == "a < b"
+    kept = more._plain_value("Use a < b when left is smaller")
+    assert kept == "Use a < b when left is smaller"
+    kept = more._plain_value("a <b and c > d")
+    assert kept == "a <b and c > d"
 
 
 def test_comparison_with_later_closer_is_preserved():
