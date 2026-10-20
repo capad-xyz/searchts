@@ -2,9 +2,11 @@
 
 <!-- mcp-name: io.github.capad-xyz/searchts -->
 
-**A keyless web reader for AI agents. It reads the page, or it tells your agent plainly that it can't.**
+**A keyless web unlocker and reader for AI agents.** *(Off the record: "search this shit".)*
 
-When Claude, Cursor or another agent fetches a web page, it often comes back with nothing: a bot wall, a page that only fills in after JavaScript runs, or a block for not looking like a browser. searchts is the reader your agent calls instead. It's open source and free, needs no API key, and works as an MCP server, a CLI or a Python library.
+**It reads the page, or it tells your agent plainly that it can't.**
+
+When Claude, Cursor, Codex or another agent fetches a URL, it regularly comes back with junk: a 403 bot wall, an empty JavaScript shell, a truncated AI-chat share link, or a login screen that the model happily summarizes as if it were the article. searchts is the reader your agent calls instead. It is open source (MIT), free, needs no API key, refuses paid residential proxies by default, and runs as an MCP server, a CLI or a Python library.
 
 [![CI](https://github.com/capad-xyz/searchts/actions/workflows/pytest.yml/badge.svg)](https://github.com/capad-xyz/searchts/actions/workflows/pytest.yml)
 [![PyPI](https://img.shields.io/pypi/v/searchts.svg)](https://pypi.org/project/searchts/)
@@ -18,11 +20,89 @@ When Claude, Cursor or another agent fetches a web page, it often comes back wit
   <a href="https://github.com/capad-xyz/searchts/releases/download/v0.7.0/searchts-demo-v5.mp4">▶ Watch the full 1-minute demo</a>
 </p>
 
+## One-line agent install
+
+Add searchts to Claude Code, Cursor or any MCP client in one command. No API key:
+
+```bash
+claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
+```
+
+Keep it globally and add the stealth browser, which the hardest rungs use:
+
+```bash
+pipx install "searchts[mcp]" && searchts install --browser
+claude mcp add searchts -- searchts mcp serve
+```
+
+[Install](#install) covers uvx, pipx, venv and the browser extra. The CLI, the MCP server and the Python library all call the same read path.
+
+## Three things your agent's built-in fetch can't do
+
+### 1. Decode full ChatGPT, Claude, Gemini, Grok, Poe, DeepSeek, Perplexity and Copilot share links
+
+A shared conversation never sits in the initial page HTML as plain text. A raw fetch gets a JavaScript shell; a renderer can still cut the chat off mid-thread. `searchts read` recognizes share URLs and decodes each provider's own data channel into complete, role-labeled Markdown, keyless and without logging in:
+
+```bash
+searchts read https://chatgpt.com/share/...        # turbo-stream payload in the page (no browser)
+searchts read https://claude.ai/share/...          # keyless snapshot API behind Cloudflare (no browser)
+searchts read https://gemini.google.com/share/...  # keyless batchexecute RPC (no browser)
+searchts read https://chat.deepseek.com/share/...  # stealth render, auto-scrolls past list virtualization
+```
+
+Eight providers: ChatGPT (both `/share/<uuid>` and the newer `/s/<prefix>_<id>` short links), Claude, Gemini, Grok, Poe, DeepSeek, Perplexity and Copilot. The first five need no browser. The last three reuse the stealth tier, scroll until the page height stops changing, open the folds, then read.
+
+### 2. Escalate past bot walls, or fail loudly instead of hallucinating on a login screen
+
+Every `searchts read` walks a three-tier open-source unlocker and remembers which rung worked per domain:
+
+- **`curl_cffi`** impersonates a real Chrome TLS/JA3 and HTTP/2 fingerprint. Fast, local, private.
+- **Jina Reader** (`r.jina.ai`) renders JavaScript when the page only fills in after it runs. Default on; `SEARCHTS_NO_JINA=1` keeps the URL off Jina's servers.
+- **`patchright`** is a lazy stealth Chromium, started only when the cheaper tiers fail.
+- **`--human`** opens a real browser when only a person can clear the page.
+
+```bash
+searchts read https://some-js-heavy-or-fingerprinted-site.com --scrub
+# Tier 1 (curl_cffi) -> 403 | Tier 2 (Jina) -> clean Markdown returned, injection scrubbed
+
+searchts read https://www.linkedin.com/in/someone/
+# Fails loudly: reports the exact tier and login-wall reason. stdout stays empty.
+```
+
+`--scrub` strips invisible and bidi characters and flags prompt-injection indicators before untrusted text reaches your model.
+
+A login you hand over is different from a login searchts guesses. In 0.15.0, local reuse is opt-in and fenced to the one host in the command: `--cookies-from-browser <browser> --yes`, `--cookies <path>`, or `--cdp-port <port>`. Without one of those, a wall is an error, not an article.
+
+### 3. Transcribe videos and grab fingerprint-gated design assets
+
+```bash
+searchts transcribe https://youtu.be/...                     # YouTube, TikTok, Instagram Reels, Reddit
+searchts transcribe https://www.instagram.com/reel/... --cookies-from-browser chrome
+searchts grab https://stripe.com --kinds images,fonts,svg --read --out ./stripe-kit
+```
+
+Transcription is subtitles-first, then `yt-dlp` audio plus Whisper when there are no captions. `grab` extracts a page's images, icons, CSS, fonts, SVGs and color palette through the same unlocker, so it works on fingerprint-gated CDNs, not just open ones.
+
 ## Why it exists
 
 I built searchts because Claude kept running into walls when I asked it to read the web for me. The trigger was a Devpost hackathon page and its terms: the page wasn't even walled, and Claude still couldn't read it.
 
 The first versions, which I built with Claude, failed the other way. When they couldn't get a page, they handed back whatever they got, and the agent summarised a loading screen as if it were the article. So searchts has one rule above the rest: return the real page, or fail loudly and say why. It never hands your agent a fake read.
+
+## How searchts compares
+
+searchts grew out of [Agent-Reach](https://github.com/Panniantong/Agent-Reach)'s channel/doctor scaffolding, then replaced the read/search core with an escalating unlocker, share-link decoders and an MCP server.
+
+| Capability | Built-in `WebFetch` / `curl` | Agent-Reach | Hosted scrapers (Firecrawl, Jina Pro) | searchts |
+| :--- | :--- | :--- | :--- | :--- |
+| **Architecture** | Naive HTTP fetch | Installer and per-platform routers for third-party CLIs (`yt-dlp`, `OpenCLI`, Jina) | Hosted fetch + scraper fleet | **Local escalating unlocker + MCP server + CLI** |
+| **Bot / JS escalation** | None | One Jina Reader hop for the web | Hosted proxies and rendering | **`curl_cffi` (TLS/JA3) → Jina → `patchright` stealth + `--human`** |
+| **Login or block** | Hands 200 OK login HTML to the model, or errors | Depends on the upstream CLI and its session | Credits, limits, or partial HTML | **Fails loudly with the tier and reason; local login reuse is opt-in** |
+| **AI-chat share links** | Empty JS shell or truncated | No share-link decoder; depends on Jina | Renderer can cut long chats | **Native decoders + auto-scroll stealth render (8 providers)** |
+| **Web search** | None | Exa via `mcporter` | Paid search endpoint | **Keyless DuckDuckGo + RRF across SearXNG / Exa / Brave / Tavily** |
+| **Prompt-injection scrubbing** | None | — | — | **Built-in (`--scrub`)** |
+| **Benchmark** | None | None | Marketing pass rates | **Reproducible two-suite scorecard (`Smoke` vs `Walled`)** |
+| **Default cost** | Free | Free, plus the CLIs it installs | API key and per-page credits | **Free, MIT, keyless (no paid residential proxy by default)** |
 
 ## What it does
 
@@ -50,11 +130,11 @@ The package you install is free and keyless. The fetch and the browser run on yo
 
 If no tier comes back with real content, an optional human-in-the-loop step opens a real browser so you can clear the page once and continue. That covers interactive CAPTCHAs and soft walls alike: a login page served as HTTP 200 is not a challenge, but it is still a page only a human gets past. Block detection is phrase-based (not vendor-name based), so legitimate pages that merely embed a bot-sensor script are not falsely rejected. Content is extracted to clean Markdown with `trafilatura`.
 
-**What it won't do.** It will not pretend a wall page is the article. A login the user did not hand over still fails, with the reason. `read` can reuse a login only when you hand it one, for the one site in the command: `searchts read URL --cookies-from-browser firefox --yes` copies that site's cookies from a Firefox-family browser for this session, and `searchts login signin URL` signs in once in a browser searchts opens. A Chrome cookie file that App-Bound Encryption locks is never decrypted; start Chrome with a debugger port and pass `--cdp-port`. Signing in on a remote browser is not built ([F27](PLAN.md)). A DataDome device-check is not a permanent failure: the stealth browser is supposed to let that script finish, and to take a simple click (continue, a checkbox, a press-and-hold that is one action). A puzzle that asks a person to recognize images still stops. The package will not route you through a paid residential proxy by default. A release never claims a site reads until it does. `datadome.co` is still a fail on the current scorecard. That is a measurement, not a rule.
+**What it won't do.** It will not pretend a wall page is the article. A login the user did not hand over still fails, with the reason. Local reuse shipped in 0.15.0, only when you hand searchts a session for the one site in the command (`--cookies-from-browser <browser> --yes`, `--cookies <path>`, or `--cdp-port <port>`). A Chrome cookie file that App-Bound Encryption locks is never decrypted; start Chrome with a debugger port instead. Signing in on a remote browser is not built ([F27](PLAN.md)). A DataDome device-check is not a permanent failure: the stealth browser is supposed to let that script finish, and to take a simple click (continue, a checkbox, a press-and-hold that is one action). A puzzle that asks a person to recognize images still stops. The package will not route you through a paid residential proxy by default. A release never claims a site reads until it does. `datadome.co` is still a fail on the current scorecard. That is a measurement, not a rule.
 
 ## AI-chat share links
 
-Share links from AI chat apps are a special kind of hard: the conversation never appears in the page HTML as extractable text, so generic readers (and most AI agents' built-in fetch) return an empty shell or a fragment cut off mid-chat. `searchts read` recognizes these URLs and decodes each provider's own data channel instead, returning the **complete conversation** as role-labeled Markdown — keyless, no login:
+Share links from AI chat apps are a special kind of hard: the conversation never appears in the page HTML as extractable text, so a raw fetch returns an empty shell, and a renderer can still cut it off mid-chat. `searchts read` recognizes these URLs and decodes each provider's own data channel instead, returning the **complete conversation** as role-labeled Markdown — keyless, no login:
 
 | Provider | Share URL | How it's read |
 |----------|-----------|---------------|
@@ -72,14 +152,34 @@ nothing in the initial HTML, so those reuse the stealth tier: wait for the
 conversation to render, auto-scroll until the page height stops changing (list
 virtualization will otherwise truncate a long chat), then expand the collapsed
 sections before reading. The benchmark currently covers the five that read
-without a browser and passes all five; the three that need one are not in it
-yet.
+without a browser; the three that need one are not in it yet.
 
 ChatGPT issues two shapes: `/share/<uuid>` for a whole conversation, and the
 newer `/s/<prefix>_<id>` short links for a single shared turn (`t_` thread,
 `m_` message, `dr_` deep research, `cd_` Codex). Both are read.
 
 Each provider is a drop-in plugin module (`searchts/share_extractors/`); if a provider changes its format, extraction falls back to the normal unlocker ladder instead of failing.
+
+## Does it actually work?
+
+Rather than take our word for it, searchts ships a reproducible **two-suite** benchmark: it runs the unlocker over two page sets and reports how many it read — keyless — and which tier carried each.
+
+- **Smoke** — a small public page set (control, open docs, AI-chat share links). A regression canary, *not* evidence about hard bot-walls.
+- **Walled** — real vendors that restrict bots (Reddit, LinkedIn login wall, a Cloudflare/DataDome-class site, X, Booking). A short body under the unlocker's minimum-content threshold is a fail, not a pass; expected walled failures are reported honestly, not papered over with 100%.
+
+The last committed run read **12/12 Smoke** and **2/7 Walled**. The walled number is the point: five real walls are reported as failures instead of hidden behind a fake 100%.
+
+These two are reported **separately** on purpose — the smoke number is not "does it work on walls." See [benchmarks/README.md](https://github.com/capad-xyz/searchts/blob/main/benchmarks/README.md).
+
+```bash
+python -m benchmarks.run                       # both suites, print a scorecard
+python -m benchmarks.run --suite walled       # the real walled pass rate only
+python -m benchmarks.run --out docs/          # write docs/scorecard.md + results.json
+```
+
+Latest run: [docs/scorecard.md](https://github.com/capad-xyz/searchts/blob/main/docs/scorecard.md). Add your own targets — see [benchmarks/README.md](https://github.com/capad-xyz/searchts/blob/main/benchmarks/README.md).
+
+> The numbers only mean something from a **residential** connection: a datacenter IP (or a VPN that reshapes your TLS fingerprint) blocks the fast curl_cffi tier more than a real user sees.
 
 ## Install
 
@@ -174,25 +274,6 @@ from searchts.search import search
 for hit in search("open source vector db", max_results=5):
     print(hit.title, hit.url)
 ```
-
-## Does it actually work?
-
-Rather than take our word for it, searchts ships a reproducible **two-suite** benchmark: it runs the unlocker over two page sets and reports how many it read — keyless — and which tier carried each.
-
-- **Smoke** — a small public page set (control, open docs, AI-chat share links). A regression canary, *not* evidence about hard bot-walls.
-- **Walled** — real vendors that restrict bots (Reddit, LinkedIn login wall, a Cloudflare/DataDome-class site, X, Booking). A short body under the unlocker's minimum-content threshold is a fail, not a pass; expected walled failures are reported honestly, not papered over with 100%.
-
-These two are reported **separately** on purpose — the smoke number is not "does it work on walls." See [benchmarks/README.md](https://github.com/capad-xyz/searchts/blob/main/benchmarks/README.md).
-
-```bash
-python -m benchmarks.run                       # both suites, print a scorecard
-python -m benchmarks.run --suite walled       # the real walled pass rate only
-python -m benchmarks.run --out docs/          # write docs/scorecard.md + results.json
-```
-
-Latest run: [docs/scorecard.md](https://github.com/capad-xyz/searchts/blob/main/docs/scorecard.md). Add your own targets — see [benchmarks/README.md](https://github.com/capad-xyz/searchts/blob/main/benchmarks/README.md).
-
-> The numbers only mean something from a **residential** connection: a datacenter IP (or a VPN that reshapes your TLS fingerprint) blocks the fast curl_cffi tier more than a real user sees.
 
 ## How it works, and its limits
 
