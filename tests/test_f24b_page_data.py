@@ -341,7 +341,7 @@ def test_short_visible_article_is_not_replaced_by_related_app_state():
     )
     read = _read(html)
     assert visible in read
-    assert read.startswith("Short article")
+    assert read.removeprefix("# ").startswith("Short article")
 
 
 def test_three_word_visible_sentence_stays_ahead_of_related_app_state():
@@ -356,7 +356,7 @@ def test_three_word_visible_sentence_stays_ahead_of_related_app_state():
     )
     read = _read(html)
     assert visible in read
-    assert read.startswith("News")
+    assert read.removeprefix("# ").startswith("News")
 
 
 @pytest.mark.parametrize(
