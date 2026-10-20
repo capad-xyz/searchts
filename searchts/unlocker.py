@@ -75,6 +75,8 @@ _BLOCK_PHRASES = (
     # Most also serve a 4xx/5xx (already escalated); these catch the on-200/202/302
     # variants (Imperva, Akamai, DataDome, Queue-it, Radware, Vercel, ...).
     "pardon our interruption",                   # F5/Shape (Distil) + some Imperva block pages
+    "/_fs-ch-",                                  # F5/Shape client challenge (its asset path; PyPI and others)
+    "enable javascript to proceed",              # the same F5/Shape shell, as a relay renders it (no asset path left)
     "powered by incapsula",                      # Imperva/Incapsula block page (can serve on HTTP 200)
     "please enable js and disable any ad blocker",  # DataDome challenge (<p id="cmsg">)
     "px-captcha",                                # PerimeterX/HUMAN challenge mount element
@@ -852,6 +854,72 @@ def cap_text(text: str) -> str:
         + f"\n\n[searchts: truncated at {MAX_TEXT_CHARS:,} characters. "
         "The rest of this page was not read.]"
     )
+
+
+#: Content types whose body is already the page's text. A README served as
+#: ``text/plain`` is not HTML with tags in it, and the article extractor reads
+#: it as one long paragraph and drops the code blocks it cannot parse.
+_PLAIN_TEXT_TYPES = frozenset({
+    "text/plain",
+    "text/markdown",
+    "text/x-markdown",
+    "text/x-rst",
+    "text/tab-separated-values",
+    "text/csv",
+    "text/ascii",
+    "text/yaml",
+    "text/x-yaml",
+    "application/json",
+    "application/javascript",
+    "application/x-javascript",
+    "application/ecmascript",
+    "text/javascript",
+    "text/ecmascript",
+    "application/yaml",
+    "application/x-yaml",
+    "application/toml",
+    "application/x-toml",
+    "text/x-python",
+    "text/x-c",
+    "text/x-c++",
+    "text/x-java",
+    "text/x-go",
+    "text/x-rust",
+    "text/x-shellscript",
+})
+
+#: Types that look plain by name but carry markup the extractor must read.
+_MARKUP_TYPES = frozenset({
+    "text/html",
+    "application/xhtml+xml",
+    "application/xml",
+    "text/xml",
+    "application/ld+json",
+    "application/xhtml",
+})
+
+
+def _is_plain_text_body(body: str, headers: Optional[Mapping[str, str]] = None) -> bool:
+    """True when the server sent text that is the page, not markup to extract.
+
+    The Content-Type is the signal, and it is a generic one: no host is named
+    and none is needed. A body that claims to be plain text but opens like an
+    HTML document is treated as markup anyway, because some servers serve a
+    whole page under ``text/plain``.
+    """
+    ctype = ""
+    if headers:
+        ctype = (headers.get("content-type") or "").split(";")[0].strip().lower()
+    if not ctype:
+        return False
+    if ctype in _MARKUP_TYPES:
+        return False
+    if ctype not in _PLAIN_TEXT_TYPES and not ctype.startswith("text/"):
+        return False
+    head = (body or "")[:512].lstrip().lower()
+    if head.startswith("<!doctype html") or head.startswith("<html"):
+        return False
+    return True
 
 
 def html_to_text(html: str, url: Optional[str] = None) -> str:
@@ -1752,8 +1820,14 @@ def _fetch_stealth_impl(
             # comes back as a near-empty shell and reads as "thin".
             html = _await_hydration(page, html, progress=want_tick)
             # Wait (bounded) for a managed JS challenge to auto-resolve.
+            from searchts import device_check as _dc
+
             waited = 0
             while waited < 15000 and looks_blocked(200, html) == "challenge":
+                # A puzzle that needs a person will not resolve itself, and
+                # waiting 15s on it only delays the naming of the reason.
+                if _dc.human_required(html):
+                    break
                 page.wait_for_timeout(1500)
                 waited += 1500
                 html = _page_content(page, progress=want_tick)
@@ -1764,9 +1838,7 @@ def _fetch_stealth_impl(
             # recognise something stops here by name instead.
             device_stop: Optional[str] = None
             if looks_blocked(200, html) == "challenge":
-                from searchts import device_check
-
-                html, device_stop = device_check.solve_simple_click(
+                html, device_stop = _dc.solve_simple_click(
                     page, html, progress=want_tick
                 )
             # F23d: open the folds, while the DOM is still live. This runs after
@@ -2556,7 +2628,15 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         index_keys=reddit_hit.keys or None,
                     )
                     return _with_auth(page_result)
-                text = html_to_text(body, url)
+                if _is_plain_text_body(body, headers):
+                    # The server sent text, not markup: a README, a JSON
+                    # document, an rST file. The article extractor is shaped for
+                    # HTML and throws away what it cannot read as a paragraph,
+                    # which for a README is most of the code. The body is
+                    # already the page, so it is the text.
+                    text = cap_text(body)
+                else:
+                    text = html_to_text(body, url)
 
             text = text or ""
             # F23d: a rung that produced HTML gets the no-browser half of the

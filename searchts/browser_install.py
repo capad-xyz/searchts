@@ -304,10 +304,32 @@ def _patchright_importable() -> bool:
     return True
 
 
+def _pip_is_missing(python: str) -> bool:
+    """True only when *python* provably cannot run ``-m pip``.
+
+    ``uv venv`` makes a venv with no pip module, so ``python -m pip install``
+    dies with "No module named pip" on a documented install path. A python we
+    cannot find or probe is treated as "pip may be there": the classic command
+    is kept and the failure, if any, is the runner's to report.
+    """
+    if not os.path.exists(python):
+        return False
+    try:
+        proc = subprocess.run(
+            [python, "-m", "pip", "--version"],
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return proc.returncode != 0
+
+
 def _extra_install_cmd(cli_env: CliEnv) -> list[str]:
     """Command that installs the browser extra's requirements into *cli_env*.
 
-    pipx on PATH -> ``pipx inject`` (tracked). Anything else -> the env's own pip.
+    pipx on PATH -> ``pipx inject`` (tracked). A pip-less env -> ``uv pip
+    install --python`` when uv is on PATH. Anything else -> the env's own pip.
     Not used for uv tool / ephemeral uvx: those never get pip-installed into.
     """
     reqs = browser_extra_requirements()
@@ -315,6 +337,10 @@ def _extra_install_cmd(cli_env: CliEnv) -> list[str]:
         pipx = shutil.which("pipx")
         if pipx:
             return [pipx, "inject", "searchts", *reqs]
+    if _pip_is_missing(cli_env.python):
+        uv = shutil.which("uv")
+        if uv:
+            return [uv, "pip", "install", "--python", cli_env.python, *reqs]
     return [cli_env.python, "-m", "pip", "install", *reqs]
 
 
@@ -438,6 +464,13 @@ def install_browser(
         if env.kind == "pipx":
             print(
                 "  Windows tip (F11): quit every searchts.exe / mcp serve before inject.",
+                file=sys.stderr,
+            )
+        if _pip_is_missing(env.python) and not shutil.which("uv"):
+            print(
+                "  This env has no pip and no uv on PATH. Install the extra yourself:\n"
+                f'  {env.python} -m ensurepip --upgrade\n'
+                "  then re-run: searchts install --browser",
                 file=sys.stderr,
             )
         return 1

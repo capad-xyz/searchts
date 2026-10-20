@@ -165,8 +165,9 @@ DEFAULT_CASES: list[Case] = [
         "datadome",
         "anti-bot vendor's own site; managed challenge in front of bots",
         suite="walled",
-        # No expect: curl, searchts and WebFetch all got a challenge or nothing on 2026-10-17, so the
-        # real page was not seen. Add a phrase from a real read.
+        # Source: searchts read of this URL, 2026-10-20 (curl_cffi, 3,873 chars): the
+        # page's own title line and its opening paragraph.
+        expect=("Bot Management & Agent Trust Platform", "Assess the intent behind your traffic"),
     ),
     Case(
         "x-home",

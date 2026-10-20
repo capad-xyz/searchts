@@ -450,6 +450,32 @@ class TestSetupRecommendsFirstPartySearch:
         assert "[Recommended] Web-wide search -- Exa (via mcporter)" not in out
 
 
+class TestSetupWithoutAConsole:
+    """`searchts setup` finishes when there is no console to ask.
+
+    Measured 2026-10-20: `searchts setup` with stdin closed died with an
+    EOFError traceback and exit 1. The wizard's own prompt says "press Enter
+    to skip", so a closed stdin is the same answer as an empty line, and a
+    script or a CI job should get the steps that need no answer rather than a
+    stack trace.
+    """
+
+    def test_setup_finishes_when_stdin_is_closed(self, capsys, monkeypatch, tmp_home):
+        monkeypatch.setattr(shutil, "which", lambda _name: None)
+
+        def eof(_prompt=""):
+            raise EOFError
+
+        monkeypatch.setattr("builtins.input", eof)
+        with patch("sys.argv", ["searchts", "setup"]):
+            main()
+        captured = capsys.readouterr()
+        assert "Traceback" not in captured.err
+        assert "EOFError" not in captured.err
+        assert "Skipped" in captured.out
+        assert "searchts doctor" in captured.out
+
+
 class TestCheckUpdateRetry:
     def test_retry_timeout_classification(self):
         sleeps = []

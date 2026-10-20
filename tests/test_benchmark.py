@@ -529,9 +529,10 @@ def test_run_case_walled_real_page_text_passes():
 def test_default_walled_cases_declare_phrases_or_say_why_not():
     walled = load_cases(suite="walled")
     declared = {c.name for c in walled if c.expect}
-    assert {"reddit-hot", "reddit-comments", "x-home", "booking-home"} <= declared
-    # linkedin, g2 and datadome were not seen from a real read; they carry no invented phrase
-    assert not {"linkedin-feed", "g2-cloudflare", "datadome-co"} & declared
+    assert {"reddit-hot", "reddit-comments", "x-home", "booking-home", "datadome-co"} <= declared
+    # linkedin and g2 were not seen from a real read; they carry no invented phrase.
+    # datadome-co joined them on 2026-10-20, when a real read reached the page.
+    assert not {"linkedin-feed", "g2-cloudflare"} & declared
 
 
 def test_case_expect_must_be_a_list_of_phrases_not_a_string():

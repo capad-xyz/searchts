@@ -2282,6 +2282,21 @@ def _cmd_doctor(args=None):
     # doctor is read-only: skill install stays on `searchts install` / `searchts skill`.
 
 
+def _ask(prompt: str) -> str:
+    """One line of input, and an empty answer when there is no input to read.
+
+    The wizard's prompts say "press Enter to skip", so a closed stdin is the
+    same answer as an empty line. Without this, ``searchts setup`` in a script,
+    a CI job, or any run with stdin closed dies with an EOFError traceback
+    instead of finishing the steps that need no answer.
+    """
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        print()
+        return ""
+
+
 def _cmd_setup():
     from searchts.config import Config
 
@@ -2312,7 +2327,7 @@ def _cmd_setup():
                 print("  Current status: [ok] configured")
             else:
                 print("  Current status: -- not configured")
-                setup_now = input("  Configure Exa automatically now? [y/N]: ").strip().lower()
+                setup_now = _ask("  Configure Exa automatically now? [y/N]: ").lower()
                 if setup_now in ("y", "yes"):
                     add_r = subprocess.run(
                         ["mcporter", "config", "add", "exa", "https://mcp.exa.ai/mcp"],
@@ -2353,7 +2368,7 @@ def _cmd_setup():
     if current:
         print("  Current status: [ok] configured")
     else:
-        key = input("  GROQ_API_KEY (press Enter to skip): ").strip()
+        key = _ask("  GROQ_API_KEY (press Enter to skip): ")
         if key:
             config.set("groq_api_key", key)
             print("  [ok] Speech-to-text enabled!")

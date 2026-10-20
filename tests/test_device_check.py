@@ -119,6 +119,40 @@ def test_a_real_image_in_an_article_is_not_a_puzzle() -> None:
     assert dc.human_required(html) is None
 
 
+def test_the_f5_image_captcha_stops_us() -> None:
+    """F5/Shape's image CAPTCHA is a puzzle, so it needs a person.
+
+    Measured 2026-10-20 on pypi.org: the client challenge escalated to an
+    image CAPTCHA, and the ladder was calling that a thin page. The stop
+    reason has to name it, because "needs a person" and "try again" are
+    different instructions for whoever is reading the error.
+    """
+    html = (
+        "<html><body><div id='captchaContainer'>"
+        "<p>Enter the characters seen in the image below:</p>"
+        "<img id='captchaImage' src='https://example.test/captcha.png'>"
+        "</div></body></html>"
+    )
+    assert dc.human_required(html) == "enter the characters seen in the image"
+
+
+def test_an_article_that_shows_a_captcha_is_not_a_puzzle() -> None:
+    """The copy is the marker, so a page that quotes it is a near miss.
+
+    A blog post about CAPTCHAs can show the instruction in a screenshot's
+    alt text or in a quoted line. The widget markup is the one thing here a
+    real page can also carry, which is why the marker is the copy and not the
+    element ids.
+    """
+    article = (
+        "<html><body><p>CAPTCHAs ask a person to read characters off an image.</p>"
+        "<p>That is why they stop an automated reader.</p></body></html>"
+    )
+    assert dc.human_required(article) is None
+    # The widget's own ids alone are not a puzzle either.
+    assert dc.human_required("<html><body><div id='captchaImage'></div></body></html>") is None
+
+
 def test_third_party_frame_is_named_in_the_stop_reason() -> None:
     stop = dc.human_required("<html>ok</html>", challenge_host="geo.captcha-delivery.com")
     assert stop is not None
