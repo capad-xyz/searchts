@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from searchts.share_extractors import (
     ShareResult,
@@ -69,6 +69,87 @@ def _conversation_messages(data) -> Optional[List[object]]:
     return None
 
 
+def _codex_turns(data: object) -> Optional[Tuple[Optional[str], List[Turn]]]:
+    """Extract (title, turns) from a Codex ``/s/cd_`` post route, or None.
+
+    Codex shares don't carry ``linear_conversation``/``messages``. The
+    conversation lives in ``post.attachments[].turns.turn_mapping``, a tree of
+    user/assistant turns keyed by turn id. Each user turn holds ``input_items[]``
+    message content; each assistant turn holds ``output_items[]`` of which the
+    ``type == "message"`` entries carry the narrative text.
+    """
+    if not isinstance(data, dict):
+        return None
+    loader = data.get("loaderData")
+    if not isinstance(loader, dict):
+        return None
+    route = loader.get("routes/s.$postId")
+    if not isinstance(route, dict):
+        return None
+    pwp = route.get("postWithProfile")
+    if not isinstance(pwp, dict):
+        return None
+    post = pwp.get("post")
+    if not isinstance(post, dict):
+        return None
+    attachments = post.get("attachments")
+    if not isinstance(attachments, list) or not attachments:
+        return None
+    att = attachments[0]
+    if not isinstance(att, dict):
+        return None
+    turns_obj = att.get("turns")
+    if not isinstance(turns_obj, dict):
+        return None
+    tm = turns_obj.get("turn_mapping")
+    if not isinstance(tm, dict) or not tm:
+        return None
+
+    def text_of_content(parts: List[object] | None) -> str:
+        out: List[str] = []
+        for p in parts or []:
+            if (isinstance(p, dict) and p.get("content_type") == "text"
+                    and isinstance(p.get("text"), str)):
+                out.append(p["text"])
+        return "".join(out)
+
+    collected: List[Tuple[object, str, str]] = []
+    for _key, node in tm.items():
+        if not isinstance(node, dict):
+            continue
+        turn = node.get("turn")
+        if not isinstance(turn, dict):
+            continue
+        rtype = turn.get("type") or turn.get("role")
+        created = turn.get("created_at")
+        text = ""
+        if rtype == "user":
+            for item in turn.get("input_items") or []:
+                if isinstance(item, dict) and item.get("type") == "message":
+                    text += text_of_content(item.get("content"))
+        elif rtype == "assistant":
+            for item in turn.get("output_items") or []:
+                if isinstance(item, dict) and item.get("type") == "message":
+                    text += text_of_content(item.get("content"))
+        else:
+            continue
+        collected.append((created, rtype, text.strip()))
+
+    collected.sort(key=lambda item: (item[0] is None, item[0]))
+    turns: List[Turn] = []
+    for _created, rtype, text in collected:
+        if not text:
+            continue
+        turns.append(("User" if rtype == "user" else "ChatGPT", text))
+
+    title = post.get("title")
+    if not isinstance(title, str) or not title.strip():
+        title = None
+    if not turns:
+        return None
+    return title, turns
+
+
 def parse_chatgpt_html(html: str) -> Optional[ShareResult]:
     """Decode a chatgpt.com share page's turbo-stream into conversation markdown."""
     chunks = re.findall(
@@ -82,26 +163,30 @@ def parse_chatgpt_html(html: str) -> Optional[ShareResult]:
             continue
         data = _hydrate_turbo_stream(pool, 0)
         messages = _conversation_messages(data)
-        if messages is None:
-            continue
-        title = _find_key(data, "title")
-        turns: List[Turn] = []
-        for msg in messages:
-            if not isinstance(msg, dict):
-                continue
-            role = ((msg.get("author") or {}).get("role")) or ""
-            parts = ((msg.get("content") or {}).get("parts")) or []
-            texts = []
-            for p in parts:
-                if isinstance(p, str) and p.strip():
-                    texts.append(p)
-                elif isinstance(p, dict) and isinstance(p.get("text"), str):
-                    texts.append(p["text"])
-            if not texts or role not in ("user", "assistant"):
-                continue
-            turns.append(("User" if role == "user" else "ChatGPT",
-                          "\n\n".join(texts)))
-        return _render("chatgpt", title if isinstance(title, str) else None, turns)
+        if messages:
+            title = _find_key(data, "title")
+            turns: List[Turn] = []
+            for msg in messages:
+                if not isinstance(msg, dict):
+                    continue
+                role = ((msg.get("author") or {}).get("role")) or ""
+                parts = ((msg.get("content") or {}).get("parts")) or []
+                texts = []
+                for p in parts:
+                    if isinstance(p, str) and p.strip():
+                        texts.append(p)
+                    elif isinstance(p, dict) and isinstance(p.get("text"), str):
+                        texts.append(p["text"])
+                if not texts or role not in ("user", "assistant"):
+                    continue
+                turns.append(("User" if role == "user" else "ChatGPT",
+                              "\n\n".join(texts)))
+            if turns:
+                return _render("chatgpt", title if isinstance(title, str) else None, turns)
+        codex = _codex_turns(data)
+        if codex is not None:
+            title, turns = codex
+            return _render("chatgpt", title, turns)
     return None
 
 

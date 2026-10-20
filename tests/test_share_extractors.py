@@ -14,6 +14,7 @@ from conftest import Tripwire
 from searchts import share_extractors, unlocker
 from searchts.share_extractors import (
     ShareResult,
+    chatgpt,
     copilot,
     extract,
     grok,
@@ -355,3 +356,87 @@ def test_copilot_shared_page_id_is_not_the_word_pages():
 
 def test_copilot_excludes_private_chats():
     assert not matches("https://copilot.microsoft.com/chats/94EXsDefVqjHqgdqAZ1Mq")
+
+
+# ── ChatGPT Codex shares (/s/cd_<id>) ──────────────────────────────────────
+#
+# Regression: Codex sessions share a post route whose conversation lives in
+# ``post.attachments[].turns.turn_mapping`` (a tree of user/assistant turns)
+# rather than ``linear_conversation``/``messages``. The share extractor must
+# walk that tree in ``created_at`` order and emit role-labelled turns.
+
+
+def _codex_turn(value, rtype, created, text, children=(), parent=None):
+    return {
+        "id": value,
+        "turn": {
+            "type": rtype,
+            "role": rtype,
+            "id": value,
+            "created_at": created,
+            "input_items": [
+                {"type": "message", "role": "user",
+                 "content": [{"content_type": "text", "text": text}]}
+            ] if rtype == "user" else [],
+            "output_items": [
+                {"type": "message", "role": "assistant",
+                 "content": [{"content_type": "text", "text": text}]}
+            ] if rtype == "assistant" else [],
+        },
+        "children": list(children),
+        "parent": parent,
+    }
+
+
+def test_parse_chatgpt_codex_turns():
+    data = {
+        "loaderData": {
+            "routes/s.$postId": {
+                "postWithProfile": {
+                    "post": {
+                        "title": "Codex session title",
+                        "attachments": [{
+                            "kind": "codex",
+                            "turns": {
+                                "turn_mapping": {
+                                    "user-1": _codex_turn("user-1", "user", 1.0,
+                                                            "Build the thing"),
+                                    "asst-1": _codex_turn(
+                                        "asst-1", "assistant", 2.0,
+                                        "Here is the plan.", parent="user-1"),
+                                    "user-2": _codex_turn(
+                                        "user-2", "user", 3.0,
+                                        "Add tests.", parent="asst-1"),
+                                    "asst-2": _codex_turn(
+                                        "asst-2", "assistant", 4.0,
+                                        "Tests added.", parent="user-2"),
+                                }
+                            },
+                        }],
+                    }
+                }
+            }
+        }
+    }
+    res = chatgpt._codex_turns(data)
+    assert res is not None
+    title, turns = res
+    assert title == "Codex session title"
+    assert [role for role, _text in turns] == ["User", "ChatGPT", "User", "ChatGPT"]
+    assert turns[0][1] == "Build the thing"
+    assert turns[1][1] == "Here is the plan."
+    assert turns[2][1] == "Add tests."
+    assert turns[3][1] == "Tests added."
+
+
+def test_parse_chatgpt_codex_turns_empty_or_wrong_shape():
+    assert chatgpt._codex_turns({}) is None
+    assert chatgpt._codex_turns({"loaderData": {}}) is None
+    assert chatgpt._codex_turns(
+        {"loaderData": {"routes/s.$postId": {"postWithProfile": {"post": {}}}}}
+    ) is None
+    # No turns -> None.
+    assert chatgpt._codex_turns(
+        {"loaderData": {"routes/s.$postId": {
+            "postWithProfile": {"post": {"attachments": [{"turns": {}}]}}}}}
+    ) is None
