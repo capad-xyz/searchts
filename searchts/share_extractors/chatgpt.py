@@ -74,7 +74,9 @@ def _codex_turns(data: object) -> Optional[Tuple[Optional[str], List[Turn]]]:
 
     Codex shares don't carry ``linear_conversation``/``messages``. The
     conversation lives in ``post.attachments[].turns.turn_mapping``, a tree of
-    user/assistant turns keyed by turn id. Each user turn holds ``input_items[]``
+    user/assistant turns keyed by turn id. A post can carry more than one
+    attachment; every attachment is read, and a turn id kept from an earlier
+    attachment is not repeated. Each user turn holds ``input_items[]``
     message content; each assistant turn holds ``output_items[]`` of which the
     ``type == "message"`` entries carry the narrative text.
     """
@@ -95,14 +97,17 @@ def _codex_turns(data: object) -> Optional[Tuple[Optional[str], List[Turn]]]:
     attachments = post.get("attachments")
     if not isinstance(attachments, list) or not attachments:
         return None
-    att = attachments[0]
-    if not isinstance(att, dict):
-        return None
-    turns_obj = att.get("turns")
-    if not isinstance(turns_obj, dict):
-        return None
-    tm = turns_obj.get("turn_mapping")
-    if not isinstance(tm, dict) or not tm:
+    mappings: List[dict] = []
+    for att in attachments:
+        if not isinstance(att, dict):
+            continue
+        turns_obj = att.get("turns")
+        if not isinstance(turns_obj, dict):
+            continue
+        tm = turns_obj.get("turn_mapping")
+        if isinstance(tm, dict) and tm:
+            mappings.append(tm)
+    if not mappings:
         return None
 
     def text_of_content(parts: List[object] | None) -> str:
@@ -114,26 +119,32 @@ def _codex_turns(data: object) -> Optional[Tuple[Optional[str], List[Turn]]]:
         return "".join(out)
 
     collected: List[Tuple[object, str, str]] = []
-    for _key, node in tm.items():
-        if not isinstance(node, dict):
-            continue
-        turn = node.get("turn")
-        if not isinstance(turn, dict):
-            continue
-        rtype = turn.get("type") or turn.get("role")
-        created = turn.get("created_at")
-        text = ""
-        if rtype == "user":
-            for item in turn.get("input_items") or []:
-                if isinstance(item, dict) and item.get("type") == "message":
-                    text += text_of_content(item.get("content"))
-        elif rtype == "assistant":
-            for item in turn.get("output_items") or []:
-                if isinstance(item, dict) and item.get("type") == "message":
-                    text += text_of_content(item.get("content"))
-        else:
-            continue
-        collected.append((created, rtype, text.strip()))
+    seen: set[object] = set()
+    for tm in mappings:
+        for key, node in tm.items():
+            if key in seen or not isinstance(node, dict):
+                continue
+            turn = node.get("turn")
+            if not isinstance(turn, dict):
+                continue
+            rtype = turn.get("type") or turn.get("role")
+            created = turn.get("created_at")
+            text = ""
+            if rtype == "user":
+                for item in turn.get("input_items") or []:
+                    if isinstance(item, dict) and item.get("type") == "message":
+                        text += text_of_content(item.get("content"))
+            elif rtype == "assistant":
+                for item in turn.get("output_items") or []:
+                    if isinstance(item, dict) and item.get("type") == "message":
+                        text += text_of_content(item.get("content"))
+            else:
+                continue
+            text = text.strip()
+            if not text:
+                continue
+            seen.add(key)
+            collected.append((created, rtype, text))
 
     collected.sort(key=lambda item: (item[0] is None, item[0]))
     turns: List[Turn] = []
