@@ -990,6 +990,102 @@ def test_scroll_rows_are_not_repeated_by_the_pages_walk(monkeypatch):
     assert asked == [300]
 
 
+# ── a next page that serves the copy again ───────────────────────────────────
+
+
+def _list_rows(first: int, count: int = 10) -> str:
+    return "\n".join(
+        f"- [Post {i}](https://example.org/post/{i}) by someone, 2h"
+        for i in range(first, first + count)
+    )
+
+
+def test_a_next_page_with_the_same_rows_is_not_counted_twice(monkeypatch):
+    """A pager that points at itself must not inflate the row count.
+
+    The count is the claim the caller makes about how much of the list was
+    read. A site that serves the same list on every page would make the walk
+    claim forty rows of a ten row list, and the caller cannot check it.
+    """
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_list_rows(1), status=200, final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list?p=1", 40)
+    first = got[0].text
+    # Ten rows, not forty: the pages after the first were the same rows again.
+    assert "10 new rows" in first
+    assert "40 rows the pages handed back again were not counted twice" in first
+    # And the walk says the pages were ones it had already read.
+    assert "4 pages served rows this walk had already read" in first
+    # The rows are returned once. The later page keeps what is its own and
+    # leaves the rows the first page already gave.
+    assert "- [Post 1](https://example.org/post/1)" not in got[1].text
+    assert "Post 10" not in got[1].text
+
+
+def test_a_next_page_with_some_new_rows_counts_only_those(monkeypatch):
+    """A page that overlaps the one before it is not all new, and not all old."""
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_list_rows(1 + 5 * (p - 1), 10), status=200,
+            final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}" if p == 1 else None,
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list?p=1", 40)
+    first = got[0].text
+    # Fifteen rows the walk had not read and five it had: posts 6-10 of the
+    # second page were posts 6-10 of the first page.
+    assert "15 new rows" in first
+    assert "5 rows the pages handed back again were not counted twice" in first
+    # The rows the first page gave are not given again on the second page.
+    assert "- [Post 6](https://example.org/post/6)" not in got[1].text
+    assert "- [Post 11](https://example.org/post/11)" in got[1].text
+
+
+def test_a_next_page_with_the_same_copy_is_named(monkeypatch):
+    """The text walk says when a page served the copy a page already had.
+
+    The pages are still returned: the walk read them and the caller asked for
+    pages, not for pages that differ. But a page list that hid four copies of
+    one page would be a claim the reader cannot check.
+    """
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text="the same words on every page", status=200,
+            final_url=url, next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_pages("https://example.org/list?p=1", 5)
+    assert len(got) == 5
+    assert "4 pages served the same content as a page already read" in got[0].text
+
+
+def test_pages_that_differ_are_not_called_repeats(monkeypatch):
+    """A pager whose pages differ is a pager, not a loop."""
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=f"page {p} of the list", status=200,
+            final_url=url, next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_pages("https://example.org/list?p=1", 5)
+    assert "served the same content" not in got[0].text
+    got2 = unlocker.read_items("https://example.org/list?p=1", 40)
+    assert "served rows this walk had already read" not in got2[0].text
+
+
 def test_repeated_list_rows_take_their_byline_and_nothing_else_with_them():
     page = (
         "# Index\n\n"

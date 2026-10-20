@@ -2944,6 +2944,11 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
     seen = set()
     out: List[FetchResult] = []
     current = url
+    # The copy of each page the walk read, so a page that serves one of them
+    # again is recognised as the copy and not as more of the document.
+    said: set = set()
+    repeated = 0
+    last_next = ""
     for i in range(wanted):
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
@@ -2973,6 +2978,18 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
                     raise
                 _note_walk_stopped(out[-1], current, e)
                 break
+        last_next = result.next_url or ""
+        # A page that serves the copy we already have is not more of the
+        # document: it is the same page under another address. It is still
+        # returned - the walk read it, and the caller asked for pages, not for
+        # pages that differ - but the walk says so, because a page list that
+        # hid four copies of one page would be a claim the reader cannot
+        # check.
+        fingerprint = _page_fingerprint(result)
+        if fingerprint and fingerprint in said:
+            repeated += 1
+        else:
+            said.add(fingerprint)
         out.append(result)
         nxt = result.next_url
         if not nxt:
@@ -2990,8 +3007,13 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
         # hit a cap" line on every ordinary read of a paginated page. `asked`,
         # not `wanted`: the sentence is about what the caller asked for, and the
         # clamp note on page one is the one that names the ceiling.
-        if out and len(out) < asked and out[-1].next_url:
-            _note_walk_capped(out[-1], len(out), asked, out[-1].next_url)
+        if out and len(out) < asked and last_next:
+            _note_walk_capped(out[-1], len(out), asked, last_next)
+    if repeated and out:
+        # On page one: that is the page every caller reads first (the CLI's
+        # stdout, the MCP envelope's ``text``), so the warning about the copies
+        # comes before the copies do.
+        _note_walk_repeated(out[0], repeated)
     if out:
         _note_knobs(out[0], limits)
     return out
@@ -3125,6 +3147,27 @@ def _note_walk_stopped(last: "FetchResult", url: str, err: UnlockerError) -> Non
     last.text = (last.text or "").rstrip() + f"\n\n{note.text}"
 
 
+def _note_walk_repeated(page: "FetchResult", pages: int) -> None:
+    """Say that pages served a copy of a page the walk had already read.
+
+    The pages are still returned: the walk read them and the caller asked for
+    pages, not for pages that differ. The note is there so a reader can tell
+    that the site sent the same copy more than once.
+
+    Scrubbed for the same reason as :func:`_note_walk_stopped`: the note lands
+    after _finalize, so nothing scans it.
+    """
+    from searchts import sanitize
+
+    note = sanitize.scrub(
+        f"[read: {pages} page{'s' if pages != 1 else ''} served the same content "
+        "as a page already read]",
+        redact=True,
+    )
+    page.warnings = list(page.warnings or []) + note.findings
+    page.text = (page.text or "").rstrip() + f"\n\n{note.text}"
+
+
 def item_count(text: str) -> int:
     """Index rows already rendered as markdown links."""
     text = text or ""
@@ -3180,24 +3223,90 @@ def _drop_repeated_rows(text: str, seen: set) -> str:
     return "\n".join(out)
 
 
-def _rows_added(result: "FetchResult", seen: set) -> int:
-    """How many rows this read added that earlier reads did not already have.
+def _row_count(text: str, seen: set) -> Tuple[int, int, set]:
+    """(new rows, repeated rows, the keys the new rows had) in ``text``.
+
+    A row with a link is keyed the way the scroll path keys it (the links and
+    the words, without the numbers that drift), so the same row on two pages
+    is one row and is counted once. A row without a link cannot be told apart
+    from another row without a link, so it counts as new: dropping rows it
+    cannot identify would make the count short of the truth the other way.
+    """
+    new = 0
+    repeated = 0
+    fresh: set = set()
+    for line in (text or "").splitlines():
+        if not (_ITEM_LINE.match(line) or _TABLE_ROW.match(line)):
+            continue
+        if _ROW_LINK.search(line):
+            key = _row_key(line)
+            if key in seen or key in fresh:
+                repeated += 1
+                continue
+            fresh.add(key)
+        new += 1
+    return new, repeated, fresh
+
+
+def _rows_added(
+    result: "FetchResult", seen_rows: set, seen_index: set
+) -> Tuple[int, int, set]:
+    """(new rows, repeated rows, the keys the new rows had) in this read.
 
     A known host can name every row it added (``FetchResult.index_keys``), and a
     site's own cursor sometimes hands back a row the previous window had, so the
     count is of *new* rows. Without keys it is the markdown row count, which is
     what every read that was not produced by a host with its own cursor has
     always used.
+
+    A generic page counts its rows by key now, the way the scroll path does, so
+    a next page that serves rows the previous page already had is not counted
+    as more of the list. A count that included them would claim to have read
+    more of the list than it did, which is the same lie the known-host path
+    already refused to tell.
     """
-    if result.index_keys is None:
-        return item_count(result.text)
-    fresh = 0
-    for key in result.index_keys:
-        if key in seen:
-            continue
-        seen.add(key)
-        fresh += 1
-    return fresh
+    if result.index_keys is not None:
+        added = 0
+        repeated = 0
+        fresh: set = set()
+        for key in result.index_keys:
+            if key in seen_index or key in fresh:
+                repeated += 1
+                continue
+            fresh.add(key)
+            added += 1
+        return added, repeated, fresh
+    return _row_count(result.text, seen_rows)
+
+
+def _own_text(result: "FetchResult") -> str:
+    """The page's own text, without the notes this pass appended to it.
+
+    The notes are ours, not the page's: the next-page line names the URL we
+    are about to fetch, so two copies of the same page never read the same
+    while those lines are still on them.
+    """
+    text = (result.text or "").rstrip()
+    for block in (
+        "\n".join(result.extra_notes or []),
+        "\n".join(
+            str(m.get("note") or "") for m in (result.more or []) if isinstance(m, dict)
+        ),
+    ):
+        if block and text.endswith(block):
+            text = text[: -len(block)].rstrip()
+    return text
+
+
+def _page_fingerprint(result: "FetchResult") -> frozenset:
+    """The page's own copy, in a form two copies of the same page share.
+
+    The lines, without the notes this pass appended: the next-page line
+    names the URL we are about to fetch, so two copies of one page never read
+    the same while those lines are still on them.
+    """
+    text = _own_text(result)
+    return frozenset(line.strip() for line in text.splitlines() if line.strip())
 
 
 def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]:
@@ -3226,12 +3335,21 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     # Row keys are a different namespace from page URLs: one set for both let a
     # row whose key was a later page's URL end the walk as a "loop".
     seen_rows: set = set()
+    # A known host names its rows; a generic page is keyed by the scroll path's
+    # rule. Two namespaces, because a row key and a post id are not the same
+    # thing and one set for both let a row's key collide with a host's id.
+    seen_index: set = set()
     out: List[FetchResult] = []
     current = url
     got = 0
     repeats = 0
+    feed_repeats = 0
     broke = False
     looped = False
+    # Pages whose every row was a row the walk had already read.
+    repeated_pages = 0
+    fetched = 0
+    last_next = ""
     for i in range(limits.pages):
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
@@ -3277,10 +3395,30 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
                 _note_walk_stopped(out[-1], current, e)
                 broke = True
                 break
-        out.append(result)
-        added = _rows_added(result, seen_rows)
+        fetched += 1
+        last_next = result.next_url or ""
+        added, again, fresh = _rows_added(result, seen_rows, seen_index)
+        rows_here = (
+            len(result.index_keys) if result.index_keys is not None else item_count(result.text)
+        )
+        if i and seen_rows:
+            # The rows the previous pages had are the rows this page repeats.
+            # They are dropped here, so each row is returned once, in the place
+            # it came first.
+            result.text = _drop_repeated_rows(result.text, seen_rows)
+        if result.index_keys is not None:
+            seen_index |= fresh
+            feed_repeats += again
+        else:
+            seen_rows |= fresh
+            repeats += again
         got += added
-        repeats += (len(result.index_keys) - added) if result.index_keys is not None else 0
+        out.append(result)
+        if rows_here and not added:
+            # Every row on this page was a row we already had: the page serves
+            # the same list again under another address. Its rows are not
+            # counted twice, and the walk says the page was one it had read.
+            repeated_pages += 1
         nxt = result.next_url
         if got >= want or not nxt:
             break
@@ -3289,9 +3427,9 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     else:
         # Out of pages with more to read. Say so: otherwise asking for 300 rows
         # and getting 150 is indistinguishable from the list ending there.
-        if out and got < want and out[-1].next_url and not broke:
+        if out and got < want and last_next and not broke:
             _note_walk_capped(
-                out[-1], len(out), asked, out[-1].next_url,
+                out[-1], fetched, asked, last_next,
                 # `want` is the ceiling that applied, not the unclamped ask:
                 # the clamp note on page one already names the difference.
                 rows=f"{got} rows of {want}" if got else "no rows",
@@ -3309,14 +3447,28 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
             "cursor pointed back at a page this walk had already read, so the "
             "walk stopped there; the rows it did not have were never served]"
         )
-    if repeats:
+    if feed_repeats:
         # The feed cursor handed back rows we already had. Saying so is the whole
         # point of counting new rows: a count that included them would claim to
         # have read more of the list than it did. The ceiling itself is named by
         # ``_note_knobs`` below, on this same page.
         extra += (
-            f"\n\n[items: {got} new rows; {repeats} the feed handed back again "
+            f"\n\n[items: {got} new rows; {feed_repeats} the feed handed back again "
             "were not counted twice]"
+        )
+    if repeats:
+        # A next page handed back rows the previous page already had. Same
+        # reason, same place: the count is of rows the walk had not read.
+        extra += (
+            f"\n\n[items: {got} new rows; {repeats} rows the pages handed back again "
+            "were not counted twice]"
+        )
+    if repeated_pages:
+        # Pages whose every row was one we already had. Their rows are not
+        # counted twice, and the walk says the page was one it had read.
+        extra += (
+            f"\n\n[items: {repeated_pages} page{'s' if repeated_pages != 1 else ''} "
+            "served rows this walk had already read]"
         )
     if (
         not broke
@@ -3327,7 +3479,7 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         # `latest` scrolls and also links `?page=N`) gets both, and asking for
         # more than the page cap can carry is exactly the case where the
         # second mechanism is the answer.
-        and (not last.next_url or len(out) >= limits.pages)
+        and (not last.next_url or fetched >= limits.pages)
     ):
         # F23c: the list did not fill by following URLs, so try the other
         # mechanism. The probe inside decides whether this page even is a feed,
