@@ -14,8 +14,8 @@ searchts read "https://www.reddit.com/r/LocalLLaMA/comments/abc/title/"
 
 `searchts read` runs the escalating unlocker, so it gets through most bot-walls
 keylessly. To find discussions in the first place, use `searchts search`, then
-read the URLs it returns. For a video tweet/post, use
-`searchts transcribe <url>`.
+read the URLs it returns. An X post that has a video comes back as the captions,
+or the failure names `searchts transcribe`. A post with no video is the page.
 
 ## Optional: platform CLIs
 

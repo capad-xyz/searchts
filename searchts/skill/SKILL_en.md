@@ -84,7 +84,7 @@ searchts grab https://example.com --out ./inspo
 | Web search | search | [references/search.md](references/search.md) |
 | Web pages / articles / RSS | web | [references/web.md](references/web.md) |
 | Design inspiration / assets / palette / fonts | design | [references/design.md](references/design.md) |
-| Video transcripts (YouTube/TikTok/Instagram/Reddit) | video | [references/video.md](references/video.md) |
+| Video transcripts (YouTube/TikTok/Instagram/Reddit/X) | video | [references/video.md](references/video.md) |
 | Twitter / Reddit discussions | social | [references/social.md](references/social.md) |
 | Jobs / LinkedIn | career | [references/career.md](references/career.md) |
 | GitHub / code | dev | [references/dev.md](references/dev.md) |

@@ -110,7 +110,7 @@ searchts grew out of [Agent-Reach](https://github.com/Panniantong/Agent-Reach)'s
 
 `search` prints a list of URLs and a line that says the snippet is not the page. Read each URL.
 
-A player page (a YouTube watch URL, a TikTok video, an Instagram reel, a `v.redd.it` file) comes back as the captions, or fails with empty stdout and names `searchts transcribe` for the audio. Captions need no key. Audio is the transcribe command, not a second reader.
+A player page (a YouTube watch URL, a TikTok video, an Instagram reel, a `v.redd.it` file, or an X post that has a video) comes back as the captions, or fails with empty stdout and names `searchts transcribe` for the audio. An X post with no video is still a read of the page. Captions need no key. Audio is the transcribe command, not a second reader.
 
 ```bash
 searchts transcribe https://youtu.be/...                     # audio, when read found no captions

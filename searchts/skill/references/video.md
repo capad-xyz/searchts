@@ -1,6 +1,6 @@
 # Video transcription
 
-Subtitles-first transcripts for YouTube, TikTok, Instagram, and Reddit videos.
+Subtitles-first transcripts for YouTube, TikTok, Instagram, Reddit, and X videos.
 
 ## Transcribe a video (`searchts transcribe`)
 
@@ -18,9 +18,10 @@ searchts transcribe "https://www.youtube.com/watch?v=VIDEO_ID" --no-subtitles
 captions, or when the source is a local file. `searchts transcribe` tries
 existing captions first (pulled via yt-dlp), so a captioned URL (most YouTube
 videos, many TikToks) transcribes with NO key and NO local model. Works for
-YouTube, TikTok, Instagram, and Reddit videos. A watch URL, a TikTok video,
-an Instagram reel, or a `v.redd.it` file is a player page: `searchts read`
-returns its captions, or fails and names this command.
+YouTube, TikTok, Instagram, Reddit, and X videos. A watch URL, a TikTok video,
+an Instagram reel, a `v.redd.it` file, or an X post that has a video is a
+player page: `searchts read` returns its captions, or fails and names this
+command. An X post with no video is still a read of the page.
 
 > Only a video without usable subtitles (or `--no-subtitles`) needs a Whisper
 > backend: configure a key first with `searchts configure groq-key gsk_xxx`
@@ -31,8 +32,9 @@ returns its captions, or fails and names this command.
 ## Reading the page
 
 `searchts read <url>` on a player page returns the captions, or fails and
-names `searchts transcribe` for the audio. A channel, a feed, or a Reddit
-thread is not a player page; read those as pages.
+names `searchts transcribe` for the audio. A channel, a feed, a Reddit
+thread, an X profile, or an X post with no video is not a player page; read
+those as pages.
 
 ## Choosing a tool
 

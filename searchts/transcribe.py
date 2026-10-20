@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.parse
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
@@ -62,7 +63,13 @@ PROVIDERS = {
 
 
 class TranscribeError(RuntimeError):
-    """Raised when transcription cannot complete."""
+    """Raised when transcription cannot complete.
+
+    ``output`` holds the process stderr and stdout when a command failed,
+    so a caller can tell a text post from a video that has no captions.
+    """
+
+    output: str = ""
 
 
 class MissingDependency(TranscribeError):
@@ -215,9 +222,11 @@ def _ytdlp_cmd() -> List[str]:
     )
 
 
-def _run(cmd: List[str], timeout: int = 600) -> None:
+def _run(cmd: List[str], timeout: int = 600) -> str:
     """Run a subprocess, raising TranscribeError on nonzero exit or timeout.
 
+    Returns the combined stderr and stdout. On failure the same text is on
+    ``TranscribeError.output`` so a caller can read it after the raise.
     cmd carries user-supplied URLs/paths into yt-dlp/ffmpeg — a stalled
     network read or a hung probe must not block the CLI forever.
     """
@@ -225,10 +234,14 @@ def _run(cmd: List[str], timeout: int = 600) -> None:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         raise TranscribeError(f"{cmd[0]} timed out after {timeout}s")
+    output = f"{proc.stderr or ''}\n{proc.stdout or ''}"
     if proc.returncode != 0:
-        raise TranscribeError(
-            f"{cmd[0]} failed (exit {proc.returncode}): {proc.stderr.strip()[:300]}"
+        err = TranscribeError(
+            f"{cmd[0]} failed (exit {proc.returncode}): {(proc.stderr or '').strip()[:300]}"
         )
+        err.output = output
+        raise err
+    return output
 
 
 def download_audio(
@@ -354,6 +367,20 @@ def _choose_vtt(work_dir: Path) -> Optional[Path]:
     return sorted(vtts, key=rank)[0]
 
 
+@dataclass
+class SubtitleReport:
+    """Captions from one yt-dlp pass, plus what yt-dlp said.
+
+    ``ok`` is false when yt-dlp exits nonzero or never runs. ``note`` is the
+    combined stderr and stdout, so a caller can tell "this post has no video"
+    from "this video has no captions".
+    """
+
+    text: Optional[str] = None
+    note: str = ""
+    ok: bool = False
+
+
 def fetch_subtitles(
     url: str,
     work_dir: Path,
@@ -368,13 +395,31 @@ def fetch_subtitles(
     nonzero yt-dlp exit is not fatal: if a `.vtt` was already written (one
     language 429'd after another succeeded), we still return that track.
     """
+    return fetch_subtitle_report(
+        url,
+        work_dir,
+        config=config,
+        cookies_from_browser=cookies_from_browser,
+    ).text
+
+
+def fetch_subtitle_report(
+    url: str,
+    work_dir: Path,
+    *,
+    config: Optional[Config] = None,
+    cookies_from_browser: Optional[str] = None,
+) -> SubtitleReport:
+    """Same pass as ``fetch_subtitles``, with the yt-dlp note kept."""
     if not ytdlp_available():
-        return None
+        return SubtitleReport(note="yt-dlp is not installed")
 
     template = work_dir / "%(id)s"
     cookie_args = cookies_from_browser_args(cookies_from_browser)
+    note = ""
+    ok = False
     try:
-        _run(
+        note = _run(
             [
                 *_ytdlp_cmd(),
                 *cookie_args,
@@ -392,22 +437,23 @@ def fetch_subtitles(
                 url,
             ],
             timeout=120,
-        )
-    except TranscribeError:
+        ) or ""
+        ok = True
+    except TranscribeError as e:
         # Private / no subs / one lang 429'd. Fall through and salvage any .vtt.
-        pass
+        note = getattr(e, "output", "") or str(e)
 
     chosen = _choose_vtt(work_dir)
     if chosen is None:
-        return None
+        return SubtitleReport(note=note, ok=ok)
 
     try:
         raw = chosen.read_text(encoding="utf-8", errors="replace")
     except OSError:
-        return None
+        return SubtitleReport(note=note, ok=ok)
 
     text = _vtt_to_text(raw)
-    return text or None
+    return SubtitleReport(text=text or None, note=note, ok=ok)
 
 
 def _vtt_to_text(vtt: str) -> str:

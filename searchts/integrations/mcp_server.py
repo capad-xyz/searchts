@@ -122,9 +122,10 @@ WEB_SEARCH_DESCRIPTION = (
 TRANSCRIBE_DESCRIPTION = (
     "Read the spoken words when read_url says a player page has no "
     "captions, or transcribe a local audio/video file. A YouTube watch "
-    "URL, a TikTok video, an Instagram reel, or a v.redd.it file is a "
-    "player page: read_url returns its captions, or an error that names "
-    "this tool for the audio. Subtitles-first: existing captions via "
+    "URL, a TikTok video, an Instagram reel, a v.redd.it file, or an X post "
+    "that has a video is a player page: read_url returns its captions, or an "
+    "error that names this tool for the audio. Subtitles-first: existing "
+    "captions via "
     "yt-dlp need no API key; otherwise Whisper (Groq/OpenAI if configured, "
     "else keyless local faster-whisper). prefer_subtitles defaults true; "
     "set false to force audio. cookies_from_browser is opt-in "

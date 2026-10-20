@@ -588,6 +588,18 @@ class TestFetchSubtitles:
         monkeypatch.setattr(tr, "_run", boom)
         assert tr.fetch_subtitles("https://youtu.be/x", tmp_path) is None
 
+    def test_report_keeps_the_yt_dlp_note(self, monkeypatch, tmp_path):
+        def boom(cmd, timeout=600):
+            err = tr.TranscribeError("yt-dlp failed")
+            err.output = "No video could be found in this tweet"
+            raise err
+
+        monkeypatch.setattr(tr, "_run", boom)
+        report = tr.fetch_subtitle_report("https://x.com/jack/status/20", tmp_path)
+        assert report.text is None
+        assert report.ok is False
+        assert "No video could be found in this tweet" in report.note
+
     def test_returns_none_when_no_vtt_produced(self, monkeypatch, tmp_path):
         monkeypatch.setattr(tr, "_run", lambda cmd, timeout=600: None)
         # No *.vtt files written to tmp_path.

@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """Fail-open read of a player page: the captions, or a named failure.
 
-A watch URL, a short, a reel, or a ``v.redd.it`` file is a player. Its words
-are spoken. ``unlocker.fetch`` asks this module before the ladder, the same
-way it asks the share extractors. Captions come back as the read. No captions
-is a failure that names ``searchts transcribe`` for the audio, rather than a
-title and a shell handed back as the article.
+A watch URL, a short, a reel, a ``v.redd.it`` file, or an X post that has a
+video is a player. Its words are spoken. ``unlocker.fetch`` asks this module
+before the ladder, the same way it asks the share extractors. Captions come
+back as the read. No captions is a failure that names ``searchts transcribe``
+for the audio, rather than a title and a shell handed back as the article.
+An X post with no video, and a photo post, fall through so the ladder reads
+the page.
 
 ``extract`` never raises. A crash returns ``None`` and the ladder runs.
 A URL that is not a player returns ``None``. This is one module, not a
@@ -23,6 +25,12 @@ from typing import Optional
 
 _YT_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 _YT_PATH_KINDS = frozenset({"shorts", "embed", "live", "v"})
+_X_STATUS = re.compile(
+    r"^/(?:(?:i/web|[^/]+)/status|statuses)/(\d+)(?:/(video|photo)/(\d+))?/?$"
+)
+_X_BROADCAST = re.compile(r"^/i/broadcasts/([^/?#]+)/?$")
+#: yt-dlp's own words when a status has no video of its own.
+_X_NO_VIDEO = "No video could be found in this tweet"
 
 
 @dataclass
@@ -75,6 +83,34 @@ def _youtube_id(url: str) -> str:
     return ""
 
 
+def _on_x(url: str) -> bool:
+    host = _host(url)
+    return host in {"x.com", "twitter.com"} or host.endswith((".x.com", ".twitter.com"))
+
+
+def _x_shape(url: str) -> str:
+    """``video``, ``broadcast``, ``status``, or ``""``.
+
+    A ``/photo/`` post is ``""`` so the ladder reads the page. A bare status
+    is ``status``: the post may be text, and a miss falls through. ``/video/``
+    and a broadcast are players.
+    """
+    if not _on_x(url):
+        return ""
+    parts = _parts(url)
+    if parts is None:
+        return ""
+    path = parts.path or ""
+    if _X_BROADCAST.match(path):
+        return "broadcast"
+    found = _X_STATUS.match(path)
+    if not found or found.group(2) == "photo":
+        return ""
+    if found.group(2) == "video":
+        return "video"
+    return "status"
+
+
 def matches(url: str) -> bool:
     """True when the URL is one player, not a channel, a feed, or a homepage."""
     host = _host(url)
@@ -95,6 +131,8 @@ def matches(url: str) -> bool:
         return bool(segs) and segs[0] in {"reel", "reels", "tv"}
     if host == "v.redd.it":
         return bool(path.strip("/"))
+    if _x_shape(url):
+        return True
     return False
 
 
@@ -134,7 +172,7 @@ def extract(url: str) -> Optional[PlayerRead]:
             MIN_SUBTITLE_CHARS,
             TranscribeError,
             assert_youtube_id_exact,
-            fetch_subtitles,
+            fetch_subtitle_report,
             ytdlp_available,
         )
     except Exception:  # noqa: BLE001 - a broken import must not break fetch
@@ -143,15 +181,24 @@ def extract(url: str) -> Optional[PlayerRead]:
         assert_youtube_id_exact(url)
     except TranscribeError as e:
         return PlayerRead(failure=str(e))
+    # A bare status might be text. Missing yt-dlp must not turn that post
+    # into a player failure; the ladder still reads the page.
     if not ytdlp_available():
+        if _x_shape(url) == "status":
+            return None
         return PlayerRead(failure=_no_ytdlp(url))
     try:
         with tempfile.TemporaryDirectory(
             prefix="searchts-player-", ignore_cleanup_errors=True
         ) as tmp:
-            text = fetch_subtitles(url, Path(tmp))
+            report = fetch_subtitle_report(url, Path(tmp))
     except Exception:  # noqa: BLE001 - fall through; do not hide the ladder
         return None
+    text = report.text or ""
     if text and len(text.replace(" ", "")) >= MIN_SUBTITLE_CHARS:
         return PlayerRead(markdown=_caption_markdown(url, text))
+    if _x_shape(url) == "status" and (
+        _X_NO_VIDEO in (report.note or "") or not report.ok
+    ):
+        return None
     return PlayerRead(failure=_no_captions(url))
