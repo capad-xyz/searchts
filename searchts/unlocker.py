@@ -3227,28 +3227,27 @@ def _drop_repeated_rows(text: str, seen: set) -> str:
     out: List[str] = []
     lines = (text or "").splitlines()
     skipping = False
-    # The link line of a card pair the marker above decided to keep: the pair
-    # is one row and its key was remembered on the marker line already.
-    carried = False
     for i, line in enumerate(lines):
         is_row = bool(_ITEM_LINE.match(line) or _TABLE_ROW.match(line))
         if is_row:
-            key = _row_key(line)
-            if _ROW_LINK.search(line) and not carried:
+            # Every row line is checked, including the row that follows a
+            # card. The card's link line is indented, so it is not a row
+            # line, and a flag remembered on the marker would still be set
+            # here and would let this row skip the check.
+            if _ROW_LINK.search(line):
+                key = _row_key(line)
                 if key in local:
                     skipping = True
                     continue
                 # Each row that stays has its key remembered, so a copy of it
                 # later on this page is dropped with the first one kept.
                 local.add(key)
-                skipping = False
-            else:
-                skipping = False
-                carried = False
+            skipping = False
         elif _BARE_MARKER.match(line):
             # A card row: "- " on this line, the title and its link on the
             # next. The pair is one row and the key is on the second line.
-            carried = False
+            # That line does not itself match a row, so the key is recorded
+            # here, and the next real row line is checked against it.
             nxt = lines[i + 1] if i + 1 < len(lines) else ""
             if _ROW_LINK.search(nxt):
                 key = _row_key(nxt)
@@ -3256,13 +3255,11 @@ def _drop_repeated_rows(text: str, seen: set) -> str:
                     skipping = True
                     continue
                 local.add(key)
-                carried = True
                 skipping = False
             else:
                 skipping = False
         elif line.strip() and not line.startswith((" ", "\t")):
             skipping = False
-            carried = False
         if skipping:
             continue
         out.append(line)

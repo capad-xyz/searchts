@@ -1255,6 +1255,29 @@ def test_a_card_row_repeated_on_the_same_page_is_returned_once():
     assert out.count("- \n") == 1
 
 
+def test_a_row_after_a_kept_card_is_still_checked():
+    """A repeat that comes after a card is still a repeat.
+
+    The card's link line is indented, so it is not a row line. Remembering
+    "this card was kept" until the next row line made that row skip the
+    check. A row already kept, written again after the card, came back twice.
+    The card's own key is the title line, which does not carry the list
+    marker, so it is not the same key as a normal row.
+    """
+    page = (
+        "- [Alpha](https://fixture.test/item/1)\n"
+        "- \n"
+        "  [Beta notes](https://fixture.test/item/2) 10 points\n"
+        "- [Alpha](https://fixture.test/item/1)\n"
+        "- [Gamma](https://fixture.test/item/3)\n"
+    )
+    out = unlocker._drop_repeated_rows(page, set())
+    assert out.count("fixture.test/item/1") == 1
+    assert out.count("- [Alpha](https://fixture.test/item/1)") == 1
+    assert "Beta notes" in out
+    assert "- [Gamma](https://fixture.test/item/3)" in out
+
+
 def test_a_read_of_a_page_that_repeats_a_row_names_the_count_and_returns_one(monkeypatch):
     """The measured read: one page, a row twice, the note on it already right.
 
