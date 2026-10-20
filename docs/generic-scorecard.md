@@ -51,7 +51,8 @@ No host in this table is in `searchts/known_hosts` or `searchts/share_extractors
 - **First run (2026-10-17): 17 of 20 reads returned content** (rows 1, 2, 3, 4,
   5, 6, 8, 9, 11, 12, 13, 15, 16, 17, 18, 19, 20; rows 7, 10 and 14 refused).
   **At the branch tip (2026-10-18, table below): 17 of 20**: row 10 now reads,
-  and row 16 was refused with 403 on the re-run.
+  and row 16's curl/Jina fetch was refused with 403/451. This is a fetch result,
+  not a browser-rung validation; the JSON-LD extraction was not re-measured.
 - **Three refused in the first run for a real wall or a real shell** (7, 14) or
   for a false wall the classifier can name but not read through (10). Row 10 was
   that false wall; it reads now, so at the tip only two are refusals of that kind
@@ -103,7 +104,7 @@ code (rows 11 and 13 changed most).
 | 13 | news.ycombinator.com/item?id=50126253 | 10,287 | 0 | `[list: 35 items rebuilt …]`, media (the thread grew since the first run) |
 | 14 | www.youtube.com/watch?v=dQw4w9WgXcQ | 0 | 1 | refused: `curl_cffi: thin-146b`; hint: "this page is a JS app … that tier is sent no cookies" |
 | 15 | svelte.dev/ | 1,392 | 0 | media (18 images, 1 video) |
-| 16 | www.allrecipes.com/recipe/223042/chicken-parmesan/ | 0 | 1 | refused: `curl_cffi: http-403`, `Jina Reader: 451`. The first run fetched this page; **NOT RE-MEASURED** for its JSON-LD. |
+| 16 | www.allrecipes.com/recipe/223042/chicken-parmesan/ | 0 | 1 | fetch refused: `curl_cffi: http-403`, `Jina Reader: 451`; browser rung unavailable. The first run fetched this page; **JSON-LD extraction NOT RE-MEASURED**. |
 | 17 | www.notion.so/ | 3,382 | 0 | media (53 images, 1 video) |
 | 18 | www.wired.com/story/kernel-panic-… | 8,635 | 0 | context line, media |
 | 19 | hnrss.org/frontpage | 8,456 | 0 | no notes |
