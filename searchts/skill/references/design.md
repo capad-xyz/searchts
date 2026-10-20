@@ -20,7 +20,7 @@ get through fingerprint-gated CDNs and many bot-walls, not just open sites.
 searchts grab https://example.com --out ./inspo
 searchts grab https://example.com --kinds images,icons,svg   # only these kinds
 searchts grab https://example.com --read                     # also save page.md (the copy)
-searchts grab https://example.com --max 100                  # raise the asset cap (default 60)
+searchts grab https://example.com --max 200                  # raise the asset cap (default 120)
 searchts grab https://example.com --json                     # print the manifest to stdout
 ```
 
