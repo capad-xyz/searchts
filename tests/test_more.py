@@ -1086,6 +1086,36 @@ def test_pages_that_differ_are_not_called_repeats(monkeypatch):
     assert "served rows this walk had already read" not in got2[0].text
 
 
+def test_a_card_row_whose_link_is_on_the_next_line_still_counts_as_a_row(monkeypatch):
+    """A card list writes "- " on one line and the title on the next.
+
+    The old count matched the marker and the link across the line break, so
+    these rows counted. Keying them line by line made them count as nothing,
+    and a read of a card list said it had no rows at all.
+    """
+    card = (
+        "- \n"
+        "  [Alpha release notes](https://fixture.test/item/1) 10 points\n"
+        "    [Read more](https://fixture.test/item/1)\n"
+    )
+
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=card, status=200, final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list?p=1", 40)
+    first = got[0].text
+    # One row, read once: the four pages that follow served the same card.
+    assert "1 new row;" in first or "1 new rows;" in first
+    assert "4 rows the pages handed back again were not counted twice" in first
+    # And the card is not repeated on the pages that follow it.
+    assert "Alpha release notes" not in got[1].text
+
+
 def test_repeated_list_rows_take_their_byline_and_nothing_else_with_them():
     page = (
         "# Index\n\n"

@@ -3121,6 +3121,9 @@ _TABLE_ROW = re.compile(r"(?m)^[ \t]*\|[^\n]*\]\(https?://")
 # A link target on a row: with the row's words, its identity across the scroll
 # and the pages that follow it (see _row_key).
 _ROW_LINK = re.compile(r"\]\((https?://[^)\s]+)\)")
+#: A list marker with nothing after it on its line: a card list writes "- " on
+#: one line and the title with its link on the next.
+_BARE_MARKER = re.compile(r"(?:-|\d+\.)\s*$")
 
 
 def _is_refusal(err: UnlockerError) -> bool:
@@ -3207,15 +3210,23 @@ def _drop_repeated_rows(text: str, seen: set) -> str:
     """``text`` without the rows already in ``seen`` (see :func:`_row_keys`).
 
     A list row drags its indented byline and snippet lines with it; a table row
-    is one line. Everything that is not a repeated row stays byte for byte.
+    is one line. A card list writes the marker on one line and the title with
+    its link on the next, and that pair is one row. Everything that is not a
+    repeated row stays byte for byte.
     """
     out: List[str] = []
+    lines = (text or "").splitlines()
     skipping = False
-    for line in (text or "").splitlines():
+    for i, line in enumerate(lines):
         is_row = bool(_ITEM_LINE.match(line) or _TABLE_ROW.match(line))
         if is_row:
             skipping = bool(_ROW_LINK.search(line) and _row_key(line) in seen)
-        elif skipping and line.strip() and not line.startswith((" ", "\t")):
+        elif _BARE_MARKER.match(line):
+            # A card row: "- " on this line, the title and its link on the
+            # next. The pair is one row and the key is on the second line.
+            nxt = lines[i + 1] if i + 1 < len(lines) else ""
+            skipping = bool(_ROW_LINK.search(nxt) and _row_key(nxt) in seen)
+        elif line.strip() and not line.startswith((" ", "\t")):
             skipping = False
         if skipping:
             continue
@@ -3223,21 +3234,41 @@ def _drop_repeated_rows(text: str, seen: set) -> str:
     return "\n".join(out)
 
 
+def _row_key_lines(text: str) -> List[str]:
+    """The line that holds each row's link, one per row, in the order they come.
+
+    A row is what :func:`item_count` counts: a list marker with a link after
+    it, or a table row that carries a link. The link is often on the line
+    *after* the marker (a card list writes "- " on one line and the title on
+    the next), so a row is a span and not a line, and the line that holds the
+    link is the one that identifies it.
+    """
+    lines: List[str] = []
+    for pattern in (_ITEM_LINE, _TABLE_ROW):
+        for match in pattern.finditer(text or ""):
+            start = text.rfind("\n", 0, match.end()) + 1
+            end = text.find("\n", match.end())
+            lines.append(text[start : len(text) if end < 0 else end])
+    return lines
+
+
 def _row_count(text: str, seen: set) -> Tuple[int, int, set]:
     """(new rows, repeated rows, the keys the new rows had) in ``text``.
 
-    A row with a link is keyed the way the scroll path keys it (the links and
-    the words, without the numbers that drift), so the same row on two pages
-    is one row and is counted once. A row without a link cannot be told apart
-    from another row without a link, so it counts as new: dropping rows it
-    cannot identify would make the count short of the truth the other way.
+    The rows are the ones :func:`item_count` counts, so the count of a page
+    that has no repeats is the count it always was. What is new here is that
+    a row the walk has already read is counted once.
+
+    A row is keyed by the links and the words on the line that holds its link
+    (the scroll path's rule), so the same row on two pages is one row. A row
+    with no link at all cannot be told apart from another row with no link,
+    so it counts as new: a count that dropped rows it cannot identify would
+    be short of the truth the other way.
     """
     new = 0
     repeated = 0
     fresh: set = set()
-    for line in (text or "").splitlines():
-        if not (_ITEM_LINE.match(line) or _TABLE_ROW.match(line)):
-            continue
+    for line in _row_key_lines(text):
         if _ROW_LINK.search(line):
             key = _row_key(line)
             if key in seen or key in fresh:
