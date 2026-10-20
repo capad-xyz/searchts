@@ -429,6 +429,55 @@ def test_parse_chatgpt_codex_turns():
     assert turns[3][1] == "Tests added."
 
 
+def _codex_post(attachments):
+    return {
+        "loaderData": {
+            "routes/s.$postId": {
+                "postWithProfile": {
+                    "post": {
+                        "title": "Two attachments",
+                        "attachments": attachments,
+                    }
+                }
+            }
+        }
+    }
+
+
+def test_parse_chatgpt_codex_turns_reads_every_attachment():
+    """A second attachment is part of the share, not dropped after the first."""
+    first = {
+        "kind": "codex",
+        "turns": {"turn_mapping": {
+            "user-1": _codex_turn("user-1", "user", 1.0, "Build the thing"),
+            "asst-1": _codex_turn("asst-1", "assistant", 2.0, "Here is the plan.",
+                                  parent="user-1"),
+        }},
+    }
+    second = {
+        "kind": "codex",
+        "turns": {"turn_mapping": {
+            # The same turn id in a later attachment is the same turn.
+            "user-1": _codex_turn("user-1", "user", 1.0, "Build the thing"),
+            "user-2": _codex_turn("user-2", "user", 3.0, "Add tests.",
+                                  parent="asst-1"),
+            "asst-2": _codex_turn("asst-2", "assistant", 4.0, "Tests added.",
+                                  parent="user-2"),
+        }},
+    }
+    # The first attachment has no turns. It must not hide the one that does.
+    empty = {"kind": "codex", "turns": {}}
+    res = chatgpt._codex_turns(_codex_post([empty, first, second]))
+    assert res is not None
+    _title, turns = res
+    assert [text for _role, text in turns] == [
+        "Build the thing",
+        "Here is the plan.",
+        "Add tests.",
+        "Tests added.",
+    ]
+
+
 def test_parse_chatgpt_codex_turns_empty_or_wrong_shape():
     assert chatgpt._codex_turns({}) is None
     assert chatgpt._codex_turns({"loaderData": {}}) is None
