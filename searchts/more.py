@@ -1521,9 +1521,12 @@ def list_index(html: str, url: str, text: str) -> Optional[Tuple[str, More]]:
                 lines.append(f"  {p['snippet']}")
             lines.append("")
         what = ", ".join(lost[:-1]) + (" and " if len(lost) > 1 else "") + lost[-1]
+        # The rebuilt markdown already contains the titles, links and dates.
+        # Saying the extractor dropped them describes the read the caller is
+        # holding, which is the list with those fields in it.
         note = More(
             "index",
-            f"[list: {n} items rebuilt from the page; the extractor dropped their {what}]",
+            f"[list: {n} items rebuilt from the page; their {what} are in this list]",
         )
         return "\n".join(lines).strip(), note
     except Exception:  # noqa: BLE001 - never lose a read over the index

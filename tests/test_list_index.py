@@ -158,7 +158,7 @@ def test_bing_results_get_titles_and_real_links_back():
     assert rebuilt is not None
     md, note = rebuilt
     assert note.kind == "index"
-    assert note.note == "[list: 10 items rebuilt from the page; the extractor dropped their titles and links]"
+    assert note.note == "[list: 10 items rebuilt from the page; their titles and links are in this list]"
     assert md.startswith("# searchts - Search\n")
     assert "- [searchts · PyPI](https://pypi.org/project/searchts/)" in md
     assert "- [SearchTS MCP Server by Aadarsh Upadhyay | PulseMCP](https://www.pulsemcp.com/servers/capad-xyz-searchts)" in md
@@ -170,7 +170,7 @@ def test_hashnode_cards_get_links_and_stop_running_together():
     rebuilt = _index("hashnode_tag.html", "https://hashnode.com/tag/web-development")
     assert rebuilt is not None
     md, note = rebuilt
-    assert note.note == "[list: 10 items rebuilt from the page; the extractor dropped their links]"
+    assert note.note == "[list: 10 items rebuilt from the page; their links are in this list]"
     assert md.startswith("# #web-development\n")
     assert (
         "- [What is MERN Stack? Complete Beginner's Guide 2026]"
@@ -185,7 +185,7 @@ def test_django_weblog_gets_its_dates_back():
     rebuilt = _index("django_weblog.html", "https://www.djangoproject.com/weblog/")
     assert rebuilt is not None
     md, note = rebuilt
-    assert note.note == "[list: 10 items rebuilt from the page; the extractor dropped their dates]"
+    assert note.note == "[list: 10 items rebuilt from the page; their dates are in this list]"
     assert md.startswith("# News & Events\n")
     assert "  Posted by Sarah Abderemane on Sept. 24, 2026" in md.splitlines()
     assert "Read more" not in md
