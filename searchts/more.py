@@ -1615,7 +1615,7 @@ def _ld_nodes(html: str) -> List[Dict[str, Any]]:
 #: Markup that carries no reading text. A body kept as a string is full of it,
 #: and emitting it verbatim would put ``<p>`` in a reader's face.
 _VALUE_SCRIPTISH_RE = re.compile(
-    r"(?is)<(script|style|noscript|template|svg|iframe)\b[^>]*>.*?</\1\s*>"
+    r"(?is)<(script|style|noscript|template|svg|iframe)\b[^>]*>(?:.*?</\1\s*>|.*\Z)"
 )
 _VALUE_BREAK_RE = re.compile(r"(?i)<\s*(?:br\s*/?|/\s*(?:p|div|li|tr|h[1-6])\s*)>")
 _VALUE_TAG_NAMES = (

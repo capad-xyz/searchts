@@ -428,6 +428,18 @@ def test_encoded_script_markup_is_removed_after_entity_decoding():
     assert "See" in cleaned and "for why" in cleaned
 
 
+@pytest.mark.parametrize(
+    "value",
+    [
+        "Before. <script>alert(1)",
+        "Before. &lt;script&gt;alert(1)",
+    ],
+)
+def test_unclosed_script_markup_is_removed(value):
+    cleaned = more._plain_value(value)
+    assert cleaned == "Before."
+
+
 def test_unseen_app_state_does_not_hide_a_jsonld_article():
     visible = _paras(5, "nav")
     article = _words(350, "ld")
