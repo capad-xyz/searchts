@@ -927,7 +927,7 @@ def _prefer_structured(html: str, text: str) -> str:
     # visible article. Only let it replace an effectively empty shell; any
     # readable visible copy remains the lead and state can supplement it.
     has_short_sentence = (
-        len(re.findall(r"\b[\w'-]+\b", text)) >= 8
+        len(re.findall(r"\b[\w'-]+\b", text)) >= 3
         and re.search(r"[.!?](?:\s|$)", text) is not None
     )
     if (
@@ -1160,7 +1160,7 @@ def _is_refused_render(html: str, status: Optional[int]) -> bool:
     """
     if status is None or status < 400:
         return False
-    body = re.sub(r"(?is)<head\b[^>]*>.*?</head\s*>", " ", html or "")
+    body = re.sub(r"(?is)<head\b[^>]*>.*?(?:</head\s*>|$)", " ", html or "")
     return _visible_markup_len(_SCRIPTISH_RE.sub(" ", body)) == 0
 
 
@@ -1532,6 +1532,7 @@ def _await_hydration(
     """
     waited = 0
     painted_candidate: Optional[str] = None
+    painted_stability = 0
     latest_painted: Optional[str] = None
     while waited < budget_ms:
         page.wait_for_timeout(step_ms)
@@ -1545,17 +1546,26 @@ def _await_hydration(
         if len(current) > len(html):
             html = current
             painted_candidate = None
+            painted_stability = 0
             if not _is_unpainted(current):
                 latest_painted = current
             continue
         if not _is_unpainted(current):
             latest_painted = current
-            if len(current) < len(html) and current != painted_candidate:
-                painted_candidate = current
-                continue
+            if len(current) < len(html):
+                if current != painted_candidate:
+                    painted_candidate = current
+                    painted_stability = 1
+                else:
+                    painted_stability += 1
+                # A shorter header can paint before the page body. Require a
+                # third matching poll before treating a shorter DOM as settled.
+                if painted_stability < 3:
+                    continue
             html = current
             break
         painted_candidate = None
+        painted_stability = 0
     return latest_painted or html
 
 

@@ -344,6 +344,21 @@ def test_short_visible_article_is_not_replaced_by_related_app_state():
     assert read.startswith("Short article")
 
 
+def test_three_word_visible_sentence_stays_ahead_of_related_app_state():
+    visible = "Apple shipped it."
+    related = _paras(18, "related")
+    html = (
+        "<html><body><main><article><h1>News</h1><p>"
+        + visible
+        + "</p></article></main>"
+        + _state({"pageProps": {"related": [{"description": related}]}})
+        + "</body></html>"
+    )
+    read = _read(html)
+    assert visible in read
+    assert read.startswith("News")
+
+
 @pytest.mark.parametrize(
     "post",
     [
@@ -371,11 +386,46 @@ def test_state_field_cap_preserves_later_article_and_marks_partial_source():
     assert any("partial: extraction cap reached" in note for note in notes)
 
 
+def test_state_node_cap_marks_truncated(monkeypatch):
+    monkeypatch.setattr(more, "_STATE_MAX_NODES", 3)
+    walked = more._state_walk({"items": [{}, {}, {}, {}]}, more._Held())
+    assert walked.truncated
+
+
 def test_angle_bracket_comparisons_survive_plain_value_cleanup():
     value = "Before. Use a < b when left is smaller and m > n after. After."
     cleaned = more._plain_value(value)
     assert "a < b" in cleaned
     assert "m > n" in cleaned
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (
+            "<p>When i<n the loop stops.</p><p>The following paragraph explains the bound.</p>",
+            "When i<n the loop stops.\n\nThe following paragraph explains the bound.",
+        ),
+        (
+            "<p>Loop while <code>i<n</code> and then continue the proof.</p>",
+            "Loop while i<n and then continue the proof.",
+        ),
+        (
+            "if a <b and c > d then keep me entirely",
+            "if a <b and c > d then keep me entirely",
+        ),
+    ],
+)
+def test_plain_value_preserves_comparison_operators(value, expected):
+    assert more._plain_value(value) == expected
+
+
+def test_encoded_script_markup_is_removed_after_entity_decoding():
+    value = "<p>See &lt;script&gt;alert(1)&lt;/script&gt; for why.</p>"
+    cleaned = more._plain_value(value)
+    assert "<script>" not in cleaned
+    assert "alert(1)" not in cleaned
+    assert "See" in cleaned and "for why" in cleaned
 
 
 def test_unseen_app_state_does_not_hide_a_jsonld_article():

@@ -104,11 +104,46 @@ def test_bare_numeric_suffix_is_kept_for_multipage_article():
             "https://example.org/?p=123&page=2",
             "https://example.org/?p=123&page=3",
         ),
+        (
+            "https://example.org/?p=123",
+            "https://example.org/?p=123&page=2",
+        ),
     ],
 )
 def test_consecutive_numeric_page_markers_continue(current, target):
     html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
     assert "next-page" in _kinds(more.detect(html, current, "t"))
+
+
+def test_plain_permalink_wordpress_article_advances_from_page_one():
+    current = "https://example.org/?p=123"
+    target = "https://example.org/?p=123&page=2"
+    html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
+    assert "next-page" in _kinds(more.detect(html, current, "t"))
+
+
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [
+        ("https://example.org/?page_id=10", "https://example.org/?page_id=11"),
+        ("https://example.org/?author=2", "https://example.org/?author=3"),
+        ("https://example.org/", "https://example.org/?p=123"),
+        ("https://example.org/?p=123", "https://example.org/?cat=4"),
+    ],
+)
+def test_root_query_document_changes_are_not_pagination(current, target):
+    html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
+    assert "next-page" not in _kinds(more.detect(html, current, "t"))
+
+
+def test_article_pagination_note_does_not_recommend_item_reading():
+    current = "https://example.org/blog/a-long-article/"
+    target = "https://example.org/blog/a-long-article/2/"
+    nav = f'<nav><a href="{target}">Next page</a></nav>'
+    found = more.detect(_page(nav), current, "t")
+    note = next(item.note for item in found if item.kind == "paginated")
+    assert note == more.PAGINATED_DOCUMENT_NOTE
+    assert "--items" not in note
 
 
 @pytest.mark.parametrize(
@@ -706,7 +741,7 @@ def test_fetch_carries_next_url_and_a_trailing_note(monkeypatch):
     assert r.more[0] == {"kind": "next-page", "note": "[more: the next page is https://example.org/blog/page/2/]",
                          "url": "https://example.org/blog/page/2/"}
     assert [m["kind"] for m in r.more] == ["next-page", "paginated"]
-    assert r.text.rstrip().endswith(more.PAGINATED_NOTE)
+    assert r.text.rstrip().endswith(more.PAGINATED_DOCUMENT_NOTE)
     assert r.page_html is None  # the HTML is never returned
 
 

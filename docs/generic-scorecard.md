@@ -50,8 +50,8 @@ No host in this table is in `searchts/known_hosts` or `searchts/share_extractors
 
 - **First run (2026-10-17): 17 of 20 reads returned content** (rows 1, 2, 3, 4,
   5, 6, 8, 9, 11, 12, 13, 15, 16, 17, 18, 19, 20; rows 7, 10 and 14 refused).
-  **At the branch tip (2026-10-18, table below): 16 of 20**, because row 16
-  was refused with 403 on the re-run.
+  **At the branch tip (2026-10-18, table below): 17 of 20**: row 10 now reads,
+  and row 16 was refused with 403 on the re-run.
 - **Three refused in the first run for a real wall or a real shell** (7, 14) or
   for a false wall the classifier can name but not read through (10). Row 10 was
   that false wall; it reads now, so at the tip only two are refusals of that kind

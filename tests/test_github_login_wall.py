@@ -150,7 +150,7 @@ def test_the_login_page_is_still_an_auth_wall(live_login):
     """The cost of the fix, stated as a test: the true wall still reads.
 
     Same classifier, same extract path, real saved page. It is caught by the
-    family, at 6.33 auth hits per 100 words against a threshold of 2.0, which is
+    family, at 6.58 auth hits per 100 words against a threshold of 2.0, which is
     what is supposed to carry it.
     """
     text = unlocker.html_to_text(live_login, LOGIN_URL)

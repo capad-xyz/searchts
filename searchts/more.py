@@ -66,6 +66,10 @@ PAGINATED_NOTE = (
     "--pages N (MCP max_pages) reads the next pages, "
     "--items N (MCP max_items) reads their rows]"
 )
+PAGINATED_DOCUMENT_NOTE = (
+    "[paginated: this URL is one page of a multipage document, and there are more; "
+    "--pages N (MCP max_pages) reads the next pages]"
+)
 #: Explicit trailing page markers. Bare numeric suffixes are compared as URL
 #: pairs in :func:`_continues`, where sibling post IDs can be refused.
 _PAGE_SEG_RE = re.compile(r"/page[-_/]?\d{1,4}$", re.I)
@@ -211,12 +215,30 @@ def _continues(target: str, url: str) -> bool:
             current_query = dict(parse_qsl(current_parts.query))
             target_post = target_query.get("p")
             current_post = current_query.get("p")
-            if target_post and current_post:
-                if target_post != current_post:
+            if target_post or current_post:
+                # Hacker News uses p=2, p=3 as its root listing pager. A lone
+                # small p value is that convention; larger p values are
+                # WordPress post IDs and require the same ID plus page=N.
+                if (
+                    not current_post
+                    and target_post
+                    and target_post.isdigit()
+                    and 1 < int(target_post) <= 100
+                    and not (set(target_query) - {"p"})
+                ):
+                    return True
+                if not target_post or target_post != current_post:
                     return False
-                target_page = target_query.get("page")
-                current_page = current_query.get("page")
-                return bool(target_page and current_page and target_page != current_page)
+                try:
+                    target_page = int(target_query.get("page") or "1")
+                    current_page = int(current_query.get("page") or "1")
+                except ValueError:
+                    return False
+                return target_page == current_page + 1
+            page_keys = {"page", "paged", "offset", "first", "start"}
+            target_identity = {key: value for key, value in target_query.items() if key not in page_keys}
+            current_identity = {key: value for key, value in current_query.items() if key not in page_keys}
+            return target_identity == current_identity
         return True
     # A bare number is only a page marker when it is appended to the other
     # URL's path (for example /article/123/2). Two sibling numeric IDs such as
@@ -879,9 +901,8 @@ def _best_list(doc) -> Optional[List]:
     return best
 
 
-def _list_kept(doc, text: str) -> Optional[Tuple[int, int]]:
+def _list_kept_items(best, text: str) -> Optional[Tuple[int, int]]:
     """(items on the page, items the extract kept) for a list the page is made of."""
-    best = _best_list(doc)
     if not best:
         return None
     lowered = _norm(text).lower()
@@ -889,6 +910,10 @@ def _list_kept(doc, text: str) -> Optional[Tuple[int, int]]:
     if kept > _LIST_MAX_KEPT * len(best):
         return None
     return len(best), kept
+
+
+def _list_kept(doc, text: str) -> Optional[Tuple[int, int]]:
+    return _list_kept_items(_best_list(doc), text)
 
 
 def _counts(doc) -> List[str]:
@@ -1239,12 +1264,16 @@ def detect(
         if source:
             found.append(source)
         base = _base_url(doc, url)
+        best_list = _best_list(doc)
+        listed = _list_kept_items(best_list, text)
         nxt = _next_page(doc, base, url)
         is_feed, load_more_url = _feed(doc, base, url)
         nxt = nxt or load_more_url or _header_next(headers, base, url)
         if nxt:
             found.append(More("next-page", f"[more: the next page is {nxt}]", nxt))
-            found.append(More("paginated", PAGINATED_NOTE))
+            found.append(
+                More("paginated", PAGINATED_NOTE if best_list else PAGINATED_DOCUMENT_NOTE)
+            )
         if is_feed:
             found.append(
                 More(
@@ -1270,7 +1299,6 @@ def detect(
                     "empty in the page; that text loads on click]",
                 )
             )
-        listed = _list_kept(doc, text)
         if listed:
             total, kept = listed
             found.append(More("list", f"[partial: the page lists {total} items; this read kept {kept}]"))
@@ -1590,6 +1618,20 @@ _VALUE_SCRIPTISH_RE = re.compile(
     r"(?is)<(script|style|noscript|template|svg|iframe)\b[^>]*>.*?</\1\s*>"
 )
 _VALUE_BREAK_RE = re.compile(r"(?i)<\s*(?:br\s*/?|/\s*(?:p|div|li|tr|h[1-6])\s*)>")
+_VALUE_TAG_NAMES = (
+    "a|article|aside|b|blockquote|br|caption|code|dd|div|dl|dt|em|figcaption|figure|"
+    "h[1-6]|hr|i|li|main|ol|p|pre|section|small|span|strong|sub|sup|table|tbody|td|"
+    "th|thead|tr|u|ul"
+)
+_VALUE_TAG_RE = re.compile(
+    rf"(?is)</?(?P<tag>{_VALUE_TAG_NAMES})\b[^<>]*>"
+)
+_VALUE_VOID_RE = re.compile(
+    r"(?is)<\s*(?:area|base|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b[^<>]*>"
+)
+_VALUE_BLOCK_TAGS = frozenset(
+    {"blockquote", "dd", "div", "dl", "dt", "li", "ol", "p", "pre", "section", "table", "tbody", "td", "th", "thead", "tr", "ul"}
+)
 
 
 def _plain_value(value: str) -> str:
@@ -1603,10 +1645,46 @@ def _plain_value(value: str) -> str:
     import html as _html
 
     t = _VALUE_SCRIPTISH_RE.sub(" ", value or "")
-    if re.search(r"</?[A-Za-z][^>]*>", t):
-        t = _VALUE_BREAK_RE.sub("\n", t)
-        t = re.sub(r"(?s)</?[A-Za-z][^>]*>", "", t)
-        t = _html.unescape(t)
+    # Only remove recognized HTML tags when an opening/closing pair exists.
+    # A broad ``<word ...>`` pattern eats technical prose such as ``i<n`` or
+    # ``a <b and c > d``. Paired tags also let malformed comparison text pass
+    # through without interpreting it as markup.
+    for _ in range(3):
+        tags = {
+            match.group("tag").lower()
+            for match in _VALUE_TAG_RE.finditer(t)
+            if not match.group(0).startswith("</")
+        }
+        closers = {
+            match.group("tag").lower()
+            for match in _VALUE_TAG_RE.finditer(t)
+            if match.group(0).startswith("</")
+        }
+        paired = tags & closers
+        if not paired:
+            break
+        pair_re = re.compile(
+            rf"(?is)<(?P<tag>{'|'.join(sorted(paired))})\b[^<>]*>(.*?)</(?P=tag)\s*>"
+        )
+        updated = pair_re.sub(
+            lambda match: (
+                "\n" + match.group(2) + "\n"
+                if match.group("tag").lower() in _VALUE_BLOCK_TAGS
+                else match.group(2)
+            ),
+            t,
+        )
+        if updated == t:
+            break
+        t = updated
+    t = _VALUE_SCRIPTISH_RE.sub(" ", t)
+    t = _VALUE_BREAK_RE.sub("\n", t)
+    t = _VALUE_VOID_RE.sub(" ", t)
+    t = _html.unescape(t)
+    # Entity decoding can reveal markup after the first pass.
+    t = _VALUE_SCRIPTISH_RE.sub(" ", t)
+    t = _VALUE_BREAK_RE.sub("\n", t)
+    t = _VALUE_VOID_RE.sub(" ", t)
     return t.strip()
 
 
@@ -1632,6 +1710,8 @@ def _strings(node: Any, *, on_truncate=None) -> List[str]:
             stack.extend(value[key] for key in reversed(keys) if key in value)
         elif isinstance(value, list):
             stack.extend(reversed(value))
+    if stack and on_truncate is not None:
+        on_truncate()
     return out
 
 
@@ -1868,15 +1948,19 @@ class _StateWalk:
         return self.nodes > _STATE_MAX_NODES or self.chars >= _STATE_MAX_CHARS
 
     def walk(self, node: Any, key: str = "") -> None:
-        if self.out_of_budget():
+        if self.chars >= _STATE_MAX_CHARS:
+            self.truncated = True
             return
+        if self.nodes >= _STATE_MAX_NODES:
+            self.truncated = True
+            return
+        self.nodes += 1
         if isinstance(node, list):
             for item in node:
                 self.walk(item, key)
             return
         if not isinstance(node, dict):
             return
-        self.nodes += 1
         if self.out_of_budget():
             return
         bodies: List[str] = []
@@ -1889,13 +1973,21 @@ class _StateWalk:
             if not isinstance(value, (str, list, dict)):
                 continue
             field_bodies: List[str] = []
-            for text in _strings(
+            values = _strings(
                 value, on_truncate=lambda: setattr(self, "truncated", True)
-            ):
+            )
+            for text in values:
                 prose = _prose(text)
                 if not prose or self.held.has(prose):
                     continue
                 field_bodies.append(prose)
+            # Portable-text trees often split one paragraph into short spans.
+            # If no leaf qualifies alone, judge their combined body text.
+            if not field_bodies and len(values) > 1:
+                joined = "\n\n".join(value for value in values if value.strip())
+                prose = _prose(joined)
+                if prose and not self.held.has(prose):
+                    field_bodies.append(prose)
             if field_bodies:
                 field_chars = sum(len(body) for body in field_bodies)
                 if self.chars + pending_chars + field_chars > _STATE_MAX_CHARS:
@@ -2177,7 +2269,12 @@ def visible_text(html: str) -> str:
     return _plain(_html.unescape(_TAG_RE_ALL.sub(" ", "".join(out))))
 
 
-def data_source_note(html: str, text: str) -> Optional[More]:
+def data_source_note(
+    html: str,
+    text: str,
+    *,
+    chunks: Optional[List[Tuple[str, str, List[str]]]] = None,
+) -> Optional[More]:
     """F24b: where the read's text came from, when the page's data supplied it.
 
     A fact about these two strings rather than a second opinion about the page.
@@ -2193,11 +2290,12 @@ def data_source_note(html: str, text: str) -> Optional[More]:
     """
     if not html or not text:
         return None
-    whole = page_data_text(html)
+    pieces = chunks if chunks is not None else page_data_chunks(html)
+    whole = page_data_text(html, chunks=pieces)
     if whole and _norm(text) == _norm(whole) and plain_len(whole) >= _STRUCTURED_MIN_CHARS:
         return More(
             "source",
-            f"[source: {_source_names(html)}, the page's own data; "
+            f"[source: {_source_names(html, chunks=pieces)}, the page's own data; "
             f"{plain_len(whole):,} characters read from it]",
         )
     if len(html) > _NOTE_MAX_HTML:
@@ -2205,7 +2303,7 @@ def data_source_note(html: str, text: str) -> Optional[More]:
     # The words the markup does not carry are the ones the data had to supply,
     # because an extract is made of markup. The same answer the read gave,
     # asked of the page instead of of the text.
-    blocks = page_state_blocks(html, visible_text(html))
+    blocks = page_state_blocks(html, visible_text(html), chunks=pieces)
     if not blocks:
         return None
     data = _plain("\n\n".join(body for _, body in blocks))
@@ -2226,9 +2324,14 @@ def data_source_note(html: str, text: str) -> Optional[More]:
     )
 
 
-def _source_names(html: str) -> str:
+def _source_names(
+    html: str,
+    *,
+    chunks: Optional[List[Tuple[str, str, List[str]]]] = None,
+) -> str:
     """The blobs this page ships, in the order the read walks them."""
-    names = list(dict.fromkeys(name for name, _, _ in page_data_chunks(html)))
+    pieces = chunks if chunks is not None else page_data_chunks(html)
+    names = list(dict.fromkeys(name for name, _, _ in pieces))
     if not names:
         names = ["JSON-LD"] if _LD_MARKER in (html or "") else []
         names.extend(name for name, _ in _state_blobs(html))

@@ -42,6 +42,12 @@ from searchts import unlocker
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
+
+@pytest.fixture(autouse=True)
+def isolate_browser_profile(monkeypatch, tmp_path):
+    """Keep every browser-rung test profile under pytest's temporary tree."""
+    monkeypatch.setattr(unlocker, "_BROWSER_PROFILE_DIR", tmp_path / "browser-profile")
+
 #: The shell as served, and the same page after its bundle ran.
 SHELL = (FIXTURES / "app_shell_paints_late.html").read_text(encoding="utf-8")
 RENDERED = (FIXTURES / "app_shell_paints_late_rendered.html").read_text(
@@ -122,6 +128,15 @@ def test_a_shorter_header_does_not_end_a_later_hydration():
     assert len(header) < len(shell) and len(article) < len(shell)
     page = _Page([header, article, article])
     assert unlocker._await_hydration(page, shell, budget_ms=2000, step_ms=500) == article
+
+
+def test_a_stable_short_header_gets_more_time_to_paint_the_article():
+    shell = "<html><body><script>" + ("bootstrap " * 450) + "</script></body></html>"
+    header = "<html><body><header>" + ("Site navigation, account, and a short welcome title. " * 8) + "</header></body></html>"
+    article = "<html><body><main><p>" + ("The full article is now visible to readers. " * 30) + "</p></main></body></html>"
+    page = _Page([header, header, article, article])
+    assert unlocker._await_hydration(page, shell, budget_ms=2000, step_ms=500) == article
+    assert len(page.timeouts) >= 4
 
 
 def test_latest_shorter_painted_dom_survives_when_it_keeps_changing():
@@ -207,6 +222,15 @@ def test_a_refusal_that_rendered_text_still_reports_200(monkeypatch):
 
 def test_a_title_only_refusal_is_not_promoted_to_200(monkeypatch):
     title_only = "<html><head><title>403 Forbidden</title></head><body></body></html>"
+    assert unlocker._is_refused_render(title_only, 403) is True
+    status, _html, _final, _headers = _run_rung(
+        monkeypatch, frames=[title_only], goto_status=403
+    )
+    assert status == 403
+
+
+def test_an_unclosed_title_only_refusal_is_not_promoted_to_200(monkeypatch):
+    title_only = "<html><head><title>403 Forbidden</title>"
     assert unlocker._is_refused_render(title_only, 403) is True
     status, _html, _final, _headers = _run_rung(
         monkeypatch, frames=[title_only], goto_status=403
