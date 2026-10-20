@@ -28,7 +28,9 @@ def _kinds(found):
 
 def test_link_rel_next_in_head():
     found = more.detect(_page("", head='<link rel="next" href="/blog/page/2/">'), URL, "text")
-    assert _kinds(found) == ["next-page"]
+    # A next page now also says which knob asks for it (F23e). The next-page
+    # note itself is unchanged.
+    assert _kinds(found) == ["next-page", "paginated"]
     assert found[0].url == "https://example.org/blog/page/2/"
     assert "https://example.org/blog/page/2/" in found[0].note
 
@@ -66,6 +68,107 @@ def test_not_a_next_page(inner):
     assert "next-page" not in _kinds(more.detect(_page(inner), URL, "t"))
 
 
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [
+        ("https://example.org/posts/123", "https://example.org/posts/124"),
+        ("https://example.org/?p=123", "https://example.org/?p=124"),
+    ],
+)
+def test_numeric_post_ids_are_not_pagination(current, target):
+    html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
+    assert "next-page" not in _kinds(more.detect(html, current, "t"))
+
+
+def test_bare_numeric_suffix_is_kept_for_multipage_article():
+    found = more.detect(
+        _page("", head='<link rel="next" href="/blog/long-post/2/">'),
+        "https://example.org/blog/long-post/",
+        "text",
+    )
+    assert found[0].url == "https://example.org/blog/long-post/2/"
+
+
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [
+        (
+            "https://example.org/blog/long-post/2/",
+            "https://example.org/blog/long-post/3/",
+        ),
+        (
+            "https://example.org/long-post/2/",
+            "https://example.org/long-post/3/",
+        ),
+        (
+            "https://example.org/blog/my-long-article/1/",
+            "https://example.org/blog/my-long-article/2/",
+        ),
+        (
+            "https://example.org/?p=123&page=2",
+            "https://example.org/?p=123&page=3",
+        ),
+        (
+            "https://example.org/?p=123",
+            "https://example.org/?p=123&page=2",
+        ),
+    ],
+)
+def test_consecutive_numeric_page_markers_continue(current, target):
+    html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
+    assert "next-page" in _kinds(more.detect(html, current, "t"))
+
+
+def test_root_query_pagination_chains_but_arbitrary_post_id_does_not():
+    html = '<html><head><link rel="next" href="/?p=3"></head><body><p>Page text.</p></body></html>'
+    assert "next-page" in _kinds(more.detect(html, "https://news.ycombinator.com/?p=2", "t"))
+    arbitrary = html.replace("/?p=3", "/?p=10")
+    assert "next-page" not in _kinds(more.detect(arbitrary, "https://example.org/", "t"))
+
+
+def test_plain_permalink_wordpress_article_advances_from_page_one():
+    current = "https://example.org/?p=123"
+    target = "https://example.org/?p=123&page=2"
+    html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
+    assert "next-page" in _kinds(more.detect(html, current, "t"))
+
+
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [
+        ("https://example.org/?page_id=10", "https://example.org/?page_id=11"),
+        ("https://example.org/?author=2", "https://example.org/?author=3"),
+        ("https://example.org/", "https://example.org/?p=123"),
+        ("https://example.org/?p=123", "https://example.org/?cat=4"),
+    ],
+)
+def test_root_query_document_changes_are_not_pagination(current, target):
+    html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
+    assert "next-page" not in _kinds(more.detect(html, current, "t"))
+
+
+def test_article_pagination_note_does_not_recommend_item_reading():
+    current = "https://example.org/blog/a-long-article/"
+    target = "https://example.org/blog/a-long-article/2/"
+    nav = f'<nav><a href="{target}">Next page</a></nav>'
+    found = more.detect(_page(nav), current, "t")
+    note = next(item.note for item in found if item.kind == "paginated")
+    assert note == more.PAGINATED_DOCUMENT_NOTE
+    assert "--items" not in note
+
+
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [
+        ("https://example.org/posts/123", "https://example.org/posts/124"),
+        ("https://example.org/posts/2", "https://example.org/posts/3"),
+    ],
+)
+def test_sibling_numeric_post_ids_are_not_pages(current, target):
+    html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
+    assert "next-page" not in _kinds(more.detect(html, current, "t"))
+
+
 # ── feeds ────────────────────────────────────────────────────────────────────
 
 
@@ -82,7 +185,7 @@ def test_load_more_button_is_a_feed():
 
 def test_load_more_link_is_the_next_page():
     found = more.detect(_page('<a href="/blog/page/2/">Load more posts</a>'), URL, "t")
-    assert _kinds(found) == ["next-page"]
+    assert _kinds(found) == ["next-page", "paginated"]
     assert found[0].url == "https://example.org/blog/page/2/"
 
 
@@ -646,9 +749,10 @@ def test_fetch_carries_next_url_and_a_trailing_note(monkeypatch):
     _curl(monkeypatch, html)
     r = unlocker.fetch(URL, backends=["curl_cffi"], use_memory=False)
     assert r.next_url == "https://example.org/blog/page/2/"
-    assert r.more == [{"kind": "next-page", "note": "[more: the next page is https://example.org/blog/page/2/]",
-                       "url": "https://example.org/blog/page/2/"}]
-    assert r.text.rstrip().endswith("[more: the next page is https://example.org/blog/page/2/]")
+    assert r.more[0] == {"kind": "next-page", "note": "[more: the next page is https://example.org/blog/page/2/]",
+                         "url": "https://example.org/blog/page/2/"}
+    assert [m["kind"] for m in r.more] == ["next-page", "paginated"]
+    assert r.text.rstrip().endswith(more.PAGINATED_DOCUMENT_NOTE)
     assert r.page_html is None  # the HTML is never returned
 
 
@@ -884,6 +988,188 @@ def test_scroll_rows_are_not_repeated_by_the_pages_walk(monkeypatch):
     # wanted in all, not what the page walk left over: asking for the
     # remainder is how it came back with rows the walk already had.
     assert asked == [300]
+
+
+# ── a next page that serves the copy again ───────────────────────────────────
+
+
+def _list_rows(first: int, count: int = 10) -> str:
+    return "\n".join(
+        f"- [Post {i}](https://example.org/post/{i}) by someone, 2h"
+        for i in range(first, first + count)
+    )
+
+
+def test_a_next_page_with_the_same_rows_is_not_counted_twice(monkeypatch):
+    """A pager that points at itself must not inflate the row count.
+
+    The count is the claim the caller makes about how much of the list was
+    read. A site that serves the same list on every page would make the walk
+    claim forty rows of a ten row list, and the caller cannot check it.
+    """
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_list_rows(1), status=200, final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list?p=1", 40)
+    first = got[0].text
+    # Ten rows, not forty: the pages after the first were the same rows again.
+    assert "10 new rows" in first
+    assert "40 rows the pages handed back again, not counted twice" in first
+    # And the walk says the pages were ones it had already read.
+    assert "4 pages served rows this walk had already read" in first
+    # The rows are returned once. The later page keeps what is its own and
+    # leaves the rows the first page already gave.
+    assert "- [Post 1](https://example.org/post/1)" not in got[1].text
+    assert "Post 10" not in got[1].text
+
+
+def test_a_next_page_with_some_new_rows_counts_only_those(monkeypatch):
+    """A page that overlaps the one before it is not all new, and not all old."""
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_list_rows(1 + 5 * (p - 1), 10), status=200,
+            final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}" if p == 1 else None,
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list?p=1", 40)
+    first = got[0].text
+    # Fifteen rows the walk had not read and five it had: posts 6-10 of the
+    # second page were posts 6-10 of the first page.
+    assert "15 new rows" in first
+    assert "5 rows the pages handed back again, not counted twice" in first
+    # The rows the first page gave are not given again on the second page.
+    assert "- [Post 6](https://example.org/post/6)" not in got[1].text
+    assert "- [Post 11](https://example.org/post/11)" in got[1].text
+
+
+def test_the_repeat_note_says_one_row_when_one_row_came_back(monkeypatch):
+    """A count of one is a row, not "1 rows"."""
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_list_rows(1 + 9 * (p - 1), 10), status=200,
+            final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}" if p == 1 else None,
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list?p=1", 40)
+    first = got[0].text
+    assert "19 new rows; 1 row the pages handed back again, not counted twice" in first
+
+
+def test_the_feed_repeat_note_says_one_row_when_one_row_came_back(monkeypatch):
+    """A count of one from the feed's own cursor is a row, not "1 the feed".
+
+    The feed-cursor path is the one the known hosts take (``index_keys``), and
+    its repeat note read "n the feed handed back again were not counted twice":
+    a count with no noun in it. The cursor that hands back exactly one row the
+    walk already had is the smallest case where the note sings alone.
+    """
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        top = 11 if p == 1 else 1  # page two names one row page one already had
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_list_rows(1, top), status=200, final_url=url,
+            index_keys=[f"https://example.org/post/{i}" for i in range(1, top + 1)],
+            next_url=f"https://example.org/feed?p={p + 1}" if p == 1 else None,
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/feed?p=1", 40)
+    first = got[0].text
+    assert "11 new rows; 1 row the feed handed back again, not counted twice" in first
+
+
+def test_the_capped_walk_says_one_row_when_one_row_came_back(monkeypatch):
+    """"1 rows of 40" is not a sentence, and the page cap is still one page."""
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_list_rows(1, 1), status=200, final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    monkeypatch.setenv("SEARCHTS_MAX_PAGES", "1")
+    got = unlocker.read_items("https://example.org/list?p=1", 40)
+    first = got[0].text
+    assert "[pages: 1 row of 40, stopped after 1 page" in first
+    assert "1 rows" not in first
+
+
+def test_a_next_page_with_the_same_copy_is_named(monkeypatch):
+    """The text walk says when a page served the copy a page already had.
+
+    The pages are still returned: the walk read them and the caller asked for
+    pages, not for pages that differ. But a page list that hid four copies of
+    one page would be a claim the reader cannot check.
+    """
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text="the same words on every page", status=200,
+            final_url=url, next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_pages("https://example.org/list?p=1", 5)
+    assert len(got) == 5
+    assert "4 pages served the same content as a page already read" in got[0].text
+
+
+def test_pages_that_differ_are_not_called_repeats(monkeypatch):
+    """A pager whose pages differ is a pager, not a loop."""
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=f"page {p} of the list", status=200,
+            final_url=url, next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_pages("https://example.org/list?p=1", 5)
+    assert "served the same content" not in got[0].text
+    got2 = unlocker.read_items("https://example.org/list?p=1", 40)
+    assert "served rows this walk had already read" not in got2[0].text
+
+
+def test_a_card_row_whose_link_is_on_the_next_line_still_counts_as_a_row(monkeypatch):
+    """A card list writes "- " on one line and the title on the next.
+
+    The old count matched the marker and the link across the line break, so
+    these rows counted. Keying them line by line made them count as nothing,
+    and a read of a card list said it had no rows at all.
+    """
+    card = (
+        "- \n"
+        "  [Alpha release notes](https://fixture.test/item/1) 10 points\n"
+        "    [Read more](https://fixture.test/item/1)\n"
+    )
+
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=card, status=200, final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list?p=1", 40)
+    first = got[0].text
+    # One row, read once: the four pages that follow served the same card.
+    assert "1 new row;" in first
+    assert "4 rows the pages handed back again, not counted twice" in first
+    # And the card is not repeated on the pages that follow it.
+    assert "Alpha release notes" not in got[1].text
 
 
 def test_repeated_list_rows_take_their_byline_and_nothing_else_with_them():

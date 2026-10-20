@@ -766,10 +766,13 @@ MAX_HTML_BYTES = 20 * 1024 * 1024
 #: book page is already beyond what an agent will read, and every consumer here
 #: (MCP response, search index, transcript) pays for it more than once.
 MAX_TEXT_CHARS = 400_000
-#: F24b: how much bigger the page's structured body has to be than the extract
-#: to replace it. One word in ten, so a formatted article that says the same
+#: F24b: how much bigger the page's own data has to be than the extract to
+#: replace it. One word in ten, so a formatted article that says the same
 #: thing keeps its Markdown.
 _STRUCTURED_MARGIN = 1.1
+#: Below this the data is a caption or a teaser, so it sits under the extract
+#: only when there is a paragraph's worth of it.
+_SUPPLEMENT_MIN_CHARS = 600
 
 #: Wall-clock budget for the extraction parse itself. This is the CPU class the
 #: other two caps do not cover: a small, pathological document can burn arbitrary
@@ -868,13 +871,18 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     and comes back as navigation, so on those the crude strip wins: whole beats
     clean when clean is chrome.
 
-    F24b: when that all comes back thinner than the JSON-LD the same bytes
-    carry, the structured body wins. Same download, no second request, and only
-    ever as the *richer* of the two.
+    F24b: when that all comes back thinner than the data the same bytes carry,
+    the data wins. Same download, no second request: either it is the *richer*
+    of the two and replaces the extract, or it holds a paragraph the extract
+    never showed and sits under it. A page that ships no data costs one
+    substring test, and one that ships data this cannot read costs a failed
+    ``json.loads``.
     """
     body = cap_html(html)
     try:
-        text = cap_text(_extract_within(body, url, EXTRACTION_TIMEOUT) or "")
+        text = cap_text(
+            _extract_within(_without_page_data(body), url, EXTRACTION_TIMEOUT) or ""
+        )
     except _ExtractionTimeout:
         text = cap_text(_tidy_crude(_strip_html(body), url))
     except Exception:
@@ -882,22 +890,60 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
     return _prefer_structured(body, text)
 
 
+def _without_page_data(html: str) -> str:
+    """The page with the scripts the page-data reader owns taken out of it."""
+    from searchts.more import drop_data_scripts
+
+    return drop_data_scripts(html)
+
+
 def _prefer_structured(html: str, text: str) -> str:
-    """F24b: the page's own JSON-LD, when the extractor came back thinner.
+    """F24b: the page's own data, against an extract that may already say it.
+
+    Two ways in, in that order. The data replaces the extract when it is the
+    richer of the two by :data:`_STRUCTURED_MARGIN`, because a shell page that
+    carries its article in a script has nothing else to give. Failing that the
+    page's own app state is asked what the extract never said, and sits under
+    it as a section when that is a paragraph or more, so a page whose markup
+    reads well gains the answers the markup hid instead of repeating itself.
 
     Both sides are compared the same way (:func:`_plain_len`), so "thinner"
-    means fewer visible characters rather than fewer bytes of markup, and the
-    data has to win by a margin so a flat blob never replaces formatted prose
-    that says the same thing. A page that ships no data costs one substring
-    test, and one that ships data it cannot read costs a failed ``json.loads``.
+    means fewer visible characters rather than fewer bytes of markup.
     """
-    if "application/ld+json" not in html:
-        return text
-    from searchts.more import plain_len, structured_text
+    from searchts.more import page_data_chunks, page_data_text, page_state_blocks, plain_len
 
-    data = structured_text(html)
-    if data and plain_len(data) >= _STRUCTURED_MARGIN * plain_len(text):
-        return cap_text(data)
+    chunks = page_data_chunks(html)
+    if not chunks:
+        return text
+    whole = page_data_text(html, chunks=chunks)
+    data = page_state_blocks(html, text, chunks=chunks)
+    jsonld = page_data_text(html, source="JSON-LD", chunks=chunks)
+    # JSON-LD is a typed article body and retains the original replacement
+    # behavior. App state also contains related cards and SEO descriptions;
+    # its total length cannot establish that it is the page's main article.
+    # Let app state replace only a shell extract, and otherwise use the
+    # deduplicated supplement path below.
+    # App state often contains longer related-card descriptions than the
+    # visible article. Only let it replace an effectively empty shell; any
+    # readable visible copy remains the lead and state can supplement it.
+    has_short_sentence = (
+        len(re.findall(r"\b[\w'-]+\b", text)) >= 3
+        and re.search(r"[.!?](?:\s|$)", text) is not None
+    )
+    if (
+        plain_len(text) < 120
+        and not has_short_sentence
+        and plain_len(whole) >= _STRUCTURED_MARGIN * plain_len(text)
+    ):
+        return cap_text(whole)
+    if jsonld and plain_len(jsonld) >= _STRUCTURED_MARGIN * plain_len(text):
+        text = jsonld
+        data = page_state_blocks(html, text, chunks=chunks)
+    kept = sum(plain_len(body) for _, body in data)
+    if kept >= _SUPPLEMENT_MIN_CHARS:
+        return cap_text(
+            (text or "").rstrip() + "\n\n" + "\n\n".join(body for _, body in data)
+        )
     return text
 
 
@@ -1003,6 +1049,13 @@ _APP_SHELL_MAX_VISIBLE = 1_200
 _APP_SHELL_MIN_INLINE = 50_000
 _TAG_RE = re.compile(r"(?s)<[^>]*>")
 _INLINE_SCRIPT_RE = re.compile(r"(?is)<script\b(?![^>]*\bsrc=)[^>]*>(.*?)</script\s*>")
+#: Visible characters in a rendered DOM below which the page has not painted for
+#: a reader yet. Measured 2026-10-18 on a served app shell: 8 characters of
+#: visible markup (a ``<title>``) held steady for 2.0s while the module bundle
+#: downloaded, then the same document showed 308 the moment the bundle ran.
+#: Anything a reader came for is far above this, so the floor only decides how
+#: long a client app is given before it is called settled.
+_PAINTED_MIN_VISIBLE = 200
 
 
 def _visible_markup_len(markup: str) -> int:
@@ -1069,6 +1122,50 @@ def _is_app_shell(html: str, text: str) -> bool:
             or _inline_script_chars(html) >= _APP_SHELL_MIN_INLINE
         )
     )
+
+
+def _is_unpainted(html: str) -> bool:
+    """True when a rendered DOM shows too little text to be the page.
+
+    The rendered document, not the extract: this asks whether the *browser* has
+    shown the reader anything, and it is the question the hydration wait needs.
+    A shell and a settled page look identical at ``domcontentloaded``, and the
+    only difference arrives later, so a caller that stops at "the length did
+    not change" reads the shell and calls the page thin.
+
+    The floor is deliberately loose: 200 visible characters is below any real
+    article and above the title-only document an app shows before its bundle
+    runs. It is a "has anything happened yet" test, not a quality one, so it
+    never decides a page is good. Only the extractor does that.
+    """
+    if not html:
+        return True
+    return _visible_markup_len(_SCRIPTISH_RE.sub(" ", html)) < _PAINTED_MIN_VISIBLE
+
+
+def _is_refused_render(html: str, status: Optional[int]) -> bool:
+    """A browser navigation that came back refused and rendered nothing.
+
+    The empty ``<html><head></head><body></body></html>`` a server sends beside
+    a 403 carries no challenge phrase and no text, so every block test passes
+    it and the rung below promotes the status to 200: a refusal becomes a
+    thin page. Measured 2026-10-18 driving the stealth rung against
+    ``x.com``: ``page.goto`` answered 403, the DOM stayed at 39 bytes of empty
+    document for 48s, and the ladder reported ``stealth-browser: thin-0b``.
+
+    Three conditions, all needed. A 4xx that rendered text is a real page (a
+    styled error page, a challenge that cleared) and stays a 200. A 2xx that
+    rendered nothing is a broken page and is already thin. Only a refusal with
+    no rendered text at all is the case that was being laundered.
+    """
+    if status is None or status < 400:
+        return False
+    body = re.sub(
+        r"(?is)<head\b[^>]*>.*?(?:</head\s*>|(?=<body\b)|\Z)",
+        " ",
+        html or "",
+    )
+    return _visible_markup_len(_SCRIPTISH_RE.sub(" ", body)) == 0
 
 
 def whole_short_page(html: str, text: str) -> bool:
@@ -1410,7 +1507,7 @@ def _await_hydration(
     step_ms: int = 500,
     progress: bool = False,
 ) -> str:
-    """Poll until the rendered HTML stops growing; return the fullest seen.
+    """Poll until a painted document stabilizes; keep the largest snapshot until then.
 
     A JS app is still an empty shell at ``domcontentloaded``, so reading
     ``page.content()`` immediately yields pre-hydration markup and the caller
@@ -1421,8 +1518,26 @@ def _await_hydration(
     Stops as soon as two consecutive reads agree, so an already-rendered page
     costs one extra step rather than the whole budget. A persistent
     navigation race fails loud instead of returning the last partial HTML.
+
+    "Stopped growing" is not the same as "finished", though, and on a client
+    app the two are indistinguishable at first: measured 2026-10-18 on a served
+    page whose module bundle mounts its body 2.2s after load, the DOM held the
+    same 146 bytes through +0.25s, +0.50s ... +2.00s and jumped to 488 at
+    +2.25s. Length stability read that as "settled" on the first poll, and the
+    rung returned the shell: 146 bytes, 8 characters of text, and a page the
+    browser was fully able to read.
+
+    So an unpainted DOM does not end the wait. While the rendered document
+    still shows less than :data:`_PAINTED_MIN_VISIBLE` characters, keep polling
+    to the budget. The cost is bounded and only paid by pages that have not
+    painted: a page with real content keeps the one-extra-step behaviour above,
+    and a page that never paints ends at the budget and is then judged thin by
+    the extractor, which is the honest verdict for it.
     """
     waited = 0
+    painted_candidate: Optional[str] = None
+    painted_stability = 0
+    latest_painted: Optional[str] = None
     while waited < budget_ms:
         page.wait_for_timeout(step_ms)
         waited += step_ms
@@ -1432,10 +1547,35 @@ def _await_hydration(
             if _is_nav_race(e):
                 raise
             break
-        if len(current) <= len(html):
-            break  # stopped growing: hydrated, or static all along
-        html = current
-    return html
+        if len(current) > len(html):
+            html = current
+            painted_candidate = None
+            painted_stability = 0
+            if not _is_unpainted(current):
+                latest_painted = current
+            continue
+        if not _is_unpainted(current):
+            latest_painted = current
+            if len(current) < len(html):
+                if current != painted_candidate:
+                    painted_candidate = current
+                    painted_stability = 1
+                else:
+                    painted_stability += 1
+                # A shorter header can paint before the page body. Require five
+                # matching polls before treating a shorter DOM as settled: the
+                # late paint documented above landed at 2.25s, and three polls
+                # (1.5s at the 500ms step) decide inside that window, while a
+                # page that paints at 2.25s has had the article on poll five
+                # (2.5s). Five identical polls = 2.5s, so a short page that
+                # truly is finished still stops far inside the 8s budget.
+                if painted_stability < 5:
+                    continue
+            html = current
+            break
+        painted_candidate = None
+        painted_stability = 0
+    return latest_painted or html
 
 
 def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:
@@ -1514,6 +1654,40 @@ def _fetch_stealth(
     return _call_sync_browser(_fetch_stealth_impl, url, timeout, progress)
 
 
+#: A Chromium that was never downloaded. Patchright's own text for it is a
+#: seven-line box naming ``patchright install``, a command that does not exist
+#: in the user's environment and does not install what searchts needs. Matched
+#: on the sentence, not the box.
+_MISSING_CHROMIUM = (
+    "executable doesn't exist",
+    "playwright was just installed or updated",
+)
+
+#: The one sentence for "the browser rung is not there". Named in both spellings
+#: because they are different fixes for different machines: pip is what puts the
+#: extra in an ordinary venv, and ``searchts install --browser`` is what puts it
+#: in a pipx or uv tool env where a bare pip write is wiped by the next upgrade.
+_BROWSER_MISSING_HINT = (
+    'install the browser tier: pip install "searchts[browser]" (or '
+    "searchts install --browser), then read again"
+)
+
+
+def _browser_missing_reason(exc: BaseException) -> Optional[str]:
+    """The browser-rung reason for a launch that failed because Chromium is
+    absent, or ``None`` when the launch failed for any other reason.
+
+    Only the one case is renamed. Every other launch failure keeps Playwright's
+    own message, because "the browser would not start" and "the browser was
+    never installed" are different facts and the fix is only known for one of
+    them.
+    """
+    msg = str(exc).lower()
+    if any(needle in msg for needle in _MISSING_CHROMIUM):
+        return f"browser not installed: {_BROWSER_MISSING_HINT}"
+    return None
+
+
 def _fetch_stealth_impl(
     url: str, timeout: int = 60, progress: Optional[bool] = None,
     proxy: Optional[Dict[str, Any]] = None,
@@ -1524,7 +1698,7 @@ def _fetch_stealth_impl(
     except ImportError as e:  # pragma: no cover - environment dependent
         raise RuntimeError(
             "stealth-browser backend needs patchright: "
-            "searchts install --browser"
+            + _BROWSER_MISSING_HINT
         ) from e
 
     ms = int(timeout * 1000)
@@ -1536,18 +1710,24 @@ def _fetch_stealth_impl(
     proxy_kwargs: Dict[str, Any] = {"proxy": proxy} if proxy else {}
     with sync_playwright() as p:
         persistent = _use_persistent_profile()
-        if persistent:
-            profile_dir = _profile_path()
-            browser = p.chromium.launch_persistent_context(
-                str(profile_dir), headless=True,
-                args=pin_args,
-                user_agent=_UA_REAL, locale="en-US",
-                viewport={"width": 1280, "height": 800},
-                **proxy_kwargs,
-            )
-        else:
-            browser = p.chromium.launch(headless=True, args=pin_args,
-                                        **proxy_kwargs)
+        try:
+            if persistent:
+                profile_dir = _profile_path()
+                browser = p.chromium.launch_persistent_context(
+                    str(profile_dir), headless=True,
+                    args=pin_args,
+                    user_agent=_UA_REAL, locale="en-US",
+                    viewport={"width": 1280, "height": 800},
+                    **proxy_kwargs,
+                )
+            else:
+                browser = p.chromium.launch(headless=True, args=pin_args,
+                                            **proxy_kwargs)
+        except Exception as e:  # noqa: BLE001 - one launch failure, one reason
+            missing = _browser_missing_reason(e)
+            if missing:
+                raise RuntimeError(missing) from e
+            raise
         try:
             if persistent:
                 page = browser.new_page()
@@ -1622,7 +1802,14 @@ def _fetch_stealth_impl(
                     html = host_html
             # If the challenge cleared, the real status is 200 regardless of the
             # initial challenge response; otherwise keep the original status.
-            status = 200 if looks_blocked(200, html) is None else init_status
+            # A refusal that rendered nothing is the one case the promotion would
+            # get wrong: the DOM is an empty document, so it carries no challenge
+            # phrase, and 403 would come back as a thin page. Checked before it
+            # happens, because afterwards there is nothing left to check.
+            status = 200 if (
+                looks_blocked(200, html) is None
+                and not _is_refused_render(html, init_status)
+            ) else init_status
             final = page.url or url
             # page.goto headers can still say "challenge" after the DOM cleared.
             headers = _drop_stale_challenge_headers(headers, html)
@@ -1910,7 +2097,7 @@ def _finalize(
         rebuilt = more.list_index(result.page_html, result.final_url or "", result.text)
         if rebuilt:
             result.text = rebuilt[0]
-        found = more.detect(result.page_html, result.final_url or "", result.text)
+        found = more.detect(result.page_html, result.final_url or "", result.text, headers=result.headers)
         if rebuilt:
             found.insert(0, rebuilt[1])
         if found:
@@ -2762,6 +2949,11 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
     seen = set()
     out: List[FetchResult] = []
     current = url
+    # The copy of each page the walk read, so a page that serves one of them
+    # again is recognised as the copy and not as more of the document.
+    said: set = set()
+    repeated = 0
+    last_next = ""
     for i in range(wanted):
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
@@ -2791,6 +2983,18 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
                     raise
                 _note_walk_stopped(out[-1], current, e)
                 break
+        last_next = result.next_url or ""
+        # A page that serves the copy we already have is not more of the
+        # document: it is the same page under another address. It is still
+        # returned - the walk read it, and the caller asked for pages, not for
+        # pages that differ - but the walk says so, because a page list that
+        # hid four copies of one page would be a claim the reader cannot
+        # check.
+        fingerprint = _page_fingerprint(result)
+        if fingerprint and fingerprint in said:
+            repeated += 1
+        else:
+            said.add(fingerprint)
         out.append(result)
         nxt = result.next_url
         if not nxt:
@@ -2808,8 +3012,13 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
         # hit a cap" line on every ordinary read of a paginated page. `asked`,
         # not `wanted`: the sentence is about what the caller asked for, and the
         # clamp note on page one is the one that names the ceiling.
-        if out and len(out) < asked and out[-1].next_url:
-            _note_walk_capped(out[-1], len(out), asked, out[-1].next_url)
+        if out and len(out) < asked and last_next:
+            _note_walk_capped(out[-1], len(out), asked, last_next)
+    if repeated and out:
+        # On page one: that is the page every caller reads first (the CLI's
+        # stdout, the MCP envelope's ``text``), so the warning about the copies
+        # comes before the copies do.
+        _note_walk_repeated(out[0], repeated)
     if out:
         _note_knobs(out[0], limits)
     return out
@@ -2917,6 +3126,9 @@ _TABLE_ROW = re.compile(r"(?m)^[ \t]*\|[^\n]*\]\(https?://")
 # A link target on a row: with the row's words, its identity across the scroll
 # and the pages that follow it (see _row_key).
 _ROW_LINK = re.compile(r"\]\((https?://[^)\s]+)\)")
+#: A list marker with nothing after it on its line: a card list writes "- " on
+#: one line and the title with its link on the next.
+_BARE_MARKER = re.compile(r"(?:-|\d+\.)\s*$")
 
 
 def _is_refusal(err: UnlockerError) -> bool:
@@ -2941,6 +3153,27 @@ def _note_walk_stopped(last: "FetchResult", url: str, err: UnlockerError) -> Non
     note = sanitize.scrub(f"[read: stopped before {url}. {reasons}]", redact=True)
     last.warnings = list(last.warnings or []) + note.findings
     last.text = (last.text or "").rstrip() + f"\n\n{note.text}"
+
+
+def _note_walk_repeated(page: "FetchResult", pages: int) -> None:
+    """Say that pages served a copy of a page the walk had already read.
+
+    The pages are still returned: the walk read them and the caller asked for
+    pages, not for pages that differ. The note is there so a reader can tell
+    that the site sent the same copy more than once.
+
+    Scrubbed for the same reason as :func:`_note_walk_stopped`: the note lands
+    after _finalize, so nothing scans it.
+    """
+    from searchts import sanitize
+
+    note = sanitize.scrub(
+        f"[read: {pages} page{'s' if pages != 1 else ''} served the same content "
+        "as a page already read]",
+        redact=True,
+    )
+    page.warnings = list(page.warnings or []) + note.findings
+    page.text = (page.text or "").rstrip() + f"\n\n{note.text}"
 
 
 def item_count(text: str) -> int:
@@ -2982,15 +3215,23 @@ def _drop_repeated_rows(text: str, seen: set) -> str:
     """``text`` without the rows already in ``seen`` (see :func:`_row_keys`).
 
     A list row drags its indented byline and snippet lines with it; a table row
-    is one line. Everything that is not a repeated row stays byte for byte.
+    is one line. A card list writes the marker on one line and the title with
+    its link on the next, and that pair is one row. Everything that is not a
+    repeated row stays byte for byte.
     """
     out: List[str] = []
+    lines = (text or "").splitlines()
     skipping = False
-    for line in (text or "").splitlines():
+    for i, line in enumerate(lines):
         is_row = bool(_ITEM_LINE.match(line) or _TABLE_ROW.match(line))
         if is_row:
             skipping = bool(_ROW_LINK.search(line) and _row_key(line) in seen)
-        elif skipping and line.strip() and not line.startswith((" ", "\t")):
+        elif _BARE_MARKER.match(line):
+            # A card row: "- " on this line, the title and its link on the
+            # next. The pair is one row and the key is on the second line.
+            nxt = lines[i + 1] if i + 1 < len(lines) else ""
+            skipping = bool(_ROW_LINK.search(nxt) and _row_key(nxt) in seen)
+        elif line.strip() and not line.startswith((" ", "\t")):
             skipping = False
         if skipping:
             continue
@@ -2998,24 +3239,110 @@ def _drop_repeated_rows(text: str, seen: set) -> str:
     return "\n".join(out)
 
 
-def _rows_added(result: "FetchResult", seen: set) -> int:
-    """How many rows this read added that earlier reads did not already have.
+def _row_key_lines(text: str) -> List[str]:
+    """The line that holds each row's link, one per row, in the order they come.
+
+    A row is what :func:`item_count` counts: a list marker with a link after
+    it, or a table row that carries a link. The link is often on the line
+    *after* the marker (a card list writes "- " on one line and the title on
+    the next), so a row is a span and not a line, and the line that holds the
+    link is the one that identifies it.
+    """
+    lines: List[str] = []
+    for pattern in (_ITEM_LINE, _TABLE_ROW):
+        for match in pattern.finditer(text or ""):
+            start = text.rfind("\n", 0, match.end()) + 1
+            end = text.find("\n", match.end())
+            lines.append(text[start : len(text) if end < 0 else end])
+    return lines
+
+
+def _row_count(text: str, seen: set) -> Tuple[int, int, set]:
+    """(new rows, repeated rows, the keys the new rows had) in ``text``.
+
+    The rows are the ones :func:`item_count` counts, so the count of a page
+    that has no repeats is the count it always was. What is new here is that
+    a row the walk has already read is counted once.
+
+    A row is keyed by the links and the words on the line that holds its link
+    (the scroll path's rule), so the same row on two pages is one row. A row
+    with no link at all cannot be told apart from another row with no link,
+    so it counts as new: a count that dropped rows it cannot identify would
+    be short of the truth the other way.
+    """
+    new = 0
+    repeated = 0
+    fresh: set = set()
+    for line in _row_key_lines(text):
+        if _ROW_LINK.search(line):
+            key = _row_key(line)
+            if key in seen or key in fresh:
+                repeated += 1
+                continue
+            fresh.add(key)
+        new += 1
+    return new, repeated, fresh
+
+
+def _rows_added(
+    result: "FetchResult", seen_rows: set, seen_index: set
+) -> Tuple[int, int, set]:
+    """(new rows, repeated rows, the keys the new rows had) in this read.
 
     A known host can name every row it added (``FetchResult.index_keys``), and a
     site's own cursor sometimes hands back a row the previous window had, so the
     count is of *new* rows. Without keys it is the markdown row count, which is
     what every read that was not produced by a host with its own cursor has
     always used.
+
+    A generic page counts its rows by key now, the way the scroll path does, so
+    a next page that serves rows the previous page already had is not counted
+    as more of the list. A count that included them would claim to have read
+    more of the list than it did, which is the same lie the known-host path
+    already refused to tell.
     """
-    if result.index_keys is None:
-        return item_count(result.text)
-    fresh = 0
-    for key in result.index_keys:
-        if key in seen:
-            continue
-        seen.add(key)
-        fresh += 1
-    return fresh
+    if result.index_keys is not None:
+        added = 0
+        repeated = 0
+        fresh: set = set()
+        for key in result.index_keys:
+            if key in seen_index or key in fresh:
+                repeated += 1
+                continue
+            fresh.add(key)
+            added += 1
+        return added, repeated, fresh
+    return _row_count(result.text, seen_rows)
+
+
+def _own_text(result: "FetchResult") -> str:
+    """The page's own text, without the notes this pass appended to it.
+
+    The notes are ours, not the page's: the next-page line names the URL we
+    are about to fetch, so two copies of the same page never read the same
+    while those lines are still on them.
+    """
+    text = (result.text or "").rstrip()
+    for block in (
+        "\n".join(result.extra_notes or []),
+        "\n".join(
+            str(m.get("note") or "") for m in (result.more or []) if isinstance(m, dict)
+        ),
+    ):
+        if block and text.endswith(block):
+            text = text[: -len(block)].rstrip()
+    return text
+
+
+def _page_fingerprint(result: "FetchResult") -> frozenset:
+    """The page's own copy, in a form two copies of the same page share.
+
+    The lines, without the notes this pass appended: the next-page line
+    names the URL we are about to fetch, so two copies of one page never read
+    the same while those lines are still on them.
+    """
+    text = _own_text(result)
+    return frozenset(line.strip() for line in text.splitlines() if line.strip())
 
 
 def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]:
@@ -3044,12 +3371,21 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     # Row keys are a different namespace from page URLs: one set for both let a
     # row whose key was a later page's URL end the walk as a "loop".
     seen_rows: set = set()
+    # A known host names its rows; a generic page is keyed by the scroll path's
+    # rule. Two namespaces, because a row key and a post id are not the same
+    # thing and one set for both let a row's key collide with a host's id.
+    seen_index: set = set()
     out: List[FetchResult] = []
     current = url
     got = 0
     repeats = 0
+    feed_repeats = 0
     broke = False
     looped = False
+    # Pages whose every row was a row the walk had already read.
+    repeated_pages = 0
+    fetched = 0
+    last_next = ""
     for i in range(limits.pages):
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
@@ -3095,10 +3431,30 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
                 _note_walk_stopped(out[-1], current, e)
                 broke = True
                 break
-        out.append(result)
-        added = _rows_added(result, seen_rows)
+        fetched += 1
+        last_next = result.next_url or ""
+        added, again, fresh = _rows_added(result, seen_rows, seen_index)
+        rows_here = (
+            len(result.index_keys) if result.index_keys is not None else item_count(result.text)
+        )
+        if i and seen_rows:
+            # The rows the previous pages had are the rows this page repeats.
+            # They are dropped here, so each row is returned once, in the place
+            # it came first.
+            result.text = _drop_repeated_rows(result.text, seen_rows)
+        if result.index_keys is not None:
+            seen_index |= fresh
+            feed_repeats += again
+        else:
+            seen_rows |= fresh
+            repeats += again
         got += added
-        repeats += (len(result.index_keys) - added) if result.index_keys is not None else 0
+        out.append(result)
+        if rows_here and not added:
+            # Every row on this page was a row we already had: the page serves
+            # the same list again under another address. Its rows are not
+            # counted twice, and the walk says the page was one it had read.
+            repeated_pages += 1
         nxt = result.next_url
         if got >= want or not nxt:
             break
@@ -3107,12 +3463,12 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     else:
         # Out of pages with more to read. Say so: otherwise asking for 300 rows
         # and getting 150 is indistinguishable from the list ending there.
-        if out and got < want and out[-1].next_url and not broke:
+        if out and got < want and last_next and not broke:
             _note_walk_capped(
-                out[-1], len(out), asked, out[-1].next_url,
+                out[-1], fetched, asked, last_next,
                 # `want` is the ceiling that applied, not the unclamped ask:
                 # the clamp note on page one already names the difference.
-                rows=f"{got} rows of {want}" if got else "no rows",
+                rows=f"{got} row{'s' if got != 1 else ''} of {want}" if got else "no rows",
             )
     if not out:
         return out
@@ -3123,18 +3479,34 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         # a batch the walk has already read when the feed has stopped moving, and
         # a walk that stops there says nothing. Named on page one, with the count.
         extra += (
-            f"\n\n[items: {got} new rows of the {asked} asked for. The feed's own "
+            f"\n\n[items: {got} new row{'s' if got != 1 else ''} of the {asked} asked for. The feed's own "
             "cursor pointed back at a page this walk had already read, so the "
             "walk stopped there; the rows it did not have were never served]"
         )
-    if repeats:
+    if feed_repeats:
         # The feed cursor handed back rows we already had. Saying so is the whole
         # point of counting new rows: a count that included them would claim to
         # have read more of the list than it did. The ceiling itself is named by
         # ``_note_knobs`` below, on this same page.
         extra += (
-            f"\n\n[items: {got} new rows; {repeats} the feed handed back again "
-            "were not counted twice]"
+            f"\n\n[items: {got} new row{'s' if got != 1 else ''}; "
+            f"{feed_repeats} row{'s' if feed_repeats != 1 else ''} the feed handed "
+            "back again, not counted twice]"
+        )
+    if repeats:
+        # A next page handed back rows the previous page already had. Same
+        # reason, same place: the count is of rows the walk had not read.
+        extra += (
+            f"\n\n[items: {got} new row{'s' if got != 1 else ''}; "
+            f"{repeats} row{'s' if repeats != 1 else ''} the pages handed back again, "
+            "not counted twice]"
+        )
+    if repeated_pages:
+        # Pages whose every row was one we already had. Their rows are not
+        # counted twice, and the walk says the page was one it had read.
+        extra += (
+            f"\n\n[items: {repeated_pages} page{'s' if repeated_pages != 1 else ''} "
+            "served rows this walk had already read]"
         )
     if (
         not broke
@@ -3145,7 +3517,7 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         # `latest` scrolls and also links `?page=N`) gets both, and asking for
         # more than the page cap can carry is exactly the case where the
         # second mechanism is the answer.
-        and (not last.next_url or len(out) >= limits.pages)
+        and (not last.next_url or fetched >= limits.pages)
     ):
         # F23c: the list did not fill by following URLs, so try the other
         # mechanism. The probe inside decides whether this page even is a feed,

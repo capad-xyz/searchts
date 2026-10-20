@@ -11,6 +11,9 @@ prints nothing and fails loudly when no tier produced real content.
   content, and names the one that answered.
 - `read-json` emits the same result as a parseable object.
 - `read-pages` follows the next page on the same site up to `--pages`.
+- `read-paginated` names the next page of a paginated list, and says which knob
+  asks for the rest (`--pages`, `--items`), and stays silent on a page that is
+  not paginated.
 - `read-items` follows list pages until `--items` rows are kept, and scrolls a
   list that only grows that way.
 - `read-expand` opens closed `<details>` and read/show/see-more buttons with
@@ -25,6 +28,10 @@ prints nothing and fails loudly when no tier produced real content.
 - `read-backend` forces one tier with `--backend`.
 - `read-human` opens a headful browser for a page no tier could clear.
 - `read-fail-loud` exits non-zero with empty stdout when no tier produced content.
+- `read-page-data` reads words the page only ships as data (`<script
+  type="application/ld+json">`, an app-state script named `__SOMETHING__`) out of
+  the bytes already downloaded, and says `[source: ...]` when the data supplied
+  them.
 
 ## How to get to it (user POV)
 
@@ -53,6 +60,7 @@ Preconditions:
 - **Which tier answered.** Read the `backend` field. A `backend` of `curl_cffi` on a site that needs a browser is the ladder having answered early, which is a pass. An empty or `null` `backend` beside a long `text` is not.
 - **Fail loud.** Read a URL that does not exist. Run `.venv/bin/python -m searchts read https://raw.githubusercontent.com/pstack-dev/pstack/main/README.md > artifacts/read/missing.out 2> artifacts/read/missing.err`. Exit code is non-zero, `artifacts/read/missing.out` is empty, and `artifacts/read/missing.err` names every tier that was tried and why each gave up.
 - **Pagination.** Run `.venv/bin/python -m searchts read https://example.com --pages 2 --json > artifacts/read/pages.json 2> artifacts/read/pages.err`. Exit code `0` and the object carries a `pages` array with one entry per page actually followed, which on a single-page site is one entry and not the two that were asked for. Assert on the array's presence, not on its length matching the flag.
+- **A paginated list says so.** Run `.venv/bin/python -m searchts read "https://news.ycombinator.com/news?p=2" --json > artifacts/read/paginated.json 2> artifacts/read/paginated.err`. Exit code `0`, `more` carries a `next-page` entry with `next_url` set to the page after this one and a `paginated` entry naming `--pages` / `--items`; `text` contains that paginated note. Other notes such as media may follow it. On a page with no pagination at all, `more` must carry neither entry: the note may not appear where there is no next page.
 - **Proof.** Open `artifacts/read/example.json` and `artifacts/read/missing.err` side by side. Together they show one fetch that returned content and named its tier, and one that returned nothing on stdout and named all three tiers.
 - **Report an unreachable tier.** If `doctor`'s `web` entry shows a tier missing, do not drive a bot-walled URL and call the failure a bug. Record the missing tier and the command attempted.
 
@@ -113,6 +121,20 @@ Preconditions:
 - **A post that *quotes* the archived notice is not archived.** Drive `https://www.reddit.com/r/NoStupidQuestions/comments/1x4uke7/` (its OP body quotes "Archived post. New comments cannot be posted" because its author was reading one elsewhere). Exit `0`, `text` carries the OP body and its comments, and it carries **no** `archived by Reddit` line and no `[removed:` note. The archived line is only ever true when Reddit puts `archived` on the post element; Reddit serves threads about all four notices, so a read that keys off the words loses a page that was there.
 - **Warm profile vs cold, paired.** Run the listing twice: once as above, once with `SEARCHTS_NO_BROWSER_PROFILE=1`. The warm run exits `0` with posts; the cold run exits non-zero with `reddit-challenge` on every tier and a hint that says the same URL may read on a warm profile. Both artifacts side by side are the proof for the warm-profile caveat in the README. If only the cold answer appears, the profile is not warm and the rest of the Reddit drives prove nothing yet.
 
+### The page's own data
+
+Driven on 2026-10-18 from this box with the JSON-LD and app-state reader (curl +
+Jina, no browser installed). Proved: a real Next.js page whose app state holds
+words the markup never showed, a real JSON-LD page the markup beat, and the
+fail-loud case. Not proved on a live page: a shell whose body is *only* data, so
+the replacement path is fixture-proved (`tests/test_f24b_page_data.py`).
+
+- **Data the markup did not show.** Run `.venv/bin/python -m searchts read https://www.veed.io/tools/video-editor --json > artifacts/read/veed.json 2> artifacts/read/veed.err`. Exit code `0`, `backend` is `curl_cffi`, and `text` contains `[source: __NEXT_DATA__, the page's own data; N characters the markup did not show]`. The customer quotes in that section are in `__NEXT_DATA__` and in no `<p>` on the page, which is the proof the read took them from the data. Other notes such as media may follow the source note.
+- **A page whose data repeats its markup says nothing.** Run the same verb on `https://react.dev/learn --json`. Exit code `0` and **no** `[source:` line: that page's `__NEXT_DATA__` says what the markup already said, so the read is the extract and the note is absent. A `[source:` line on every Next.js page would mean the reader cannot trust it.
+- **JSON-LD consulted, not obeyed.** Run the same verb on `https://www.healthline.com/nutrition/intermittent-fasting-guide --json`. Exit code `0`, no `[source:` line, and `chars` matches `origin/main` for the same page: the page's JSON-LD describes a *related* article and the publisher's about text, so adding it would be noise. The rule is that the data supplies, and only what the markup did not say.
+- **A blob of config is not a read.** `__NEXT_DATA__` on a page that ships no text (a shell) still exits non-zero when the blob is a build id, a nav list and a stylesheet. That is the fixture, not a live URL: no public shell page with a config-only blob was found in ninety probes. Do not read a `[source:` line as "this page was thin": it names words, not a rescue.
+- **One request.** Every one of these drives is one curl request; the data is read out of the bytes that request returned. There is no second fetch, and the URL count is not observable from the CLI, so it is asserted in `tests/test_f24b_page_data.py::test_the_read_cost_one_request_and_no_other`.
+
 ### The ceilings
 
 - **Clamp.** Run `SEARCHTS_MAX_ITEMS=20 .venv/bin/python -m searchts read https://meta.discourse.org/latest --items 90 --json > artifacts/read/clamp.json 2> artifacts/read/clamp.err`. The object carries a `text` containing `[items: asked for 90, the ceiling is 20]`, and the `[scroll:` line says it stopped at the 20 rows asked for. The ceiling stops further walking and scrolling; it does not trim rows page one already held (the saved drive had 30).
@@ -161,3 +183,12 @@ Preconditions:
   stderr line naming `reddit-challenge` for the first tier is not the page's
   state. The named content wall (`reddit-private`, `reddit-banned`, ...) is the
   one to report.
+- A `[source: ...]` line in the notes means the page's own data supplied those
+  words. It is not a media line and not a "thin page rescued" line: the read
+  still fails loud when the data holds only build config, navigation or a
+  stylesheet, and a page whose data repeats its markup carries no such line.
+- The app-state reader is keyed on the shape `__SOMETHING__` in a script `id`.
+  A bare `window.__STATE__ = {...}` with no `id` attribute (the Remix,
+  SvelteKit and YouTube shape) is **not** read, because that shape is also how
+  tracking blobs (`dataLayer`, `webpackJsonp`) are written. Do not expect a
+  `ytInitialData` page to read from its data yet.

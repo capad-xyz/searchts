@@ -11,9 +11,10 @@ Trafilatura drops ``<button>`` labels (the questions) and inline
 ``display:none`` panels (the answers). ``tidy_markdown`` puts headings and
 code fences back on their own lines after extraction, and
 :func:`space_after_inline` puts back a space the extractor drops next to
-inline code or bold. :func:`structured_text` reads the page's own JSON-LD, so
-a page that ships its body as data instead of markup can still be read from
-the bytes already downloaded.
+inline code or bold. :func:`page_data_blocks` reads the page's own data, the
+typed ``<script type="application/ld+json">`` and the app state an inline
+script named ``__SOMETHING__`` holds, so a page that ships its body as data
+instead of markup can still be read from the bytes already downloaded.
 
 No note is not a promise that the page is complete. These are page signals,
 not per-host code (Reddit keeps its own ring in ``known_hosts``).
@@ -24,7 +25,7 @@ from __future__ import annotations
 import base64
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
 from searchts.expand import EXPAND_EXACT_RE as _EXPAND_EXACT_RE
@@ -55,8 +56,35 @@ _NEXT_TEXT_RE = re.compile(r"^(?:next(?:\s+page)?|older(?:\s+(?:posts|entries))?
 _PAGER_HINT_RE = re.compile(r"pagination|pager|paging|page\s+navigation|more\s+results", re.I)
 #: A link's own name (aria-label or title) that says it is the next page (Bing, Google).
 _NEXT_LABEL_RE = re.compile(r"^next(?:\s+(?:page|results?))?[\s›»>]*$", re.I)
-#: Trailing page markers: /page/2, /page-2, /2 (a short number).
-_PAGE_SEG_RE = re.compile(r"/(?:page[-_/]?\d{1,4}|\d{1,3})$", re.I)
+#: What to do about the next page, in the knobs both surfaces already carry
+#: (F23e): the CLI's ``--pages`` / ``--items``, the MCP tool's ``max_pages`` /
+#: ``max_items``. It carries no URL on purpose, so the MCP envelope's page-URL
+#: scrubber (``mcp_server._more_without_urls``) leaves this line standing
+#: instead of blanking it, and an agent on either surface reads the same knob.
+PAGINATED_NOTE = (
+    "[paginated: this URL is one page of a paginated list, and there are more; "
+    "--pages N (MCP max_pages) reads the next pages, "
+    "--items N (MCP max_items) reads their rows]"
+)
+PAGINATED_DOCUMENT_NOTE = (
+    "[paginated: this URL is one page of a multipage document, and there are more; "
+    "--pages N (MCP max_pages) reads the next pages]"
+)
+#: Explicit trailing page markers. Bare numeric suffixes are compared as URL
+#: pairs in :func:`_continues`, where sibling post IDs can be refused.
+_PAGE_SEG_RE = re.compile(r"/page[-_/]?\d{1,4}$", re.I)
+_BARE_PAGE_SEG_RE = re.compile(r"/\d{1,3}$")
+#: The page a URL names for itself, read off that URL. Only the forms that say
+#: "page" outright: ``?page=3``, ``?p=3`` (Hacker News), ``/page/3/``. The bare
+#: ``/3/`` form is left out on purpose, because as often as not it is a year, a
+#: date or a category id, and calling it a page number would be a guess.
+_URL_PAGE_RE = re.compile(r"(?:^|[?&])(?:page|p|pg|pn)=(\d{1,4})(?![0-9])", re.I)
+_PATH_PAGE_RE = re.compile(r"/page[-_/]?(\d{1,4})/?$", re.I)
+#: A container that reads as navigation, so a link naming itself the next page
+#: inside one is this page's next page even when no pager class says so. The
+#: leading ``\b`` is deliberately absent: real class names run the word into
+#: another one ("postnav", "mainnav") far more often than they isolate it.
+_NAV_HINT_RE = re.compile(r"nav(?:igation)?\b|pagin|pager|paging", re.I)
 _SHOWING_RE = re.compile(
     r"\bshowing\s+(\d[\d,]*)\s*(?:-|–|—|to)\s*(\d[\d,]*)\s+of\s+(\d[\d,]*)", re.I
 )
@@ -174,7 +202,122 @@ def _continues(target: str, url: str) -> bool:
     next *post* of every single post, and docs sites on the next *chapter*;
     those have their own path, so they are not "more of this page".
     """
-    return _page_base(target) == _page_base(url)
+    target_parts = urlsplit(target)
+    current_parts = urlsplit(url)
+    target_path = (target_parts.path or "/").lower().rstrip("/") or "/"
+    current_path = (current_parts.path or "/").lower().rstrip("/") or "/"
+    if _page_base(target) == _page_base(url):
+        # WordPress uses ?p=<post id> at the site root; Hacker News uses the
+        # same key for its /news?page=N listing. Do not call root post IDs a
+        # pagination sequence.
+        if target_path == current_path == "/":
+            target_query = dict(parse_qsl(target_parts.query))
+            current_query = dict(parse_qsl(current_parts.query))
+            target_post = target_query.get("p")
+            current_post = current_query.get("p")
+            if target_post or current_post:
+                # Hacker News uses p=2, p=3 as its root listing pager. A lone
+                # small p value is that convention; larger p values are
+                # WordPress post IDs and require the same ID plus page=N.
+                if (
+                    not current_post
+                    and target_post
+                    and target_post.isdigit()
+                    and int(target_post) == 2
+                    and not (set(target_query) - {"p"})
+                ):
+                    return True
+                if (
+                    current_post
+                    and target_post
+                    and current_post.isdigit()
+                    and target_post.isdigit()
+                    and 1 < int(current_post) < 100
+                    and int(target_post) == int(current_post) + 1
+                    and not (set(target_query) - {"p"})
+                    and not (set(current_query) - {"p"})
+                ):
+                    return True
+                if not target_post or target_post != current_post:
+                    return False
+                try:
+                    target_page = int(target_query.get("page") or "1")
+                    current_page = int(current_query.get("page") or "1")
+                except ValueError:
+                    return False
+                return target_page == current_page + 1
+            page_keys = {"page", "paged", "offset", "first", "start", "p", "pg", "pn"}
+            target_identity = {key: value for key, value in target_query.items() if key not in page_keys}
+            current_identity = {key: value for key, value in current_query.items() if key not in page_keys}
+            return target_identity == current_identity
+        return True
+    # A bare number is only a page marker when it is appended to the other
+    # URL's path (for example /article/123/2). Two sibling numeric IDs such as
+    # /posts/123 and /posts/124 are separate documents.
+    for longer, shorter in ((target_path, current_path), (current_path, target_path)):
+        prefix = shorter.rstrip("/")
+        if not longer.startswith(prefix + "/"):
+            continue
+        suffix = longer[len(prefix) :]
+        if _BARE_PAGE_SEG_RE.fullmatch(suffix):
+            return True
+    target_number = _BARE_PAGE_SEG_RE.search(target_path)
+    current_number = _BARE_PAGE_SEG_RE.search(current_path)
+    if target_number and current_number:
+        target_base = target_path[: target_number.start()]
+        current_base = current_path[: current_number.start()]
+        # Once a multipage article is on a numeric continuation, allow the
+        # next consecutive segment. Requiring an existing article path avoids
+        # treating /posts/123 -> /posts/124 as a page walk.
+        target_num = int(target_number.group()[1:])
+        current_num = int(current_number.group()[1:])
+        slug = target_base.rstrip("/").rsplit("/", 1)[-1]
+        if (
+            target_base == current_base
+            and target_num == current_num + 1
+            and 1 <= current_num < 20
+            and ("-" in slug or len(slug) >= 12)
+        ):
+            return True
+    return False
+
+
+def _url_page(url: str) -> Optional[int]:
+    """The page number ``url`` names for itself, or None when it names none.
+
+    Read from the address, never guessed from the markup. A URL with no marker
+    is the unmarked first page of its own path, which is what ``_page_base``
+    assumes too, but the caller decides whether that is enough to claim.
+    """
+    parts = urlsplit(url)
+    found = _URL_PAGE_RE.search(parts.query or "")
+    if found:
+        return int(found.group(1))
+    found = _PATH_PAGE_RE.search(parts.path or "")
+    if found:
+        return int(found.group(1))
+    return None
+
+
+def _nav_chrome(el) -> bool:
+    """True when ``el`` sits in navigation: a ``nav``, or a named container.
+
+    A pager is a navigation block by another name, so this only widens where a
+    self-naming "Next" / "Older posts" link may sit. The target still has to
+    pass :func:`_good_next`, so a "Next slide" in a carousel on the same host
+    is still refused: a carousel's next image is not a next page.
+    """
+    if _in_nav(el):
+        return True
+    node = el.getparent()
+    for _ in range(3):
+        if node is None or not isinstance(node.tag, str):
+            return False
+        hint = " ".join(node.get(a) or "" for a in ("class", "id", "aria-label"))
+        if _NAV_HINT_RE.search(hint):
+            return True
+        node = node.getparent()
+    return False
 
 
 def _good_next(href: str, base: str, url: str) -> Optional[str]:
@@ -529,7 +672,7 @@ def _next_page(doc, base: str, url: str) -> Optional[str]:
             # A rel=next to another post or chapter fails _good_next's same-URL rule.
             is_next = True
         else:
-            is_next = says_next and _pager_of(a) is not None
+            is_next = says_next and (_pager_of(a) is not None or _nav_chrome(a))
         if is_next:
             good = _good_next(a.get("href"), base, url)
             if good:
@@ -543,11 +686,56 @@ def _next_page(doc, base: str, url: str) -> Optional[str]:
             continue
         current = _current_page(pager)
         if current is None:
+            # No page marks itself current. The address is the next best
+            # evidence: it names the page, and a URL that names none is the
+            # unmarked first page of its own path. A pager window that does
+            # not even link page 1 is somebody else's, so it is left alone.
+            current = _url_page(url)
+            if current is None and 1 in _pager_numbers(pager):
+                current = 1
+        if current is None:
             continue
         for a in pager.xpath(".//a[@href]"):
             txt = _norm(a.text_content())
             if txt.isdigit() and int(txt) == current + 1:
                 good = _good_next(a.get("href"), base, url)
+                if good:
+                    return good
+    return None
+
+
+def _pager_numbers(pager) -> set:
+    """The page numbers this pager links, by the digits it labels them with."""
+    out = set()
+    for a in pager.xpath(".//a[@href]"):
+        txt = _norm(a.text_content())
+        if txt.isdigit() and len(txt) <= 3:
+            out.add(int(txt))
+    return out
+
+
+def _header_next(headers: Optional[Mapping[str, str]], base: str, url: str) -> Optional[str]:
+    """The next page a ``Link: <url>; rel="next"`` response header declares.
+
+    RFC 8288, and a real signal: a page can paginate with no rel=next link and
+    no pager markup at all, and say so in the one header the markup does not
+    carry. Each link is taken whole (``[^<>]*``), since a URL may hold a comma
+    and only the parameters after it are split on ``;``.
+    """
+    if not headers:
+        return None
+    raw = ""
+    for name, value in headers.items():
+        if str(name).lower() == "link":
+            raw = str(value or "")
+            break
+    for match in re.finditer(r"<([^<>]*)>\s*;\s*([^<>]*)", raw):
+        for param in match.group(2).split(";"):
+            key, _, value = param.partition("=")
+            if key.strip().lower() != "rel":
+                continue
+            if "next" in {r.strip().lower() for r in value.strip().strip('",').split()}:
+                good = _good_next(match.group(1).strip(), base, url)
                 if good:
                     return good
     return None
@@ -724,9 +912,8 @@ def _best_list(doc) -> Optional[List]:
     return best
 
 
-def _list_kept(doc, text: str) -> Optional[Tuple[int, int]]:
+def _list_kept_items(best, text: str) -> Optional[Tuple[int, int]]:
     """(items on the page, items the extract kept) for a list the page is made of."""
-    best = _best_list(doc)
     if not best:
         return None
     lowered = _norm(text).lower()
@@ -734,6 +921,10 @@ def _list_kept(doc, text: str) -> Optional[Tuple[int, int]]:
     if kept > _LIST_MAX_KEPT * len(best):
         return None
     return len(best), kept
+
+
+def _list_kept(doc, text: str) -> Optional[Tuple[int, int]]:
+    return _list_kept_items(_best_list(doc), text)
 
 
 def _counts(doc) -> List[str]:
@@ -1056,8 +1247,18 @@ def media_note(region, base: str = "") -> Optional[More]:
     return More("media", f"[media: {said} in the main content: {listed}{rest}]")
 
 
-def detect(html: str, url: str, text: str) -> List[More]:
-    """Findings for one read: the page HTML, its URL, and the extracted text."""
+def detect(
+    html: str,
+    url: str,
+    text: str,
+    headers: Optional[Mapping[str, str]] = None,
+) -> List[More]:
+    """Findings for one read: the page HTML, its URL, and the extracted text.
+
+    ``headers`` is the winning rung's response headers, read for a
+    ``Link: rel="next"`` the markup does not declare. Markup wins; the header
+    is only consulted when the page says nothing else.
+    """
     doc = _parse(html)
     if doc is None:
         return []
@@ -1068,12 +1269,22 @@ def detect(html: str, url: str, text: str) -> List[More]:
             # First, so it reads as a header on the notes rather than as one
             # more thing the page was missing.
             found.append(More("context", where))
+        # F24b: the read came out of the page's own data, say which blob and
+        # how much of it the markup did not show.
+        source = data_source_note(html, text)
+        if source:
+            found.append(source)
         base = _base_url(doc, url)
+        best_list = _best_list(doc)
+        listed = _list_kept_items(best_list, text)
         nxt = _next_page(doc, base, url)
         is_feed, load_more_url = _feed(doc, base, url)
-        nxt = nxt or load_more_url
+        nxt = nxt or load_more_url or _header_next(headers, base, url)
         if nxt:
             found.append(More("next-page", f"[more: the next page is {nxt}]", nxt))
+            found.append(
+                More("paginated", PAGINATED_NOTE if best_list else PAGINATED_DOCUMENT_NOTE)
+            )
         if is_feed:
             found.append(
                 More(
@@ -1099,7 +1310,6 @@ def detect(html: str, url: str, text: str) -> List[More]:
                     "empty in the page; that text loads on click]",
                 )
             )
-        listed = _list_kept(doc, text)
         if listed:
             total, kept = listed
             found.append(More("list", f"[partial: the page lists {total} items; this read kept {kept}]"))
@@ -1329,8 +1539,8 @@ def annotate(text: str, found: List[More]) -> str:
 
 def summary(found: List[More]) -> str:
     """Short stderr tick, e.g. ``more: next page, folded``."""
-    names = {"next-page": "next page", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read", "context": "context",
-           "media": "media"}
+    names = {"next-page": "next page", "paginated": "paginated", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read", "context": "context",
+           "media": "media", "source": "page data"}
     seen: List[str] = []
     for m in found:
         name = names.get(m.kind, m.kind)
@@ -1343,8 +1553,9 @@ def summary(found: List[More]) -> str:
 
 #: Below this a structured body is a teaser, not the page's text.
 _STRUCTURED_MIN_CHARS = 400
+_LD_MARKER = "application/ld+json"
 _LD_SCRIPT_RE = re.compile(
-    r"<script[^>]*type\s*=\s*[\"']application/ld\+json[\"'][^>]*>(.*?)</script\s*>",
+    r"<script[^>]*type\s*=\s*[\"']" + re.escape(_LD_MARKER) + r"[\"'][^>]*>(.*?)</script\s*>",
     re.I | re.S,
 )
 #: schema.org types, compared on the last segment so a full URL and a bare name
@@ -1412,18 +1623,172 @@ def _ld_nodes(html: str) -> List[Dict[str, Any]]:
     return out
 
 
-def _strings(node: Any) -> List[str]:
-    """Every prose string under ``node``: a string, a dict's text, or a list."""
+#: Markup that carries no reading text. A body kept as a string is full of it,
+#: and emitting it verbatim would put ``<p>`` in a reader's face. The unclosed
+#: branch covers script-shaped containers whose closer never arrives: script,
+#: style, svg, noscript, template, and iframe all treat everything after the
+#: opener as their own content, so a tag that opened and never closed drops the
+#: rest of the value, exactly as an unclosed ``<script>`` does.
+_VALUE_SCRIPTISH_RE = re.compile(
+    r"(?is)<(script|style|noscript|template|svg|iframe)\b[^>]*>.*?</\1\s*>"
+    r"|<(?:script|style|noscript|template|svg|iframe)\b[^>]*>.*\Z"
+)
+_VALUE_BREAK_RE = re.compile(r"(?i)<\s*(?:br\s*/?|/\s*(?:p|div|li|tr|h[1-6])\s*)>")
+_VALUE_TAG_NAMES = (
+    "a|article|aside|b|blockquote|br|caption|code|dd|details|div|dl|dt|em|figcaption|figure|"
+    "h[1-6]|hr|i|li|main|ol|p|pre|section|small|span|strong|sub|sup|table|tbody|td|"
+    "th|thead|tr|u|ul|image|iframe|svg|template|style|noscript|script|"
+    "video|audio|summary|picture|form|object|math"
+)
+_VALUE_TAG_RE = re.compile(
+    rf"(?is)</?(?P<tag>{_VALUE_TAG_NAMES})\b[^<>]*>"
+)
+_VALUE_VOID_RE = re.compile(
+    r"(?is)<\s*(?:area|base|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b[^<>]*>"
+)
+_VALUE_BLOCK_TAGS = frozenset(
+    {"blockquote", "dd", "div", "dl", "dt", "li", "ol", "p", "pre", "section", "table", "tbody", "td", "th", "thead", "tr", "ul"}
+)
+
+
+def _value_opener_is_markup(match: "re.Match[str]") -> bool:
+    """Whether a recognized opener reads as markup rather than prose.
+
+    An opener whose attributes carry a value (``onclick=``) is markup however
+    many tokens it has. A bare opener and a single boolean attribute token
+    (``<details open>``, ``<b x>``) are markup when a closing tag exists to
+    pair with. Two or more bare tokens read as prose instead: the comparison
+    ``a <b and c > d`` has ``and c`` where attributes would be, and every
+    character of it stays.
+    """
+    raw = match.group(0)
+    if raw.startswith("</"):
+        return False
+    if "=" in raw:
+        return True
+    attr_part = raw[1 + len(match.group("tag")):].rstrip("/>").strip()
+    return not attr_part or len(attr_part.split()) <= 1
+
+
+def _blank_boolean_opener(match: "re.Match[str]") -> str:
+    """Erase an opener whose only attribute is boolean; pass everything else.
+
+    Openers behind a value attribute or a closer were already handled in the
+    bounded passes above; openers with two or more bare tokens are prose and
+    pass through untouched.
+    """
+    raw = match.group(0)
+    if raw.startswith("</") or "=" in raw:
+        return raw
+    attr_part = raw[1 + len(match.group("tag")):].rstrip("/>").strip()
+    if not attr_part or len(attr_part.split()) > 1:
+        return raw
+    return " "
+
+
+def _strip_paired_value_tags(text: str) -> str:
+    """Remove recognized paired HTML tags while preserving their text.
+
+    Requiring an opening/closing pair avoids interpreting comparison text such
+    as ``i<n`` or ``a <b and c > d`` as markup. Nested blocks are unwrapped in
+    bounded passes so HTML decoded from entities receives the same treatment.
+    """
+    for _ in range(16):
+        tags = {
+            found.group("tag").lower()
+            for found in _VALUE_TAG_RE.finditer(text)
+            if _value_opener_is_markup(found)
+        }
+        closers = {
+            found.group("tag").lower()
+            for found in _VALUE_TAG_RE.finditer(text)
+            if found.group(0).startswith("</")
+        }
+        paired = tags & closers
+        if not paired:
+            break
+        pair_re = re.compile(
+            rf"(?is)<(?P<tag>{'|'.join(sorted(paired))})\b[^<>]*>(.*?)</(?P=tag)\s*>"
+        )
+        updated = pair_re.sub(
+            lambda match: (
+                "\n" + match.group(2) + "\n"
+                if match.group("tag").lower() in _VALUE_BLOCK_TAGS
+                else match.group(2)
+            ),
+            text,
+        )
+        if updated == text:
+            break
+        text = updated
+    # Attribute-bearing openers can be unsafe even when the source omitted a
+    # closing tag. Strip the tag token but keep its following prose.
+    text = re.sub(rf"(?is)</?(?:{_VALUE_TAG_NAMES})\s*/?>", " ", text)
+    text = re.sub(
+        rf"(?is)<(?P<tag>{_VALUE_TAG_NAMES})\b(?=[^<>]*=)[^<>]*>",
+        " ",
+        text,
+    )
+    # A boolean attribute alone (``<details open>``) carries no value, so the
+    # strip above misses it. A single attribute token is still markup; the
+    # comparison shape lost two or more tokens and keeps its prose.
+    text = re.sub(_VALUE_TAG_RE, _blank_boolean_opener, text)
+    return text
+
+
+def _plain_value(value: str) -> str:
+    """A JSON string as text: tags dropped, blocks kept as line breaks.
+
+    Pages put their body in the data as HTML often enough that emitting it
+    verbatim is a visible fault, and a ``<script>`` smuggled into a data field
+    would be a hole in the "never emit scripts or HTML as text" rule. Both are
+    stripped here, once, for every value whichever blob it came from.
+    """
+    import html as _html
+
+    t = _VALUE_SCRIPTISH_RE.sub(" ", value or "")
+    t = _strip_paired_value_tags(t)
+    t = _VALUE_SCRIPTISH_RE.sub(" ", t)
+    t = _VALUE_BREAK_RE.sub("\n", t)
+    t = _VALUE_VOID_RE.sub(" ", t)
+    # Decode in layers, sanitizing after each one. App-state values pass
+    # through this function once at collection and once at prose selection.
+    # Removing markup at every layer makes that repeat idempotent.
+    for _ in range(3):
+        decoded = _html.unescape(t)
+        if decoded == t:
+            break
+        t = _VALUE_SCRIPTISH_RE.sub(" ", decoded)
+        t = _strip_paired_value_tags(t)
+        t = _VALUE_BREAK_RE.sub("\n", t)
+        t = _VALUE_VOID_RE.sub(" ", t)
+    return t.strip()
+
+
+def _strings(node: Any, *, on_truncate=None) -> List[str]:
+    """Boundedly collect prose strings under a structured content value."""
     out: List[str] = []
-    if isinstance(node, str):
-        if node.strip():
-            out.append(node.strip())
-    elif isinstance(node, dict):
-        for key in ("text", "name", "itemListElement", "acceptedAnswer", "suggestedAnswer"):
-            out.extend(_strings(node.get(key)))
-    elif isinstance(node, list):
-        for item in node:
-            out.extend(_strings(item))
+    stack = [node]
+    visited = chars = 0
+    while stack and visited < _STATE_MAX_NODES and chars < _STATE_MAX_CHARS:
+        value = stack.pop()
+        visited += 1
+        if isinstance(value, str):
+            if value.strip() and len(value) <= _STATE_MAX_CHARS - chars:
+                out.append(_plain_value(value))
+                chars += len(value)
+            elif value.strip() and on_truncate is not None:
+                on_truncate()
+        elif isinstance(value, dict):
+            keys = (
+                "text", "name", "itemListElement", "acceptedAnswer", "suggestedAnswer",
+                "body", "content", "children", "rendered", "value",
+            )
+            stack.extend(value[key] for key in reversed(keys) if key in value)
+        elif isinstance(value, list):
+            stack.extend(reversed(value))
+    if stack and on_truncate is not None:
+        on_truncate()
     return out
 
 
@@ -1503,33 +1868,553 @@ def _pays_for_the_rest(html_or_text: str) -> bool:
     return any(label in low for label in PAY_LABELS)
 
 
+# ── F24b: app state in the page ───────────────────────────────────────────────
+
+#: A script whose id is wrapped in double underscores: the shape a client app
+#: gives its own state blob (``__NEXT_DATA__``, ``__NUXT__``,
+#: ``__APOLLO_STATE__``, ``__INITIAL_STATE__`` and the rest). The shape is the
+#: test, not a list of names, so a state blob this code has never heard of is
+#: read the same way.
+_STATE_ID_RE = re.compile(r"""\bid\s*=\s*["']\s*(__[A-Za-z0-9_$]+__)\s*["']""")
+_SCRIPT_TAG_RE = re.compile(r"(?is)<script\b([^>]*)>(.*?)</script\s*>")
+_TAG_RE_ALL = re.compile(r"(?s)<[^>]*>")
+#: A state blob this big is a bundle or a data dump, not a page's words.
+_STATE_MAX_BLOB = 4 * 1024 * 1024
+#: Dicts walked before the walk gives up, and characters emitted from them.
+_STATE_MAX_NODES = 20_000
+_STATE_MAX_CHARS = 40_000
+#: Below this a field is a label, a caption or a config value, not prose.
+_STATE_MIN_FIELD = 120
+_STATE_MIN_WORDS = 12
+#: A heading out of a data blob: short, a few words, and not a sentence.
+_STATE_MAX_HEADING = 200
+_STATE_MAX_HEADING_WORDS = 24
+#: Subtrees that never hold prose. Identifiers, addresses, media, style blocks,
+#: build metadata, callbacks and the page's own chrome: cheap, structural, and
+#: never a key path to a host. The chrome names are the ones
+#: :data:`_CHROME_TAGS` and :data:`_CHROME_ROLES` already use, so a navigation
+#: blob in the data is dropped for the same reason a navigation menu in the
+#: markup is.
+_STATE_SKIP_KEYS = frozenset(
+    {
+        "id", "ids", "_id", "uuid", "guid", "slug", "hash", "checksum", "etag",
+        "url", "urls", "uri", "href", "link", "links", "permalink", "canonical",
+        "src", "source", "srcset", "sizes", "alt", "alttext", "caption",
+        "width", "height", "ratio",
+        "image", "images", "img", "icon", "icons", "thumb", "thumbnail",
+        "class", "classname", "style", "styles", "css", "svg", "font", "fonts",
+        "color", "colors", "radius", "border", "padding", "margin",
+        "buildid", "buildmanifest", "webpack", "runtimeconfig", "config",
+        "env", "environment", "locale", "locales", "lang", "languages",
+        "timezone", "currency", "lat", "lng", "latitude", "longitude",
+        "token", "tokens", "secret", "secrets", "apikey", "password", "cookie",
+        "cookies", "event", "events", "handler", "handlers", "callback",
+        "callbacks", "script", "scripts", "chunk", "chunks", "route",
+        "navigation", "nav", "navbar", "menu", "menubar", "header", "footer",
+        "sidebar", "breadcrumb", "breadcrumbs", "banner", "promo", "promos",
+        "advert", "adverts", "ads", "social", "share", "sharing", "legal",
+    }
+)
+#: A field that is this shaped is a person's reading, not a value a page keeps.
+_STATE_BODY_KEYS = (
+    "articlebody", "body", "content", "bodytext", "contenttext", "plaintext",
+    "text", "description", "summary", "excerpt", "answer", "answertext",
+    "acceptedanswer", "suggestedanswer", "value",
+)
+_STATE_HEADING_KEYS = ("headline", "title", "name", "question", "questiontext")
+#: Characters that give a string away as code, markup or an address.
+_CODE_CHARS = frozenset("{}<>;|\\=")
+#: A token that is an address, a path or a handle rather than a word.
+_LINKISH_RE = re.compile(r"^(?:https?://|www\.|//|mailto:|\S+@\S+\.\w+)")
+
+
+def _plain(text: str) -> str:
+    """Whitespace-collapsed, mark-free, lowercased: two texts that mean the same
+    thing compare equal even when one is Markdown and the other is a JSON string.
+    """
+    return _norm(re.sub(r"[#*_>`\[\]]", "", text or "")).lower()
+
+
+#: Two windows are enough to call a field already said: one at a third of the
+#: way in and one at two thirds, so an edit to the first or the last paragraph
+#: does not hide the rest.
+_HELD_WINDOW = 30
+#: Markup past this is more than one note about it is worth: the source note
+#: that counts what the markup did not show has to read the whole markup to say
+#: it, and on the largest pages here that is most of a second.
+_NOTE_MAX_HTML = 4_000_000
+
+
+class _Held:
+    """What the read already has, so the same words are not said twice."""
+
+    def __init__(self, seen: str = "") -> None:
+        self.buf = _plain(seen) if seen else ""
+
+    def has(self, prose: str) -> bool:
+        window = _HELD_WINDOW
+        text = _plain(prose)
+        if len(text) < window:
+            return bool(self.buf) and text in self.buf
+        for at in (len(text) // 3, 2 * len(text) // 3):
+            if text[at : at + window] in self.buf:
+                return True
+        return False
+
+    def add(self, prose: str) -> None:
+        self.buf += "\n" + _plain(prose)
+
+
+def _prose(value: str) -> str:
+    """A string is reading text: long enough, enough words, not code or a name.
+
+    The tests are shape, not vocabulary, so they hold on a page this code has
+    never seen: a few hundred characters of sentences with letters, spaces and
+    ordinary punctuation in them, none of the punctuation that marks a
+    stylesheet or a script, and not one token in five that is an address. A
+    block of links is navigation wherever it is written, and navigation is not
+    the body of anything.
+    """
+    # _strings has already normalized and sanitized each field. Re-decoding it
+    # here would turn double-encoded entities back into markup.
+    text = value
+    flat = _norm(text)
+    if len(flat) < _STATE_MIN_FIELD or len(flat.split()) < _STATE_MIN_WORDS:
+        return ""
+    if sum(1 for c in flat if c in _CODE_CHARS) > len(flat) // 100 + 1:
+        return ""
+    if flat.lower().startswith(("http://", "https://", "data:", "javascript:", "//")):
+        return ""
+    tokens = flat.split()
+    if sum(1 for token in tokens if _LINKISH_RE.match(token)) > len(tokens) // 5:
+        return ""
+    return text
+
+
+def _heading(node: Dict[str, Any]) -> str:
+    """A name to put above the prose beside it, or nothing."""
+    for key in _STATE_HEADING_KEYS:
+        value = node.get(key)
+        if not isinstance(value, str):
+            continue
+        text = _norm(_plain_value(value))
+        if not text or len(text) > _STATE_MAX_HEADING:
+            continue
+        if len(text.split()) <= _STATE_MAX_HEADING_WORDS and "\n" not in text:
+            return text
+    return ""
+
+
+class _StateWalk:
+    """Read one app-state blob as Markdown: the prose under the content keys.
+
+    Structural throughout. A dict that carries both a short name and a long
+    string becomes a heading and a paragraph, an FAQ pair becomes a question
+    and its answer, and everything else is walked in the order the page wrote
+    it. Nothing is matched by a key path to a site, and a value that fails the
+    prose test is never emitted, so a state blob that is only build metadata
+    and navigation comes back empty and the read still fails as thin.
+    """
+
+    def __init__(self, held: _Held) -> None:
+        self.held = held
+        self.chunks: List[Tuple[str, List[str]]] = []
+        self.chars = 0
+        self.nodes = 0
+        self.truncated = False
+
+    def out_of_budget(self) -> bool:
+        return self.nodes > _STATE_MAX_NODES or self.chars >= _STATE_MAX_CHARS
+
+    def walk(self, node: Any, key: str = "") -> None:
+        if self.chars >= _STATE_MAX_CHARS:
+            self.truncated = True
+            return
+        if self.nodes >= _STATE_MAX_NODES:
+            self.truncated = True
+            return
+        self.nodes += 1
+        if isinstance(node, list):
+            for item in node:
+                self.walk(item, key)
+            return
+        if not isinstance(node, dict):
+            return
+        if self.out_of_budget():
+            return
+        bodies: List[str] = []
+        used: List[str] = []
+        pending_chars = 0
+        for name, value in node.items():
+            lower = str(name).lower()
+            if lower in _STATE_SKIP_KEYS or lower not in _STATE_BODY_KEYS:
+                continue
+            if not isinstance(value, (str, list, dict)):
+                continue
+            field_bodies: List[str] = []
+            values = _strings(
+                value, on_truncate=lambda: setattr(self, "truncated", True)
+            )
+            for text in values:
+                prose = _prose(text)
+                if not prose or self.held.has(prose):
+                    continue
+                field_bodies.append(prose)
+            # Portable-text trees often split one paragraph into short spans.
+            # If no leaf qualifies alone, judge their combined body text.
+            if not field_bodies and len(values) > 1:
+                joined = "\n\n".join(value for value in values if value.strip())
+                prose = _prose(joined)
+                if prose and not self.held.has(prose):
+                    field_bodies.append(prose)
+            if field_bodies:
+                field_chars = sum(len(body) for body in field_bodies)
+                if self.chars + pending_chars + field_chars > _STATE_MAX_CHARS:
+                    self.truncated = True
+                    continue
+                bodies.extend(field_bodies)
+                pending_chars += field_chars
+                used.append(str(name))
+        if bodies:
+            heading = _heading(node)
+            lines: List[str] = []
+            if heading and not self.held.has(heading):
+                lines += [f"## {heading}", ""]
+            for prose in bodies:
+                self.held.add(prose)
+                # The blob's own paragraph breaks survive: a body written as
+                # twelve <p> blocks reads as twelve paragraphs, not one line.
+                for para in prose.split("\n"):
+                    if para.strip():
+                        lines += [para.strip(), ""]
+            self.chars += pending_chars
+            self.chunks.append(("\n\n".join(bodies), lines))
+        for name, value in node.items():
+            if str(name) in used:
+                continue
+            if str(name).lower() in _STATE_SKIP_KEYS:
+                continue
+            self.walk(value, str(name))
+
+
+def _state_blobs(html: str) -> List[Tuple[str, Any]]:
+    """``(id, parsed)`` for every app-state script the page ships."""
+    import json
+
+    out: List[Tuple[str, Any]] = []
+    seen: set = set()
+    for match in _SCRIPT_TAG_RE.finditer(html or ""):
+        attrs, body = match.group(1) or "", match.group(2) or ""
+        name_match = _STATE_ID_RE.search(attrs)
+        if not name_match or not body.strip() or len(body) > _STATE_MAX_BLOB:
+            continue
+        name = name_match.group(1)
+        if name in seen:
+            continue
+        seen.add(name)
+        try:
+            data = json.loads(body)
+        except Exception:  # noqa: BLE001 - an assignment is not the whole body
+            data = _loads_assignment(body)
+        if isinstance(data, (dict, list)):
+            out.append((name, data))
+    return out
+
+
+def _loads_assignment(body: str) -> Any:
+    """The JSON in ``window.__STATE__ = {...}``, or ``None``.
+
+    Half the app-state blobs this walks are written as an assignment rather
+    than as the whole script body. Slicing from the first brace to the last is
+    enough for that shape, and anything it cannot read is left unread rather
+    than guessed at.
+    """
+    import json
+
+    starts = [i for i in (body.find("{"), body.find("[")) if i >= 0]
+    lo = min(starts) if starts else -1
+    hi = max(body.rfind("}"), body.rfind("]"))
+    if lo < 0 or hi <= lo:
+        return None
+    try:
+        return json.loads(body[lo : hi + 1])
+    except Exception:  # noqa: BLE001 - not JSON, so not prose either
+        return None
+
+
+def _state_walk(data: Any, held: _Held) -> _StateWalk:
+    """Walk one state blob and retain its output and cap status."""
+    walk = _StateWalk(held)
+    walk.walk(data)
+    return walk
+
+
+def _state_chunks(data: Any, held: _Held) -> List[Tuple[str, List[str]]]:
+    """``(prose, markdown lines)`` for each piece of prose in one state blob."""
+    return _state_walk(data, held).chunks
+
+
+def has_page_data(html: str) -> bool:
+    """True when the page ships structured data of either kind.
+
+    One substring test for JSON-LD and one scan for a state script, so a page
+    that ships neither costs nothing.
+    """
+    if not html:
+        return False
+    if _LD_MARKER in html:
+        return True
+    return any(
+        _STATE_ID_RE.search(m.group(1) or "")
+        for m in _SCRIPT_TAG_RE.finditer(html)
+    )
+
+
+def drop_data_scripts(html: str) -> str:
+    """The page with the scripts this module reads taken out of it.
+
+    The extractor is not asked to read them. Left in, it hands back the body of
+    a JSON-LD script as though it were the article: one line of punctuation and
+    quotes, which is not a read and must not be mistaken for a thin one that
+    the data could rescue. These blobs are read by :func:`page_data_chunks`
+    instead, so nothing is lost by removing them here.
+    """
+    if not html or not has_page_data(html):
+        return html
+    out: List[str] = []
+    last = 0
+    for match in _SCRIPT_TAG_RE.finditer(html):
+        attrs = match.group(1) or ""
+        if _LD_MARKER in attrs or _STATE_ID_RE.search(attrs):
+            out.append(html[last : match.start()])
+            last = match.end()
+    out.append(html[last:])
+    return "".join(out)
+
+
+def page_data_chunks(html: str) -> List[Tuple[str, str, List[str]]]:
+    """``(blob, prose, lines)`` for every piece of prose the page's data holds.
+
+    The one walk both readers use: the body of a JSON-LD node, and each field
+    an app-state blob carries under a content key. JSON-LD comes first, then
+    the app state in the order the page wrote it. A piece the page repeats (the
+    same article in two blobs) is emitted once, because the walk is what the
+    caller reads, not the walker's own opinion of it.
+
+    A paywalled page returns nothing here on purpose. Its structured body is
+    the copy the paywall is charging for, and reading it out of the markup
+    would be the thing ``--expand`` refuses to do with a "continue reading"
+    button.
+    """
+    if not html or not has_page_data(html):
+        return []
+    try:
+        if _pays_for_the_rest(html):
+            return []
+        out: List[Tuple[str, str, List[str]]] = []
+        said: _Held = _Held()
+        for node in _ld_nodes(html):
+            kind = _node_kind(node)
+            if not kind:
+                continue
+            lines = _node_lines(node, kind)
+            prose = _plain("\n".join(lines))
+            if not prose or said.has(prose):
+                continue
+            said.add(prose)
+            out.append(("JSON-LD", prose, lines))
+        for name, data in _state_blobs(html):
+            try:
+                walk = _state_walk(data, said)
+            except Exception:  # noqa: BLE001 - a malformed state blob cannot erase JSON-LD
+                continue
+            source = f"{name} (partial: extraction cap reached)" if walk.truncated else name
+            for prose, lines in walk.chunks:
+                out.append((source, prose, lines))
+        return out
+    except Exception:  # noqa: BLE001 - structured data is an extra, never a failure
+        return []
+
+
+def page_data_blocks(
+    html: str,
+    seen: str = "",
+    *,
+    chunks: Optional[List[Tuple[str, str, List[str]]]] = None,
+) -> List[Tuple[str, str]]:
+    """``(source, text)`` for each blob that holds prose this read does not have.
+
+    A piece of data the extract already said is dropped (``seen``), so the data
+    never repeats the article next to it and a page whose markup already reads
+    well comes back with nothing here.
+    """
+    held = _Held(seen)
+    order: List[str] = []
+    grouped: Dict[str, List[str]] = {}
+    pieces = chunks if chunks is not None else page_data_chunks(html)
+    for name, prose, lines in pieces:
+        if held.has(prose):
+            continue
+        held.add(prose)
+        if name not in grouped:
+            grouped[name] = []
+            order.append(name)
+        grouped[name].extend(lines)
+    out: List[Tuple[str, str]] = []
+    for name in order:
+        text = "\n".join(grouped[name]).strip()
+        if len(_norm(text)) >= _STRUCTURED_MIN_CHARS:
+            out.append((name, text))
+    return out
+
+
+def page_state_blocks(
+    html: str,
+    seen: str = "",
+    *,
+    chunks: Optional[List[Tuple[str, str, List[str]]]] = None,
+) -> List[Tuple[str, str]]:
+    """The app state's own words that this read does not already have.
+
+    The same answer as :func:`page_data_blocks`, without the JSON-LD. That
+    blob is a machine-readable description of whatever entities the page is
+    *about*, and on a page that already reads well those entities are usually
+    not this page: a related article's blurb, the publisher's about text, a
+    list of social profiles. App state is the page's own content model, the
+    text the browser was going to draw, so that is what is worth adding to a
+    read that has one already.
+    """
+    return [
+        (name, text)
+        for name, text in page_data_blocks(html, seen, chunks=chunks)
+        if name != "JSON-LD"
+    ]
+
+
+def page_data_text(
+    html: str,
+    *,
+    source: Optional[str] = None,
+    chunks: Optional[List[Tuple[str, str, List[str]]]] = None,
+) -> str:
+    """The page's own data as Markdown, or ``""`` when it holds no body.
+
+    Every piece the blobs hold, said once. The caller compares this against the
+    extract to decide whether the data replaces it (:func:`_Held` is how
+    :func:`page_data_blocks` decides what is new).
+    """
+    lines: List[str] = []
+    pieces = chunks if chunks is not None else page_data_chunks(html)
+    for name, _, chunk in pieces:
+        if source is not None and name != source:
+            continue
+        lines.extend(chunk)
+    return "\n".join(lines).strip()
+
+
 def structured_text(html: str) -> str:
-    """The page's own JSON-LD as Markdown, or ``""`` when it holds no body.
+    """The page's own data as Markdown, or ``""`` when it holds no body.
 
     F24b. No second request and no guess about the host: the bytes already
     downloaded often carry the whole article as data, and a client-rendered
-    page serves almost nothing else. This only *supplies* text; it never
-    replaces a longer extract, so a page whose markup reads well is untouched.
+    page serves almost nothing else. Both shapes count, the typed
+    ``<script type="application/ld+json">`` and the app state an inline script
+    named ``__SOMETHING__`` holds. This only *supplies* text; the caller decides
+    whether that text replaces a thinner extract or sits under it.
 
     A paywalled page is refused here on purpose. Its structured body is the
     copy the paywall is charging for, and reading it out of the markup would be
     the thing ``--expand`` refuses to do with a "continue reading" button.
     """
-    if not html or "application/ld+json" not in html:
-        return ""
-    try:
-        if _pays_for_the_rest(html):
-            return ""
-        lines: List[str] = []
-        for node in _ld_nodes(html):
-            kind = _node_kind(node)
-            if not kind:
-                continue
-            lines.extend(_node_lines(node, kind))
-        text = "\n".join(lines).strip()
-        return text if len(_norm(text)) >= _STRUCTURED_MIN_CHARS else ""
-    except Exception:  # noqa: BLE001 - structured data is an extra, never a failure
-        return ""
+    return page_data_text(html)
+
+
+def visible_text(html: str) -> str:
+    """What the markup shows a reader: no tags, no script bodies.
+
+    The other side of :func:`_Held` for the note. A word is *not* shown if the
+    page never put it in the document, as opposed to putting it somewhere the
+    extractor did not look. Script bodies go by span rather than by pattern, so
+    this is one pass over the markup and not a backtracking one.
+    """
+    import html as _html
+
+    out: List[str] = []
+    last = 0
+    for match in _SCRIPT_TAG_RE.finditer(html or ""):
+        out.append(html[last : match.start()])
+        last = match.end()
+    out.append(html[last:])
+    return _plain(_html.unescape(_TAG_RE_ALL.sub(" ", "".join(out))))
+
+
+def data_source_note(
+    html: str,
+    text: str,
+    *,
+    chunks: Optional[List[Tuple[str, str, List[str]]]] = None,
+) -> Optional[More]:
+    """F24b: where the read's text came from, when the page's data supplied it.
+
+    A fact about these two strings rather than a second opinion about the page.
+    Either the read *is* the data (:func:`page_data_text`), or the app state
+    holds words the markup never showed and they are at the end of the read. A
+    page whose data says what its markup says gets no note: the extract and the
+    data are two descriptions of one article and only one of them was used.
+
+    The second question is asked of the page's visible text rather than of the
+    read, so on a page far past :data:`_NOTE_MAX_HTML` it costs more markup
+    than the note is worth; those pages say nothing here rather than say it
+    late.
+    """
+    if not html or not text:
+        return None
+    pieces = chunks if chunks is not None else page_data_chunks(html)
+    whole = page_data_text(html, chunks=pieces)
+    if whole and _norm(text) == _norm(whole) and plain_len(whole) >= _STRUCTURED_MIN_CHARS:
+        return More(
+            "source",
+            f"[source: {_source_names(html, chunks=pieces)}, the page's own data; "
+            f"{plain_len(whole):,} characters read from it]",
+        )
+    if len(html) > _NOTE_MAX_HTML:
+        return None
+    # The words the markup does not carry are the ones the data had to supply,
+    # because an extract is made of markup. The same answer the read gave,
+    # asked of the page instead of of the text.
+    blocks = page_state_blocks(html, visible_text(html), chunks=pieces)
+    if not blocks:
+        return None
+    data = _plain("\n\n".join(body for _, body in blocks))
+    read = _plain(text)
+    at = read.find(data[:_HELD_WINDOW])
+    # The data is at the end, so what came before it is the extract. A match at
+    # the very start is the extract saying the same thing, which is the other
+    # case and has no note.
+    if at < _HELD_WINDOW or read.find(data[-_HELD_WINDOW:], at) < 0:
+        return None
+    added = sum(plain_len(body) for _, body in blocks)
+    if added < _STRUCTURED_MIN_CHARS:
+        return None
+    return More(
+        "source",
+        f"[source: {', '.join(name for name, _ in blocks)}, the page's own data; "
+        f"{added:,} characters the markup did not show]",
+    )
+
+
+def _source_names(
+    html: str,
+    *,
+    chunks: Optional[List[Tuple[str, str, List[str]]]] = None,
+) -> str:
+    """The blobs this page ships, in the order the read walks them."""
+    pieces = chunks if chunks is not None else page_data_chunks(html)
+    names = list(dict.fromkeys(name for name, _, _ in pieces))
+    if not names:
+        names = ["JSON-LD"] if _LD_MARKER in (html or "") else []
+        names.extend(name for name, _ in _state_blobs(html))
+    return ", ".join(names) or "the page's own data"
 
 
 # ── F24c: one line saying where this page came from ───────────────────────────
