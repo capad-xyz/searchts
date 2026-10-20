@@ -2190,8 +2190,15 @@ def _cmd_grab(args):
         parts = ", ".join(f"{e['count']} {e['kind']} ({e['reason']})" for e in entries)
         return f"  omitted: {total} asset(s) not saved: {parts}"
 
+    def page_md_note():
+        err = manifest.get("page_md_error")
+        return f"  page.md not saved: {err}" if err else None
+
     if args.json:
         note = omitted_note()
+        if note:
+            print(note, file=sys.stderr)
+        note = page_md_note()
         if note:
             print(note, file=sys.stderr)
         print(json.dumps(manifest, ensure_ascii=False))
@@ -2207,6 +2214,9 @@ def _cmd_grab(args):
     if fonts:
         print(f"  fonts:   {fonts}", file=sys.stderr)
     note = omitted_note()
+    if note:
+        print(note, file=sys.stderr)
+    note = page_md_note()
     if note:
         print(note, file=sys.stderr)
     print(os.path.join(out, "manifest.json"))

@@ -292,6 +292,14 @@ def get_asset(url: str, out_path: Optional[str] = None, *, timeout: int = 30,
 ASSET_KINDS = ("images", "icons", "css", "fonts", "svg", "scripts", "inline_svg")
 
 
+_FONT_DATA_PREFIXES = (
+    "data:font/",
+    "data:application/font",
+    "data:application/vnd.ms-fontobject",
+    "data:application/x-font",
+)
+
+
 def _parse_srcset(srcset: str) -> List[str]:
     """Pull every URL out of a srcset, descriptors and data URI commas included.
 
@@ -327,8 +335,10 @@ def extract_assets(html: str, base_url: str) -> Dict[str, List[str]]:
         u = urllib.parse.urljoin(base_url, href.strip().strip('\'"'))
         low = u.lower()
         # A data URI carries its bytes in the page; save it directly rather
-        # than pretend it is a URL to fetch. Only image payloads are worth it.
-        if not (low.startswith(("http://", "https://")) or low.startswith("data:image/")):
+        # than pretend it is a URL to fetch. Images and fonts are worth it.
+        if not (low.startswith(("http://", "https://"))
+                or low.startswith("data:image/")
+                or low.startswith(_FONT_DATA_PREFIXES)):
             return
         if u not in out[kind]:
             out[kind].append(u)
@@ -429,7 +439,7 @@ _RGB = re.compile(r"rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)", re.I)
 _HSL = re.compile(r"hsla?\(\s*([\d.]+)(?:deg)?[\s,]+([\d.]+)%[\s,]+([\d.]+)%", re.I)
 _FONTFAM = re.compile(r"font-family\s*:\s*([^;{}]+)", re.I)
 _CSS_VAR = re.compile(r"(--[\w-]+)\s*:\s*([^;{}]+)", re.I)
-_GRADIENT = re.compile(r"(linear|radial|conic)-gradient\(([^)]+)\)", re.I)
+_GRADIENT_START = re.compile(r"(?:linear|radial|conic)-gradient\(", re.I)
 _FONT_FACE = re.compile(r"@font-face\s*\{([^}]+)\}", re.I)
 _GENERIC_FONTS = {"inherit", "initial", "unset", "serif", "sans-serif", "monospace",
                   "cursive", "fantasy", "system-ui", "ui-sans-serif", "ui-serif",
@@ -487,6 +497,24 @@ def _hsl_to_hex(h: float, s: float, lum: float) -> str:
         r, g, b = c, 0, x
     m = lum - c / 2
     return _rgb_to_hex((r + m) * 255, (g + m) * 255, (b + m) * 255)
+
+
+def _gradients_in(text: str) -> List[str]:
+    """Full gradient calls, including nested color functions such as rgba()."""
+    found: List[str] = []
+    for m in _GRADIENT_START.finditer(text):
+        i, depth = m.end(), 1
+        while i < len(text) and depth:
+            if text[i] == "(":
+                depth += 1
+            elif text[i] == ")":
+                depth -= 1
+            i += 1
+        if depth == 0:
+            grad = text[m.start():i].strip()
+            if grad not in found:
+                found.append(grad)
+    return found
 
 
 def _colors_in(text: str) -> set:
@@ -549,8 +577,7 @@ def extract_design(html: str, css_texts: Optional[List[str]] = None) -> Dict:
             if var_name not in css_vars:
                 css_vars[var_name] = var_value
         # Gradients
-        for m in _GRADIENT.finditer(b):
-            grad = m.group(0).strip()
+        for grad in _gradients_in(b):
             if grad not in gradients:
                 gradients.append(grad)
         # Font stacks (full font-family declarations)
@@ -623,8 +650,8 @@ def extract_design(html: str, css_texts: Optional[List[str]] = None) -> Dict:
                 if _SEMANTIC_VAR.match(vm.group(1) + ":"):
                     for h in _colors_in(vm.group(2)):
                         semantic[h] += 2
-        for gm in _GRADIENT.finditer(css):
-            for h in _colors_in(gm.group(0)):
+        for gm in _gradients_in(css):
+            for h in _colors_in(gm):
                 semantic[h] += 1
 
     ordered = sorted(
@@ -862,6 +889,8 @@ def grab(page_url: str, out_dir: str, *,
             if low.startswith("data:"):
                 if low.startswith("data:image/") and raw not in assets["images"]:
                     assets["images"].append(raw)
+                elif low.startswith(_FONT_DATA_PREFIXES) and raw not in assets["fonts"]:
+                    assets["fonts"].append(raw)
                 continue
             if not raw or raw.startswith("#"):
                 continue

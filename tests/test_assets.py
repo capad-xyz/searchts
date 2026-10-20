@@ -417,6 +417,7 @@ def test_extract_assets_collects_picture_srcset_lazy_poster_and_meta():
                  "/safari-pinned-tab.svg"):
         assert BASE.rstrip("/") + path in a["icons"], path
     assert BASE.rstrip("/") + "/fonts/Inter-Variable.woff2" in a["fonts"]
+    assert any(u.startswith("data:font/woff2;base64,") for u in a["fonts"])
     assert BASE.rstrip("/") + "/assets/app.js" in a["scripts"]
     assert BASE.rstrip("/") + "/assets/site.css" in a["css"]
 
@@ -444,6 +445,14 @@ def test_extract_design_reads_variables_tokens_and_semantic_palette():
     assert d["tokens"]["shadow"]
     assert "24px" in d["tokens"]["spacing"] or "0 auto" in d["tokens"]["spacing"]
     assert any("Inter" in stack for stack in d["tokens"]["font_stacks"])
+
+
+def test_gradients_keep_nested_color_functions():
+    d = assets.extract_design(
+        "", [".x{background:linear-gradient(90deg, rgba(255,0,0,.5), #00ff00)}"])
+    grad = d["gradients"][0]
+    assert grad.startswith("linear-gradient(") and grad.endswith(")")
+    assert "rgba(255,0,0,.5)" in grad and "#00ff00" in grad
 
 
 def test_theme_color_is_read_whatever_the_meta_order():
@@ -477,6 +486,7 @@ def test_grab_writes_css_fonts_inline_svg_and_tokens(monkeypatch, tmp_path):
     assert css_files and "--brand" in css_files[0].read_text(encoding="utf-8")
     assert list((out / "inline_svg").glob("*.svg"))
     assert list((out / "images").glob("inline-*.png"))  # the data URI image
+    assert list((out / "fonts").glob("inline-*.woff2"))  # the data URI font
 
     # Font files are saved, modern format first, not just the family name.
     font_records = [r for r in manifest["assets"] if r["kind"] == "fonts" and r["ok"]]
@@ -598,7 +608,7 @@ def test_cli_grab_json_warns_on_stderr_and_keeps_stdout_clean(monkeypatch, capsy
         "title": "Demo", "downloaded": 2, "palette": [], "fonts": [], "assets": [],
         "omitted": [{"reason": "max-assets", "kind": "fonts", "count": 6,
                      "urls": ["https://d.test/a.woff2"]}],
-        "omitted_count": 6,
+        "omitted_count": 6, "page_md_error": "OSError: disk full",
     }
     monkeypatch.setattr("searchts.assets.grab", lambda url, out, **kw: manifest)
     with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out",
@@ -608,6 +618,7 @@ def test_cli_grab_json_warns_on_stderr_and_keeps_stdout_clean(monkeypatch, capsy
     assert json.loads(captured.out)["omitted_count"] == 6
     assert "omitted: 6 asset(s) not saved" in captured.err
     assert "6 fonts (max-assets)" in captured.err
+    assert "page.md not saved" in captured.err
 
 
 def test_grab_rejects_an_unknown_kind_fail_loud(monkeypatch, tmp_path):
@@ -615,6 +626,12 @@ def test_grab_rejects_an_unknown_kind_fail_loud(monkeypatch, tmp_path):
     with pytest.raises(assets.AssetError) as e:
         assets.grab(BASE, str(tmp_path / "g"), kinds=("images", "imagez"))
     assert "imagez" in str(e.value)
+
+
+def test_grab_scripts_flag_actually_saves_scripts(monkeypatch, tmp_path):
+    monkeypatch.setattr(assets, "fetch_bytes", _design_fetch)
+    manifest = assets.grab(BASE, str(tmp_path / "g"), include_scripts=True)
+    assert any(r["kind"] == "scripts" and r["ok"] for r in manifest["assets"])
 
 
 def test_grab_kinds_include_inline_svg_by_default(monkeypatch, tmp_path):
