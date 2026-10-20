@@ -970,8 +970,8 @@ def test_items_counts_new_rows_only_and_says_when_the_feed_repeated_one(monkeypa
     first = got[0].text
     # 3 unique rows from the first page, then the same 8 rows a second time:
     # 11 read, 8 of them already had.
-    assert "11 new rows; 8 the feed handed back again" in first
-    assert "were not counted twice" in first
+    assert "11 new rows; 8 rows the feed handed back again" in first
+    assert "not counted twice" in first
     # Asking for 300 and getting 11 is not the list ending, and the read says so:
     # the batch's own cursor pointed back at the batch.
     assert "cursor pointed back at a page this walk had already read" in first
@@ -1021,7 +1021,7 @@ def test_the_cursor_hop_stops_at_the_items_ceiling_and_never_counts_a_row_twice(
     got = unlocker.read_items(LISTING, 300, use_memory=False)
     assert len(fetched) == 3
     assert len(set(fetched)) == 3, "a URL was requested twice in one walk"
-    assert "8 the feed handed back again were not counted twice" in got[0].text
+    assert "8 rows the feed handed back again, not counted twice" in got[0].text
 
 
 def test_expand_escalates_to_the_browser_and_raises_the_comment_cap(monkeypatch):

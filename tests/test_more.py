@@ -1019,7 +1019,7 @@ def test_a_next_page_with_the_same_rows_is_not_counted_twice(monkeypatch):
     first = got[0].text
     # Ten rows, not forty: the pages after the first were the same rows again.
     assert "10 new rows" in first
-    assert "40 rows the pages handed back again were not counted twice" in first
+    assert "40 rows the pages handed back again, not counted twice" in first
     # And the walk says the pages were ones it had already read.
     assert "4 pages served rows this walk had already read" in first
     # The rows are returned once. The later page keeps what is its own and
@@ -1044,10 +1044,66 @@ def test_a_next_page_with_some_new_rows_counts_only_those(monkeypatch):
     # Fifteen rows the walk had not read and five it had: posts 6-10 of the
     # second page were posts 6-10 of the first page.
     assert "15 new rows" in first
-    assert "5 rows the pages handed back again were not counted twice" in first
+    assert "5 rows the pages handed back again, not counted twice" in first
     # The rows the first page gave are not given again on the second page.
     assert "- [Post 6](https://example.org/post/6)" not in got[1].text
     assert "- [Post 11](https://example.org/post/11)" in got[1].text
+
+
+def test_the_repeat_note_says_one_row_when_one_row_came_back(monkeypatch):
+    """A count of one is a row, not "1 rows"."""
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_list_rows(1 + 9 * (p - 1), 10), status=200,
+            final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}" if p == 1 else None,
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list?p=1", 40)
+    first = got[0].text
+    assert "19 new rows; 1 row the pages handed back again, not counted twice" in first
+
+
+def test_the_feed_repeat_note_says_one_row_when_one_row_came_back(monkeypatch):
+    """A count of one from the feed's own cursor is a row, not "1 the feed".
+
+    The feed-cursor path is the one the known hosts take (``index_keys``), and
+    its repeat note read "n the feed handed back again were not counted twice":
+    a count with no noun in it. The cursor that hands back exactly one row the
+    walk already had is the smallest case where the note sings alone.
+    """
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        top = 11 if p == 1 else 1  # page two names one row page one already had
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_list_rows(1, top), status=200, final_url=url,
+            index_keys=[f"https://example.org/post/{i}" for i in range(1, top + 1)],
+            next_url=f"https://example.org/feed?p={p + 1}" if p == 1 else None,
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/feed?p=1", 40)
+    first = got[0].text
+    assert "11 new rows; 1 row the feed handed back again, not counted twice" in first
+
+
+def test_the_capped_walk_says_one_row_when_one_row_came_back(monkeypatch):
+    """"1 rows of 40" is not a sentence, and the page cap is still one page."""
+    def fake(url, **k):
+        p = int(url.rsplit("=", 1)[-1])
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=_list_rows(1, 1), status=200, final_url=url,
+            next_url=f"https://example.org/list?p={p + 1}",
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    monkeypatch.setenv("SEARCHTS_MAX_PAGES", "1")
+    got = unlocker.read_items("https://example.org/list?p=1", 40)
+    first = got[0].text
+    assert "[pages: 1 row of 40, stopped after 1 page" in first
+    assert "1 rows" not in first
 
 
 def test_a_next_page_with_the_same_copy_is_named(monkeypatch):
@@ -1110,8 +1166,8 @@ def test_a_card_row_whose_link_is_on_the_next_line_still_counts_as_a_row(monkeyp
     got = unlocker.read_items("https://example.org/list?p=1", 40)
     first = got[0].text
     # One row, read once: the four pages that follow served the same card.
-    assert "1 new row;" in first or "1 new rows;" in first
-    assert "4 rows the pages handed back again were not counted twice" in first
+    assert "1 new row;" in first
+    assert "4 rows the pages handed back again, not counted twice" in first
     # And the card is not repeated on the pages that follow it.
     assert "Alpha release notes" not in got[1].text
 

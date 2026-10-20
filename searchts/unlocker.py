@@ -3463,7 +3463,7 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
                 out[-1], fetched, asked, last_next,
                 # `want` is the ceiling that applied, not the unclamped ask:
                 # the clamp note on page one already names the difference.
-                rows=f"{got} rows of {want}" if got else "no rows",
+                rows=f"{got} row{'s' if got != 1 else ''} of {want}" if got else "no rows",
             )
     if not out:
         return out
@@ -3474,7 +3474,7 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         # a batch the walk has already read when the feed has stopped moving, and
         # a walk that stops there says nothing. Named on page one, with the count.
         extra += (
-            f"\n\n[items: {got} new rows of the {asked} asked for. The feed's own "
+            f"\n\n[items: {got} new row{'s' if got != 1 else ''} of the {asked} asked for. The feed's own "
             "cursor pointed back at a page this walk had already read, so the "
             "walk stopped there; the rows it did not have were never served]"
         )
@@ -3484,15 +3484,17 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         # have read more of the list than it did. The ceiling itself is named by
         # ``_note_knobs`` below, on this same page.
         extra += (
-            f"\n\n[items: {got} new rows; {feed_repeats} the feed handed back again "
-            "were not counted twice]"
+            f"\n\n[items: {got} new row{'s' if got != 1 else ''}; "
+            f"{feed_repeats} row{'s' if feed_repeats != 1 else ''} the feed handed "
+            "back again, not counted twice]"
         )
     if repeats:
         # A next page handed back rows the previous page already had. Same
         # reason, same place: the count is of rows the walk had not read.
         extra += (
-            f"\n\n[items: {got} new rows; {repeats} rows the pages handed back again "
-            "were not counted twice]"
+            f"\n\n[items: {got} new row{'s' if got != 1 else ''}; "
+            f"{repeats} row{'s' if repeats != 1 else ''} the pages handed back again, "
+            "not counted twice]"
         )
     if repeated_pages:
         # Pages whose every row was one we already had. Their rows are not
