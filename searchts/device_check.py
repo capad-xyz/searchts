@@ -115,6 +115,11 @@ PUZZLE_MARKERS: Tuple[str, ...] = (
     # hCaptcha
     "hcaptcha.com",
     "h-captcha",
+    # F5/Shape image CAPTCHA. Its copy, not its element ids: the widget markup
+    # is the one thing here that a real page can also carry (a blog post about
+    # CAPTCHAs shows a screenshot of one), while the instruction it prints is
+    # only ever there when a person is being asked to read characters.
+    "enter the characters seen in the image",
 )
 
 # Longest first. "funcaptcha" is a substring of "funcaptcha.com" and

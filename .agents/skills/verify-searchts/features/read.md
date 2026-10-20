@@ -32,6 +32,10 @@ prints nothing and fails loudly when no tier produced real content.
   type="application/ld+json">`, an app-state script named `__SOMETHING__`) out of
   the bytes already downloaded, and says `[source: ...]` when the data supplied
   them.
+- `read-plain-text` treats a body the server sent as text (`text/plain`,
+  `application/json`, markdown) as the page, not as markup to extract.
+- `read-challenge` names a bot check that stands in front of the page, and never
+  returns one as the article.
 
 ## How to get to it (user POV)
 
@@ -63,6 +67,25 @@ Preconditions:
 - **A paginated list says so.** Run `.venv/bin/python -m searchts read "https://news.ycombinator.com/news?p=2" --json > artifacts/read/paginated.json 2> artifacts/read/paginated.err`. Exit code `0`, `more` carries a `next-page` entry with `next_url` set to the page after this one and a `paginated` entry naming `--pages` / `--items`; `text` contains that paginated note. Other notes such as media may follow it. On a page with no pagination at all, `more` must carry neither entry: the note may not appear where there is no next page.
 - **Proof.** Open `artifacts/read/example.json` and `artifacts/read/missing.err` side by side. Together they show one fetch that returned content and named its tier, and one that returned nothing on stdout and named all three tiers.
 - **Report an unreachable tier.** If `doctor`'s `web` entry shows a tier missing, do not drive a bot-walled URL and call the failure a bug. Record the missing tier and the command attempted.
+
+### A body the server already sent as text
+
+Driven on 2026-10-20 from this box, with the browser tier installed. A body
+whose Content-Type is text (not markup) is the page, and the extractor must
+not eat it.
+
+- **A README is the file.** Run `.venv/bin/python -m searchts read https://raw.githubusercontent.com/capad-xyz/searchts/main/README.md --json > artifacts/read/raw-readme.json 2> artifacts/read/raw-readme.err`. Exit code `0`, `chars` is the size of the served file (25,397 on that day, against a 25,267-byte body), and `text` holds the file's first line and its last line. Before 2026-10-20 this drive returned 8,852 characters of 24,112 and said "16,274 characters are in blocks this read did not return": the article extractor read the markdown as markup and dropped the centred image blocks and the prose around them.
+- **Proof.** Compare `chars` with the size of the file the server serves. A read that is a fixed fraction of it is a read that lost something.
+- **Markup mislabelled as text is still extracted.** A server that sends a whole page under `text/plain` is still a page; the extractor reads it. Assert on the prose being present, not on the raw bytes.
+
+### A bot check in front of the page
+
+Driven on 2026-10-20 from this box, against pypi.org's F5/Shape client
+challenge. A challenge is a wall: it is named, and it is never the article.
+
+- **The shell is not the page.** Run `.venv/bin/python -m searchts read https://pypi.org/project/requests/ --json > artifacts/read/pypi.json 2> artifacts/read/pypi.err`. Two answers are correct and both were seen on that day: exit `0` with the project page (`chars` in the thousands, `text` holding the project's own summary), or exit non-zero with empty stdout and `artifacts/read/pypi.err` naming `challenge` on every tier. What is never correct is exit `0` with the challenge shell as `text`.
+- **The shell's markers.** The F5/Shape shell carries `/_fs-ch-` in its asset paths and prints "Please enable JavaScript to proceed". A relay strips the scripts, so the copy is the second signal. Measured on 11 real pages (Wikipedia, GitHub, docs.python.org, MDN, Hacker News, arXiv, npm, crates.io, Stack Overflow, BBC, a personal blog): none of them carries either.
+- **A puzzle that needs a person is named.** The image CAPTCHA on that site is a puzzle, so the browser rung stops and says so: `stealth-browser: challenge (needs a person: enter the characters seen in the image)`. A puzzle needing a person is never solved by guessing.
 
 ### Scrolling a list (`--items`)
 

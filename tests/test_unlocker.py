@@ -1672,3 +1672,180 @@ def test_human_rung_extract_crash_fails_loud(monkeypatch):
     with pytest.raises(UnlockerError) as ei:
         unlocker.fetch("https://site.test", allow_human=True, use_memory=False)
     assert "extract failed (ValueError" in dict(ei.value.attempts)["human-browser"]
+
+
+# ── F26: a body the server already sent as text, and a challenge that is not
+# the page ────────────────────────────────────────────────────────────────────
+
+
+def test_a_plain_text_body_is_the_page_and_not_an_extract(monkeypatch):
+    """A README served as text/plain is the page. The extractor must not eat it.
+
+    Measured 2026-10-20: `searchts read` of the searchts README on
+    raw.githubusercontent.com returned 8,852 characters of a 25,267-byte file
+    and said "16,274 characters are in blocks this read did not return". The
+    article extractor reads markdown as markup, and every centred image block
+    in a README takes the rest of the document with it. The Content-Type is
+    the generic signal, so no host is named and none is needed.
+    """
+    body = "# Project\n\nIntro paragraph.\n\n" + "".join(
+        '<p align="center">\n'
+        '  <img src="https://example.test/demo%d.gif" alt="demo" width="860">\n'
+        "</p>\n\n"
+        "Prose paragraph %d.\n\n"
+        "```python\n"
+        'import searchts\nprint(searchts.read("https://example.com/%d").text)\n'
+        "```\n\n" % (i, i, i)
+        for i in range(12)
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda url, timeout=30: (
+            200,
+            body,
+            url,
+            {"content-type": "text/plain; charset=utf-8"},
+        ),
+    )
+    r = fetch("https://example.test/README.md", use_memory=False, backends=["curl_cffi"])
+    # The body is the page. Notes (the media line) may follow it; nothing of
+    # the body may be missing.
+    assert r.text.startswith(body.rstrip()), "the body was not the page"
+    assert r.text.count("import searchts") == 12, "the code blocks were eaten"
+    assert "blocks this read did not return" not in r.text
+
+
+def test_html_served_as_text_plain_is_still_extracted(monkeypatch):
+    """A server that sends a whole page under text/plain is still a page.
+
+    The Content-Type is a signal, not a verdict: some servers mislabel the
+    document they serve. The markup still has to go through the extractor.
+    """
+    html = "<html><body><p>" + ("Real article words. " * 60) + "</p></body></html>"
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda url, timeout=30: (200, html, url, {"content-type": "text/plain"}),
+    )
+    r = fetch("https://example.test/page", use_memory=False, backends=["curl_cffi"])
+    assert "Real article words." in r.text
+
+
+def test_a_client_challenge_shell_is_never_returned_as_the_page(monkeypatch):
+    """F5/Shape's client challenge is a wall, not a 572-character article.
+
+    Measured 2026-10-20 on pypi.org: curl_cffi got the challenge shell and the
+    relay got its markdown, whose length (572 characters) passed the
+    500-character gate, so the read returned the shell as the page with exit
+    0. A bot check returned as the article is the failure the whole fail-loud
+    rule exists for.
+    """
+    shell_html = (
+        "<!DOCTYPE html><html><head><title>Client Challenge</title></head><body>"
+        "<noscript><span>JavaScript is disabled in your browser.</span>"
+        "<p>Please enable JavaScript to proceed.</p></noscript>"
+        "<script src='/_fs-ch-1T1wmsGaOgGaSxcX/script.js?reload=true'></script>"
+        "</body></html>"
+    )
+    shell_md = (
+        "Title: Client Challenge\n\nURL Source: https://example.test/project/\n\n"
+        "Markdown Content:\n\nJavaScript is disabled in your browser.\n"
+        "Please enable JavaScript to proceed.\n\n"
+        + ("A required part of this site could not load. " * 12)
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda url, timeout=30: (200, shell_html, url, {"content-type": "text/html"}),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_jina",
+        lambda url, timeout=40: (200, shell_md, url, {"content-type": "text/plain"}),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_stealth",
+        lambda url, timeout=60, progress=None: (200, shell_html, url, {}),
+    )
+    with pytest.raises(UnlockerError) as ei:
+        fetch("https://example.test/project/", use_memory=False)
+    reasons = dict(ei.value.attempts)
+    assert reasons.get("curl_cffi") == "challenge"
+    assert reasons.get("Jina Reader") == "challenge"
+
+
+def test_the_client_challenge_copy_is_recognised_when_the_asset_path_is_gone(monkeypatch):
+    """A relay strips the scripts, so the shell is named by its copy instead.
+
+    The asset path is the exact marker, but a relay renders the page to text
+    and the path is gone. The copy the shell prints is the second signal, and
+    it was measured on 11 real pages that carry none of it.
+    """
+    shell_md = (
+        "Title: Client Challenge\n\nMarkdown Content:\n\n"
+        "JavaScript is disabled in your browser.\nPlease enable JavaScript to proceed.\n"
+    )
+    assert unlocker.looks_blocked(200, shell_md) == "challenge"
+    # And a real page that never says it is not a challenge.
+    assert unlocker.looks_blocked(200, "An article about JavaScript. " * 50) is None
+
+
+class TestBlockPhraseFixtures:
+    """One positive and one negative near-miss for every phrase this run added.
+
+    CONTRIBUTING.md asks for this on every phrase added to `_BLOCK_PHRASES`:
+    a false positive turns a working read into a slow retry, and it is silent.
+    The negatives are near misses, not a different subject: the Chrome copy
+    says "continue" where F5 says "proceed", and a page that names the vendor
+    without carrying its markers is not a challenge.
+    """
+
+    # F5/Shape's client challenge, as the origin serves it.
+    F5_SHELL_HTML = (
+        "<!DOCTYPE html><html><head><title>Client Challenge</title></head><body>"
+        "<noscript><span>JavaScript is disabled in your browser.</span>"
+        "<p>Please enable JavaScript to proceed.</p></noscript>"
+        "<script src='/_fs-ch-1T1wmsGaOgGaSxcX/script.js?reload=true'></script>"
+        "</body></html>"
+    )
+
+    # The same challenge as a relay renders it: the scripts are gone, the copy
+    # is not.
+    F5_SHELL_MARKDOWN = (
+        "Title: Client Challenge\n\nMarkdown Content:\n\n"
+        "JavaScript is disabled in your browser.\nPlease enable JavaScript to proceed.\n"
+    )
+
+    def test_the_f5_shell_is_a_challenge(self):
+        assert looks_blocked(200, self.F5_SHELL_HTML) == "challenge"
+        assert looks_blocked(200, self.F5_SHELL_MARKDOWN) == "challenge"
+
+    def test_the_chrome_copy_is_not_a_challenge(self):
+        """Chrome says "continue". F5 says "proceed". One of them is a wall."""
+        chrome = (
+            "<html><body><noscript>Please enable JavaScript to continue.</noscript>"
+            + ("<p>An article that needs scripting.</p>" * 20)
+            + "</body></html>"
+        )
+        assert looks_blocked(200, chrome) is None
+
+    def test_a_page_that_names_the_vendor_is_not_a_challenge(self):
+        """Naming F5 Shape is not carrying its markers."""
+        article = (
+            "# How F5 Shape works\n\n"
+            "F5 Shape is a bot-management product. It serves a challenge before "
+            "the page and clears a cookie once the browser has answered it.\n\n"
+            + ("Prose about the product. " * 40)
+        )
+        assert looks_blocked(200, article) is None
+
+    def test_a_page_that_mentions_javascript_is_not_a_challenge(self):
+        article = (
+            "How to enable JavaScript on a page\n\n"
+            "If a site needs scripting, the browser asks you to enable it. "
+            "That is ordinary and it is not a bot check.\n\n"
+            + ("Prose about the browser. " * 40)
+        )
+        assert looks_blocked(200, article) is None

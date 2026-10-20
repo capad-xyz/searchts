@@ -510,3 +510,71 @@ class TestUninstallBrowser:
         assert "searchts Uninstaller" not in captured.out
         assert "--browser" in captured.err
         assert captured.out == ""
+
+
+class TestPipLessEnv:
+    """A venv made by `uv venv` has no pip, and `python -m pip` dies on it.
+
+    Measured 2026-10-20: `searchts install --browser` in such a venv failed
+    with "No module named pip", while the doctor's own message tells the user
+    to run exactly that command. CLAUDE.md and the verify skill both document
+    `uv venv .venv && uv pip install -c constraints.txt -e ".[dev]"`, so this
+    is a documented install path and the failure was on it.
+    """
+
+    def _python(self, tmp_path, *, has_pip):
+        py = tmp_path / "bin" / "python"
+        py.parent.mkdir(parents=True, exist_ok=True)
+        py.write_text(
+            "#!/bin/sh\n"
+            + ('if [ "$1" = "-m" ] && [ "$2" = "pip" ]; then exit 0; fi\n' if has_pip
+               else 'if [ "$1" = "-m" ] && [ "$2" = "pip" ]; then exit 1; fi\n')
+            + "exit 0\n"
+        )
+        py.chmod(0o755)
+        return py
+
+    def test_a_pip_less_env_installs_through_uv(self, tmp_path, monkeypatch):
+        py = self._python(tmp_path, has_pip=False)
+        env = bi.CliEnv("venv", "venv (uv)", str(py))
+        monkeypatch.setattr(
+            bi.shutil, "which", lambda name: "/usr/bin/uv" if name == "uv" else None
+        )
+        cmd = bi._extra_install_cmd(env)
+        assert cmd[:4] == ["/usr/bin/uv", "pip", "install", "--python"]
+        assert cmd[4] == str(py)
+        assert "patchright" in cmd[-1]
+
+    def test_an_env_with_pip_still_uses_pip(self, tmp_path, monkeypatch):
+        py = self._python(tmp_path, has_pip=True)
+        env = bi.CliEnv("venv", "venv", str(py))
+        monkeypatch.setattr(
+            bi.shutil, "which", lambda name: "/usr/bin/uv" if name == "uv" else None
+        )
+        cmd = bi._extra_install_cmd(env)
+        assert cmd[:3] == [str(py), "-m", "pip"]
+
+    def test_a_python_we_cannot_probe_keeps_the_classic_command(self, tmp_path, monkeypatch):
+        # An interpreter that is not on disk cannot be probed, so the classic
+        # command stands and the runner reports the failure if there is one.
+        env = bi.CliEnv("venv", "venv", str(tmp_path / "gone" / "python"))
+        monkeypatch.setattr(
+            bi.shutil, "which", lambda name: "/usr/bin/uv" if name == "uv" else None
+        )
+        cmd = bi._extra_install_cmd(env)
+        assert cmd[:3] == [env.python, "-m", "pip"]
+
+    def test_a_pip_less_env_without_uv_says_what_to_do(self, tmp_path, monkeypatch, capsys):
+        py = self._python(tmp_path, has_pip=False)
+        env = bi.CliEnv("venv", "venv (uv)", str(py))
+        monkeypatch.setattr(bi.shutil, "which", lambda name: None)
+        monkeypatch.setattr(bi, "browser_extra_requirements", lambda: ["patchright>=1.50"])
+
+        def fail(cmd):
+            return bi.subprocess.CompletedProcess(cmd, 1, "", "No module named pip")
+
+        code = bi.install_browser(cli_env=env, runner=fail)
+        assert code == 1
+        err = capsys.readouterr().err
+        assert "no pip and no uv on PATH" in err
+        assert "ensurepip" in err

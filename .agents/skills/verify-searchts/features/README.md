@@ -8,6 +8,9 @@ file as the recipe.
 
 - The repo is checked out and `.venv` exists with `[dev]` installed, as
   [`SKILL.md`](../SKILL.md) describes.
+- `searchts install --browser` works in that `.venv`. A venv made by `uv venv`
+  has no `pip` module, so an installer that only knows `python -m pip` fails
+  there with "No module named pip" on the documented install path.
 - `python -m searchts doctor --json` has been run in this run, and its `github`,
   `youtube`, `tiktok`, `instagram`, `reddit-video` and `rss` entries are `ok`.
 - The `web` entry has been read, not just its status. Its message names any read
@@ -80,3 +83,9 @@ surface over the same functions and no feature file here drives it. The
 install, setup and uninstall verbs change the user's machine and are proved by
 their own tests, not by driving them. Every tier of the read ladder above the
 first needs an extra install and is bounded per run by the `doctor` entry.
+
+Two verbs are driven here only as far as a non-interactive run can go, and
+both must fail cleanly rather than crash: `searchts setup` with stdin closed
+finishes the steps that need no answer (its prompts say "press Enter to skip",
+so a closed stdin is the same answer) and prints no traceback; `searchts
+login list` into a scratch `HOME` prints that no site logins are kept.
