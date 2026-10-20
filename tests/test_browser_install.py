@@ -522,20 +522,30 @@ class TestPipLessEnv:
     is a documented install path and the failure was on it.
     """
 
-    def _python(self, tmp_path, *, has_pip):
+    def _python(self, tmp_path, monkeypatch, *, has_pip):
+        """A path that exists, whose ``python -m pip --version`` exits as asked.
+
+        A ``#!/bin/sh`` stub is not a Windows executable. CreateProcess raises
+        ``OSError``, and ``_pip_is_missing`` then treats pip as present. The
+        decision under test is that exit code, on every platform.
+        """
         py = tmp_path / "bin" / "python"
         py.parent.mkdir(parents=True, exist_ok=True)
-        py.write_text(
-            "#!/bin/sh\n"
-            + ('if [ "$1" = "-m" ] && [ "$2" = "pip" ]; then exit 0; fi\n' if has_pip
-               else 'if [ "$1" = "-m" ] && [ "$2" = "pip" ]; then exit 1; fi\n')
-            + "exit 0\n"
-        )
-        py.chmod(0o755)
+        py.write_text("probe\n", encoding="utf-8")
+        target = str(py)
+
+        def run(cmd, *args, **kwargs):
+            if list(cmd)[:3] == [target, "-m", "pip"]:
+                return bi.subprocess.CompletedProcess(
+                    list(cmd), 0 if has_pip else 1, "", ""
+                )
+            raise AssertionError(f"unexpected probe: {cmd!r}")
+
+        monkeypatch.setattr(bi.subprocess, "run", run)
         return py
 
     def test_a_pip_less_env_installs_through_uv(self, tmp_path, monkeypatch):
-        py = self._python(tmp_path, has_pip=False)
+        py = self._python(tmp_path, monkeypatch, has_pip=False)
         env = bi.CliEnv("venv", "venv (uv)", str(py))
         monkeypatch.setattr(
             bi.shutil, "which", lambda name: "/usr/bin/uv" if name == "uv" else None
@@ -546,7 +556,7 @@ class TestPipLessEnv:
         assert "patchright" in cmd[-1]
 
     def test_an_env_with_pip_still_uses_pip(self, tmp_path, monkeypatch):
-        py = self._python(tmp_path, has_pip=True)
+        py = self._python(tmp_path, monkeypatch, has_pip=True)
         env = bi.CliEnv("venv", "venv", str(py))
         monkeypatch.setattr(
             bi.shutil, "which", lambda name: "/usr/bin/uv" if name == "uv" else None
@@ -565,7 +575,7 @@ class TestPipLessEnv:
         assert cmd[:3] == [env.python, "-m", "pip"]
 
     def test_a_pip_less_env_without_uv_says_what_to_do(self, tmp_path, monkeypatch, capsys):
-        py = self._python(tmp_path, has_pip=False)
+        py = self._python(tmp_path, monkeypatch, has_pip=False)
         env = bi.CliEnv("venv", "venv (uv)", str(py))
         monkeypatch.setattr(bi.shutil, "which", lambda name: None)
         monkeypatch.setattr(bi, "browser_extra_requirements", lambda: ["patchright>=1.50"])
