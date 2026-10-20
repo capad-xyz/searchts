@@ -2,6 +2,16 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.16.1](https://github.com/capad-xyz/searchts/compare/v0.16.0...v0.16.1) (2026-10-20)
+
+
+### Fixed
+
+* **grab:** cap radius, shadow, and spacing tokens ([#398](https://github.com/capad-xyz/searchts/issues/398)) ([dd5260a](https://github.com/capad-xyz/searchts/commit/dd5260aa7554e00e07b15ed8751bb92268816eb2))
+* **read:** drop a trailing cookie banner ([#399](https://github.com/capad-xyz/searchts/issues/399)) ([062c3f6](https://github.com/capad-xyz/searchts/commit/062c3f64f1c272b179909b5d6ecda8376a4dd054))
+* **read:** say a rebuilt list contains its links ([#397](https://github.com/capad-xyz/searchts/issues/397)) ([5b043ec](https://github.com/capad-xyz/searchts/commit/5b043ecb52aad0a34edb27bbd7eaccb3265ff93b))
+* **share:** read every Codex attachment ([#396](https://github.com/capad-xyz/searchts/issues/396)) ([3cb9f15](https://github.com/capad-xyz/searchts/commit/3cb9f15bea56e26bfa0e1aaa7a38015b9aa27540))
+
 ## [0.16.0](https://github.com/capad-xyz/searchts/compare/v0.15.0...v0.16.0) (2026-10-20)
 
 
