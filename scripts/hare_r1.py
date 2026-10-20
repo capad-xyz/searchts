@@ -275,14 +275,15 @@ ZEN_EFFORTS: dict[str, dict[str, Any]] = {
 # list, so "the highest this model supports" is one lookup, not a guess.
 EFFORT_LADDER = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
 # Pinned fallback for the models in the chain, read from the live catalogs on
-# 2026-10-10. A model missing here publishes no list, so the provider's
+# 2026-10-20. A model missing here publishes no list, so the provider's
 # fallback level is used and the hop is not told a level it may reject.
 PINNED_EFFORTS: dict[str, tuple[str, ...]] = {
     # openrouter + nous, slug without the ":free" tag
+    "minimax/minimax-m3.1-flash": ("low", "medium", "high", "xhigh", "max"),
     "nvidia/nemotron-3-ultra-550b-a55b": ("medium", "high"),
     "nvidia/nemotron-3-super-120b-a12b": ("low", "medium"),
-    "nvidia/nemotron-3.5-lightning": (),  # reasoning present, no effort published
-    "stepfun/step-5-preview": ("low", "medium", "high"),
+    "reflection/beam-1.0-501b-a23b": ("low", "medium", "high", "xhigh", "max"),
+    "stepfun/step-3.7-flash": ("low", "medium", "high"),
 }
 # What each provider is asked for when the model publishes nothing. Gemini and
 # Groq publish their ladder in prose, not in a catalog, so these are the top of
@@ -469,99 +470,74 @@ def reasoning_options(
         return {"reasoning": {"effort": clamp_effort(level, efforts), "exclude": True}}
     return {}
 
-# Fixed list, not a router. Read against the live catalogs 2026-10-06:
-# OpenRouter /api/v1/models (pricing 0/0), Groq docs/models, Zen by probe.
-# OpenRouter: nemotron-3.5-lightning:free, then gemma-4-31b-it:free.
-# qwen3.8-27b:free 404'd on every eval row (#309). Left out:
-# nemotron-3-ultra:free (cannot think below medium), the health,
-# safety, tiny and translation models, space-bunny-alpha (gone 2026-10-05).
-# Groq: gpt-oss-120b sits after OpenRouter and Nous (#258, owner's call: it
+# Fixed list, not a router. Read against the live free catalogs on 2026-10-20:
+# OpenRouter /api/v1/models (pricing 0/0), Nous /v1/models, Groq docs/models,
+# the Gemini free tier, and Zen by probe.
+# Groq: gpt-oss-120b sits after Nous and OpenRouter (#258, owner's call: it
 # answers in seconds and has missed what a slower reviewer caught). It answered
 # PR 239 and 240 (2026-10-03) and returned 413 on PR 235, whose prompt was
 # three times the free tier's 8k-token request cap; a 413 is instant.
-# Gemini: gemini-2.5-flash returned 404 on 2026-10-03, ahead of its October 16
-# shutdown date. gemini-3.1-flash-lite answered the review on PR 236 the same
-# night, so it went first; 3.5 Flash was second, unverified.
-# BOTH Gemini pins then returned "model not available" on 2026-10-06, in the
-# /hare deep on #321, where nothing in the chain answered. No Gemini key exists
-# on this laptop, so the fix could not be probed live and the pins stay with
-# the caveat below rather than a guess. Run `python scripts/hare_r1.py --probe-pins`
-# on a box that holds the key before trusting them; that command is the point,
-# so the next dead pin is a fact rather than a nag nobody believed.
-# Zen: longcat and ling return 403 FreeTierError outside the OpenCode TUI by
-# policy (measured 2026-10-03), so only space-bunny-free stays. CI passes no
-# Zen key anyway.
-# Nous: unverifiable from here (free tier is gated live in the Portal, no
-# public list); order set by #255, see the note above HARE_NOUS_DEFAULT.
+# Gemini: 3.8 Flash leads and 3.6 Flash is second. No Gemini key exists on this
+# laptop, so the pins stay with the caveat below rather than a live probe. Run
+# `python scripts/hare_r1.py --probe-pins` on a box that holds the key before
+# trusting them; that command is the point, so the next dead pin is a fact.
+# Zen: every free model tested returns 403 FreeTierError outside the OpenCode
+# TUI, and space-bunny-free is retired, so HARE_ZEN_DEFAULT is empty. CI passes
+# no Zen key anyway.
 # Skip: openrouter/free, Lyria, Muse contributor-free (trains; Responses API).
 # OR may retain prompts (not training).
 HARE_GROQ_DEFAULT = "openai/gpt-oss-120b"
-HARE_GEMINI_DEFAULT = "gemini-3.1-flash-lite,gemini-3.5-flash"
-# The ledger on 2026-10-04 (docs/hare-ledger.md, 82 notes): laguna answered 18
-# times on OpenRouter and found nothing once; on Nous, 1 finding in 4. Groq
-# found something on all 10 of its notes, Gemini on 3 of 3, qwen on 5 of 12.
-# So laguna leaves OpenRouter (it only cost a 300 s wait before the next hop)
-# and was last on Nous until 2026-10-06, when Laguna moved ahead of LongCat. Space Bunny's free period ended 2026-10-05, so it is
-# off OpenRouter and Nous; Zen's space-bunny-free is a separate offer and stays
-# until Zen retires it (a gone model fails in under a second and falls through).
-# Laguna first on Nous (2026-10-06): LongCat wrote the three notes on #299 and
-# contradicted itself, shorten then lengthen. LongCat stays in the flow.
-# Step 5 Preview is free on Nous for one week from 2026-10-08. Drop it after
-# 2026-10-15. OpenRouter's stepfun/step-5-preview is paid ($1 / $2.70 per 1M)
-# and has no :free slug, so it does not go in HARE_OR_DEFAULT.
+HARE_GEMINI_DEFAULT = "gemini-3.8-flash,gemini-3.6-flash"
+# Re-checked against both live free catalogs on 2026-10-20. The old Nous pins
+# are gone: stepfun/step-5-preview:free is paid and inclusionai/ling-3.0-flash-
+# sante:free is no longer listed. LongCat 2.5 stays because it is the large
+# model the ledger has actually run, but it publishes no reasoning block, so it
+# is last behind every hop that does reason.
 #
-# Ordered by what the catalog says each model can do (2026-10-10), not by taste:
-# a model that publishes an effort ladder goes first, then the reasoning models
-# whose thinking is on with no dial, then a model that publishes no reasoning at
-# all. Step 5 Preview is the only Nous pin with a ladder (low|medium|high, and
-# mandatory, so it cannot be turned off). Laguna and Ling are reasoning models
-# with `default_enabled: true` and no dial. LongCat's catalog entry has no
-# reasoning block at all, so it is the one hop that does not reason, and a
-# non-reasoning model now sits behind the reasoning ones instead of ahead of one.
+# Nous, strongest first:
+#   reflection/beam-1.0-501b-a23b:free  501B/23B, mandatory reasoning, default
+#       medium, low..max; cited SWE-bench 81.6, Terminal 80.1, SWE Pro 76.5.
+#   poolside/laguna-s-2.1:free          reasoning with no published dial; 1
+#       finding in 4 ledger notes, 6 s on the 2026-10-06 probe, and the hop that
+#       answered the 2026-10-20 PR #389 review (526 s model time, 3 attempts).
+#   stepfun/step-3.7-flash:free         mandatory reasoning, default medium,
+#       low..high; cited SWE-Bench Pro 56.3 and Terminal-Bench 2.1 59.5.
+#   meituan/longcat-2.5-preview:free    1M ctx, no reasoning block; last.
 HARE_NOUS_DEFAULT = (
-    "stepfun/step-5-preview:free,"
+    "reflection/beam-1.0-501b-a23b:free,"
     "poolside/laguna-s-2.1:free,"
-    "inclusionai/ling-3.0-flash-sante:free,"
+    "stepfun/step-3.7-flash:free,"
     "meituan/longcat-2.5-preview:free"
 )
 # The owner's additive slot: whatever is set here is appended after every pin in
-# HARE_NOUS_DEFAULT. Ling used to live here, which put a reasoning model behind
-# the one non-reasoning pin, so it moved into the ordered list above and this
-# defaults to empty.
+# HARE_NOUS_DEFAULT. It defaults to empty because the ordered list above already
+# holds every free model worth running.
 HARE_NOUS_EXTRA_DEFAULT = ""
-# Inkling (inkling-small:free, inkling:free) left 2026-10-05: OpenRouter's free
-# Inkling endpoint now serves only agentic harnesses, so a direct API call gets
-# 403 (both did on #287's /hare deep), and it logs prompts to train on.
-# qwen3.8-27b:free left 2026-10-06: every row of the eval (#309) was
-# 404 "unavailable for free".
+# OpenRouter, strongest first. The old Lightning hop is gone: it publishes no
+# effort ladder and no default, so it cannot be asked to stop thinking. Gemma
+# still 429s, Inkling still serves only agentic harnesses, and Laguna still 429s
+# on this gateway, so none of them return.
 #
-# Probed live 2026-10-06 with a real code diff and thinking off, not a catalog
-# listing. Every slug here returned a review in 1 to 6 s:
-#   nvidia/nemotron-3.5-lightning:free  OK 2s (full payload 65s, JSON out)
-#   nvidia/nemotron-3-super-120b-a12b:free  OK 1s
-#   nvidia/nemotron-3-ultra-550b-a55b:free   OK 2s
-#   apodex/apodex-1.1-mini:free              OK 1s
-# Dropped 2026-10-06, both 429 "temporarily rate-limited upstream" on the probe:
-#   google/gemma-4-31b-it:free, google/gemma-4-26b-a4b-it:free
-# Dropped 2026-10-06: poolside/laguna-s-2.1:free is 429 on OpenRouter. It is in
-# the Nous list below, where the same probe answered in 6s. Two providers, two
-# answers, so keep it on the one that works.
-# Inkling is back on the catalog (thinkingmachines/inkling:free, 1M ctx) and
-# stays off: its free endpoint served agentic harnesses only as of 2026-10-05.
-#
-# Ordered by what the catalog publishes (2026-10-10). Ultra and Super carry a
-# `supported_efforts` list and `supports_max_tokens: true`, so they are the two
-# hops whose thinking can be bounded, and they now go first. Lightning publishes
-# a reasoning block with neither, so it has no dial to turn and no budget to
-# bound, and it moved behind them: same live probe, same 1 to 2 s answer, but a
-# hop that cannot be asked to stop thinking is the one that comes back empty.
+#   minimax/minimax-m3.1-flash:free    1M ctx, mandatory reasoning, default max,
+#       low..max; cited DeepSWE 73.7, CyberGym 82.2, AutomationBench 62.2,
+#       OSWorld 61.7, and adoption rank #3 with 798K users.
+#   nvidia/nemotron-3-ultra-550b-a55b:free  default high, none|medium|high,
+#       supports_max_tokens; SWE-bench Verified 71.9, Terminal-Bench 2.1 56.4,
+#       and the model that answered 5 of 5 Hare calls in the 2026-10-10 probe.
+#   nvidia/nemotron-3-super-120b-a12b:free  default medium, none|low|medium,
+#       supports_max_tokens; the bounded fallback behind Ultra.
 HARE_OR_DEFAULT = (
+    "minimax/minimax-m3.1-flash:free,"
     "nvidia/nemotron-3-ultra-550b-a55b:free,"
-    "nvidia/nemotron-3-super-120b-a12b:free,"
-    "nvidia/nemotron-3.5-lightning:free"
+    "nvidia/nemotron-3-super-120b-a12b:free"
 )
-# Nous probed live the same day: laguna 6s, longcat 3s, ling-3.0-flash-sante 2s.
-HARE_ZEN_DEFAULT = "space-bunny-free"
+# Zen has no reachable free hop. On 2026-10-20 every free model tested, including
+# the new minimax-m3.1-flash-free and deepseek-v4.1-flash-free, returned HTTP 403
+# FreeTierError ("OpenCode's free tier can only be used from within OpenCode"),
+# and space-bunny-free is retired from the live catalog. CI passes no Zen key,
+# so the empty default changes nothing there; HARE_ZEN_MODEL still accepts a
+# model if Zen makes one reachable again.
+HARE_ZEN_DEFAULT = ""
 
 
 

@@ -133,10 +133,10 @@ jobs:
           SEARCHTS_HARE_API_KEY_GROQ: ${{ secrets.SEARCHTS_HARE_API_KEY_GROQ }}
           SEARCHTS_HARE_API_KEY_GEMINI: ${{ secrets.SEARCHTS_HARE_API_KEY_GEMINI }}
           HARE_GROQ_MODEL: openai/gpt-oss-120b
-          HARE_GEMINI_MODEL: gemini-3.1-flash-lite,gemini-3.5-flash
-          HARE_NOUS_MODEL: stepfun/step-5-preview:free,poolside/laguna-s-2.1:free,inclusionai/ling-3.0-flash-sante:free,meituan/longcat-2.5-preview:free
+          HARE_GEMINI_MODEL: gemini-3.8-flash,gemini-3.6-flash
+          HARE_NOUS_MODEL: reflection/beam-1.0-501b-a23b:free,poolside/laguna-s-2.1:free,stepfun/step-3.7-flash:free,meituan/longcat-2.5-preview:free
           HARE_NOUS_EXTRA_MODEL: ''
-          HARE_OR_MODEL: ${{ github.event.inputs.or_model || 'nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3.5-lightning:free' }}
+          HARE_OR_MODEL: ${{ github.event.inputs.or_model || 'minimax/minimax-m3.1-flash:free,nvidia/nemotron-3-ultra-550b-a55b:free,nvidia/nemotron-3-super-120b-a12b:free' }}
           # ── Caps (scripts/hare_r1.py Caps, docs/hare-next.md has the table) ──
           # 0 is uncapped for all three; the job timeout is the only ceiling then.
           # Rate-limit backoff is not a cap and has no 0: hammering a free tier

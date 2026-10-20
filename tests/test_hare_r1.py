@@ -744,7 +744,7 @@ def test_probe_pins_asks_every_pin_and_names_the_dead_ones(monkeypatch, capsys) 
     monkeypatch.setenv("HARE_NOUS_EXTRA_MODEL", "")
     rc = hare_r1.probe_pins()
     out = capsys.readouterr().out
-    assert "nvidia/nemotron-3.5-lightning:free: answers" in out
+    assert "minimax/minimax-m3.1-flash:free: answers" in out
     assert "google/gemma-4-31b-it:free: HTTP 404" in out
     assert rc == 1
     assert any("gemma" in m for m, _ in asked), "the probe must call the hop, not read a catalog"
@@ -818,19 +818,19 @@ def test_the_probe_sends_each_provider_the_options_production_sends(monkeypatch)
                 "gemini": [hare_r1.HARE_GEMINI_DEFAULT.split(",")[0]],
                 "nous": [hare_r1.HARE_NOUS_DEFAULT.split(",")[0]],
                 "openrouter": [hare_r1.HARE_OR_DEFAULT.split(",")[0]],
-                "zen": [hare_r1.HARE_ZEN_DEFAULT],
+                "zen": hare_r1._csv_models("HARE_ZEN_MODEL", hare_r1.HARE_ZEN_DEFAULT),
             },
         )
     }
     for model, opts in real.items():
         assert seen[model] == opts, f"{model}: probe sent {seen[model]}, production sends {opts}"
-    # And the three shapes are now the real per-provider ones: Gemini takes a
+    # And the shapes are now the real per-provider ones: Gemini takes a
     # top-level reasoning_effort, Groq does too (gpt-oss takes low|medium|high),
-    # and Zen has no documented field so it gets nothing. A probe that could not
-    # pay for thinking would report a reasoning pin dead.
+    # and Zen has no free default, so the probe sends it nothing. A probe that
+    # could not pay for thinking would report a reasoning pin dead.
     assert seen[hare_r1.HARE_GEMINI_DEFAULT.split(",")[0]] == {"reasoning_effort": "high"}
     assert seen[hare_r1.HARE_GROQ_DEFAULT] == {"reasoning_effort": "high"}
-    assert seen[hare_r1.HARE_ZEN_DEFAULT] == {}
+    assert hare_r1.HARE_ZEN_DEFAULT == ""
 
 
 def test_a_gateway_that_rejects_the_reasoning_knob_does_not_look_like_a_dead_pin(monkeypatch, capsys) -> None:
@@ -884,7 +884,8 @@ def test_the_extra_nous_pin_is_reachable_from_the_review_chain(monkeypatch) -> N
         hr._csv_models("HARE_NOUS_MODEL", hr.HARE_NOUS_DEFAULT)
         + hr._csv_models("HARE_NOUS_EXTRA_MODEL", hr.HARE_NOUS_EXTRA_DEFAULT)
     )
-    assert "inclusionai/ling-3.0-flash-sante:free" in nous
+    assert "reflection/beam-1.0-501b-a23b:free" in nous
+    assert "inclusionai/ling-3.0-flash-sante:free" not in nous
     # run() must build the same list the probe does, or the probe proves nothing.
     import inspect
     src = inspect.getsource(hr.run)
@@ -1126,12 +1127,15 @@ def test_hop_loop_sends_every_provider_its_own_options() -> None:
     assert parsed == {"summary": "ok", "findings": []}
 
 
-def test_space_bunny_is_off_openrouter_and_nous_after_its_free_period() -> None:
-    """Space Bunny's free period on OpenRouter and Nous ended 2026-10-05. Zen's
-    space-bunny-free is its own offer and stays until Zen retires it."""
+def test_space_bunny_is_off_every_list_and_zen_has_no_free_hop() -> None:
+    """Space Bunny left OpenRouter and Nous on 2026-10-05. Zen retired
+    space-bunny-free, and its remaining free models are TUI-only (403 from
+    Actions), so the Zen default is empty rather than a known-dead pin."""
     assert "stealth/space-bunny-alpha" not in hare_r1.HARE_NOUS_DEFAULT.split(",")
     assert "stealth/space-bunny-alpha" not in hare_r1.HARE_OR_DEFAULT.split(",")
-    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stepfun/step-5-preview:free"
+    assert "space-bunny-free" not in hare_r1.HARE_ZEN_DEFAULT.split(",")
+    assert hare_r1.HARE_ZEN_DEFAULT == ""
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "reflection/beam-1.0-501b-a23b:free"
 
 
 def test_dead_hops_are_printed_on_success() -> None:
@@ -1787,50 +1791,35 @@ def test_csv_models_splits_and_override(monkeypatch: object) -> None:
     assert hare_r1._csv_models("HARE_OR_MODEL", "a, b ,c") == ["a", "b", "c"]
     monkeypatch.setenv("HARE_OR_MODEL", "only-one")  # type: ignore[attr-defined]
     assert hare_r1._csv_models("HARE_OR_MODEL", "a,b") == ["only-one"]
-    # The ledger (2026-10-04): laguna answered 18 times on OpenRouter and never
-    # found anything, so it is off that list; qwen stays first. Space Bunny left
-    # OpenRouter and Nous when its free period ended (2026-10-05).
-    # qwen3.8-27b:free 404'd on every OpenRouter row of the 2026-10-06 eval (#309).
-    # Nemotron Lightning is on the free catalog that day. Gemma is still second.
-    # Probed live 2026-10-06 with a real diff: nemotron-lightning, nemotron-super
-    # and nemotron-ultra all answered in 1 to 2 s. Both gemma slugs 429'd and
-    # were dropped; Inkling stays off (agentic harnesses only).
-    # Step 5 Preview is free on Nous for one week from 2026-10-08, so it leads
-    # that list until 2026-10-15. Dropping it means editing BOTH assertions that
-    # pin the head of the Nous chain: this one, and the one in
-    # test_space_bunny_is_off_openrouter_and_nous_after_its_free_period.
-    # That pair already bit us once: #351 moved the head and fixed only one.
-    # Ultra and Super lead because they are the two that publish an effort
-    # ladder and accept `reasoning.max_tokens`, so their thinking can be
-    # bounded; Lightning publishes neither and moved behind them (2026-10-10).
+    # Re-checked on 2026-10-20. The Nous list is Beam, Laguna S, Step 3.7,
+    # LongCat 2.5. Beam and Step 3.7 publish mandatory effort ladders; Laguna
+    # reasons with no dial; LongCat publishes no reasoning block and stays last.
+    # The old Step 5 and Ling pins are gone (paid and delisted). Lightning is
+    # off OpenRouter for the same no-dial reason, and MiniMax M3.1 leads it.
     or_list = hare_r1.HARE_OR_DEFAULT.split(",")
     assert or_list[:2] == [
+        "minimax/minimax-m3.1-flash:free",
         "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
     ]
-    assert "nvidia/nemotron-3.5-lightning:free" in or_list
+    assert "nvidia/nemotron-3.5-lightning:free" not in or_list
     assert not any("gemma" in m for m in or_list), "gemma 429'd on 2026-10-06"
     assert not any("inkling" in m for m in or_list)
+    assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
     # Laguna answers on Nous and 429s on OpenRouter, so it is on one list only.
     assert any("laguna" in m for m in hare_r1.HARE_NOUS_DEFAULT.split(","))
     assert not any("laguna" in m for m in or_list)
-    assert "inkling" not in hare_r1.HARE_OR_DEFAULT
-    assert "poolside/laguna-s-2.1:free" not in hare_r1.HARE_OR_DEFAULT.split(",")
-    # Not one model: diversity is data. Two here, and five providers in the chain.
-    assert len(hare_r1.HARE_OR_DEFAULT.split(",")) >= 2
-    # Two Zen slugs are TUI-only by policy (403 FreeTierError from Actions).
-    assert hare_r1.HARE_ZEN_DEFAULT.split(",") == ["space-bunny-free"]
-    assert "nex-agi" not in hare_r1.HARE_OR_DEFAULT
-    # Step 5 Preview is the only Nous pin that publishes an effort ladder, so it
-    # leads. LongCat publishes no reasoning at all, so it is last, behind the
-    # reasoning models that have no dial (2026-10-10).
-    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "stepfun/step-5-preview:free"
+    assert "poolside/laguna-s-2.1:free" not in or_list
+    # Not one model: diversity is data. Three here, and five providers in the chain.
+    assert len(or_list) >= 2
+    # No free Zen model answers from outside the OpenCode TUI, so the default is empty.
+    assert hare_r1.HARE_ZEN_DEFAULT == ""
+    # Beam leads and LongCat is last behind every reasoning model.
+    assert hare_r1.HARE_NOUS_DEFAULT.split(",")[0] == "reflection/beam-1.0-501b-a23b:free"
     assert hare_r1.HARE_NOUS_DEFAULT.endswith("meituan/longcat-2.5-preview:free")
-    assert hare_r1.HARE_NOUS_DEFAULT.index("inclusionai/ling-3.0-flash-sante:free") < hare_r1.HARE_NOUS_DEFAULT.index(
+    assert hare_r1.HARE_NOUS_DEFAULT.index("stepfun/step-3.7-flash:free") < hare_r1.HARE_NOUS_DEFAULT.index(
         "meituan/longcat-2.5-preview:free"
     ), "a reasoning model sits behind the one non-reasoning pin"
-    assert hare_r1.HARE_NOUS_EXTRA_DEFAULT == "", "ling moved into the ordered list, so the additive slot is empty"
-    assert hare_r1.HARE_ZEN_DEFAULT.split(",")[0] == "space-bunny-free"
+    assert hare_r1.HARE_NOUS_EXTRA_DEFAULT == "", "the ordered list already holds every free model worth running"
 
 
 def test_short_fail_hides_provider_json() -> None:
@@ -2473,7 +2462,7 @@ def test_no_provider_that_cannot_bound_thinking_is_sent_a_budget() -> None:
     for provider, model in (
         ("groq", "openai/gpt-oss-120b"),
         ("gemini", "gemini-3.1-flash-lite"),
-        ("nous", "stepfun/step-5-preview:free"),
+        ("nous", "reflection/beam-1.0-501b-a23b:free"),
     ):
         opts = hare_r1.reasoning_options(provider, model, "high", 12000, CATALOG_2026_10_10)
         assert "max_tokens" not in json.dumps(opts), f"{provider} was sent a budget it cannot take"
@@ -2483,16 +2472,23 @@ def test_a_non_reasoning_model_sits_behind_the_reasoning_ones() -> None:
     """The chain order is the contract, and it now follows what the models can do.
 
     Reasoning-capable hops go first and a model that publishes no reasoning at
-    all goes last. On Nous that moves Ling, a reasoning model with no dial, ahead
-    of LongCat, which has no reasoning block. On OpenRouter it moves the two
-    Nemotrons that publish an effort ladder ahead of Lightning, which publishes
-    neither and so cannot be asked to stop thinking.
+    all goes last. On Nous that means Beam, Laguna S and Step 3.7 sit ahead of
+    LongCat, which has no reasoning block. OpenRouter has no non-reasoning pin:
+    Lightning was dropped on 2026-10-20 because it publishes neither a ladder nor
+    a default, so it cannot be asked to stop thinking.
     """
     nous = hare_r1.HARE_NOUS_DEFAULT.split(",")
-    assert nous.index("inclusionai/ling-3.0-flash-sante:free") < nous.index("meituan/longcat-2.5-preview:free")
+    for reasoning_hop in (
+        "reflection/beam-1.0-501b-a23b:free",
+        "poolside/laguna-s-2.1:free",
+        "stepfun/step-3.7-flash:free",
+    ):
+        assert nous.index(reasoning_hop) < nous.index("meituan/longcat-2.5-preview:free")
     or_list = hare_r1.HARE_OR_DEFAULT.split(",")
-    assert or_list.index("nvidia/nemotron-3-ultra-550b-a55b:free") < or_list.index("nvidia/nemotron-3.5-lightning:free")
-    assert or_list.index("nvidia/nemotron-3-super-120b-a12b:free") < or_list.index("nvidia/nemotron-3.5-lightning:free")
+    assert "nvidia/nemotron-3.5-lightning:free" not in or_list
+    assert or_list.index("nvidia/nemotron-3-ultra-550b-a55b:free") < or_list.index(
+        "nvidia/nemotron-3-super-120b-a12b:free"
+    )
 
 
 def test_reasoning_off_is_a_shape_each_provider_actually_has() -> None:
