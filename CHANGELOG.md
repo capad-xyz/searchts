@@ -2,6 +2,25 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.16.0](https://github.com/capad-xyz/searchts/compare/v0.15.0...v0.16.0) (2026-10-20)
+
+
+### Added
+
+* **generic:** read unknown pages with more fidelity (F24) ([#382](https://github.com/capad-xyz/searchts/issues/382)) ([a9cf1d4](https://github.com/capad-xyz/searchts/commit/a9cf1d4dbf0180de3cc2345fbf2e185eb15ce49a))
+* **grab:** save the real design kit and name what the cap leaves out ([#394](https://github.com/capad-xyz/searchts/issues/394)) ([6c4fe80](https://github.com/capad-xyz/searchts/commit/6c4fe802558ec81ea11f8c940fb3cded95f227dd))
+* **read:** combine and harden four Searchts reading improvements ([#388](https://github.com/capad-xyz/searchts/issues/388)) ([ff53665](https://github.com/capad-xyz/searchts/commit/ff53665b29c601cc41c1be1a7e4a47033b75d10c))
+* **read:** scroll, expand and ceilings for long pages (F23c, F23d, F23e) ([#376](https://github.com/capad-xyz/searchts/issues/376)) ([21aef47](https://github.com/capad-xyz/searchts/commit/21aef47f4d0f15d6681356ac2b91cbf61a09f41a))
+* **reddit:** read the rest of Reddit through the one read path ([#380](https://github.com/capad-xyz/searchts/issues/380)) ([cd9cc39](https://github.com/capad-xyz/searchts/commit/cd9cc3973d0893ed422c70ca6ae1557064f7a212))
+
+
+### Fixed
+
+* **cli:** a plain-text body stays whole, a bot check is named, and setup and install do not crash ([#393](https://github.com/capad-xyz/searchts/issues/393)) ([6e49f04](https://github.com/capad-xyz/searchts/commit/6e49f0463f5ad7719244a1ef77fb5586df216af4))
+* **read:** drop a repeated row on the same page, and the tags inside form and math ([#391](https://github.com/capad-xyz/searchts/issues/391)) ([c111c60](https://github.com/capad-xyz/searchts/commit/c111c603f35ed713f6d0eb2b382b23080568b840))
+* **read:** the items ceiling stops the page walk, and --expand never drops content ([#381](https://github.com/capad-xyz/searchts/issues/381)) ([0c10837](https://github.com/capad-xyz/searchts/commit/0c10837166f92ef06433e86c6e3e7cbd45c3dafc))
+* **share:** parse ChatGPT Codex /s/cd_&lt;id&gt; post-route conversations ([#392](https://github.com/capad-xyz/searchts/issues/392)) ([c24a116](https://github.com/capad-xyz/searchts/commit/c24a116ec78f25a7f04fcc45a083615d7e57805e))
+
 ## [0.15.0](https://github.com/capad-xyz/searchts/compare/v0.14.1...v0.15.0) (2026-10-13)
 
 
