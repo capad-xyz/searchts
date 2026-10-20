@@ -321,6 +321,22 @@ def test_grab_site_forwards_max_assets_and_returns_omitted(monkeypatch, tmp_path
     assert data["omitted"][0]["urls"]
 
 
+def test_grab_site_forwards_max_tokens_and_rejects_the_ceiling(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+
+    def fake_grab(url, out, read=False, **kw):
+        seen.update(kw)
+        return {"url": url, "downloaded": 0, "assets": [], "tokens_more": "kept 80"}
+
+    monkeypatch.setattr("searchts.assets.grab", fake_grab)
+    data = json.loads(grab_site("https://x.test/", max_tokens=80))
+    assert seen["max_tokens"] == 80
+    assert data["tokens_more"] == "kept 80"
+    assert grab_site("https://x.test/", max_tokens=201).startswith("Error:")
+    assert grab_site("https://x.test/", max_tokens=-1).startswith("Error:")
+
+
 def test_grab_site_requires_url():
     assert grab_site("").startswith("Error:")
 

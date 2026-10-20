@@ -417,6 +417,14 @@ def _run():
     p_grab.add_argument("--read", action="store_true", help="Also save the page text as page.md")
     p_grab.add_argument("--max", dest="max_assets", type=int, default=120,
                         help="Maximum assets to download (default 120)")
+    from searchts import assets as _grab_assets
+    p_grab.add_argument(
+        "--tokens", dest="max_tokens", type=int, default=_grab_assets._TOKEN_CAP,
+        help="Radius, shadow, and spacing values to keep "
+             f"(default {_grab_assets._TOKEN_CAP}, "
+             f"ceiling {_grab_assets._TOKEN_CAP_MAX}). "
+             "The note names how many more a higher number returns.",
+    )
     p_grab.add_argument("--json", action="store_true", help="Print the manifest JSON to stdout")
 
     sub.add_parser("check-update", parents=[_verbose],
@@ -2172,9 +2180,14 @@ def _cmd_grab(args):
         print("--max cannot be negative", file=sys.stderr)
         sys.exit(2)
     try:
+        max_tokens = assets.resolve_token_cap(args.max_tokens)
+    except ValueError as e:
+        print(f"--tokens: {e}", file=sys.stderr)
+        sys.exit(2)
+    try:
         manifest = assets.grab(
             args.url, out, kinds=kinds, include_scripts=args.scripts,
-            read=args.read, max_assets=args.max_assets,
+            read=args.read, max_assets=args.max_assets, max_tokens=max_tokens,
             # Ticks go to stderr only, so --json stdout stays machine-clean.
             progress=not getattr(args, "json", False),
         )
@@ -2195,6 +2208,9 @@ def _cmd_grab(args):
         if not left:
             return None
         parts = ", ".join(f"{n} {kind}" for kind, n in left.items())
+        more = manifest.get("tokens_more")
+        if more:
+            return f"  tokens left out: {parts}. {more}"
         return f"  tokens left out: {parts}"
 
     def page_md_note():

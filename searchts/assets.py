@@ -460,13 +460,32 @@ _SEMANTIC_SELECTOR = re.compile(
 _SEMANTIC_VAR = re.compile(r"--[\w-]*(?:brand|primary|accent|link|heading|button|cta)[\w-]*\s*:", re.I)
 _CSS_BLOCK = re.compile(r"([^{}]+)\{([^{}]*)\}")
 #: Radius, shadow and spacing are a design kit, not a dump of every declaration.
-#: A spacing scale fits in this many values. One-off lengths past it are named
-#: in ``tokens_omitted`` instead of being appended forever.
+#: This many values is the default projection. A caller who needs the rest raises
+#: it with ``--tokens`` / ``max_tokens``, up to ``_TOKEN_CAP_MAX``. One-off
+#: lengths past the chosen cap are named, not appended forever.
 _TOKEN_CAP = 24
+_TOKEN_CAP_MAX = 200
 #: A ``gap:`` or ``margin:`` match on raw HTML can run until the next brace.
 #: A real token is a short declaration. Markup is not.
 _TOKEN_VALUE_MAX = 160
 _TOKEN_LISTS = ("radius", "shadow", "spacing")
+
+
+def resolve_token_cap(value: int) -> int:
+    """The radius/shadow/spacing cap, or ``ValueError`` when it is out of range.
+
+    ``0`` keeps nothing. The ceiling is ``_TOKEN_CAP_MAX``: past that the list
+    is a dump again. A bool is not an integer here (``True`` would be ``1``).
+    """
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(
+            f"token cap must be an integer from 0 to {_TOKEN_CAP_MAX}, got {value!r}"
+        )
+    if value < 0 or value > _TOKEN_CAP_MAX:
+        raise ValueError(
+            f"token cap must be from 0 to {_TOKEN_CAP_MAX}, got {value}"
+        )
+    return value
 
 
 def _token_value(raw: str) -> Optional[str]:
@@ -479,30 +498,50 @@ def _token_value(raw: str) -> Optional[str]:
     return val
 
 
+def _tokens_more(cap: int, over: Dict[str, int]) -> Optional[str]:
+    """How a caller gets the real values this cap hid, or None when none were."""
+    if not over:
+        return None
+    parts = ", ".join(f"{n} more {kind}" for kind, n in over.items())
+    return (
+        f"kept {cap} per list; {parts}; "
+        f"--tokens N (MCP max_tokens) raises it, ceiling {_TOKEN_CAP_MAX}"
+    )
+
+
 def _cap_token_lists(
-    tokens: Dict[str, List[str]],
-) -> Tuple[Dict[str, List[str]], Dict[str, int]]:
-    """Cap radius, shadow and spacing. Count what was left out."""
+    tokens: Dict[str, List[str]], cap: int,
+) -> Tuple[Dict[str, List[str]], Dict[str, int], Optional[str]]:
+    """Cap radius, shadow and spacing. Count what was left out.
+
+    Markup that is not a token is counted in the omission and is not offered
+    back: raising the cap cannot turn it into a value. Real values past ``cap``
+    are named in the ``tokens_more`` sentence.
+    """
     omitted: Dict[str, int] = {}
+    over: Dict[str, int] = {}
     capped: Dict[str, List[str]] = dict(tokens)
     for key in _TOKEN_LISTS:
         kept: List[str] = []
-        dropped = 0
+        rejected = 0
+        past = 0
         for raw in tokens.get(key) or []:
             val = _token_value(raw)
             if val is None:
-                dropped += 1
+                rejected += 1
                 continue
             if val in kept:
                 continue
-            if len(kept) >= _TOKEN_CAP:
-                dropped += 1
+            if len(kept) >= cap:
+                past += 1
                 continue
             kept.append(val)
         capped[key] = kept
-        if dropped:
-            omitted[key] = dropped
-    return capped, omitted
+        if rejected or past:
+            omitted[key] = rejected + past
+        if past:
+            over[key] = past
+    return capped, omitted, _tokens_more(cap, over)
 
 
 def _norm_hex(h: str) -> str:
@@ -577,7 +616,8 @@ def _colors_in(text: str) -> set:
     return found
 
 
-def extract_design(html: str, css_texts: Optional[List[str]] = None) -> Dict:
+def extract_design(html: str, css_texts: Optional[List[str]] = None, *,
+                   token_cap: int = _TOKEN_CAP) -> Dict:
     """Extract a color palette, the fonts in use, theme-color, and design tokens."""
     blobs = [html] + list(css_texts or [])
     colors: Counter = Counter()
@@ -708,7 +748,8 @@ def extract_design(html: str, css_texts: Optional[List[str]] = None) -> Dict:
          "weight": semantic[h] + colors[h]}
         for h in ordered[:12]
     ]
-    tokens, tokens_omitted = _cap_token_lists(tokens)
+    cap = resolve_token_cap(token_cap)
+    tokens, tokens_omitted, tokens_more = _cap_token_lists(tokens, cap)
     return {
         "palette": palette,
         "fonts": fonts[:20],
@@ -717,6 +758,8 @@ def extract_design(html: str, css_texts: Optional[List[str]] = None) -> Dict:
         "gradients": gradients[:10],
         "tokens": tokens,
         "tokens_omitted": tokens_omitted,
+        "tokens_limit": cap,
+        "tokens_more": tokens_more,
     }
 
 
@@ -873,14 +916,16 @@ def grab(page_url: str, out_dir: str, *,
          kinds: Tuple[str, ...] = ("images", "icons", "css", "fonts", "svg", "inline_svg"),
          include_scripts: bool = False, read: bool = False,
          max_assets: int = 120, max_total_mb: int = 50, timeout: int = 30,
-         progress: Optional[bool] = None) -> Dict:
+         max_tokens: int = _TOKEN_CAP, progress: Optional[bool] = None) -> Dict:
     """Fetch a page, download its assets, and extract design tokens.
 
     Writes the assets under out_dir/<kind>/, a manifest.json, and (with read=True)
     a page.md. Every URL the page named is either saved, recorded as a failure,
     or listed in ``omitted`` with the reason (``--max`` or the byte cap), so a
-    cap never truncates silently. Best-effort: a single failed asset is recorded,
-    never fatal. Returns the manifest dict.
+    cap never truncates silently. ``max_tokens`` is how many radius, shadow,
+    and spacing values to keep (default 24, ceiling 200). ``tokens_more`` names
+    how many real values a higher number returns. Best-effort: a single failed
+    asset is recorded, never fatal. Returns the manifest dict.
     """
     unknown = sorted(set(kinds) - set(ASSET_KINDS))
     if unknown:
@@ -955,7 +1000,11 @@ def grab(page_url: str, out_dir: str, *,
     # woff2 first: a rebuild wants the modern format before the fallbacks.
     assets["fonts"].sort(key=_font_rank)
 
-    design = extract_design(html, css_texts)
+    try:
+        token_cap = resolve_token_cap(max_tokens)
+    except ValueError as e:
+        raise AssetError(page_url, [("tokens", str(e))]) from e
+    design = extract_design(html, css_texts, token_cap=token_cap)
 
     want = set(kinds) | ({"scripts"} if include_scripts else set())
     records: List[Dict] = []
@@ -1081,12 +1130,14 @@ def grab(page_url: str, out_dir: str, *,
         "gradients": design["gradients"],
         "tokens": design["tokens"],
         "tokens_omitted": design.get("tokens_omitted") or {},
+        "tokens_more": design.get("tokens_more"),
         "found": {k: len(assets.get(k, [])) for k in ASSET_KINDS},
         "downloaded": sum(1 for r in records if r.get("ok")),
         "assets": public_records,
         "omitted": omitted_entries,
         "omitted_count": sum(e["count"] for e in omitted_entries),
-        "limits": {"max_assets": max_assets, "max_total_mb": max_total_mb},
+        "limits": {"max_assets": max_assets, "max_total_mb": max_total_mb,
+                   "max_tokens": token_cap},
         "css_scanned": len(css_texts),
         "css_not_scanned": css_skipped,
         "page_md": "page.md" if page_md is not None else None,

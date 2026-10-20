@@ -446,6 +446,8 @@ def test_extract_design_reads_variables_tokens_and_semantic_palette():
     assert "24px" in d["tokens"]["spacing"] or "0 auto" in d["tokens"]["spacing"]
     assert any("Inter" in stack for stack in d["tokens"]["font_stacks"])
     assert d["tokens_omitted"] == {}
+    assert d["tokens_limit"] == assets._TOKEN_CAP
+    assert d["tokens_more"] is None
 
 
 def test_radius_shadow_and_spacing_are_capped_and_named():
@@ -464,6 +466,26 @@ def test_radius_shadow_and_spacing_are_capped_and_named():
     assert d["tokens_omitted"]["spacing"] > d["tokens_omitted"]["radius"]
     assert "0px" in d["tokens"]["spacing"]
     assert "<div>" not in " ".join(d["tokens"]["spacing"])
+    assert d["tokens_more"] is not None
+    assert "more spacing" in d["tokens_more"]
+    assert "--tokens" in d["tokens_more"]
+    raised = assets.extract_design("", ["\n".join(rules)], token_cap=40)
+    assert len(raised["tokens"]["radius"]) == 40
+    assert len(raised["tokens"]["spacing"]) == 40
+    assert "more radius" not in (raised["tokens_more"] or "")
+    # The two spacing values that are markup stay omitted. Raising the cap
+    # does not turn them into tokens.
+    assert raised["tokens_omitted"]["spacing"] == 2
+    assert raised["tokens_more"] is None
+
+
+def test_token_cap_outside_the_ceiling_fails_loud():
+    with pytest.raises(ValueError):
+        assets.extract_design("", [], token_cap=assets._TOKEN_CAP_MAX + 1)
+    with pytest.raises(ValueError):
+        assets.extract_design("", [], token_cap=-1)
+    with pytest.raises(ValueError):
+        assets.resolve_token_cap(True)  # type: ignore[arg-type]
 
 
 def test_gradients_keep_nested_color_functions():
@@ -550,7 +572,7 @@ def test_grab_names_what_the_byte_cap_left_out(monkeypatch, tmp_path):
     assert manifest["downloaded"] == 0
     assert manifest["omitted_count"] > 0
     assert all(e["reason"] == "size-cap" for e in manifest["omitted"])
-    assert manifest["limits"] == {"max_assets": 120, "max_total_mb": 0}
+    assert manifest["limits"] == {"max_assets": 120, "max_total_mb": 0, "max_tokens": 24}
 
 
 def test_grab_climbs_from_a_client_rendered_shell(monkeypatch, tmp_path):
@@ -632,6 +654,32 @@ def test_cli_grab_names_tokens_left_out(monkeypatch, capsys, tmp_path):
         cli.main()
     err = capsys.readouterr().err
     assert "tokens left out: 33 spacing, 1 radius" in err
+
+
+def test_cli_grab_forwards_a_higher_token_cap(monkeypatch, capsys, tmp_path):
+    seen = {}
+
+    def fake_grab(url, out, **kw):
+        seen.update(kw)
+        return {"title": "Demo", "downloaded": 0, "palette": [], "fonts": [], "assets": []}
+
+    monkeypatch.setattr("searchts.assets.grab", fake_grab)
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out",
+                            str(tmp_path), "--tokens", "80"]):
+        cli.main()
+    assert seen["max_tokens"] == 80
+
+
+def test_cli_grab_rejects_a_token_cap_past_the_ceiling(monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr("searchts.assets.grab", lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("grab should not run")))
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out",
+                            str(tmp_path), "--tokens", "201"]):
+        with pytest.raises(SystemExit) as exc:
+            cli.main()
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "200" in err and "201" in err
 
 
 def test_cli_grab_json_warns_on_stderr_and_keeps_stdout_clean(monkeypatch, capsys, tmp_path):
