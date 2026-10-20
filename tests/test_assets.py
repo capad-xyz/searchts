@@ -445,6 +445,25 @@ def test_extract_design_reads_variables_tokens_and_semantic_palette():
     assert d["tokens"]["shadow"]
     assert "24px" in d["tokens"]["spacing"] or "0 auto" in d["tokens"]["spacing"]
     assert any("Inter" in stack for stack in d["tokens"]["font_stacks"])
+    assert d["tokens_omitted"] == {}
+
+
+def test_radius_shadow_and_spacing_are_capped_and_named():
+    """A stylesheet does not get to list every one-off, or a markup swallow."""
+    rules = [
+        f".s{i}{{margin:{i}px;border-radius:{i}px;box-shadow:{i}px 0 0 #000}}"
+        for i in range(40)
+    ]
+    rules.append("gap:" + ("<div>not a token</div>" * 20))
+    rules.append(".bad{padding:4px <span>}")
+    d = assets.extract_design("", ["\n".join(rules)])
+    for kind in ("radius", "shadow", "spacing"):
+        assert len(d["tokens"][kind]) == assets._TOKEN_CAP
+        assert all("<" not in v and len(v) < assets._TOKEN_VALUE_MAX
+                   for v in d["tokens"][kind])
+    assert d["tokens_omitted"]["spacing"] > d["tokens_omitted"]["radius"]
+    assert "0px" in d["tokens"]["spacing"]
+    assert "<div>" not in " ".join(d["tokens"]["spacing"])
 
 
 def test_gradients_keep_nested_color_functions():
@@ -601,6 +620,18 @@ def test_cli_grab_names_omitted_assets(monkeypatch, capsys, tmp_path):
     err = capsys.readouterr().err
     assert "omitted: 3 asset(s) not saved" in err
     assert "3 images (max-assets)" in err
+
+
+def test_cli_grab_names_tokens_left_out(monkeypatch, capsys, tmp_path):
+    manifest = {
+        "title": "Demo", "downloaded": 1, "palette": [], "fonts": [], "assets": [],
+        "tokens_omitted": {"spacing": 33, "radius": 1},
+    }
+    monkeypatch.setattr("searchts.assets.grab", lambda url, out, **kw: manifest)
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out", str(tmp_path)]):
+        cli.main()
+    err = capsys.readouterr().err
+    assert "tokens left out: 33 spacing, 1 radius" in err
 
 
 def test_cli_grab_json_warns_on_stderr_and_keeps_stdout_clean(monkeypatch, capsys, tmp_path):

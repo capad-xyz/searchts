@@ -459,6 +459,50 @@ _SEMANTIC_SELECTOR = re.compile(
 )
 _SEMANTIC_VAR = re.compile(r"--[\w-]*(?:brand|primary|accent|link|heading|button|cta)[\w-]*\s*:", re.I)
 _CSS_BLOCK = re.compile(r"([^{}]+)\{([^{}]*)\}")
+#: Radius, shadow and spacing are a design kit, not a dump of every declaration.
+#: A spacing scale fits in this many values. One-off lengths past it are named
+#: in ``tokens_omitted`` instead of being appended forever.
+_TOKEN_CAP = 24
+#: A ``gap:`` or ``margin:`` match on raw HTML can run until the next brace.
+#: A real token is a short declaration. Markup is not.
+_TOKEN_VALUE_MAX = 160
+_TOKEN_LISTS = ("radius", "shadow", "spacing")
+
+
+def _token_value(raw: str) -> Optional[str]:
+    """Return ``raw`` when it is a token value, else None."""
+    val = " ".join((raw or "").split())
+    if not val or len(val) > _TOKEN_VALUE_MAX:
+        return None
+    if any(ch in val for ch in "<>{}"):
+        return None
+    return val
+
+
+def _cap_token_lists(
+    tokens: Dict[str, List[str]],
+) -> Tuple[Dict[str, List[str]], Dict[str, int]]:
+    """Cap radius, shadow and spacing. Count what was left out."""
+    omitted: Dict[str, int] = {}
+    capped: Dict[str, List[str]] = dict(tokens)
+    for key in _TOKEN_LISTS:
+        kept: List[str] = []
+        dropped = 0
+        for raw in tokens.get(key) or []:
+            val = _token_value(raw)
+            if val is None:
+                dropped += 1
+                continue
+            if val in kept:
+                continue
+            if len(kept) >= _TOKEN_CAP:
+                dropped += 1
+                continue
+            kept.append(val)
+        capped[key] = kept
+        if dropped:
+            omitted[key] = dropped
+    return capped, omitted
 
 
 def _norm_hex(h: str) -> str:
@@ -664,6 +708,7 @@ def extract_design(html: str, css_texts: Optional[List[str]] = None) -> Dict:
          "weight": semantic[h] + colors[h]}
         for h in ordered[:12]
     ]
+    tokens, tokens_omitted = _cap_token_lists(tokens)
     return {
         "palette": palette,
         "fonts": fonts[:20],
@@ -671,6 +716,7 @@ def extract_design(html: str, css_texts: Optional[List[str]] = None) -> Dict:
         "css_variables": css_vars,
         "gradients": gradients[:10],
         "tokens": tokens,
+        "tokens_omitted": tokens_omitted,
     }
 
 
@@ -1034,6 +1080,7 @@ def grab(page_url: str, out_dir: str, *,
         "css_variables": design["css_variables"],
         "gradients": design["gradients"],
         "tokens": design["tokens"],
+        "tokens_omitted": design.get("tokens_omitted") or {},
         "found": {k: len(assets.get(k, [])) for k in ASSET_KINDS},
         "downloaded": sum(1 for r in records if r.get("ok")),
         "assets": public_records,
