@@ -410,12 +410,13 @@ def _run():
     p_grab.add_argument("url", help="The page URL to grab")
     p_grab.add_argument("--out", default=None,
                         help="Output directory (default: ./searchts-grab-<host>)")
-    p_grab.add_argument("--kinds", default="images,icons,css,fonts,svg",
-                        help="Comma list of asset kinds to download (images,icons,css,fonts,svg,scripts)")
+    p_grab.add_argument("--kinds", default="images,icons,css,fonts,svg,inline_svg",
+                        help="Comma list of asset kinds to download "
+                             "(images,icons,css,fonts,svg,inline_svg,scripts)")
     p_grab.add_argument("--scripts", action="store_true", help="Also download <script src> files")
     p_grab.add_argument("--read", action="store_true", help="Also save the page text as page.md")
-    p_grab.add_argument("--max", dest="max_assets", type=int, default=60,
-                        help="Maximum assets to download (default 60)")
+    p_grab.add_argument("--max", dest="max_assets", type=int, default=120,
+                        help="Maximum assets to download (default 120)")
     p_grab.add_argument("--json", action="store_true", help="Print the manifest JSON to stdout")
 
     sub.add_parser("check-update", parents=[_verbose],
@@ -2167,6 +2168,9 @@ def _cmd_grab(args):
         host = urlparse(assets.normalize(args.url)).netloc.replace(":", "_") or "site"
         out = f"searchts-grab-{host}"
     kinds = tuple(k.strip() for k in (args.kinds or "").split(",") if k.strip())
+    if args.max_assets < 0:
+        print("--max cannot be negative", file=sys.stderr)
+        sys.exit(2)
     try:
         manifest = assets.grab(
             args.url, out, kinds=kinds, include_scripts=args.scripts,
@@ -2178,7 +2182,25 @@ def _cmd_grab(args):
         print(f"Failed to grab {args.url}: {e}", file=sys.stderr)
         sys.exit(1)
 
+    def omitted_note():
+        entries = manifest.get("omitted") or []
+        if not entries:
+            return None
+        total = manifest.get("omitted_count") or sum(e.get("count", 0) for e in entries)
+        parts = ", ".join(f"{e['count']} {e['kind']} ({e['reason']})" for e in entries)
+        return f"  omitted: {total} asset(s) not saved: {parts}"
+
+    def page_md_note():
+        err = manifest.get("page_md_error")
+        return f"  page.md not saved: {err}" if err else None
+
     if args.json:
+        note = omitted_note()
+        if note:
+            print(note, file=sys.stderr)
+        note = page_md_note()
+        if note:
+            print(note, file=sys.stderr)
         print(json.dumps(manifest, ensure_ascii=False))
         return
     title = manifest.get("title") or "(no title)"
@@ -2191,6 +2213,12 @@ def _cmd_grab(args):
         print(f"  palette: {palette}", file=sys.stderr)
     if fonts:
         print(f"  fonts:   {fonts}", file=sys.stderr)
+    note = omitted_note()
+    if note:
+        print(note, file=sys.stderr)
+    note = page_md_note()
+    if note:
+        print(note, file=sys.stderr)
     print(os.path.join(out, "manifest.json"))
 
 

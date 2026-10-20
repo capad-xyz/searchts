@@ -295,9 +295,30 @@ def test_grab_site_returns_manifest_json(monkeypatch):
         "downloaded": 2,
         "assets": [],
     }
-    monkeypatch.setattr("searchts.assets.grab", lambda url, out, read=False: manifest)
+    monkeypatch.setattr("searchts.assets.grab", lambda url, out, read=False, **kw: manifest)
     data = json.loads(grab_site("https://x.test/"))
     assert data["fonts"] == ["Inter"] and data["downloaded"] == 2
+
+
+def test_grab_site_forwards_max_assets_and_returns_omitted(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+    manifest = {
+        "url": "https://x.test/", "downloaded": 2, "assets": [],
+        "omitted": [{"reason": "max-assets", "kind": "fonts", "count": 2,
+                     "urls": ["https://x.test/a.woff2", "https://x.test/b.woff2"]}],
+        "omitted_count": 2,
+    }
+
+    def fake_grab(url, out, read=False, **kw):
+        seen.update(kw)
+        return manifest
+
+    monkeypatch.setattr("searchts.assets.grab", fake_grab)
+    data = json.loads(grab_site("https://x.test/", max_assets=12))
+    assert seen["max_assets"] == 12
+    assert data["omitted_count"] == 2
+    assert data["omitted"][0]["urls"]
 
 
 def test_grab_site_requires_url():
@@ -411,7 +432,7 @@ def test_grab_site_defaults_inside_cwd_and_refuses_absolute(monkeypatch, tmp_pat
     monkeypatch.chdir(tmp_path)
     seen = {}
 
-    def fake_grab(url, out, read=False):
+    def fake_grab(url, out, read=False, **kw):
         seen["out"] = out
         return {"url": url, "assets": []}
 
@@ -598,7 +619,7 @@ def test_fetch_asset_blocks_ssrf(monkeypatch):
 
 
 def test_grab_site_blocks_ssrf(monkeypatch):
-    monkeypatch.setattr("searchts.assets.grab", lambda u, o, read=False: {})
+    monkeypatch.setattr("searchts.assets.grab", lambda u, o, read=False, **kw: {})
     out = grab_site("http://127.0.0.1/")
     assert out.startswith("Error: SSRF guard")
 
@@ -756,7 +777,7 @@ def test_grab_site_never_writes_into_the_base_or_a_used_folder(monkeypatch, tmp_
     monkeypatch.chdir(tmp_path)
     seen = []
 
-    def fake_grab(url, out, read=False):
+    def fake_grab(url, out, read=False, **kw):
         seen.append(Path(out))
         return {"url": url, "assets": []}
 

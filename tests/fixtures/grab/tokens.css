@@ -1,0 +1,67 @@
+:root {
+  --brand: #ff5500;
+  --brand-strong: #d94800;
+  --surface: #faf7f2;
+  --ink: #1b1b1f;
+  --muted: #6b6b76;
+  --font-sans: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --radius-card: 12px;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, .08), 0 8px 24px rgba(0, 0, 0, .12);
+  --space-2: 8px;
+  --space-4: 16px;
+}
+
+body {
+  color: var(--ink);
+  background: var(--surface);
+  font-family: var(--font-sans);
+  margin: 0 auto;
+  padding: 24px;
+}
+
+h1, h2, h3 {
+  color: #1b1b1f;
+  font-family: "Inter", sans-serif;
+}
+
+a {
+  color: #d94800;
+}
+
+.button {
+  background: linear-gradient(135deg, #ff5500 0%, #ff8a00 100%);
+  color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .08), 0 8px 24px rgba(0, 0, 0, .12);
+  padding: 12px 20px;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Regular.woff") format("woff");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("/fonts/Inter-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IconGlyphs";
+  src: url("https://fonts.cdn.test/iconglyphs.woff2") format("woff2");
+}
+
+.reset, .reset * {
+  margin: 0;
+  padding: 0;
+  color: #000000;
+  background: #ffffff;
+}
+
+.hero {
+  background-image: url("/media/css-texture.png");
+}

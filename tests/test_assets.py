@@ -375,3 +375,273 @@ def test_fetch_bytes_jina_html_detects_relayed_waf(monkeypatch):
     monkeypatch.setattr("requests.get", lambda *a, **k: R())
     with pytest.raises(assets.AssetError):
         assets.fetch_bytes("https://x.test/", backends=["jina-html"])
+
+
+# ── the design kit: saved fixtures for the new parsers ──────────────────────
+
+from pathlib import Path  # noqa: E402
+
+FIXTURES = Path(__file__).parent / "fixtures" / "grab"
+
+
+def _fixture(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+GRAB_HTML = _fixture("design_page.html")
+GRAB_CSS = _fixture("tokens.css")
+BASE = "https://northwind.test/"
+
+
+def test_srcset_parser_keeps_every_candidate_and_data_uri_commas():
+    urls = assets._parse_srcset("/a.png 1x, /a@2x.png 2x, /a@3x.png 3x")
+    assert urls == ["/a.png", "/a@2x.png", "/a@3x.png"]
+    # A data URI carries its own commas; split(",") would cut it in half.
+    urls = assets._parse_srcset("data:image/png;base64,AA,BB 1x, /b.png 2x")
+    assert urls == ["data:image/png;base64,AA,BB", "/b.png"]
+
+
+def test_extract_assets_collects_picture_srcset_lazy_poster_and_meta():
+    a = assets.extract_assets(GRAB_HTML, BASE)
+    for path in (
+        "/media/hero.avif", "/media/hero@2x.avif",
+        "/media/hero.webp", "/media/hero@2x.webp",
+        "/media/hero.jpg", "/media/hero@2x.jpg", "/media/hero@3x.jpg",
+        "/media/lazy-logo.png", "/media/lazy-logo@2x.png",
+        "/media/poster.jpg", "/media/paper-texture.png",
+    ):
+        assert BASE.rstrip("/") + path in a["images"], path
+    assert "https://cdn.northwind.test/social/og.png" in a["images"]
+    assert "https://cdn.northwind.test/social/twitter.png" in a["images"]
+    for path in ("/favicon.ico", "/favicon.svg", "/apple-touch-icon.png",
+                 "/safari-pinned-tab.svg"):
+        assert BASE.rstrip("/") + path in a["icons"], path
+    assert BASE.rstrip("/") + "/fonts/Inter-Variable.woff2" in a["fonts"]
+    assert any(u.startswith("data:font/woff2;base64,") for u in a["fonts"])
+    assert BASE.rstrip("/") + "/assets/app.js" in a["scripts"]
+    assert BASE.rstrip("/") + "/assets/site.css" in a["css"]
+
+
+def test_extract_assets_keeps_data_uri_images_and_inline_svg():
+    a = assets.extract_assets(GRAB_HTML, BASE)
+    assert any(u.startswith("data:image/png;base64,") for u in a["images"])
+    assert len(a["inline_svg"]) == 2
+    data, mime = assets._decode_data_url(a["inline_svg"][0])
+    assert mime == "image/svg+xml" and b"<svg" in data
+
+
+def test_extract_design_reads_variables_tokens_and_semantic_palette():
+    d = assets.extract_design(GRAB_HTML, [GRAB_CSS])
+    assert d["css_variables"]["--brand"] == "#ff5500"
+    assert d["css_variables"]["--radius-card"] == "12px"
+    assert d["css_variables"]["--space-4"] == "16px"
+    assert "Inter" in d["fonts"] and "IconGlyphs" in d["fonts"]
+    hexes = [c["hex"] for c in d["palette"]]
+    # The brand from :root/theme-color outranks a reset stylesheet's #000.
+    assert "#ff5500" in hexes[:4], hexes
+    assert "#d94800" in hexes, hexes
+    assert any("linear-gradient" in g for g in d["gradients"])
+    assert "12px" in d["tokens"]["radius"]
+    assert d["tokens"]["shadow"]
+    assert "24px" in d["tokens"]["spacing"] or "0 auto" in d["tokens"]["spacing"]
+    assert any("Inter" in stack for stack in d["tokens"]["font_stacks"])
+
+
+def test_gradients_keep_nested_color_functions():
+    d = assets.extract_design(
+        "", [".x{background:linear-gradient(90deg, rgba(255,0,0,.5), #00ff00)}"])
+    grad = d["gradients"][0]
+    assert grad.startswith("linear-gradient(") and grad.endswith(")")
+    assert "rgba(255,0,0,.5)" in grad and "#00ff00" in grad
+
+
+def test_theme_color_is_read_whatever_the_meta_order():
+    d = assets.extract_design('<meta content="#123456" name="theme-color">', [])
+    assert d["theme_color"] == "#123456"
+
+
+def _design_fetch(url, *, backends=None, timeout=30, progress=None):
+    if url.startswith("data:"):
+        raise AssertionError("data URIs are saved directly, never fetched")
+    if "googleapis" in url:
+        return assets.AssetResult(b"/* gfont */", "text/css", url, "curl_cffi")
+    if url.endswith(".css"):
+        return assets.AssetResult(GRAB_CSS.encode(), "text/css", url, "curl_cffi")
+    if url.endswith((".woff2", ".woff", ".ttf", ".otf", ".eot")):
+        return assets.AssetResult(b"FONTDATA", "font/woff2", url, "curl_cffi")
+    if url.endswith((".png", ".jpg", ".jpeg", ".webp", ".avif", ".ico", ".svg")):
+        return assets.AssetResult(b"BINARY", "image/png", url, "curl_cffi")
+    return assets.AssetResult(GRAB_HTML.encode(), "text/html", url, "curl_cffi")
+
+
+def test_grab_writes_css_fonts_inline_svg_and_tokens(monkeypatch, tmp_path):
+    monkeypatch.setattr(assets, "fetch_bytes", _design_fetch)
+    out = tmp_path / "grab"
+    manifest = assets.grab(BASE, str(out))
+
+    # Every kind a designer needs is on disk, with the source URL in the manifest.
+    saved_kinds = {r["kind"] for r in manifest["assets"] if r["ok"]}
+    assert {"images", "icons", "css", "fonts", "inline_svg"} <= saved_kinds
+    css_files = list((out / "css").glob("*.css"))
+    assert css_files and "--brand" in css_files[0].read_text(encoding="utf-8")
+    assert list((out / "inline_svg").glob("*.svg"))
+    assert list((out / "images").glob("inline-*.png"))  # the data URI image
+    assert list((out / "fonts").glob("inline-*.woff2"))  # the data URI font
+
+    # Font files are saved, modern format first, not just the family name.
+    font_records = [r for r in manifest["assets"] if r["kind"] == "fonts" and r["ok"]]
+    assert any(r["source_url"].endswith(".woff2") for r in font_records)
+    assert any(r["source_url"].endswith(".woff") for r in font_records)
+    woff2_at = next(i for i, r in enumerate(font_records)
+                    if r["source_url"].endswith(".woff2"))
+    woff_at = next(i for i, r in enumerate(font_records)
+                   if r["source_url"].endswith(".woff"))
+    assert woff2_at < woff_at
+
+    assert any(r["source_url"].endswith("/media/css-texture.png") and r["ok"]
+               for r in manifest["assets"])
+    assert manifest["css_variables"]["--brand"] == "#ff5500"
+    assert manifest["tokens"]["radius"]
+    assert manifest["page_rungs"][0]["backend"] == "curl_cffi"
+
+    # Inline data URIs become files and a short label, not a huge manifest URL.
+    inline = [r for r in manifest["assets"] if r["kind"] == "inline_svg" and r["ok"]]
+    assert inline and all(r["inline"] and r["source_url"].startswith("inline:")
+                          for r in inline)
+
+
+def test_grab_names_what_max_left_out(monkeypatch, tmp_path):
+    monkeypatch.setattr(assets, "fetch_bytes", _design_fetch)
+    manifest = assets.grab(BASE, str(tmp_path / "g"), max_assets=3)
+    assert manifest["downloaded"] == 3
+    assert manifest["omitted_count"] > 0
+    max_entries = [e for e in manifest["omitted"] if e["reason"] == "max-assets"]
+    assert max_entries
+    assert all(e["count"] == len(e["urls"]) and e["urls"] for e in max_entries)
+    assert manifest["found"]["images"] > 3  # the page really had more to give
+    # Nothing omitted is also claimed as saved.
+    omitted_urls = {u for e in max_entries for u in e["urls"]}
+    saved_urls = {r["source_url"] for r in manifest["assets"] if r["ok"]}
+    assert not (omitted_urls & saved_urls)
+
+
+def test_grab_names_what_the_byte_cap_left_out(monkeypatch, tmp_path):
+    monkeypatch.setattr(assets, "fetch_bytes", _design_fetch)
+    manifest = assets.grab(BASE, str(tmp_path / "g"), max_total_mb=0)
+    assert manifest["downloaded"] == 0
+    assert manifest["omitted_count"] > 0
+    assert all(e["reason"] == "size-cap" for e in manifest["omitted"])
+    assert manifest["limits"] == {"max_assets": 120, "max_total_mb": 0}
+
+
+def test_grab_climbs_from_a_client_rendered_shell(monkeypatch, tmp_path):
+    shell = '<html><body><div id="root"></div><script src="/app.js"></script></body></html>'
+    calls = []
+
+    def climbing_fetch(url, *, backends=None, timeout=30, progress=None):
+        backend = (backends or ["curl_cffi"])[0]
+        calls.append((backend, url))
+        if url.endswith(".css"):
+            return assets.AssetResult(GRAB_CSS.encode(), "text/css", url, backend)
+        if backend == "curl_cffi":
+            return assets.AssetResult(shell.encode(), "text/html", url, "curl_cffi")
+        if backend == "jina-html":
+            return assets.AssetResult(GRAB_HTML.encode(), "text/html", url, "jina-html")
+        return assets.AssetResult(GRAB_HTML.encode(), "text/html", url, "stealth-browser")
+
+    monkeypatch.setattr(assets, "fetch_bytes", climbing_fetch)
+    manifest = assets.grab(BASE, str(tmp_path / "g"))
+
+    # The shell's one script tag is not sold as the page's asset set.
+    assert manifest["page_backend"] == "jina-html"
+    assert [r["backend"] for r in manifest["page_rungs"]] == ["curl_cffi", "jina-html"]
+    assert manifest["page_rungs"][0]["assets_found"] < manifest["page_rungs"][1]["assets_found"]
+    assert manifest["found"]["images"] > 1
+
+
+def test_grab_fails_loud_when_every_rung_is_a_shell(monkeypatch, tmp_path):
+    shell = '<html><body><div id="root"></div><script src="/app.js"></script></body></html>'
+
+    def shell_fetch(url, *, backends=None, timeout=30, progress=None):
+        return assets.AssetResult(shell.encode(), "text/html", url,
+                                  (backends or ["curl_cffi"])[0])
+
+    monkeypatch.setattr(assets, "fetch_bytes", shell_fetch)
+    with pytest.raises(assets.AssetError) as e:
+        assets.grab("https://shell.test/", str(tmp_path / "g"))
+    assert "thin client-rendered shell" in str(e.value)
+
+
+def test_grab_keeps_a_short_static_page(monkeypatch, tmp_path):
+    # example.com-shaped: tiny, complete as served, and no shell markers.
+    tiny = ('<html><head><title>Example Domain</title></head><body>'
+            '<h1>Example Domain</h1><p>This domain is for use in examples.</p>'
+            '</body></html>')
+
+    def tiny_fetch(url, *, backends=None, timeout=30, progress=None):
+        return assets.AssetResult(tiny.encode(), "text/html", url, "curl_cffi")
+
+    monkeypatch.setattr(assets, "fetch_bytes", tiny_fetch)
+    manifest = assets.grab("https://example.com/", str(tmp_path / "g"))
+    assert manifest["title"] == "Example Domain"
+    assert manifest["page_backend"] == "curl_cffi"
+    assert len(manifest["page_rungs"]) == 1
+
+
+def test_cli_grab_names_omitted_assets(monkeypatch, capsys, tmp_path):
+    manifest = {
+        "title": "Demo", "downloaded": 2, "palette": [], "fonts": [], "assets": [],
+        "omitted": [{"reason": "max-assets", "kind": "images", "count": 3,
+                     "urls": ["https://d.test/a.png"]}],
+        "omitted_count": 3,
+    }
+    monkeypatch.setattr("searchts.assets.grab", lambda url, out, **kw: manifest)
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out", str(tmp_path)]):
+        cli.main()
+    err = capsys.readouterr().err
+    assert "omitted: 3 asset(s) not saved" in err
+    assert "3 images (max-assets)" in err
+
+
+def test_cli_grab_json_warns_on_stderr_and_keeps_stdout_clean(monkeypatch, capsys, tmp_path):
+    manifest = {
+        "title": "Demo", "downloaded": 2, "palette": [], "fonts": [], "assets": [],
+        "omitted": [{"reason": "max-assets", "kind": "fonts", "count": 6,
+                     "urls": ["https://d.test/a.woff2"]}],
+        "omitted_count": 6, "page_md_error": "OSError: disk full",
+    }
+    monkeypatch.setattr("searchts.assets.grab", lambda url, out, **kw: manifest)
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out",
+                            str(tmp_path), "--json"]):
+        cli.main()
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["omitted_count"] == 6
+    assert "omitted: 6 asset(s) not saved" in captured.err
+    assert "6 fonts (max-assets)" in captured.err
+    assert "page.md not saved" in captured.err
+
+
+def test_grab_rejects_an_unknown_kind_fail_loud(monkeypatch, tmp_path):
+    monkeypatch.setattr(assets, "fetch_bytes", _design_fetch)
+    with pytest.raises(assets.AssetError) as e:
+        assets.grab(BASE, str(tmp_path / "g"), kinds=("images", "imagez"))
+    assert "imagez" in str(e.value)
+
+
+def test_grab_scripts_flag_actually_saves_scripts(monkeypatch, tmp_path):
+    monkeypatch.setattr(assets, "fetch_bytes", _design_fetch)
+    manifest = assets.grab(BASE, str(tmp_path / "g"), include_scripts=True)
+    assert any(r["kind"] == "scripts" and r["ok"] for r in manifest["assets"])
+
+
+def test_grab_kinds_include_inline_svg_by_default(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_grab(url, out, **kw):
+        seen.update(kw)
+        return {"title": "x", "downloaded": 0, "palette": [], "fonts": [], "assets": []}
+
+    monkeypatch.setattr("searchts.assets.grab", fake_grab)
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out", str(tmp_path)]):
+        cli.main()
+    assert "inline_svg" in seen["kinds"]

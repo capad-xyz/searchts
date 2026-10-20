@@ -259,21 +259,27 @@ def create_server():
         name="grab_site",
         description=(
             "Grab a page for design inspiration: fetch it through the unlock "
-            "ladder, download its assets (images/icons/css/fonts/svg), extract "
-            "the color palette and the fonts in use, and return a manifest (with "
-            "local file paths) as JSON. Use this for a whole page's design/assets "
-            "at once; for a single known file use fetch_asset. Saves into out_dir "
-            "(a relative folder inside the working directory, or SEARCHTS_MCP_OUT_DIR "
-            "if the user set it) when given, otherwise a 'searchts-grab-<host>' "
-            "folder there. A folder that already has files is never written into; "
-            "the grab goes to '<folder>-2', '<folder>-3' and so on, and the folder "
-            "used is returned as out_dir. Set read=true "
-            "to also save the page text as page.md. Returns an 'Error: ...' string "
+            "ladder, download its assets (images/icons/css/fonts/svg/inline_svg), "
+            "save the font and CSS files those rules came from, extract the color "
+            "palette (CSS variables, gradients, theme-color), the fonts, and the "
+            "design tokens, and return a manifest (with local file paths) as JSON. "
+            "Use this for a whole page's design/assets at once; for a single known "
+            "file use fetch_asset. Saves into out_dir (a relative folder inside the "
+            "working directory, or SEARCHTS_MCP_OUT_DIR if the user set it) when "
+            "given, otherwise a 'searchts-grab-<host>' folder there. A folder that "
+            "already has files is never written into; the grab goes to '-2', '-3' "
+            "and so on, and the folder used is returned as out_dir. Set read=true "
+            "to also save the page text as page.md. max_assets caps how many files "
+            "are saved (default 120); when it or the byte cap stops early, the "
+            "manifest's 'omitted' list names every URL left out and why, so never "
+            "report a grab as complete without reading it. 'page_rungs' names the "
+            "fetch tiers tried and what each found. Returns an 'Error: ...' string "
             "on failure."
         ),
     )
-    def grab_site_tool(url: str, out_dir: str = "", read: bool = False) -> str:
-        return grab_site(url, out_dir, read)
+    def grab_site_tool(url: str, out_dir: str = "", read: bool = False,
+                       max_assets: int = 120) -> str:
+        return grab_site(url, out_dir, read, max_assets=max_assets)
 
     @mcp.tool(name="transcribe", description=TRANSCRIBE_DESCRIPTION)
     async def transcribe_tool(
@@ -832,12 +838,14 @@ def fetch_asset(url: str, out_dir: str = "") -> str:
     return json.dumps({"path": str(path), "content_type": ct, "bytes": size}, ensure_ascii=False)
 
 
-def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
+def grab_site(url: str, out_dir: str = "", read: bool = False,
+              max_assets: int = 120) -> str:
     """Grab a page's assets + color palette + fonts; return the manifest JSON.
 
-    Downloads images/icons/css/fonts/svg and writes a manifest with local paths;
-    returns it as a JSON string an agent can use for design inspiration. Error
-    string on failure.
+    Downloads images/icons/css/fonts/svg/inline_svg and writes a manifest with
+    local paths; returns it as a JSON string an agent can use for design
+    inspiration. Anything the size or count cap left out is listed under
+    ``omitted`` with its URL and reason. Error string on failure.
     """
     from urllib.parse import urlparse
 
@@ -864,7 +872,8 @@ def grab_site(url: str, out_dir: str = "", read: bool = False) -> str:
         return f"Error: no free folder next to {folder} (tried -2 to -999)."
     folder = fresh
     try:
-        manifest = assets.grab(url, str(folder), read=read)
+        manifest = assets.grab(url, str(folder), read=read,
+                               max_assets=max(0, int(max_assets)))
     except assets.AssetError as e:
         return f"Error: {e}"
     except OSError as e:

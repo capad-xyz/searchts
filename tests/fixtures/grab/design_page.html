@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Northwind Design Fixture</title>
+  <meta name="theme-color" content="#ff5500">
+  <link rel="preload" as="font" type="font/woff2" href="data:font/woff2;base64,d09GMgAB">
+  <meta property="og:image" content="https://cdn.northwind.test/social/og.png">
+  <meta name="twitter:image" content="https://cdn.northwind.test/social/twitter.png">
+  <link rel="stylesheet" href="/assets/site.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#ff5500">
+  <link rel="preload" as="font" type="font/woff2" href="/fonts/Inter-Variable.woff2" crossorigin>
+</head>
+<body>
+  <header>
+    <picture>
+      <source srcset="/media/hero.avif 1x, /media/hero@2x.avif 2x" type="image/avif">
+      <source srcset="/media/hero.webp 1x, /media/hero@2x.webp 2x" type="image/webp">
+      <img src="/media/hero.jpg" srcset="/media/hero@2x.jpg 2x, /media/hero@3x.jpg 3x"
+           alt="Northwind hero">
+    </picture>
+    <img data-src="/media/lazy-logo.png" data-srcset="/media/lazy-logo@2x.png 2x" alt="logo">
+    <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" alt="pixel">
+    <video poster="/media/poster.jpg" controls>
+      <source src="/media/clip.mp4" type="video/mp4">
+    </video>
+  </header>
+  <main>
+    <div style="background-image:url('/media/paper-texture.png')"></div>
+    <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+      <path d="M12 2 2 7l10 5 10-5-10-5zm0 9L2 16l10 5 10-5-10-5z"></path>
+    </svg>
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <circle cx="8" cy="8" r="7"></circle>
+    </svg>
+  </main>
+  <script src="/assets/app.js"></script>
+</body>
+</html>
