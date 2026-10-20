@@ -52,14 +52,19 @@ specific asset rather than a whole page.
 
 ## From an agent over MCP
 
-- `grab_site(url, out_dir?, read?)` — returns the manifest JSON (palette, fonts,
-  asset list with local paths) for design inspiration.
+- `grab_site(url, out_dir?, read?, max_tokens?)` — returns the manifest JSON
+  (palette, fonts, asset list with local paths) for design inspiration.
+  `max_tokens` is the radius/shadow/spacing cap (default 24, ceiling 200).
 - `fetch_asset(url, out_dir?)` — downloads one asset, returns `{path, content_type, bytes}`.
 
 ## Notes / limits
 
 - Best-effort and bounded: capped at `--max` assets and ~50 MB total per grab;
   one bad asset is logged in the manifest and skipped.
+- Radius, shadow, and spacing keep 24 values unless `--tokens N` (MCP
+  `max_tokens`) says otherwise, up to 200. `tokens_more` names how many real
+  values a higher number returns. Markup that is not a token is counted in
+  `tokens_omitted` and is not returned by raising the cap.
 - Same ceiling as `read`: an interactive CAPTCHA can still block a walled asset.
 - Personal-grade: runs from your own IP at personal volume. Respect each site's
   terms of service and copyright — this is for reference/inspiration, not bulk

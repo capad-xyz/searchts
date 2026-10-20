@@ -272,14 +272,18 @@ def create_server():
             "to also save the page text as page.md. max_assets caps how many files "
             "are saved (default 120); when it or the byte cap stops early, the "
             "manifest's 'omitted' list names every URL left out and why, so never "
-            "report a grab as complete without reading it. 'page_rungs' names the "
+            "report a grab as complete without reading it. max_tokens is how many "
+            "radius, shadow, and spacing values to keep (default 24, ceiling 200). "
+            "When that cap hides real values, tokens_more says how many more and "
+            "that a higher max_tokens returns them. 'page_rungs' names the "
             "fetch tiers tried and what each found. Returns an 'Error: ...' string "
             "on failure."
         ),
     )
     def grab_site_tool(url: str, out_dir: str = "", read: bool = False,
-                       max_assets: int = 120) -> str:
-        return grab_site(url, out_dir, read, max_assets=max_assets)
+                       max_assets: int = 120, max_tokens: int = 24) -> str:
+        return grab_site(url, out_dir, read, max_assets=max_assets,
+                         max_tokens=max_tokens)
 
     @mcp.tool(name="transcribe", description=TRANSCRIBE_DESCRIPTION)
     async def transcribe_tool(
@@ -839,7 +843,7 @@ def fetch_asset(url: str, out_dir: str = "") -> str:
 
 
 def grab_site(url: str, out_dir: str = "", read: bool = False,
-              max_assets: int = 120) -> str:
+              max_assets: int = 120, max_tokens: int = 24) -> str:
     """Grab a page's assets + color palette + fonts; return the manifest JSON.
 
     Downloads images/icons/css/fonts/svg/inline_svg and writes a manifest with
@@ -853,6 +857,10 @@ def grab_site(url: str, out_dir: str = "", read: bool = False,
 
     if not url:
         return "Error: grab_site requires a 'url' argument."
+    try:
+        token_cap = assets.resolve_token_cap(max_tokens)
+    except ValueError as e:
+        return f"Error: {e}"
     # P3.6: same SSRF boundary as read_url.
     blocked = ssrf.guard_mcp_url(url)
     if blocked:
@@ -873,7 +881,8 @@ def grab_site(url: str, out_dir: str = "", read: bool = False,
     folder = fresh
     try:
         manifest = assets.grab(url, str(folder), read=read,
-                               max_assets=max(0, int(max_assets)))
+                               max_assets=max(0, int(max_assets)),
+                               max_tokens=token_cap)
     except assets.AssetError as e:
         return f"Error: {e}"
     except OSError as e:
