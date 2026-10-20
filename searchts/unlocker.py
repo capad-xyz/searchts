@@ -3212,27 +3212,57 @@ def _row_keys(text: str) -> set:
 
 
 def _drop_repeated_rows(text: str, seen: set) -> str:
-    """``text`` without the rows already in ``seen`` (see :func:`_row_keys`).
+    """``text`` without the rows already in ``seen`` or repeated inside it.
 
     A list row drags its indented byline and snippet lines with it; a table row
     is one line. A card list writes the marker on one line and the title with
-    its link on the next, and that pair is one row. Everything that is not a
-    repeated row stays byte for byte.
+    its link on the next, and that pair is one row. A row the page handed back
+    twice is a repeat the same way a row from an earlier page is one: the first
+    copy is the one that stays, so the caller gets every row once and the count
+    note matches the text. ``seen`` itself is never changed: the key of each row
+    this text keeps is remembered in a local copy of it. Everything that is not
+    a repeated row stays byte for byte.
     """
+    local: set = set(seen or ())
     out: List[str] = []
     lines = (text or "").splitlines()
     skipping = False
+    # The link line of a card pair the marker above decided to keep: the pair
+    # is one row and its key was remembered on the marker line already.
+    carried = False
     for i, line in enumerate(lines):
         is_row = bool(_ITEM_LINE.match(line) or _TABLE_ROW.match(line))
         if is_row:
-            skipping = bool(_ROW_LINK.search(line) and _row_key(line) in seen)
+            key = _row_key(line)
+            if _ROW_LINK.search(line) and not carried:
+                if key in local:
+                    skipping = True
+                    continue
+                # Each row that stays has its key remembered, so a copy of it
+                # later on this page is dropped with the first one kept.
+                local.add(key)
+                skipping = False
+            else:
+                skipping = False
+                carried = False
         elif _BARE_MARKER.match(line):
             # A card row: "- " on this line, the title and its link on the
             # next. The pair is one row and the key is on the second line.
+            carried = False
             nxt = lines[i + 1] if i + 1 < len(lines) else ""
-            skipping = bool(_ROW_LINK.search(nxt) and _row_key(nxt) in seen)
+            if _ROW_LINK.search(nxt):
+                key = _row_key(nxt)
+                if key in local:
+                    skipping = True
+                    continue
+                local.add(key)
+                carried = True
+                skipping = False
+            else:
+                skipping = False
         elif line.strip() and not line.startswith((" ", "\t")):
             skipping = False
+            carried = False
         if skipping:
             continue
         out.append(line)
@@ -3437,11 +3467,12 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         rows_here = (
             len(result.index_keys) if result.index_keys is not None else item_count(result.text)
         )
-        if i and seen_rows:
-            # The rows the previous pages had are the rows this page repeats.
-            # They are dropped here, so each row is returned once, in the place
-            # it came first.
-            result.text = _drop_repeated_rows(result.text, seen_rows)
+        # The rows the previous pages had are the rows this page repeats, and
+        # so is a second copy on this page. Both are dropped here, so each row
+        # is returned once, in the place it came first. Page one runs it too:
+        # the page itself can hand a row back twice, and the count note above
+        # already said the second copy was not counted.
+        result.text = _drop_repeated_rows(result.text, seen_rows)
         if result.index_keys is not None:
             seen_index |= fresh
             feed_repeats += again

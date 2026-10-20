@@ -1638,7 +1638,9 @@ _VALUE_TAG_NAMES = (
     "a|article|aside|b|blockquote|br|caption|code|dd|details|div|dl|dt|em|figcaption|figure|"
     "h[1-6]|hr|i|li|main|ol|p|pre|section|small|span|strong|sub|sup|table|tbody|td|"
     "th|thead|tr|u|ul|image|iframe|svg|template|style|noscript|script|"
-    "video|audio|summary|picture|form|object|math"
+    "video|audio|summary|picture|form|object|math|"
+    "button|select|option|optgroup|label|fieldset|legend|textarea|"
+    "mi|mo|mn|mrow|msup|msub|mfrac|msqrt|mtext|mtable|mtr|mtd|semantics|annotation"
 )
 _VALUE_TAG_RE = re.compile(
     rf"(?is)</?(?P<tag>{_VALUE_TAG_NAMES})\b[^<>]*>"

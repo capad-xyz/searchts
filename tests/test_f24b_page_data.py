@@ -546,6 +546,40 @@ def test_media_and_boolean_tags_pair_and_strip_to_prose(value, expected):
 
 
 @pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (
+            '<form><button onclick="alert(1)">Go</button></form>',
+            "Go",
+        ),
+        (
+            '&lt;form&gt;&lt;button onclick="alert(1)"&gt;Go&lt;/button&gt;&lt;/form&gt;',
+            "Go",
+        ),
+        (
+            "<math><mrow><mi>a</mi><mo>+</mo><mn>1</mn></mrow></math>",
+            "a+1",
+        ),
+        (
+            "&lt;math&gt;&lt;mrow&gt;&lt;mi&gt;a&lt;/mi&gt;&lt;mo&gt;+&lt;/mo&gt;&lt;mn&gt;1&lt;/mn&gt;&lt;/mrow&gt;&lt;/math&gt;",
+            "a+1",
+        ),
+    ],
+)
+def test_form_and_math_tags_pair_and_strip_to_prose(value, expected):
+    """Confirmed leaks inside form and math, raw and entity-encoded.
+
+    ``form`` and ``math`` were recognized, so the wrappers stripped and their
+    children did not: the button's handler reached the reader, and the math
+    row kept ``<mrow>`` and its siblings. The names inside are in the list
+    now, so the pairs strip to their text and none of the tag tokens or the
+    ``on*`` handler survive.
+    """
+    cleaned = more._plain_value(value)
+    assert cleaned == expected
+
+
+@pytest.mark.parametrize(
     "opener",
     [
         "<details open>",

@@ -1209,3 +1209,88 @@ def test_table_rows_that_share_a_first_link_are_not_one_row():
     assert out.startswith(head)
     # A page that is nothing but repeats keeps its header and loses its row.
     assert unlocker._drop_repeated_rows(page1, unlocker._row_keys(page1)).strip() == head.strip()
+
+
+def test_a_row_repeated_on_the_same_page_is_returned_once():
+    """A page that hands a row back twice gives the reader one copy.
+
+    The count already spoke: the second copy was counted of the rows "the
+    pages handed back again, not counted twice". The drop, though, only ran
+    against the rows earlier pages had, so page one delivered the row twice
+    while the note on it said the caller had read it once.
+    """
+    seen = {"- [Gone](https://e.test/gone)"}
+    counted = len(seen)
+    out = unlocker._drop_repeated_rows(
+        "- [Alpha](https://example.org/a)\n"
+        "- [Beta](https://example.org/b)\n"
+        "- [Alpha](https://example.org/a)\n",
+        seen,
+    )
+    # The second copy is gone; the first is the one that stays.
+    assert out == (
+        "- [Alpha](https://example.org/a)\n"
+        "- [Beta](https://example.org/b)"
+    )
+    # The caller's set is untouched: the keys this page kept are
+    # remembered locally only.
+    assert seen == {"- [Gone](https://e.test/gone)"} and len(seen) == counted
+
+
+def test_a_card_row_repeated_on_the_same_page_is_returned_once():
+    """A card the page wrote twice on one page is delivered once.
+
+    The card is one row across two lines: the marker on its own line, the
+    title with its link on the next. Both copies used to print, on a page the
+    count said had read the card once.
+    """
+    card = (
+        "- \n"
+        "  [Alpha release notes](https://fixture.test/item/1) 10 points\n"
+        "[pages: 1 row of 5, stopped after 1 page. The next page is https://e.test/?p=2]\n"
+    )
+    out = unlocker._drop_repeated_rows(card + card, set())
+    assert "Alpha release notes" in out
+    assert out.count("[Alpha release notes](https://fixture.test/item/1)") == 1
+    assert out.count("- \n") == 1
+
+
+def test_a_read_of_a_page_that_repeats_a_row_names_the_count_and_returns_one(monkeypatch):
+    """The measured read: one page, a row twice, the note on it already right.
+
+    The note said 2 new rows and 1 row "the pages handed back again, not
+    counted twice", but the text carried the row twice. Now they agree.
+    """
+    text = (
+        "- [Alpha](https://example.org/a)\n"
+        "- [Beta](https://example.org/b)\n"
+        "- [Alpha](https://example.org/a)\n"
+    )
+
+    def fake(url, **k):
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=text, status=200, final_url=url,
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list", 20)
+    first = got[0].text
+    assert "2 new rows; 1 row the pages handed back again, not counted twice" in first
+    assert first.count("- [Alpha](https://example.org/a)") == 1
+    assert "- [Beta](https://example.org/b)" in first
+
+
+def test_a_read_of_a_page_that_repeats_a_card_back_names_the_count_and_returns_one(monkeypatch):
+    """The measured card read: the pair on one page, written twice."""
+    pair = "- \n  [Alpha release notes](https://fixture.test/item/1) 10 points\n"
+
+    def fake(url, **k):
+        return unlocker.FetchResult(
+            backend="curl_cffi", text=pair + pair, status=200, final_url=url,
+        )
+
+    monkeypatch.setattr(unlocker, "fetch", fake)
+    got = unlocker.read_items("https://example.org/list", 20)
+    first = got[0].text
+    assert "1 new row; 1 row the pages handed back again, not counted twice" in first
+    assert first.count("[Alpha release notes](https://fixture.test/item/1)") == 1
