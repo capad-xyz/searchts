@@ -1634,30 +1634,22 @@ _VALUE_BLOCK_TAGS = frozenset(
 )
 
 
-def _plain_value(value: str) -> str:
-    """A JSON string as text: tags dropped, blocks kept as line breaks.
+def _strip_paired_value_tags(text: str) -> str:
+    """Remove recognized paired HTML tags while preserving their text.
 
-    Pages put their body in the data as HTML often enough that emitting it
-    verbatim is a visible fault, and a ``<script>`` smuggled into a data field
-    would be a hole in the "never emit scripts or HTML as text" rule. Both are
-    stripped here, once, for every value whichever blob it came from.
+    Requiring an opening/closing pair avoids interpreting comparison text such
+    as ``i<n`` or ``a <b and c > d`` as markup. Nested blocks are unwrapped in
+    bounded passes so HTML decoded from entities receives the same treatment.
     """
-    import html as _html
-
-    t = _VALUE_SCRIPTISH_RE.sub(" ", value or "")
-    # Only remove recognized HTML tags when an opening/closing pair exists.
-    # A broad ``<word ...>`` pattern eats technical prose such as ``i<n`` or
-    # ``a <b and c > d``. Paired tags also let malformed comparison text pass
-    # through without interpreting it as markup.
-    for _ in range(3):
+    for _ in range(16):
         tags = {
             match.group("tag").lower()
-            for match in _VALUE_TAG_RE.finditer(t)
+            for match in _VALUE_TAG_RE.finditer(text)
             if not match.group(0).startswith("</")
         }
         closers = {
             match.group("tag").lower()
-            for match in _VALUE_TAG_RE.finditer(t)
+            for match in _VALUE_TAG_RE.finditer(text)
             if match.group(0).startswith("</")
         }
         paired = tags & closers
@@ -1672,17 +1664,33 @@ def _plain_value(value: str) -> str:
                 if match.group("tag").lower() in _VALUE_BLOCK_TAGS
                 else match.group(2)
             ),
-            t,
+            text,
         )
-        if updated == t:
+        if updated == text:
             break
-        t = updated
+        text = updated
+    return text
+
+
+def _plain_value(value: str) -> str:
+    """A JSON string as text: tags dropped, blocks kept as line breaks.
+
+    Pages put their body in the data as HTML often enough that emitting it
+    verbatim is a visible fault, and a ``<script>`` smuggled into a data field
+    would be a hole in the "never emit scripts or HTML as text" rule. Both are
+    stripped here, once, for every value whichever blob it came from.
+    """
+    import html as _html
+
+    t = _VALUE_SCRIPTISH_RE.sub(" ", value or "")
+    t = _strip_paired_value_tags(t)
     t = _VALUE_SCRIPTISH_RE.sub(" ", t)
     t = _VALUE_BREAK_RE.sub("\n", t)
     t = _VALUE_VOID_RE.sub(" ", t)
     t = _html.unescape(t)
     # Entity decoding can reveal markup after the first pass.
     t = _VALUE_SCRIPTISH_RE.sub(" ", t)
+    t = _strip_paired_value_tags(t)
     t = _VALUE_BREAK_RE.sub("\n", t)
     t = _VALUE_VOID_RE.sub(" ", t)
     return t.strip()

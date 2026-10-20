@@ -428,6 +428,20 @@ def test_encoded_script_markup_is_removed_after_entity_decoding():
     assert "See" in cleaned and "for why" in cleaned
 
 
+def test_encoded_paired_html_tags_are_removed_after_entity_decoding():
+    value = 'Before. &lt;div onclick="alert(1)"&gt;clickable text&lt;/div&gt; After.'
+    cleaned = more._plain_value(value)
+    assert "clickable text" in cleaned
+    assert "<div" not in cleaned and "onclick" not in cleaned
+
+
+def test_encoded_app_state_body_does_not_emit_html_tags():
+    body = '&lt;div onclick="alert(1)"&gt;' + _paras(12, "encoded") + "&lt;/div&gt;"
+    read = _read(_shell_with_state({"pageProps": {"body": body}}))
+    assert "encoded0" in read
+    assert "<div" not in read and "onclick" not in read
+
+
 @pytest.mark.parametrize(
     "value",
     [
