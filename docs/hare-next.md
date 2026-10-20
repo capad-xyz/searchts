@@ -64,7 +64,7 @@ Installing it does **not** give a private Jev. Zero-shot it does not beat `jev-1
 
       A cap that returns no review 5 times out of 5 is not a cap, it is a way to spend a call and get nothing, so **a hop asks its model for its own strongest published level** and `HARE_REASONING_BUDGET` stays the ceiling for a run that wants to measure the other shape (`shape: budget` in the eval). Nous is empty on both shapes for a different reason: Laguna publishes no effort dial and reasons by default, so its thinking eats `max_tokens` whatever it is told, and the seam/wrap-up machinery is what turns that into a note. Groq and Gemini publish no nested field at all and are never sent one. The docs say one of `effort` or `max_tokens` and **not both**, so only one is ever sent.
     - **A reasoning call that dies is retried once without reasoning**, bounded by the hop's own deadline so the retry cannot buy the hop more time. Then it falls through to the next model.
-    - **Chain order follows what the models publish.** Reasoning-capable hops first, a model that publishes no reasoning at all last. Nous: Step 5 Preview (the only Nous pin with an effort ladder) → Laguna → Ling → LongCat. OpenRouter: Nemotron Ultra (`high`, budgetable) → Nemotron Super (`medium`, budgetable) → Lightning (no dial, no budget). Lightning moved behind the other two on the same live probe that answered all three in 1 to 2 s.
+    - **Chain order follows what the models publish.** Reasoning-capable hops first, a model that publishes no reasoning at all last. Nous: Beam (mandatory, `low..max`) → Laguna (no dial) → Step 3.7 (mandatory, `low..high`) → LongCat (no reasoning block). OpenRouter: MiniMax M3.1 Flash (mandatory, defaults to `max`) → Nemotron Ultra (`high`, budgetable) → Nemotron Super (`medium`, budgetable). MiniMax leads on its coding and agentic results; Ultra stays directly behind it as the proven, bounded fallback. Lightning is off the chain.
     - **`/hare deep` still exists** and still means "the owner's deep pass"; it is no longer the only way to reason.
     - **The caps, in one place: `Caps` in `scripts/hare_r1.py`.** Four of them. Three are caps and `0` means uncapped for each; the fourth is a backoff and is never off. Every one is a workflow env with a default in `.github/workflows/hare.yml`, a `workflow_dispatch` input that overrides it for one run, and a `/hare` argument that overrides it for one command. An unknown key or a value that is not a non-negative integer is ignored, so a typo leaves the default in place rather than silently uncapping a review.
 
@@ -72,7 +72,7 @@ Installing it does **not** give a private Jev. Zero-shot it does not beat `jev-1
       | --- | --- | --- | --- | --- |
       | Reasoning token budget per call | `HARE_REASONING_BUDGET` | 12,000 | The ceiling for a run that asks for the `budget` shape. Production sends `effort` instead, because `reasoning.max_tokens` returned empty content 5 of 5 on both providers while `effort` answered 5 of 5 (see the shapes table above), so the number is the bound on the measurement, not the bound on the request. Raw answers in [`docs/proofs/hare-reasoning/`](proofs/hare-reasoning/README.md). | no bound on thinking |
       | Wall clock for the whole review | `HARE_REVIEW_WALL_CLOCK_S` | 3,600 | The owner's call (2026-10-10): "a wall-clock cap only as high as the job timeout allows". The job timeout is 90 min, so 60 min leaves 30 min to read CI, validate bubbles and post. | no wall-clock cap; the job timeout is the only ceiling |
-      | Calls per review, whole chain | `HARE_MAX_ATTEMPTS` | 6 | The chain is 5 providers and up to 11 models; 6 stops one dead model burning all of them while still reaching three providers. Enforced *before* the call, not after. | no attempt cap |
+      | Calls per review, whole chain | `HARE_MAX_ATTEMPTS` | 6 | The chain is 5 providers and up to 10 models; 6 stops one dead model burning all of them while still reaching three providers. Enforced *before* the call, not after. | no attempt cap |
       | Rate-limit backoff | `HARE_RATE_BACKOFF_S` / `HARE_RATE_MAX_BACKOFF_S` | 20 s / 120 s | **No `0`.** Hammering a free tier costs the account quota the live reviews use. A `Retry-After` the gateway sent wins over both; otherwise it doubles from 20 s and stops at 120 s. | not available |
 
       How to move each one, in the order you would reach for it:
@@ -152,6 +152,12 @@ measurements of my own against the live branch diff (section 8).
 Build in this order. Items 1 and 2 gate everything else: at four labelled
 defects no downstream change can be shown to work, and a reviewer whose first
 hop is measurably inert cannot be measured at all.
+
+> **2026-10-20 update:** The demotion in item 2 is in PR #390.
+> `nvidia/nemotron-3.5-lightning:free` is off the chain; MiniMax M3.1 Flash
+> leads OpenRouter, with Nemotron Ultra and Nemotron Super behind it. The
+> non-empty-findings and `response_format` parts of item 2 are still open. The
+> measurements and the rest of the 2026-10-10 analysis below are unchanged.
 
 | # | Item | Cost | How you would know it worked |
 | --- | --- | --- | --- |
@@ -619,8 +625,9 @@ Three corrections to how this reads, because they change the fix:
    comment that laguna "answers in the shape the prompt wants" and nemotron
    "open[s] with 'Here's a thinking process' instead of the JSON." So the fix for
    the *ordering* landed on 2026-10-06. What is missing is the *measurement*:
-   nemotron's position in the chain is justified by one anecdote, and it is still
-   the OpenRouter default at `HARE_OR_DEFAULT` in `scripts/hare_r1.py`.
+   nemotron's position in the chain was justified by one anecdote, and it was
+   still the OpenRouter default at `HARE_OR_DEFAULT` when this was written. It
+   was removed from the chain on 2026-10-20.
 3. **The measured result is stronger than "returned prose."** 0 catches over 4
    bugs x 10 runs is 0 out of 40 trials. Under a binomial model with zero
    successes, the exact 95% upper bound on the per-trial catch rate is
@@ -1249,7 +1256,8 @@ accuracy terms (only that one surfaced zero of the target function and the other
 surfaced it as a callee); any vendor's detection internals beyond what their own
 docs state; the DeepCode training-data claim, which is third-party only; whether
 `nvidia/nemotron-3.5-lightning:free` finds anything under a recall-first prompt,
-which is a one-probe experiment that has not been run.
+which is a one-probe experiment that has not been run; it was removed from the
+chain on 2026-10-20 without that probe.
 
 ---
 
