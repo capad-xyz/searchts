@@ -6,14 +6,13 @@ Run: python -m searchts.integrations.mcp_server
 
 Exposes these tools to an agent:
 - read_url: fetch any URL through the escalating open-source unlocker
-  (curl_cffi -> Jina Reader -> stealth browser) and return clean markdown;
-  gets through most bot-walls and falls back gracefully.
-- web_search: keyless multi-provider web search, fusion-merged across providers
-  (DuckDuckGo by default; SearXNG/Exa/Brave/Tavily when configured).
-- fetch_asset: download one asset (image/PDF/font/file) through the unlock ladder.
-- grab_site: grab a page's assets + color palette + fonts (design inspiration).
+  (curl_cffi -> Jina Reader -> stealth browser) and return clean markdown.
+  A player page comes back as its captions, or the error names transcribe.
+- web_search: find URLs to read. A snippet is not the page.
+- fetch_asset: download one file a read named, through the unlock ladder.
+- grab_site: save the set of files a read named.
 - get_status: report which channels/backends are installed and active (doctor).
-- transcribe: subtitles-first transcript of a video URL or local audio file.
+- transcribe: the audio, when a read says the player has no captions, or a local file.
 
 Backed by searchts.unlocker, searchts.search, searchts.assets, and
 searchts.transcribe.
@@ -110,26 +109,28 @@ READ_URL_DESCRIPTION = (
 )
 
 WEB_SEARCH_DESCRIPTION = (
-    "Search the web across multiple providers and return a ranked, "
-    "de-duplicated list of results (title + URL + snippet), fusion-merged "
-    "with reciprocal-rank fusion. Keyless by default (DuckDuckGo); also "
-    "uses SearXNG/Exa/Brave/Tavily when their keys are configured. Use "
-    "this to discover URLs or answer open-ended questions before reading "
-    "pages. Snippets are not the page: if you need the content, or a hit "
-    "is 403/429/challenge/thin, call read_url on that URL. Do not answer "
-    "from the snippet. Returns a formatted text block, or an 'Error: ...' "
+    "Find URLs to read. Returns a ranked, de-duplicated list "
+    "(title + URL + snippet), fusion-merged with reciprocal-rank fusion. "
+    "Keyless by default (DuckDuckGo); also uses SearXNG/Exa/Brave/Tavily "
+    "when their keys are configured. Snippets are not the page. Call "
+    "read_url on each URL you need, including when a hit is 403/429, a "
+    "challenge, or thin. Do not answer from the snippet. Returns a "
+    "formatted text block that starts with that warning, or an 'Error: ...' "
     "string when every provider fails."
 )
 
 TRANSCRIBE_DESCRIPTION = (
-    "Transcribe a video URL or a local audio/video file. Subtitles-first: "
-    "existing captions via yt-dlp need no API key; otherwise Whisper "
-    "(Groq/OpenAI if configured, else keyless local faster-whisper). Use "
-    "this when the user wants spoken words, not the page. Do not use "
-    "read_url for a transcript. prefer_subtitles defaults true; set false "
-    "to force audio. cookies_from_browser is opt-in (chrome/firefox/…) and "
-    "uses THIS machine's browser cookies; never used by read_url. Returns "
-    "the transcript text, or an 'Error: ...' string on failure."
+    "Read the spoken words when read_url says a player page has no "
+    "captions, or transcribe a local audio/video file. A YouTube watch "
+    "URL, a TikTok video, an Instagram reel, or a v.redd.it file is a "
+    "player page: read_url returns its captions, or an error that names "
+    "this tool for the audio. Subtitles-first: existing captions via "
+    "yt-dlp need no API key; otherwise Whisper (Groq/OpenAI if configured, "
+    "else keyless local faster-whisper). prefer_subtitles defaults true; "
+    "set false to force audio. cookies_from_browser is opt-in "
+    "(chrome/firefox/…) and uses THIS machine's browser cookies; read_url "
+    "does not copy them. Returns the transcript text, or an 'Error: ...' "
+    "string on failure."
 )
 
 
@@ -258,13 +259,12 @@ def create_server():
     @mcp.tool(
         name="grab_site",
         description=(
-            "Grab a page for design inspiration: fetch it through the unlock "
-            "ladder, download its assets (images/icons/css/fonts/svg/inline_svg), "
-            "save the font and CSS files those rules came from, extract the color "
-            "palette (CSS variables, gradients, theme-color), the fonts, and the "
-            "design tokens, and return a manifest (with local file paths) as JSON. "
-            "Use this for a whole page's design/assets at once; for a single known "
-            "file use fetch_asset. Saves into out_dir (a relative folder inside the "
+            "Save the files a read already named. Fetches the page through the "
+            "same unlock ladder as read_url, downloads its assets "
+            "(images/icons/css/fonts/svg/inline_svg), and returns a manifest "
+            "(local paths, plus the palette and fonts those files use) as JSON. "
+            "Use this when the files are the deliverable. For one URL the read "
+            "listed, use fetch_asset. Saves into out_dir (a relative folder inside the "
             "working directory, or SEARCHTS_MCP_OUT_DIR if the user set it) when "
             "given, otherwise a 'searchts-grab-<host>' folder there. A folder that "
             "already has files is never written into; the grab goes to '-2', '-3' "
@@ -795,7 +795,7 @@ def web_search(query: str, max_results: int = 5) -> str:
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
         return _unexpected("web_search", e)
 
-    blocks = []
+    blocks = [search_mod.SNIPPET_LINE]
     for i, r in enumerate(results, start=1):
         lines = [f"{i}. {r.title or '(no title)'}", f"   {r.url}"]
         if r.snippet:

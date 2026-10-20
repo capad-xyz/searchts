@@ -2401,6 +2401,27 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             FetchResult(f"share:{share.provider}", share.markdown, 200, final_url=url)
         )
 
+    # A player page's words are spoken. Captions come back as the read. No
+    # captions is a named failure, not a title and a shell passed off as the
+    # article. A crash, or a URL that is not a player, falls through.
+    try:
+        from searchts import players
+        if players.matches(url):
+            _tick("trying player captions…")
+            played = players.extract(url)
+        else:
+            played = None
+    except Exception:  # noqa: BLE001 - a player miss must not break the ladder
+        played = None
+    if played is not None and played.failure:
+        _tick(f"  player: {played.failure}")
+        raise UnlockerError(url, [("player", played.failure)], hint=played.failure)
+    if played is not None and played.markdown:
+        _tick(f"  player: captions ({len(played.markdown)} chars)")
+        return _with_auth(
+            FetchResult("player:captions", played.markdown, 200, final_url=url)
+        )
+
     # Tier-0.5: known-host public-API endpoints (e.g. Reddit .json).
     # A fail-open ring — on miss/exception the normal ladder runs unchanged.
     # No domain-memory pinning for reddit.com (volatile per request).

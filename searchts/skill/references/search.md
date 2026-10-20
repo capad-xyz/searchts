@@ -15,11 +15,11 @@ searchts search "open source vector db" --json
 searchts search "query" --provider duckduckgo
 ```
 
-**Use case**: the primary way to search the web. `searchts search` queries
+**Use case**: find URLs to read. `searchts search` queries
 multiple providers and merges them with reciprocal-rank fusion, de-duplicating
 results. DuckDuckGo is the keyless default; SearXNG, Exa, Brave, and Tavily
-merge in automatically when configured. Once you have URLs, read them with
-`searchts read <url>`.
+merge in automatically when configured. A snippet is not the page. Read each
+URL with `searchts read <url>`.
 
 ## Optional providers
 

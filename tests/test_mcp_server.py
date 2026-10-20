@@ -34,6 +34,8 @@ from searchts.unlocker import FetchResult, UnlockerError
 def test_web_search_description_tells_agent_to_call_read_url():
     assert "read_url" in WEB_SEARCH_DESCRIPTION
     assert "snippet" in WEB_SEARCH_DESCRIPTION.lower()
+    assert "not the page" in WEB_SEARCH_DESCRIPTION.lower()
+    assert "open-ended" not in WEB_SEARCH_DESCRIPTION.lower()
 
 
 def test_read_url_description_covers_followup_after_search():
@@ -131,6 +133,7 @@ def test_web_search_returns_formatted_block():
     ]
     with patch("searchts.search.search", return_value=results):
         out = web_search("hello", max_results=5)
+    assert out.startswith("Snippets are not the page. Read each URL.")
     assert "1. First" in out
     assert "https://x.test/1" in out
     assert "snippet one" in out

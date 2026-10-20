@@ -22,11 +22,11 @@ uvx --from "searchts[mcp]" searchts -v read https://en.wikipedia.org/wiki/Ada_Lo
 
 ## Commands
 
-- `searchts read <url>` — Markdown via curl_cffi → Jina → stealth-browser
-- `searchts search "<query>"` — keyless DuckDuckGo (+ optional SearXNG/Exa/Brave/Tavily)
-- `searchts transcribe <url>` — subtitles-first
+- `searchts read <url>` — the page, or a plain failure. Share links are reads whose HTML is empty. A player page comes back as its captions, or the failure names `transcribe`
+- `searchts search "<query>"` — URLs to read. A snippet is not the page
+- `searchts transcribe <url>` — the audio, when a read found no captions, or a local file
 - `searchts login signin <url>` — sign in once for a site that is behind a login (also `login keep`, `kill`, `list`)
-- `searchts grab` / `searchts get` — assets
+- `searchts get <url>` — one file a read named. `searchts grab` saves the set when the files are the deliverable
 - `searchts doctor` — **read-only** health (does not install skills)
 - `searchts mcp serve` / `searchts skill install`
 

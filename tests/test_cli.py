@@ -255,7 +255,9 @@ class TestCLI:
         with patch("searchts.search.search", return_value=results):
             with patch("sys.argv", ["searchts", "search", "my query"]):
                 main()
-        out = capsys.readouterr().out
+        captured = capsys.readouterr()
+        out = captured.out
+        assert out.startswith("Snippets are not the page. Read each URL.")
         assert "1. First Hit" in out
         assert "https://x.test/1" in out
         assert "a snippet" in out
@@ -270,7 +272,9 @@ class TestCLI:
             with patch("sys.argv", ["searchts", "search", "q", "--json"]):
                 main()
         import json as _json
-        payload = _json.loads(capsys.readouterr().out)
+        captured = capsys.readouterr()
+        payload = _json.loads(captured.out)
+        assert "Snippets are not the page." in captured.err
         assert payload == [
             {"title": "T", "url": "https://x.test/1", "snippet": "snip", "source": "duckduckgo"}
         ]

@@ -53,7 +53,7 @@ Ready-to-post copy for Show HN, X, Reddit and a 60-second Reel. Every claim here
 **Title options:**
 
 1. `Show HN: searchts – a keyless web reader for agents that fails loudly on walls`
-2. `Show HN: searchts ("search this shit") – keyless web reader + AI share-link decoder for MCP agents`
+2. `Show HN: searchts ("search this shit") – a keyless web reader for MCP agents`
 3. `Show HN: searchts – escalating web reader for coding agents (curl_cffi, Jina, patchright)`
 
 **URL:** https://github.com/capad-xyz/searchts
@@ -74,7 +74,7 @@ searchts is built around one rule: return the real page, or fail loudly and say 
 
 3. **A two-suite benchmark that reports the walls it misses.** Open-web Smoke and real bot-walled targets are reported separately. The last committed run is 12/12 on Smoke and 2/7 on Walled. The five walled failures are named in `docs/scorecard.md`; a wall is not counted as a pass just because its HTML is long enough.
 
-4. **A CLI, an MCP server and a Python library.** Nine MCP tools: `read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_kill`. Search is keyless DuckDuckGo by default, with reciprocal rank fusion across optional SearXNG, Exa, Brave or Tavily. `--scrub` strips invisible/bidi characters and flags prompt injection. `transcribe` is subtitles-first, then `yt-dlp` audio plus Whisper.
+4. **A CLI, an MCP server and a Python library.** Nine MCP tools, and `read_url` is the one. `web_search` finds URLs to read; a snippet is not the page. A player page's captions come back from `read_url`, and `transcribe` is the audio when that read finds none. `fetch_asset` fetches one file a read named. Search is keyless DuckDuckGo by default, with reciprocal rank fusion across optional SearXNG, Exa, Brave or Tavily. `--scrub` strips invisible/bidi characters and flags prompt injection.
 
 A login you hand over is opt-in and host-fenced in 0.15.0: `--cookies-from-browser <browser> --yes`, `--cookies <path>`, or `--cdp-port <port>`. Reusing a login on a remote browser is not built yet (F27). Nothing is guessed silently.
 

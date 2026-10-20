@@ -37,6 +37,9 @@ from searchts.unlocker import _UA_REAL  # noqa: E402
 #: provider's #1.
 _RRF_K = 60
 
+#: Printed above a search list. A snippet is provider text, not the page.
+SNIPPET_LINE = "Snippets are not the page. Read each URL."
+
 #: Short per-request HTTP timeout (seconds). A slow provider must not stall the
 #: whole fused search — it just gets skipped and recorded.
 _HTTP_TIMEOUT = 10

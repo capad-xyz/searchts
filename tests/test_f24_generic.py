@@ -616,7 +616,7 @@ def test_media_in_the_content_is_listed_with_its_addresses():
     assert note == (
         "[media: 1 image, 1 video, 1 embed in the main content: "
         "https://example.org/img/one.jpg, https://player.example.org/v/1, "
-        "https://example.org/clip/two.mp4]"
+        "https://example.org/clip/two.mp4. searchts get fetches one of these.]"
     )
 
 
@@ -662,7 +662,8 @@ def test_a_picture_does_not_count_its_sources_as_more_images():
     )
     assert html == (
         "[media: 1 image, 1 video in the main content: "
-        "https://example.org/a.png, https://example.org/clip.mp4]"
+        "https://example.org/a.png, https://example.org/clip.mp4. "
+        "searchts get fetches one of these.]"
     )
 
 
@@ -683,7 +684,7 @@ def test_the_note_never_lists_more_than_four_addresses():
     images = "".join(f'<img src="/img/{i}.jpg" alt="Image {i}">' for i in range(30))
     note = _media_note(images)
     assert note.count("https://example.org/img/") == 4
-    assert note.endswith("and 26 more]")
+    assert note.endswith("and 26 more. searchts get fetches one of these.]")
     assert "[media: 30 images" in note
 
 
@@ -691,7 +692,10 @@ def test_the_media_note_is_carried_on_the_read(monkeypatch):
     html = f"<html><body><main><h1>A page</h1>{_prose(40)}<img src='/photo.jpg' alt='A photo'></main></body></html>"
     monkeypatch.setattr(unlocker, "_fetch_curl_cffi", lambda url, **kw: (200, html, url, {}))
     result = unlocker.fetch(URL, backends=["curl_cffi"], use_memory=False)
-    assert "[media: 1 image in the main content: https://example.org/photo.jpg]" in result.text
+    assert (
+        "[media: 1 image in the main content: https://example.org/photo.jpg. "
+        "searchts get fetches one of these.]"
+    ) in result.text
     assert [m["kind"] for m in result.more if m["kind"] == "media"]
     assert "media" in more.summary(more.detect(html, URL, _kept(40)))
 

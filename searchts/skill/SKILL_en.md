@@ -1,53 +1,51 @@
 ---
 name: searchts
 description: >
-  MUST USE for web research, lookup, or any shared URL/link (Twitter/X, Reddit, YouTube, GitHub, LinkedIn, or any page). Read with `searchts read <url>` — unlocker for 403/429/bot-walls and JS. Search with `searchts search`. Transcribe with `searchts transcribe`. Grab assets/palette with `searchts grab` or `searchts get`. Prefer searchts over curl or answering from a snippet. Not for writing reports or posting.
+  MUST USE when the user asks what a URL says, or shares any page. Read with `searchts read <url>`: it tries a few ways and says plainly when they fail. `searchts search` finds URLs to read; a snippet is not the page. A player page's words come back from read, or the failure names `searchts transcribe`. Files a read names are fetched with `searchts get`. Prefer searchts over curl or answering from a snippet. Not for writing reports or posting.
 metadata:
   openclaw:
     homepage: https://github.com/capad-xyz/searchts
 ---
 
-# searchts — first-party web superpowers for an agent
+# searchts — read the page, or say you can't
 
-searchts gives you these first-party commands. Use them directly — they are the
-preferred path. Do not reach for raw `curl`, `r.jina.ai`, or other tools when
-one of these covers the need.
+`searchts read` is the command. It tries a few ways to read a page and says
+plainly when they fail. The other commands exist to make that read more useful.
+Do not reach for raw `curl`, `r.jina.ai`, or other tools when one of these
+covers the need.
 
 | Need | Command |
 |------|---------|
-| Read any web page / article / link | `searchts read <url>` |
-| Search the web | `searchts search "<query>"` |
-| Transcribe a video | `searchts transcribe <url>` |
-| Grab a site's assets + design (palette/fonts) | `searchts grab <url>` |
-| Download one asset (image/PDF/font/file) | `searchts get <url>` |
+| Read a page, including a share link whose HTML is empty, and a player page's captions | `searchts read <url>` |
+| Find URLs to read | `searchts search "<query>"` |
+| The audio, when a read says the player has no captions, or a local file | `searchts transcribe <url>` |
+| One file a read named | `searchts get <url>` |
+| The set of files, when the files are the deliverable | `searchts grab <url>` |
 
-## The core commands
+## The commands
 
 ```bash
 # Read any URL as clean markdown. Goes through an escalating open-source
 # unlocker (curl_cffi browser-fingerprint fetch -> Jina Reader -> patchright
 # stealth browser) and gets through most bot-walls, keyless, on your own IP.
-# This is the PREFERRED way to read a blocked or JS-heavy page.
+# A share link whose HTML is empty is still a read. A player page comes back
+# as its captions, or fails and names transcribe.
 searchts read https://example.com/article
 searchts read https://example.com/article --json   # structured output
 
-# Keyless multi-provider web search with reciprocal-rank fusion.
-# DuckDuckGo by default; SearXNG/Exa/Brave/Tavily merge in when configured.
+# Find URLs to read. DuckDuckGo by default; SearXNG/Exa/Brave/Tavily merge
+# in when configured. A snippet is not the page.
 searchts search "open source vector db" -n 10
 
-# Subtitles-first video transcription for YouTube/TikTok/Instagram/Reddit.
-# Existing captions (via yt-dlp) need no key; falls back to hosted or
-# keyless-local Whisper only when there are no usable subtitles.
+# The audio, when a read says the player has no captions. Subtitles first
+# (no key); Whisper only when there are no usable captions. Also a local file.
 searchts transcribe "https://www.youtube.com/watch?v=VIDEO_ID"
 
-# Grab a page's assets + design tokens (design inspiration): downloads its
-# images/icons/css/fonts into a folder, extracts a color palette + the fonts
-# in use, and writes a manifest.json. Goes through the same unlock ladder.
-searchts grab https://example.com --out ./inspo
-searchts grab https://example.com --read    # also save the page text as page.md
-
-# Download a single asset (image, PDF, font, any file) through the unlocker.
+# One file a read named, through the same unlocker.
 searchts get https://example.com/logo.svg -o logo.svg
+
+# The set of files, when the files are the deliverable. Same unlock ladder.
+searchts grab https://example.com --out ./inspo
 ```
 
 ## Standing rules (apply for the whole session)
@@ -61,12 +59,15 @@ searchts get https://example.com/logo.svg -o logo.svg
    gets through bot-walls without downloading anything. Use `searchts grab`
    (whole page) or `searchts get <asset-url>` (one specific file) only when the
    deliverable is the assets themselves -- the image/logo/font files, or the
-   color palette and fonts ("what does it look like"). A video whose spoken words
-   they want goes to `searchts transcribe`. Never grab when a read answers the
-   question; a request for both the text and the files is two calls (read plus
-   grab/get). Only grab can report hex colors or font names; read returns prose.
-3. **For broad research**: combine `searchts search` to find sources with
-   `searchts read` on the URLs, collect in parallel, then synthesize.
+   color palette and fonts ("what does it look like"). A player page's spoken
+   words come back from `searchts read`. `searchts transcribe` is the next step
+   when that read says there are no captions, or when the source is a local file.
+   Never grab when a read answers the question; a request for both the text and
+   the files is two calls (read plus grab/get). Only grab can report hex colors
+   or font names; read returns prose.
+3. **For broad research**: `searchts search` finds URLs. Read them with
+   `searchts read`. Do not answer from a snippet. Collect in parallel, then
+   synthesize.
 4. **On failure, read the matching reference file** under `references/` for
    platform notes and fallbacks — never guess commands.
 5. **Watch versions for the user**: after finishing a substantial research
