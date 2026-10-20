@@ -178,3 +178,56 @@ def test_style_block_copy_is_not_a_wall():
         + "</p>"
     )
     assert walls.classify(html) is None
+
+
+def _long_answer() -> str:
+    return "The accepted answer walks through the code.\n\n" + (
+        "Each reply explains one step and then the next step. " * 80
+    )
+
+
+def test_a_long_page_loses_only_the_trailing_cookie_banner():
+    banner = (
+        "\n\nBy continuing to use this website, you agree Stack Exchange can "
+        "store cookies on your device and disclose information in accordance "
+        "with our Cookie Policy.\n\nNecessary cookies only\n\nCustomize settings\n"
+    )
+    kept, dropped = walls.strip_trailing_consent(_long_answer() + banner)
+    assert dropped
+    assert "store cookies" not in kept
+    assert "Necessary cookies only" not in kept
+    assert "The accepted answer walks through the code." in kept
+
+
+def test_a_consent_dialog_with_no_article_is_left_whole():
+    dialog = REAL_WALLS[3][1]
+    kept, dropped = walls.strip_trailing_consent(dialog)
+    assert dropped is False
+    assert kept == dialog
+
+
+def test_mentioning_cookies_at_the_end_of_an_article_is_not_a_banner():
+    article = _long_answer() + (
+        "\n\nWe use cookies to remember a theme, and that sentence is the "
+        "article, not a dialog."
+    )
+    kept, dropped = walls.strip_trailing_consent(article)
+    assert dropped is False
+    assert kept == article
+
+
+def test_finalize_names_the_banner_it_left_off():
+    from searchts.unlocker import FetchResult, _finalize
+
+    banner = (
+        "\n\nBy continuing to use this website, you agree the site can store "
+        "cookies on your device.\n\nAccept all cookies\n"
+    )
+    result = FetchResult(
+        "Jina Reader", _long_answer() + banner, 200,
+        final_url="https://stackoverflow.com/questions/1",
+    )
+    out = _finalize(result, scrub=False)
+    assert "store cookies" not in (out.text or "")
+    assert "[left off: a cookie banner at the end of the page]" in (out.text or "")
+    assert "The accepted answer walks through the code." in (out.text or "")

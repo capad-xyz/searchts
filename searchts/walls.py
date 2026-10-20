@@ -40,6 +40,7 @@ __all__ = [
     "classify",
     "classify_all",
     "scrub",
+    "strip_trailing_consent",
     "FAMILIES",
     "WALL_NAMES",
 ]
@@ -328,6 +329,57 @@ def classify(text: str) -> Optional[Wall]:
         if per_100 >= fam.per_100:
             return Wall(fam.name, round(per_100, 2), total)
     return None
+
+
+#: A consent dialog tacked onto a real page is not the page. The whole extract
+#: being the dialog is a wall, and :func:`classify` already names that. This
+#: only removes a short block that sits at the end, after a substantial body.
+_BANNER_BODY_MIN = 2000
+_BANNER_MAX_CHARS = 900
+_BANNER_OPEN = re.compile(
+    r"(?i)(?:by continuing to use this website, you agree\b|"
+    r"by continuing you accept our cookies\b|"
+    r"we use cookies to\b|"
+    r"this (?:site|website) uses cookies\b|"
+    r"your privacy, your choice\b)"
+)
+_BANNER_CHOICE_LINE = re.compile(
+    r"(?im)^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?"
+    r"(?:necessary cookies only|accept all(?: cookies)?|reject all(?: cookies)?|"
+    r"customize settings|cookie settings|manage preferences|only necessary)"
+    r"(?:\*\*)?[ \t]*$"
+)
+
+
+def strip_trailing_consent(text: str) -> Tuple[str, bool]:
+    """Drop a cookie dialog that follows a real page.
+
+    Returns ``(text, True)`` when a short dialog was removed from the end, and
+    ``(text, False)`` otherwise. A page that is itself the dialog is left
+    whole: there is no substantial body in front of it, so this is not the
+    function that decides it is a wall.
+    """
+    raw = text or ""
+    if len(raw) < _BANNER_BODY_MIN + 40:
+        return raw, False
+    start_at = max(0, len(raw) - (_BANNER_MAX_CHARS + 200))
+    found: Optional[int] = None
+    for match in _BANNER_OPEN.finditer(raw[start_at:]):
+        abs_at = start_at + match.start()
+        prefix = raw[:abs_at]
+        if prefix and not prefix.endswith("\n"):
+            line_start = raw.rfind("\n", 0, abs_at) + 1
+            if raw[line_start:abs_at].strip():
+                continue
+        rest = raw[abs_at:]
+        if len(rest) > _BANNER_MAX_CHARS or len(prefix.strip()) < _BANNER_BODY_MIN:
+            continue
+        if _BANNER_CHOICE_LINE.search(rest) is None:
+            continue
+        found = abs_at
+    if found is None:
+        return raw, False
+    return raw[:found].rstrip(), True
 
 
 def classify_all(text: str) -> Dict[str, float]:

@@ -2162,6 +2162,14 @@ def _finalize(
     next-page stop note already had to scrub itself by hand because of that.
     """
     from searchts import more, sanitize
+    from searchts.walls import strip_trailing_consent
+
+    kept, banner = strip_trailing_consent(result.text or "")
+    if banner:
+        result.text = kept
+        result.extra_notes.append(
+            "[left off: a cookie banner at the end of the page]"
+        )
 
     if result.page_html:
         # F23f: a list page whose extract lost the items' titles, links or dates
