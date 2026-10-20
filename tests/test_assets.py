@@ -482,8 +482,12 @@ def test_grab_writes_css_fonts_inline_svg_and_tokens(monkeypatch, tmp_path):
     # Every kind a designer needs is on disk, with the source URL in the manifest.
     saved_kinds = {r["kind"] for r in manifest["assets"] if r["ok"]}
     assert {"images", "icons", "css", "fonts", "inline_svg"} <= saved_kinds
+    # Glob order is the filesystem's. Windows lists the Google font sheet
+    # (css2.css) before site.css, so the brand variable is in one of them.
     css_files = list((out / "css").glob("*.css"))
-    assert css_files and "--brand" in css_files[0].read_text(encoding="utf-8")
+    assert css_files and any(
+        "--brand" in path.read_text(encoding="utf-8") for path in css_files
+    )
     assert list((out / "inline_svg").glob("*.svg"))
     assert list((out / "images").glob("inline-*.png"))  # the data URI image
     assert list((out / "fonts").glob("inline-*.woff2"))  # the data URI font
