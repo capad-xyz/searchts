@@ -101,6 +101,10 @@ def test_bare_numeric_suffix_is_kept_for_multipage_article():
             "https://example.org/long-post/3/",
         ),
         (
+            "https://example.org/blog/my-long-article/1/",
+            "https://example.org/blog/my-long-article/2/",
+        ),
+        (
             "https://example.org/?p=123&page=2",
             "https://example.org/?p=123&page=3",
         ),
@@ -113,6 +117,13 @@ def test_bare_numeric_suffix_is_kept_for_multipage_article():
 def test_consecutive_numeric_page_markers_continue(current, target):
     html = f'<html><head><link rel="next" href="{target}"></head><body><p>{PARA.format(1)}</p></body></html>'
     assert "next-page" in _kinds(more.detect(html, current, "t"))
+
+
+def test_root_query_pagination_chains_but_arbitrary_post_id_does_not():
+    html = '<html><head><link rel="next" href="/?p=3"></head><body><p>Page text.</p></body></html>'
+    assert "next-page" in _kinds(more.detect(html, "https://news.ycombinator.com/?p=2", "t"))
+    arbitrary = html.replace("/?p=3", "/?p=10")
+    assert "next-page" not in _kinds(more.detect(arbitrary, "https://example.org/", "t"))
 
 
 def test_plain_permalink_wordpress_article_advances_from_page_one():

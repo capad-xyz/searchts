@@ -223,8 +223,19 @@ def _continues(target: str, url: str) -> bool:
                     not current_post
                     and target_post
                     and target_post.isdigit()
-                    and 1 < int(target_post) <= 100
+                    and int(target_post) == 2
                     and not (set(target_query) - {"p"})
+                ):
+                    return True
+                if (
+                    current_post
+                    and target_post
+                    and current_post.isdigit()
+                    and target_post.isdigit()
+                    and 1 < int(current_post) < 100
+                    and int(target_post) == int(current_post) + 1
+                    and not (set(target_query) - {"p"})
+                    and not (set(current_query) - {"p"})
                 ):
                     return True
                 if not target_post or target_post != current_post:
@@ -235,7 +246,7 @@ def _continues(target: str, url: str) -> bool:
                 except ValueError:
                     return False
                 return target_page == current_page + 1
-            page_keys = {"page", "paged", "offset", "first", "start"}
+            page_keys = {"page", "paged", "offset", "first", "start", "p", "pg", "pn"}
             target_identity = {key: value for key, value in target_query.items() if key not in page_keys}
             current_identity = {key: value for key, value in current_query.items() if key not in page_keys}
             return target_identity == current_identity
@@ -264,7 +275,7 @@ def _continues(target: str, url: str) -> bool:
         if (
             target_base == current_base
             and target_num == current_num + 1
-            and 2 <= current_num < 20
+            and 1 <= current_num < 20
             and ("-" in slug or len(slug) >= 12)
         ):
             return True
@@ -1615,13 +1626,13 @@ def _ld_nodes(html: str) -> List[Dict[str, Any]]:
 #: Markup that carries no reading text. A body kept as a string is full of it,
 #: and emitting it verbatim would put ``<p>`` in a reader's face.
 _VALUE_SCRIPTISH_RE = re.compile(
-    r"(?is)<(script|style|noscript|template|svg|iframe)\b[^>]*>(?:.*?</\1\s*>|.*\Z)"
+    r"(?is)<(script|style|noscript|template|svg|iframe)\b[^>]*>.*?</\1\s*>|<script\b[^>]*>.*\Z"
 )
 _VALUE_BREAK_RE = re.compile(r"(?i)<\s*(?:br\s*/?|/\s*(?:p|div|li|tr|h[1-6])\s*)>")
 _VALUE_TAG_NAMES = (
-    "a|article|aside|b|blockquote|br|caption|code|dd|div|dl|dt|em|figcaption|figure|"
+    "a|article|aside|b|blockquote|br|caption|code|dd|details|div|dl|dt|em|figcaption|figure|"
     "h[1-6]|hr|i|li|main|ol|p|pre|section|small|span|strong|sub|sup|table|tbody|td|"
-    "th|thead|tr|u|ul"
+    "th|thead|tr|u|ul|image|iframe|svg|template|style|noscript|script"
 )
 _VALUE_TAG_RE = re.compile(
     rf"(?is)</?(?P<tag>{_VALUE_TAG_NAMES})\b[^<>]*>"
@@ -1646,6 +1657,7 @@ def _strip_paired_value_tags(text: str) -> str:
             match.group("tag").lower()
             for match in _VALUE_TAG_RE.finditer(text)
             if not match.group(0).startswith("</")
+            and ("=" in match.group(0) or not re.search(r"\s+[^/\s>]+", match.group(0)[1:]))
         }
         closers = {
             match.group("tag").lower()
@@ -1669,6 +1681,14 @@ def _strip_paired_value_tags(text: str) -> str:
         if updated == text:
             break
         text = updated
+    # Attribute-bearing openers can be unsafe even when the source omitted a
+    # closing tag. Strip the tag token but keep its following prose.
+    text = re.sub(rf"(?is)</?(?:{_VALUE_TAG_NAMES})\s*/?>", " ", text)
+    text = re.sub(
+        rf"(?is)<(?P<tag>{_VALUE_TAG_NAMES})\b(?=[^<>]*=)[^<>]*>",
+        " ",
+        text,
+    )
     return text
 
 
@@ -1687,12 +1707,17 @@ def _plain_value(value: str) -> str:
     t = _VALUE_SCRIPTISH_RE.sub(" ", t)
     t = _VALUE_BREAK_RE.sub("\n", t)
     t = _VALUE_VOID_RE.sub(" ", t)
-    t = _html.unescape(t)
-    # Entity decoding can reveal markup after the first pass.
-    t = _VALUE_SCRIPTISH_RE.sub(" ", t)
-    t = _strip_paired_value_tags(t)
-    t = _VALUE_BREAK_RE.sub("\n", t)
-    t = _VALUE_VOID_RE.sub(" ", t)
+    # Decode in layers, sanitizing after each one. App-state values pass
+    # through this function once at collection and once at prose selection.
+    # Removing markup at every layer makes that repeat idempotent.
+    for _ in range(3):
+        decoded = _html.unescape(t)
+        if decoded == t:
+            break
+        t = _VALUE_SCRIPTISH_RE.sub(" ", decoded)
+        t = _strip_paired_value_tags(t)
+        t = _VALUE_BREAK_RE.sub("\n", t)
+        t = _VALUE_VOID_RE.sub(" ", t)
     return t.strip()
 
 
@@ -1906,7 +1931,9 @@ def _prose(value: str) -> str:
     block of links is navigation wherever it is written, and navigation is not
     the body of anything.
     """
-    text = _plain_value(value)
+    # _strings has already normalized and sanitized each field. Re-decoding it
+    # here would turn double-encoded entities back into markup.
+    text = value
     flat = _norm(text)
     if len(flat) < _STATE_MIN_FIELD or len(flat.split()) < _STATE_MIN_WORDS:
         return ""

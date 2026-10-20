@@ -442,6 +442,31 @@ def test_encoded_app_state_body_does_not_emit_html_tags():
     assert "<div" not in read and "onclick" not in read
 
 
+@pytest.mark.parametrize("tag", ["image src=x onerror=alert(1)", "br onclick=alert(1)", "details open ontoggle=alert(1)"])
+def test_encoded_attribute_tags_are_removed_without_dropping_following_text(tag):
+    cleaned = more._plain_value(f"Before. &lt;{tag}&gt;visible text After.")
+    assert "visible text" in cleaned
+    assert "onerror" not in cleaned and "onclick" not in cleaned and "ontoggle" not in cleaned
+
+
+def test_unclosed_non_script_tag_does_not_discard_following_prose():
+    cleaned = more._plain_value("See the &lt;iframe&gt; element. keep this sentence.")
+    assert "keep this sentence" in cleaned
+
+
+def test_comparison_with_later_closer_is_preserved():
+    cleaned = more._plain_value("if a <b and c > d then &lt;/b&gt; keep me entirely")
+    assert "if a <b and c > d then" in cleaned
+    assert "keep me entirely" in cleaned
+
+
+def test_double_encoded_app_state_markup_is_not_redecoded():
+    body = "&amp;lt;image src=x onerror=alert(1)&amp;gt;" + _paras(12, "encoded")
+    read = _read(_shell_with_state({"pageProps": {"body": body}}))
+    assert "encoded0" in read
+    assert "onerror" not in read
+
+
 @pytest.mark.parametrize(
     "value",
     [

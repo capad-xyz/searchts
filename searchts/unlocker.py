@@ -1160,7 +1160,11 @@ def _is_refused_render(html: str, status: Optional[int]) -> bool:
     """
     if status is None or status < 400:
         return False
-    body = re.sub(r"(?is)<head\b[^>]*>.*?(?:</head\s*>|$)", " ", html or "")
+    body = re.sub(
+        r"(?is)<head\b[^>]*>.*?(?:</head\s*>|(?=<body\b)|\Z)",
+        " ",
+        html or "",
+    )
     return _visible_markup_len(_SCRIPTISH_RE.sub(" ", body)) == 0
 
 
