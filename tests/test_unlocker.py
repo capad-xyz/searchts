@@ -1849,3 +1849,13 @@ class TestBlockPhraseFixtures:
             + ("Prose about the browser. " * 40)
         )
         assert looks_blocked(200, article) is None
+
+
+def test_the_plain_text_and_markup_type_sets_do_not_overlap():
+    """One source of truth: the markup check runs first, so an overlap is dead code.
+
+    Hare's skip finding on the first version of this change: `application/xml`
+    was in both sets, so the plain-text entry could never fire and a reader
+    could not tell which set decided.
+    """
+    assert not unlocker._PLAIN_TEXT_TYPES & unlocker._MARKUP_TYPES

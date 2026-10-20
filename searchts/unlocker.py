@@ -870,7 +870,6 @@ _PLAIN_TEXT_TYPES = frozenset({
     "text/yaml",
     "text/x-yaml",
     "application/json",
-    "application/xml",
     "application/javascript",
     "application/x-javascript",
     "application/ecmascript",
