@@ -736,7 +736,7 @@ def test_cli_grab_keeps_token_counts_that_a_higher_cap_would_not_return(
 def test_cli_grab_names_what_saved_and_links_the_folder_on_a_terminal(
     monkeypatch, capsys, tmp_path,
 ):
-    from urllib.request import pathname2url
+    from searchts.ux import file_uri
 
     manifest = {
         "title": "Stripe", "page_backend": "curl_cffi", "downloaded": 2,
@@ -759,7 +759,9 @@ def test_cli_grab_names_what_saved_and_links_the_folder_on_a_terminal(
     folder = str(tmp_path / "kit")
     assert captured.out.strip() == folder
     assert "\033" not in captured.out
-    uri = "file://" + pathname2url(folder)
+    # Same builder the CLI uses. "file://" plus pathname2url doubles the
+    # slashes on Windows (file://///C:/...) and the terminal never sees that.
+    uri = file_uri(folder)
     assert f"\033]8;;{uri}\033\\" in captured.err
     assert folder in captured.err
     assert "downloaded 2 assets (1 images, 1 fonts)" in captured.err
