@@ -37,6 +37,14 @@ It writes to the output dir (default `./searchts-grab-<host>`):
     `backend`, and `ok`/`error` — a failed asset is recorded, never fatal)
   - `page_md`: `"page.md"` when `--read` was passed
 
+The preview on stderr names that folder with its full path, then `manifest.json`
+inside it, then the palette and the fonts. Ctrl+click the folder path to open
+it (Cmd+click on macOS): in a terminal that supports links the path is a link,
+and elsewhere it is a bare absolute path, which VS Code and Cursor open on
+their own. stdout is that same folder path and nothing else, so
+`cd "$(searchts grab <url>)"` lands in it. `--json` prints the manifest
+instead and does not print the preview.
+
 To answer "what's the palette / what fonts", read `manifest.json` and report
 `palette` + `fonts`. To reuse assets, point at the files under the kind folders.
 

@@ -22,9 +22,11 @@ noise-stripping belongs next to the text it shapes.
 
 from __future__ import annotations
 
+import os
 import re
-from typing import Optional
+from typing import Optional, Sequence
 from urllib.parse import urlsplit
+from urllib.request import pathname2url
 
 #: Playwright appends a "Call log:" block with the navigation step. Useful in a
 #: bug report, noise in an error message.
@@ -106,3 +108,104 @@ def tidy_reason(why: str) -> str:
         text = pattern.sub("", text).strip()
     # curl's message keeps a useful prefix; only the pointer goes.
     return text or "failed"
+
+
+def stream_is_tty(stream: object) -> bool:
+    """Whether ``stream`` is a terminal someone is looking at."""
+    isatty = getattr(stream, "isatty", None)
+    if not callable(isatty):
+        return False
+    try:
+        return bool(isatty())
+    except Exception:  # noqa: BLE001 - a broken stream is not a terminal
+        return False
+
+
+def links_enabled(stream: object) -> bool:
+    """OSC 8 only where the escapes will be interpreted, not printed.
+
+    A pipe, a capture, and ``TERM=dumb`` must see the path itself. Escape
+    codes there hide it from the next program.
+    """
+    if os.environ.get("TERM") == "dumb":
+        return False
+    return stream_is_tty(stream)
+
+
+def color_enabled(stream: object) -> bool:
+    """Truecolor only when a person will see it.
+
+    ``NO_COLOR`` is the off switch. A captured stream is not a terminal, so
+    a test or a pipe keeps the hex and nothing else.
+    """
+    if os.environ.get("NO_COLOR", "") != "":
+        return False
+    if os.environ.get("TERM") == "dumb":
+        return False
+    return stream_is_tty(stream)
+
+
+def file_uri(path: str) -> str:
+    """A ``file://`` URI for ``path``. A directory URI opens the directory.
+
+    The path is made absolute first, then percent-encoded, so a space cannot
+    end an OSC 8 sequence early. Windows ``pathname2url`` already returns
+    ``///C:/...``, and the scheme there is ``file:`` plus that. Everywhere
+    else it returns ``/tmp/...`` and the scheme is ``file://``. Both come
+    out as ``file:///...``, which Explorer, Finder, and a terminal's
+    Ctrl+click open.
+    """
+    absolute = os.path.abspath(path)
+    if os.name == "nt":
+        import nturl2path
+
+        return "file:" + nturl2path.pathname2url(absolute)
+    return "file://" + pathname2url(absolute)
+
+
+def clickable_path(path: str, *, link: bool) -> str:
+    """``path`` as text, and when ``link`` an OSC 8 hyperlink to its file URI.
+
+    The visible characters are always the path. A copy pastes as a path, and
+    a terminal that detects paths (VS Code, Cursor) can open a directory
+    from the text alone. Windows Terminal does not detect bare paths, so on
+    a real terminal the same text is also an OSC 8 link: Ctrl+click opens
+    the folder.
+
+    ``link`` stays false for a pipe. The escapes would be part of the path
+    the next program reads.
+    """
+    if not link:
+        return path
+    uri = file_uri(path)
+    if any(ch in uri or ch in path for ch in ("\033", "\x07", "\n", "\r")):
+        return path
+    # ST (ESC \\) closes the sequence. It does not occur in a file URI.
+    return f"\033]8;;{uri}\033\\{path}\033]8;;\033\\"
+
+
+_HEX6 = re.compile(r"^#([0-9a-fA-F]{6})$")
+
+
+def palette_text(hexes: Sequence[str], *, color: bool) -> str:
+    """Hex codes, with a truecolor chip in front of each when ``color``.
+
+    The hex stays either way, so it can be copied and a test can find it.
+    The chip is two spaces on a 24-bit background: a space is in every
+    font, a block glyph is not. A value that is not ``#rrggbb`` is printed
+    as text, so an odd token cannot paint the rest of the line.
+    """
+    parts = []
+    for hx in hexes:
+        if not hx:
+            continue
+        match = _HEX6.match(hx) if color else None
+        if match:
+            raw = match.group(1)
+            r = int(raw[0:2], 16)
+            g = int(raw[2:4], 16)
+            b = int(raw[4:6], 16)
+            parts.append(f"\033[48;2;{r};{g};{b}m  \033[0m {hx}")
+        else:
+            parts.append(hx)
+    return " ".join(parts)

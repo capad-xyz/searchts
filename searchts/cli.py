@@ -17,7 +17,7 @@ import json
 import os
 import sys
 import time
-from typing import Callable
+from typing import Callable, Optional
 
 from searchts import __version__
 
@@ -2192,6 +2192,131 @@ def _cmd_get(args):
     print(str(path))
 
 
+def _grab_saved_kinds(records, downloaded: int) -> str:
+    """``80 images, 4 css`` when that accounts for ``downloaded``, else "".
+
+    A partial asset list must not pretend to be the breakdown: the numbers
+    would not add up to the count on the same line.
+    """
+    counts: dict[str, int] = {}
+    for rec in records or []:
+        if not isinstance(rec, dict) or not rec.get("ok"):
+            continue
+        kind = rec.get("kind")
+        if not kind:
+            continue
+        key = str(kind)
+        counts[key] = counts.get(key, 0) + 1
+    if not counts or sum(counts.values()) != downloaded:
+        return ""
+    from searchts.assets import ASSET_KINDS
+
+    order = [k for k in ASSET_KINDS if k in counts]
+    order.extend(k for k in counts if k not in order)
+    return ", ".join(f"{counts[k]} {k}" for k in order)
+
+
+def _grab_omitted_note(manifest: dict) -> Optional[str]:
+    entries = manifest.get("omitted") or []
+    if not entries:
+        return None
+    total = manifest.get("omitted_count") or sum(e.get("count", 0) for e in entries)
+    parts = ", ".join(f"{e['count']} {e['kind']} ({e['reason']})" for e in entries)
+    return f"  omitted: {total} asset(s) not saved: {parts}"
+
+
+def _grab_token_howto(omitted: dict, more: str) -> str:
+    """The cap sentence, without repeating counts the line above already gave.
+
+    ``tokens_more`` is ``kept N per list; 13 more radius, ...; --tokens N ...``.
+    When that middle clause is the same counts as what was left out, printing
+    both stutters. Drop the middle. When it differs, some of what was left
+    out is markup a higher cap cannot bring back, so the middle stays: it is
+    the part ``--tokens`` would actually return. Any other shape is printed
+    whole.
+    """
+    pieces = more.split("; ")
+    if len(pieces) != 3:
+        return more
+    kept, counts, howto = pieces
+    expected = ", ".join(f"{n} more {kind}" for kind, n in omitted.items())
+    if counts == expected:
+        return f"{kept}; {howto}"
+    return more
+
+
+def _grab_token_note(manifest: dict) -> Optional[str]:
+    left = manifest.get("tokens_omitted") or {}
+    if not left:
+        return None
+    parts = ", ".join(f"{n} {kind}" for kind, n in left.items())
+    head = f"  tokens left out: {parts}"
+    more = manifest.get("tokens_more")
+    if not more:
+        return head
+    return f"{head}\n    {_grab_token_howto(left, more)}"
+
+
+def _grab_page_md_note(manifest: dict) -> Optional[str]:
+    err = manifest.get("page_md_error")
+    return f"  page.md not saved: {err}" if err else None
+
+
+def _print_grab_summary(manifest: dict, out: str) -> None:
+    """Preview on stderr, and the folder path alone on stdout.
+
+    stdout is the absolute folder and nothing else, so
+    ``cd "$(searchts grab URL)"`` lands in it, and a terminal that detects
+    paths (VS Code, Cursor) can open that line with Ctrl+click. The same
+    path on stderr is an OSC 8 link when stderr is a terminal, which is
+    what Windows Terminal opens. Escape codes never go to stdout: a pipe
+    has to be a path.
+    """
+    from searchts import ux
+
+    folder = os.path.abspath(out)
+    manifest_path = os.path.join(folder, "manifest.json")
+    link = ux.links_enabled(sys.stderr)
+    title = manifest.get("title") or "(no title)"
+    backend = manifest.get("page_backend") or "?"
+    downloaded = manifest.get("downloaded", 0)
+    kinds = _grab_saved_kinds(manifest.get("assets"), downloaded)
+    kind_note = f" ({kinds})" if kinds else ""
+    print(f"[grab] {title}", file=sys.stderr)
+    print(
+        f"  page via {backend}; downloaded {downloaded} assets{kind_note}",
+        file=sys.stderr,
+    )
+    print(f"  folder: {ux.clickable_path(folder, link=link)}", file=sys.stderr)
+    print(
+        f"  manifest: {ux.clickable_path(manifest_path, link=link)}",
+        file=sys.stderr,
+    )
+    colors = [
+        str(c["hex"])
+        for c in (manifest.get("palette") or [])
+        if isinstance(c, dict) and c.get("hex")
+    ]
+    if colors:
+        shown = ux.palette_text(colors[:8], color=ux.color_enabled(sys.stderr))
+        extra = len(colors) - 8
+        more = f"  +{extra} more" if extra > 0 else ""
+        print(f"  palette: {shown}{more}", file=sys.stderr)
+    fonts_all = [f for f in (manifest.get("fonts") or []) if f]
+    if fonts_all:
+        extra_fonts = len(fonts_all) - 6
+        more = f"  +{extra_fonts} more" if extra_fonts > 0 else ""
+        print(f"  fonts: {', '.join(fonts_all[:6])}{more}", file=sys.stderr)
+    for note in (
+        _grab_omitted_note(manifest),
+        _grab_token_note(manifest),
+        _grab_page_md_note(manifest),
+    ):
+        if note:
+            print(note, file=sys.stderr)
+    print(folder)
+
+
 def _cmd_grab(args):
     """Save the files a read named, through the same unlock ladder."""
     from urllib.parse import urlparse
@@ -2222,60 +2347,17 @@ def _cmd_grab(args):
         print(f"Failed to grab {args.url}: {e}", file=sys.stderr)
         sys.exit(1)
 
-    def omitted_note():
-        entries = manifest.get("omitted") or []
-        if not entries:
-            return None
-        total = manifest.get("omitted_count") or sum(e.get("count", 0) for e in entries)
-        parts = ", ".join(f"{e['count']} {e['kind']} ({e['reason']})" for e in entries)
-        return f"  omitted: {total} asset(s) not saved: {parts}"
-
-    def token_note():
-        left = manifest.get("tokens_omitted") or {}
-        if not left:
-            return None
-        parts = ", ".join(f"{n} {kind}" for kind, n in left.items())
-        more = manifest.get("tokens_more")
-        if more:
-            return f"  tokens left out: {parts}. {more}"
-        return f"  tokens left out: {parts}"
-
-    def page_md_note():
-        err = manifest.get("page_md_error")
-        return f"  page.md not saved: {err}" if err else None
-
     if args.json:
-        note = omitted_note()
-        if note:
-            print(note, file=sys.stderr)
-        note = token_note()
-        if note:
-            print(note, file=sys.stderr)
-        note = page_md_note()
-        if note:
-            print(note, file=sys.stderr)
+        for note in (
+            _grab_omitted_note(manifest),
+            _grab_token_note(manifest),
+            _grab_page_md_note(manifest),
+        ):
+            if note:
+                print(note, file=sys.stderr)
         print(json.dumps(manifest, ensure_ascii=False))
         return
-    title = manifest.get("title") or "(no title)"
-    palette = " ".join(c["hex"] for c in manifest.get("palette", [])[:8])
-    fonts = ", ".join(manifest.get("fonts", [])[:6])
-    print(f"[grab] {title}", file=sys.stderr)
-    print(f"  page via {manifest.get('page_backend', '?')}; downloaded "
-          f"{manifest.get('downloaded', 0)} assets -> {out}/", file=sys.stderr)
-    if palette:
-        print(f"  palette: {palette}", file=sys.stderr)
-    if fonts:
-        print(f"  fonts:   {fonts}", file=sys.stderr)
-    note = omitted_note()
-    if note:
-        print(note, file=sys.stderr)
-    note = token_note()
-    if note:
-        print(note, file=sys.stderr)
-    note = page_md_note()
-    if note:
-        print(note, file=sys.stderr)
-    print(os.path.join(out, "manifest.json"))
+    _print_grab_summary(manifest, out)
 
 
 def _parse_provider_flags(provider_args):

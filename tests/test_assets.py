@@ -2,7 +2,9 @@
 """Tests for the on-demand asset + design grabber (no network)."""
 
 import json
+import os
 import re
+import sys
 
 import pytest
 
@@ -208,7 +210,7 @@ def test_cli_get_error_exits_nonzero(monkeypatch):
     assert exc.value.code == 1
 
 
-def test_cli_grab_prints_summary_and_manifest_path(monkeypatch, capsys, tmp_path):
+def test_cli_grab_prints_summary_and_the_folder(monkeypatch, capsys, tmp_path):
     manifest = {"title": "Demo", "downloaded": 3,
                 "palette": [{"hex": "#0a0a23", "count": 9}],
                 "fonts": ["Inter"], "assets": []}
@@ -223,9 +225,16 @@ def test_cli_grab_prints_summary_and_manifest_path(monkeypatch, capsys, tmp_path
     with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out", str(tmp_path / "g")]):
         cli.main()
     captured = capsys.readouterr()
-    assert "manifest.json" in captured.out
+    folder = str(tmp_path / "g")
+    # stdout is the folder alone, so a script can cd there and a terminal
+    # that detects paths can open it. The manifest stays named on stderr.
+    assert captured.out.strip() == folder
+    assert "\033" not in captured.out
+    assert f"folder: {folder}" in captured.err
+    assert f"manifest: {folder}{os.sep}manifest.json" in captured.err
     assert "Demo" in captured.err and "#0a0a23" in captured.err
-    assert seen["out"] == str(tmp_path / "g")
+    assert "\033" not in captured.err
+    assert seen["out"] == folder
     assert "images" in seen["kinds"]
 
 
@@ -683,6 +692,96 @@ def test_cli_grab_names_tokens_left_out(monkeypatch, capsys, tmp_path):
         cli.main()
     err = capsys.readouterr().err
     assert "tokens left out: 33 spacing, 1 radius" in err
+
+
+def test_cli_grab_does_not_repeat_token_counts(monkeypatch, capsys, tmp_path):
+    """The screenshot case: the how-to restated every count it had just given."""
+    manifest = {
+        "title": "Demo", "downloaded": 1, "palette": [], "fonts": [], "assets": [],
+        "tokens_omitted": {"radius": 13, "shadow": 19, "spacing": 149},
+        "tokens_more": (
+            "kept 24 per list; 13 more radius, 19 more shadow, 149 more spacing; "
+            "--tokens N (MCP max_tokens) raises it, ceiling 200"
+        ),
+    }
+    monkeypatch.setattr("searchts.assets.grab", lambda url, out, **kw: manifest)
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out", str(tmp_path)]):
+        cli.main()
+    err = capsys.readouterr().err
+    assert "tokens left out: 13 radius, 19 shadow, 149 spacing" in err
+    assert "13 more radius" not in err
+    assert "kept 24 per list; --tokens N (MCP max_tokens) raises it, ceiling 200" in err
+
+
+def test_cli_grab_keeps_token_counts_that_a_higher_cap_would_not_return(
+    monkeypatch, capsys, tmp_path,
+):
+    """Markup left out is not the same number as the real values past the cap."""
+    manifest = {
+        "title": "Demo", "downloaded": 1, "palette": [], "fonts": [], "assets": [],
+        "tokens_omitted": {"spacing": 33, "radius": 1},
+        "tokens_more": (
+            "kept 24 per list; 30 more spacing; "
+            "--tokens N (MCP max_tokens) raises it, ceiling 200"
+        ),
+    }
+    monkeypatch.setattr("searchts.assets.grab", lambda url, out, **kw: manifest)
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out", str(tmp_path)]):
+        cli.main()
+    err = capsys.readouterr().err
+    assert "tokens left out: 33 spacing, 1 radius" in err
+    assert "30 more spacing" in err
+
+
+def test_cli_grab_names_what_saved_and_links_the_folder_on_a_terminal(
+    monkeypatch, capsys, tmp_path,
+):
+    from urllib.request import pathname2url
+
+    manifest = {
+        "title": "Stripe", "page_backend": "curl_cffi", "downloaded": 2,
+        "palette": [{"hex": "#0a0a23"}, {"hex": "#ffffff"}, {"hex": "nope"}],
+        "fonts": ["Inter"],
+        "assets": [
+            {"ok": True, "kind": "fonts"},
+            {"ok": True, "kind": "images"},
+            {"ok": False, "kind": "images"},
+        ],
+    }
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("TERM", "xterm")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+    monkeypatch.setattr("searchts.assets.grab", lambda url, out, **kw: manifest)
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out", "kit"]):
+        cli.main()
+    captured = capsys.readouterr()
+    folder = str(tmp_path / "kit")
+    assert captured.out.strip() == folder
+    assert "\033" not in captured.out
+    uri = "file://" + pathname2url(folder)
+    assert f"\033]8;;{uri}\033\\" in captured.err
+    assert folder in captured.err
+    assert "downloaded 2 assets (1 images, 1 fonts)" in captured.err
+    assert "\033[48;2;10;10;35m" in captured.err
+    assert "\033[48;2;255;255;255m" in captured.err
+    assert "#0a0a23" in captured.err and "#ffffff" in captured.err
+    assert "nope" in captured.err
+
+
+def test_cli_grab_palette_stays_plain_when_color_is_off(monkeypatch, capsys, tmp_path):
+    manifest = {
+        "title": "Demo", "downloaded": 0,
+        "palette": [{"hex": "#0a0a23"}], "fonts": [], "assets": [],
+    }
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
+    monkeypatch.setattr("searchts.assets.grab", lambda url, out, **kw: manifest)
+    with patch("sys.argv", ["searchts", "grab", "https://demo.test/", "--out", str(tmp_path)]):
+        cli.main()
+    err = capsys.readouterr().err
+    assert "#0a0a23" in err
+    assert "\033[48;" not in err
 
 
 def test_cli_grab_forwards_a_higher_token_cap(monkeypatch, capsys, tmp_path):

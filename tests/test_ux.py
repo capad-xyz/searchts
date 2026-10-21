@@ -108,3 +108,63 @@ class TestTidyReason:
     def test_does_not_mangle_a_reason_that_merely_mentions_a_url(self):
         raw = "thin-200b (page has 3 of 4 sections, see https://example.com/x)"
         assert ux.tidy_reason(raw) == raw
+
+
+class TestFolderLink:
+    """The grab folder has to be something a person can open with a click."""
+
+    def test_a_posix_path_becomes_a_file_uri(self, tmp_path):
+        folder = tmp_path / "my kit"
+        folder.mkdir()
+        uri = ux.file_uri(str(folder))
+        expected = "file:///" + str(folder).lstrip("/").replace(" ", "%20")
+        assert uri == expected
+        assert " " not in uri
+
+    def test_a_windows_drive_path_opens_as_a_file_uri(self, monkeypatch):
+        monkeypatch.setattr(ux.os, "name", "nt")
+        monkeypatch.setattr(ux.os.path, "abspath", lambda p: p)
+        uri = ux.file_uri(r"C:\Users\Aadarsh Upadhyay\searchts-grab-stripe.com")
+        assert uri == "file:///C:/Users/Aadarsh%20Upadhyay/searchts-grab-stripe.com"
+
+    def test_the_visible_text_is_the_path_and_the_target_is_the_uri(self, tmp_path):
+        folder = tmp_path / "kit"
+        folder.mkdir()
+        shown = ux.clickable_path(str(folder), link=True)
+        assert shown.startswith("\033]8;;file://")
+        assert shown.endswith("\033]8;;\033\\")
+        # The label between the open and the close is the path, not the URI.
+        label = shown.split("\033\\", 1)[1]
+        assert label.startswith(str(folder))
+
+    def test_a_pipe_gets_the_path_and_no_escapes(self, tmp_path):
+        folder = str(tmp_path / "kit")
+        assert ux.clickable_path(folder, link=False) == folder
+
+    def test_dumb_terminals_and_pipes_do_not_get_links_or_color(self, monkeypatch):
+        class Stream:
+            def __init__(self, tty):
+                self.tty = tty
+
+            def isatty(self):
+                return self.tty
+
+        monkeypatch.delenv("NO_COLOR", raising=False)
+        monkeypatch.setenv("TERM", "xterm")
+        assert ux.links_enabled(Stream(True)) is True
+        assert ux.color_enabled(Stream(True)) is True
+        assert ux.links_enabled(Stream(False)) is False
+        monkeypatch.setenv("TERM", "dumb")
+        assert ux.links_enabled(Stream(True)) is False
+        assert ux.color_enabled(Stream(True)) is False
+        monkeypatch.setenv("TERM", "xterm")
+        monkeypatch.setenv("NO_COLOR", "1")
+        assert ux.color_enabled(Stream(True)) is False
+        assert ux.links_enabled(Stream(True)) is True
+
+    def test_a_chip_keeps_the_hex_and_paints_only_six_digit_colors(self):
+        text = ux.palette_text(["#0a0a23", "#fff", ""], color=True)
+        assert "\033[48;2;10;10;35m  \033[0m #0a0a23" in text
+        assert "#fff" in text
+        assert "\033[48;2;" in text.split("#fff")[0]
+        assert ux.palette_text(["#0a0a23"], color=False) == "#0a0a23"
