@@ -40,7 +40,7 @@ Free, open-source, **keyless** package for agents. Fetch a URL or admit you can'
 
 ## Do not violate
 
-1. **One read path** — CLI and MCP call `unlocker.fetch`. Channels are doctor probes only. No `if host==reddit` router.
+1. **One read path** — CLI and MCP call `unlocker.fetch`. Channels are doctor probes only. No `if host==reddit` router. A feature earns its place when a thin or failed read is more honest because of it, and when it can be said as a clause of the one sentence: it reads the page, or it says it can't. Search finds URLs for that read. A player page comes back as its captions, or the failure names `transcribe`. An X post is a player when it has a video; a post with no video stays a read of the page. Media the read names is fetched with `get`. Share links are how read works when the HTML is empty.
 2. **Fail loud** — thin, challenge, login-wall, or Playwright "page is navigating" is an error unless the caller opts into thin. Do not return half-HTML as a pass.
 3. **P4.6** — work that can sit >1s ticks on **stderr**. Never stdout. Never the MCP protocol. Plain stderr, not Rich, not loguru (`-v` is for loguru).
 4. **No connector framework** (**N4**). Share extractors stay fail-open modules. Known-host JSON (F5b) is the same pattern, not a plugin system.

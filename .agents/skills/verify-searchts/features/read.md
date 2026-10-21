@@ -28,6 +28,7 @@ prints nothing and fails loudly when no tier produced real content.
 - `read-backend` forces one tier with `--backend`.
 - `read-human` opens a headful browser for a page no tier could clear.
 - `read-fail-loud` exits non-zero with empty stdout when no tier produced content.
+- `read-player` on a YouTube watch URL, a TikTok video, an Instagram reel, a `v.redd.it` file, or an X post that has a video returns the captions (`backend` `player:captions`, text contains `[spoken:`), or exits non-zero with empty stdout and stderr naming `player:` and `searchts transcribe`. A channel, a feed, a Reddit thread, an X profile, and an X post with no video are not player pages: that read is the page.
 - `read-page-data` reads words the page only ships as data (`<script
   type="application/ld+json">`, an app-state script named `__SOMETHING__`) out of
   the bytes already downloaded, and says `[source: ...]` when the data supplied

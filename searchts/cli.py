@@ -243,7 +243,7 @@ def _run():
 
     # ── search ──
     p_search = sub.add_parser("search", parents=[_verbose],
-                              help="Multi-source web search (fusion-merged across providers)")
+                              help="Find URLs to read (fusion-merged across providers). A snippet is not the page")
     p_search.add_argument("query", help="The search query")
     p_search.add_argument("-n", dest="max_results", type=int, default=10,
                           help="Maximum number of fused results to return (default: 10)")
@@ -378,7 +378,7 @@ def _run():
     # ── check-update ──
     # ── transcribe ──
     p_tr = sub.add_parser("transcribe", parents=[_verbose],
-                          help="Transcribe a URL or local audio file (existing subtitles first, then Whisper via Groq/OpenAI or keyless local faster-whisper)")
+                          help="Read the audio when a player page has no captions, or transcribe a local file (subtitles first, then Whisper)")
     p_tr.add_argument("source", help="Audio/video URL or local file path")
     p_tr.add_argument("--provider", choices=["auto", "groq", "openai", "local"], default="auto",
                       help="Audio transcription provider used when there are no subtitles "
@@ -398,7 +398,7 @@ def _run():
              "Transcribe only. Never used by searchts read.",
     )
 
-    # ── get / grab (assets + design inspiration) ──
+    # ── get / grab (files a read named) ──
     p_get = sub.add_parser("get", parents=[_verbose],
                            help="Download a single asset (image/PDF/font/file) through the unlocker")
     p_get.add_argument("url", help="The asset URL to download")
@@ -406,7 +406,7 @@ def _run():
                        help="Output file or directory (default: filename from the URL, in the cwd)")
 
     p_grab = sub.add_parser("grab", parents=[_verbose],
-                            help="Grab a page's assets + color palette + fonts (design inspiration)")
+                            help="Save the files a read named (images, fonts, and the rest of the page's assets)")
     p_grab.add_argument("url", help="The page URL to grab")
     p_grab.add_argument("--out", default=None,
                         help="Output directory (default: ./searchts-grab-<host>)")
@@ -2166,7 +2166,7 @@ def _cmd_get(args):
 
 
 def _cmd_grab(args):
-    """Grab a page's assets + color palette + fonts (design inspiration)."""
+    """Save the files a read named, through the same unlock ladder."""
     from urllib.parse import urlparse
 
     from searchts import assets
@@ -2289,6 +2289,7 @@ def _cmd_search(args):
         sys.exit(1)
 
     if args.json:
+        print(search_mod.SNIPPET_LINE, file=sys.stderr)
         payload = [
             {"title": r.title, "url": r.url, "snippet": r.snippet, "source": r.source}
             for r in results
@@ -2296,6 +2297,7 @@ def _cmd_search(args):
         print(json.dumps(payload, ensure_ascii=False))
         return
 
+    print(search_mod.SNIPPET_LINE)
     for i, r in enumerate(results, start=1):
         snippet = r.snippet.replace("\n", " ").strip()
         if len(snippet) > 200:

@@ -1212,8 +1212,9 @@ def media_note(region, base: str = "") -> Optional[More]:
     F24a. A read returns text, so a photo essay comes back as its captions and
     an embedded video as nothing at all; both are real content the page holds.
     The note lists the addresses the markup already carries and never fetches
-    one, and a page whose media has no address to give says so in the words
-    PLAN.md uses rather than pretending there is none.
+    one. When an address is listed, the note names ``searchts get`` as the way
+    to fetch it. A page whose media has no address says so in the words PLAN.md
+    uses rather than pretending there is none.
     """
     if region is None:
         return None
@@ -1244,7 +1245,11 @@ def media_note(region, base: str = "") -> Optional[More]:
         return More("media", f"[media: {said} in the main content; media present, not resolved]")
     listed = ", ".join(urls)
     rest = f", and {total - len(urls)} more" if total > len(urls) else ""
-    return More("media", f"[media: {said} in the main content: {listed}{rest}]")
+    return More(
+        "media",
+        f"[media: {said} in the main content: {listed}{rest}. "
+        "searchts get fetches one of these.]",
+    )
 
 
 def detect(

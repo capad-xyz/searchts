@@ -15,8 +15,8 @@ so a drive that needs a key is not proving the claim.
 
 ## How to get to it (user POV)
 
-- Run `searchts search "<query>"` for a human-readable list.
-- Run `searchts search "<query>" --json` for a parseable array.
+- Run `searchts search "<query>"` for a human-readable list. The first line is `Snippets are not the page. Read each URL.`
+- Run `searchts search "<query>" --json` for a parseable array. The same line is on stderr, so stdout stays the array.
 
 ## Driving it with searchts
 
