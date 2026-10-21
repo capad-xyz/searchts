@@ -6,6 +6,8 @@ the before/after. These are hermetic: no network, no timing assertions that
 could flake, just "is the message the one a user needs".
 """
 
+import os
+
 import pytest
 
 from searchts import ux
@@ -117,8 +119,11 @@ class TestFolderLink:
         folder = tmp_path / "my kit"
         folder.mkdir()
         uri = ux.file_uri(str(folder))
-        expected = "file:///" + str(folder).lstrip("/").replace(" ", "%20")
-        assert uri == expected
+        # Forward slashes on every OS. A Windows drive stays a drive:
+        # file:///C:/Users/.../my%20kit. A POSIX path stays file:///tmp/...
+        slash = str(folder).replace("\\", "/")
+        prefix = "file:///" if os.name == "nt" else "file://"
+        assert uri == prefix + slash.replace(" ", "%20")
         assert " " not in uri
 
     def test_a_windows_drive_path_opens_as_a_file_uri(self, monkeypatch):
