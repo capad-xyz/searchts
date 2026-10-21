@@ -66,7 +66,9 @@ squash-merged, so the title becomes the commit message on `main`, and release
 tooling reads it: a `feat:` cuts a minor release and a `fix:` cuts a patch one,
 while `ci:`, `docs:`, `test:`, `refactor:` and `chore:` ship silently with the
 next release. Maintainers cut releases by merging the standing release PR, so
-please do not bump version numbers in your PR.
+please do not bump version numbers in your PR. The version rules, including
+0.x breaking changes and when that release PR actually merges, are in
+[docs/releasing.md](docs/releasing.md).
 
 ## AI assistance
 

@@ -6,6 +6,7 @@
       "package-name": "searchts",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
+      "bump-minor-pre-major": true,
       "extra-files": [
         "searchts/__init__.py",
         {
