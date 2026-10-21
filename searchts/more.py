@@ -802,11 +802,19 @@ def _visible_text(el) -> str:
 
 
 def _item_key(item) -> str:
-    for xp in (".//h1|.//h2|.//h3|.//h4", ".//a[@href]"):
-        for el in item.xpath(xp):
-            txt = _norm(el.text_content())
-            if len(txt) >= 8:
-                return txt[:60].lower()
+    for el in item.xpath(".//h1|.//h2|.//h3|.//h4"):
+        txt = _norm(el.text_content())
+        if len(txt) >= 8:
+            return txt[:60].lower()
+    for el in item.xpath(".//a[@href]"):
+        # The name, when the anchor also wraps a paragraph. The whole
+        # text_content glues those together and is not what the rebuild prints.
+        labeled = _card_label(el)
+        if labeled is not None and len(labeled[1]) >= 8:
+            return labeled[1][:60].lower()
+        txt = _norm(el.text_content())
+        if len(txt) >= 8:
+            return txt[:60].lower()
     return _norm(item.text_content())[:60].lower()
 
 
@@ -1436,6 +1444,9 @@ _DATEISH_RE = re.compile(
 )
 _BREADCRUMB_RE = re.compile(r"^https?://\S+(?:\s+›\s+\S+)+$")
 _INDEX_MIN_COVERAGE = 0.6
+#: A markdown bullet is not on the page. Left in, it lands in the middle of a
+#: one-paragraph list and the coverage window misses text the extract did keep.
+_LIST_MARKER_RE = re.compile(r"(?m)^[ \t]*(?:[-*+]|\d+[.)])[ \t]+")
 
 
 def _text_pieces(item) -> List[Tuple[Any, str]]:
@@ -1484,12 +1495,35 @@ def _clean_item_url(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
+def _card_label(link) -> Optional[Tuple[Any, str]]:
+    """The name on an anchor that also wraps a description paragraph.
+
+    ``text_content`` glues the two with no space, and the whole anchor then
+    counts as the title, which drops the paragraph. The name stays the link.
+    """
+    pieces: List[Tuple[Any, str, bool]] = []
+    for el, text in _text_pieces(link):
+        node = el
+        in_p = False
+        while node is not None and node is not link.getparent():
+            if isinstance(node.tag, str) and node.tag.lower() == "p":
+                in_p = True
+                break
+            node = node.getparent()
+        pieces.append((el, text, in_p))
+    labels = [(el, text) for el, text, in_p in pieces if not in_p and 3 <= len(text) <= 160]
+    if not labels or not any(in_p and len(text) >= 40 for _el, text, in_p in pieces):
+        return None
+    return max(labels, key=lambda pair: len(pair[1]))
+
+
 def _item_parts(item, base: str) -> Optional[Dict[str, str]]:
     """Title, link, byline and snippet of one list item, or None."""
     heading = next(
         (h for h in item.xpath(".//h1|.//h2|.//h3|.//h4") if len(_norm(h.text_content())) >= 3), None
     )
     link = None
+    label_el = None
     if heading is not None:
         inside = heading.xpath(".//a[@href]")
         around = [a for a in heading.iterancestors("a") if a.get("href")]
@@ -1501,13 +1535,17 @@ def _item_parts(item, base: str) -> Optional[Dict[str, str]]:
             return None
         link = max(links, key=lambda a: len(_norm(a.text_content())))
         if heading is None:
-            title = _norm(link.text_content())
+            labeled = _card_label(link)
+            if labeled is not None:
+                label_el, title = labeled
+            else:
+                title = _norm(link.text_content())
     href = (link.get("href") or "").strip()
     if not href or href.startswith(("#", "javascript:")):
         return None
     url = _clean_item_url(urljoin(base, href))
 
-    title_el = heading if heading is not None else link
+    title_el = heading if heading is not None else (label_el if label_el is not None else link)
     pieces = [(el, t) for el, t in _text_pieces(item) if el is not title_el and title_el not in el.iterancestors()]
     detail = _following_detail_row(item) if isinstance(item.tag, str) and item.tag.lower() == "tr" else None
     if detail is not None:
@@ -1538,6 +1576,19 @@ def _item_parts(item, base: str) -> Optional[Dict[str, str]]:
 
 def _strip_md_links(text: str) -> str:
     return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+
+
+def _index_paragraphs(text: str) -> List[str]:
+    """Paragraphs of the extract, one markdown bullet each.
+
+    A bullet list is one block to a blank-line split, so the coverage window
+    was landing on the marker between two items and missing text the extract
+    had kept. Each bullet is its own paragraph, and the marker is not part of it.
+    """
+    body = _strip_md_links(text or "")
+    body = re.sub(r"\n(?=[ \t]*(?:[-*+]|\d+[.)])[ \t]+)", "\n\n", body)
+    body = _LIST_MARKER_RE.sub("", body)
+    return [p for p in (_norm(part).lower() for part in re.split(r"\n\s*\n", body)) if len(p) >= 30]
 
 
 def list_index(html: str, url: str, text: str) -> Optional[Tuple[str, More]]:
@@ -1583,8 +1634,7 @@ def list_index(html: str, url: str, text: str) -> Optional[Tuple[str, More]]:
         if not (lost == ["links"] and titles_present and table_list):
             # The extract must be mostly this list; otherwise it is an article with a list under it.
             item_text = " ".join(_norm(_visible_text(it)) for it in items).lower()
-            paras = [_norm(_strip_md_links(p)).lower() for p in re.split(r"\n\s*\n", text or "")]
-            paras = [p for p in paras if len(p) >= 30]
+            paras = _index_paragraphs(text)
             total = sum(len(p) for p in paras)
             covered = sum(len(p) for p in paras if p[len(p) // 2 - 15 : len(p) // 2 + 15] in item_text)
             if not total and _norm(text or ""):
