@@ -3,8 +3,8 @@
 
 F19: when the nudge fires it also says which build this process runs (an
 upgrade you just ran did not take effect here), names any other searchts.exe
-PIDs on Windows, and prints the one upgrade command for how this copy was
-installed. It never installs and never kills.
+PIDs on Windows, and prints ``searchts update``. It never installs and never
+kills.
 """
 
 from __future__ import annotations
@@ -26,15 +26,16 @@ RELEASES_URL = "https://api.github.com/repos/capad-xyz/searchts/releases/latest"
 UPDATE_DOC = (
     "https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md"
 )
-SKIP_COMMANDS = frozenset({"check-update", "watch", "version"})
+SKIP_COMMANDS = frozenset({"check-update", "watch", "version", "update", "upgrade"})
 
-#: One upgrade command per install kind (see ``detect_install_kind``).
+#: One command. ``searchts update`` picks the installer for this copy.
+_UPDATE_COMMAND = "searchts update"
 INSTALL_COMMANDS = {
-    "pipx": "pipx upgrade searchts",
-    "uv_tool": "uv tool upgrade searchts",
-    "uvx": 'uvx reuses its cached build: run uvx --from "searchts[mcp]@latest" searchts',
-    "editable": "source checkout: git pull, then reinstall the editable install",
-    "pip": 'pip install -U "searchts[mcp]"',
+    "pipx": _UPDATE_COMMAND,
+    "uv_tool": _UPDATE_COMMAND,
+    "uvx": _UPDATE_COMMAND,
+    "editable": _UPDATE_COMMAND,
+    "pip": _UPDATE_COMMAND,
 }
 
 
@@ -179,7 +180,7 @@ def maybe_nudge(
 ) -> None:
     """Best-effort stderr lines when a newer GitHub release exists.
 
-    Skips: env opt-out, pytest, pipes, mcp serve, check-update/watch/version.
+    Skips: env opt-out, pytest, pipes, mcp serve, check-update/watch/version/update.
     Failures are silent. Never writes stdout. Never installs or kills.
     """
     if os.environ.get("SEARCHTS_NO_UPDATE_CHECK"):

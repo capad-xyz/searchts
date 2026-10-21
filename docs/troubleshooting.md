@@ -22,9 +22,9 @@ searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace
 
 **`externally-managed-environment` (PEP 668):** do not `pip install` onto Homebrew / system Python. Keep = `pipx install "searchts[mcp]"`. Try = `uvx --from "searchts[mcp]" searchts …`.
 
-**Windows: file lock on `searchts.exe`.** MCP `serve` is holding the shim. Stop those PIDs, then reinstall (`pipx install --force`, or `pip install --force-reinstall -e .`). Do not add a machine-wide mutex (**F11**).
+**Windows: file lock on `searchts.exe`.** `searchts update` renames the running executable aside and writes the new one. It does not kill anything. If another `searchts.exe` still has the file and the rename fails, quit the PIDs it prints, then run the command it prints. Do not add a machine-wide mutex (**F11**).
 
-**uvx "won't upgrade":** each run is latest PyPI. Nothing to upgrade.
+**uvx:** there is no persistent install. `searchts update` clears the uv cache for searchts. The next `uvx` run is the latest PyPI release.
 
 ## Doctor warnings
 
@@ -42,6 +42,6 @@ claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 
 ## Update
 
-See [docs/update.md](update.md). Keep: `pipx upgrade searchts`. venv: `pip install -U "searchts[mcp]"`.
+See [docs/update.md](update.md). `searchts update` (same as `searchts upgrade`) updates the copy that is running.
 
 Install: [docs/install.md](install.md)

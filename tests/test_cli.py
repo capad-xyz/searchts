@@ -593,7 +593,9 @@ class TestCheckUpdateRetry:
 
     def test_update_instructions_are_pipx_first(self):
         text = cli._UPDATE_INSTRUCTIONS
-        assert "pipx upgrade searchts" in text
+        assert "searchts update" in text
+        assert "searchts upgrade" in text
+        assert "pipx upgrade searchts --include-injected" in text
         assert "main.zip" not in text
         assert "pip install -U" in text
 

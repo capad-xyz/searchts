@@ -235,7 +235,8 @@ searchts get https://example.com/logo.png
 ```
 
 Diagnostics and maintenance: `searchts doctor` (add `--json`), `searchts setup`,
-`searchts install`, `searchts configure`, `searchts check-update`,
+`searchts install`, `searchts configure`, `searchts update` (`upgrade` is the same),
+`searchts check-update`,
 `searchts watch`, `searchts version`, `searchts uninstall`.
 
 MCP server (stdio, no port - the agent spawns it and talks over the pipe):
