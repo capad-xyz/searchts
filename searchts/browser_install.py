@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Callable, Mapping, Optional, Sequence
 
+from searchts.progress import phase as progress_phase
 from searchts.update_nudge import _path_parts
 
 #: Fallback if package metadata cannot be read.
@@ -97,6 +98,13 @@ def _stderr_fd() -> Optional[int]:
         return sys.stderr.fileno()
     except (AttributeError, OSError, ValueError):
         return None
+
+
+def _stderr_is_tty() -> bool:
+    try:
+        return bool(sys.stderr is not None and sys.stderr.isatty())
+    except Exception:  # noqa: BLE001 - a stream with no isatty is not a tty
+        return False
 
 
 def _stream_runner(cmd: Sequence[str]) -> subprocess.CompletedProcess:
@@ -386,8 +394,15 @@ def _install_chromium_and_check(
         print("Dry run complete. No changes were made.")
         return 0
 
-    _tick("downloading Chromium…")
-    chromium = _run_chromium(chromium_cmd, runner=runner)
+    # The Chromium installer already writes its own stream when stderr is a
+    # real terminal. A second heartbeat on that same line would paint over it.
+    child_owns_tty = runner is None and _stderr_fd() is not None and _stderr_is_tty()
+    with progress_phase(
+        "downloading Chromium…",
+        enabled=True,
+        heartbeat=not child_owns_tty,
+    ):
+        chromium = _run_chromium(chromium_cmd, runner=runner)
     if chromium.returncode != 0:
         err = ""
         if runner is not None:
@@ -400,8 +415,8 @@ def _install_chromium_and_check(
         )
         return 1
 
-    _tick("checking stealth…")
-    installed, message = stealth_status()
+    with progress_phase("checking stealth…", enabled=True):
+        installed, message = stealth_status()
     marker = "[ok]" if installed else "[!]"
     print(f"{marker} {message}")
     if installed:
@@ -451,8 +466,8 @@ def install_browser(
 
     if untracked_pipx:
         _tick(PIPX_UNTRACKED_NOTE)
-    _tick("installing [browser] extra…")
-    extra = run(extra_cmd)
+    with progress_phase("installing [browser] extra…", enabled=True):
+        extra = run(extra_cmd)
     if extra.returncode != 0:
         err = (extra.stderr or extra.stdout or "").strip()
         print(

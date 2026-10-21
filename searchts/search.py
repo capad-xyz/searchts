@@ -22,13 +22,14 @@ Design goals (parallel to ``unlocker.fetch``):
 from __future__ import annotations
 
 import os
-import sys
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 #: Browser-ish UA so keyless HTTP providers (SearXNG instances) don't 403 us.
 #: Single source of truth lives in unlocker._UA_REAL — import, don't duplicate.
+from searchts.progress import phase as progress_phase
+from searchts.progress import wanted as progress_wanted
 from searchts.unlocker import _UA_REAL  # noqa: E402
 
 #: Reciprocal Rank Fusion constant. 60 is the value from the original RRF paper
@@ -51,16 +52,6 @@ _TRACKING_PARAMS = frozenset({
     "gclid", "fbclid", "msclkid", "mc_cid", "mc_eid", "ref", "ref_src",
     "igshid", "spm", "_ga", "yclid",
 })
-
-
-def _tick(msg: str) -> None:
-    # Best-effort only: a closed/broken stderr must never abort a search.
-    if sys.stderr is None:
-        return
-    try:
-        print(msg, file=sys.stderr, flush=True)
-    except (OSError, ValueError):
-        pass
 
 
 @dataclass
@@ -394,8 +385,9 @@ def search(
         default is DuckDuckGo plus every provider whose key/env is present.
 
     progress:
-        True: stderr ticks (``searching <name>…``) before each provider. False:
-        never ticks (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
+        True: stderr names the provider being searched and reprints that name
+        with the real elapsed seconds while the provider is still running.
+        False: never (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
         Library/MCP callers omit the arg so they stay quiet unless the env is set.
 
     Returns the top ``max_results`` fused :class:`SearchResult` objects. Raises
@@ -404,32 +396,26 @@ def search(
     """
     selected = list(providers) if providers is not None else _available_providers()
 
-    if progress is None:
-        progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
-            "1", "true", "True", "yes",
-        )
+    progress = progress_wanted(progress)
 
     attempts: List[Tuple[str, str]] = []
     per_provider: List[Tuple[str, List[SearchResult]]] = []
 
     for name in selected:
         fn = PROVIDERS.get(name)
-        if fn is None:
-            if progress:
-                _tick(f"searching {name}…")
-            attempts.append((name, "unknown-provider"))
-            continue
-        if progress:
-            _tick(f"searching {name}…")
-        try:
-            results = fn(query, max_results) or []
-        except Exception as e:  # noqa: BLE001 - any provider failure is recorded, never raised
-            attempts.append((name, f"{type(e).__name__}: {e}"))
-            continue
-        if not results:
-            attempts.append((name, "no-results"))
-            continue
-        per_provider.append((name, results))
+        with progress_phase(f"searching {name}…", enabled=bool(progress)):
+            if fn is None:
+                attempts.append((name, "unknown-provider"))
+                continue
+            try:
+                results = fn(query, max_results) or []
+            except Exception as e:  # noqa: BLE001 - any provider failure is recorded, never raised
+                attempts.append((name, f"{type(e).__name__}: {e}"))
+                continue
+            if not results:
+                attempts.append((name, "no-results"))
+                continue
+            per_provider.append((name, results))
 
     if not per_provider:
         raise SearchError(query, attempts)

@@ -2,6 +2,7 @@
 """Tests for the on-demand asset + design grabber (no network)."""
 
 import json
+import re
 
 import pytest
 
@@ -264,6 +265,30 @@ def test_fetch_bytes_ticks_each_rung(monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == "trying curl_cffi…\ntrying stealth-browser…\n"
+
+
+def test_grab_count_is_a_real_fraction(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(assets, "fetch_bytes", _fake_fetch)
+    assets.grab("https://demo.test/", str(tmp_path / "g"), progress=True)
+    err = capsys.readouterr().err
+    pairs = [
+        (int(done), int(total))
+        for done, total in re.findall(r"downloading assets… (\d+)/(\d+)", err)
+    ]
+    assert pairs
+    denom = pairs[0][1]
+    assert [done for done, _total in pairs] == list(range(1, denom + 1))
+    assert all(done <= total == denom for done, total in pairs)
+    assert pairs[-1] == (denom, denom)
+
+
+def test_grab_cap_does_not_invent_a_fraction(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(assets, "fetch_bytes", _fake_fetch)
+    assets.grab("https://demo.test/", str(tmp_path / "g"), max_assets=1, progress=True)
+    err = capsys.readouterr().err
+    assert "downloading assets…" in err
+    assert "saved" in err
+    assert re.search(r"downloading assets… \d+/\d+", err) is None
 
 
 def test_grab_ticks_fetch_and_assets(monkeypatch, tmp_path, capsys):

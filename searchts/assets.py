@@ -21,27 +21,23 @@ import hashlib
 import json
 import os
 import re
-import sys
 import urllib.parse
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from searchts.progress import note as progress_note
+from searchts.progress import phase as progress_phase
 from searchts.ssrf import guard_mcp_url, private_hop
 from searchts.unlocker import _UA_REAL, jina_enabled, looks_blocked, normalize
 
 
 def _tick(progress: bool, msg: str) -> None:
-    # Best-effort only: a closed/broken stderr must never abort a fetch/grab.
+    """A permanent stderr line. A live phase is committed first so they do not glue."""
     if not progress:
         return
-    if sys.stderr is None:
-        return
-    try:
-        print(msg, file=sys.stderr, flush=True)
-    except (OSError, ValueError):
-        pass
+    progress_note(msg)
 
 
 def _progress_default(progress: Optional[bool]) -> bool:
@@ -207,19 +203,19 @@ def fetch_bytes(url: str, *, backends: Optional[List[str]] = None,
         order = [b for b in order if b != "jina-html"]
     attempts: List[Tuple[str, str]] = []
     for backend in order:
-        _tick(progress, f"trying {backend}…")
-        try:
-            if backend == "curl_cffi":
-                return _fetch_bytes_curl(url, timeout)
-            if backend == "jina-html":
-                return _fetch_bytes_jina_html(url, timeout)
-            if backend == "stealth-browser":
-                return _fetch_bytes_stealth(url, timeout)
-            attempts.append((backend, "unknown-backend"))
-        except AssetError as e:
-            attempts.extend(e.attempts or [(backend, "failed")])
-        except Exception as e:  # noqa: BLE001 - any backend failure escalates
-            attempts.append((backend, f"{type(e).__name__}: {e}"))
+        with progress_phase(f"trying {backend}…", enabled=bool(progress)):
+            try:
+                if backend == "curl_cffi":
+                    return _fetch_bytes_curl(url, timeout)
+                if backend == "jina-html":
+                    return _fetch_bytes_jina_html(url, timeout)
+                if backend == "stealth-browser":
+                    return _fetch_bytes_stealth(url, timeout)
+                attempts.append((backend, "unknown-backend"))
+            except AssetError as e:
+                attempts.extend(e.attempts or [(backend, "failed")])
+            except Exception as e:  # noqa: BLE001 - any backend failure escalates
+                attempts.append((backend, f"{type(e).__name__}: {e}"))
     raise AssetError(url, attempts)
 
 
@@ -270,8 +266,8 @@ def get_asset(url: str, out_path: Optional[str] = None, *, timeout: int = 30,
     ``-1``, ``-2`` … suffix instead (the MCP tool uses this).
     """
     progress = _progress_default(progress)
-    _tick(progress, "fetching asset…")
-    res = fetch_bytes(url, timeout=timeout, progress=progress)
+    with progress_phase("fetching asset…", enabled=bool(progress)):
+        res = fetch_bytes(url, timeout=timeout, progress=progress)
     if out_path:
         dest = Path(out_path)
         if dest.is_dir():
@@ -282,8 +278,8 @@ def get_asset(url: str, out_path: Optional[str] = None, *, timeout: int = 30,
         dest = _unique_path(dest)
     if dest.parent and not dest.parent.exists():
         dest.parent.mkdir(parents=True, exist_ok=True)
-    _tick(progress, "saving asset…")
-    dest.write_bytes(res.content)
+    with progress_phase("saving asset…", enabled=bool(progress)):
+        dest.write_bytes(res.content)
     return dest
 
 
@@ -941,14 +937,12 @@ def grab(page_url: str, out_dir: str, *,
     # The page gets the full ladder, and a rung that serves a client-rendered
     # shell is climbed for one that names the real assets. Assets below stay
     # curl-first; only ones that fail get the browser rung.
-    _tick(progress, "fetching page…")
-    page, html, assets, page_rungs = _fetch_page_for_grab(
-        page_url, max(timeout, 45), progress)
+    with progress_phase("fetching page…", enabled=bool(progress)):
+        page, html, assets, page_rungs = _fetch_page_for_grab(
+            page_url, max(timeout, 45), progress)
     if page.backend != page_rungs[0]["backend"]:
         _tick(progress, f"manifest will come from {page.backend} "
                         f"({_asset_total(assets)} asset urls)")
-
-    _tick(progress, "reading stylesheets…")
 
     css_texts: List[str] = []
     css_cache: Dict[str, AssetResult] = {}
@@ -956,47 +950,52 @@ def grab(page_url: str, out_dir: str, *,
     # The scan bound only limits token extraction, never which CSS files are
     # saved; anything beyond it is named in the manifest, not dropped silently.
     css_scan_limit = max(30, min(len(css_urls), max_assets))
+    css_scan = css_urls[:css_scan_limit]
     css_skipped = css_urls[css_scan_limit:]
-    for cu in css_urls[:css_scan_limit]:
-        try:
-            cb = fetch_bytes(cu, backends=["curl_cffi"], timeout=timeout)
-        except AssetError:
-            continue
-        css_cache[cu] = cb
-        css = cb.content.decode("utf-8", "replace")
-        css_texts.append(css)
-        # Capture every url() in each @font-face block (woff2/woff/ttf, not just
-        # the first .eot), so the grabbed fonts include the modern formats.
-        for block in re.finditer(r"@font-face\s*\{[^}]*\}", css, re.I):
-            for m in re.finditer(r"url\(([^)]+)\)", block.group(0), re.I):
-                fu = urllib.parse.urljoin(cu, m.group(1).strip().strip('\'"'))
-                if fu not in assets["fonts"]:
-                    assets["fonts"].append(fu)
-        # CSS also paints backgrounds and loads images. Keep those URLs, but
-        # leave @font-face to the pass above so fonts are not miscounted as art.
-        for m in re.finditer(r"url\(([^)]+)\)", css, re.I):
-            raw = m.group(1).strip().strip('\'"')
-            low = raw.lower()
-            if low.startswith("data:"):
-                if low.startswith("data:image/") and raw not in assets["images"]:
-                    assets["images"].append(raw)
-                elif low.startswith(_FONT_DATA_PREFIXES) and raw not in assets["fonts"]:
-                    assets["fonts"].append(raw)
+    with progress_phase("reading stylesheets…", enabled=bool(progress)) as css_phase:
+        for i, cu in enumerate(css_scan, start=1):
+            # i/n is real: this loop visits every stylesheet inside the scan bound.
+            css_phase.update("reading stylesheets…", done=i, total=len(css_scan))
+            try:
+                cb = fetch_bytes(cu, backends=["curl_cffi"], timeout=timeout,
+                                 progress=False)
+            except AssetError:
                 continue
-            if not raw or raw.startswith("#"):
-                continue
-            fu = urllib.parse.urljoin(cu, raw)
-            if fu in assets["fonts"]:
-                continue
-            path = urllib.parse.urlparse(fu).path.lower()
-            if path.endswith(tuple(_FONT_EXT_ORDER)):
-                if fu not in assets["fonts"]:
-                    assets["fonts"].append(fu)
-            elif path.endswith(".svg"):
-                if fu not in assets["svg"]:
-                    assets["svg"].append(fu)
-            elif fu not in assets["images"]:
-                assets["images"].append(fu)
+            css_cache[cu] = cb
+            css = cb.content.decode("utf-8", "replace")
+            css_texts.append(css)
+            # Capture every url() in each @font-face block (woff2/woff/ttf, not just
+            # the first .eot), so the grabbed fonts include the modern formats.
+            for block in re.finditer(r"@font-face\s*\{[^}]*\}", css, re.I):
+                for m in re.finditer(r"url\(([^)]+)\)", block.group(0), re.I):
+                    fu = urllib.parse.urljoin(cu, m.group(1).strip().strip('\'"'))
+                    if fu not in assets["fonts"]:
+                        assets["fonts"].append(fu)
+            # CSS also paints backgrounds and loads images. Keep those URLs, but
+            # leave @font-face to the pass above so fonts are not miscounted as art.
+            for m in re.finditer(r"url\(([^)]+)\)", css, re.I):
+                raw = m.group(1).strip().strip('\'"')
+                low = raw.lower()
+                if low.startswith("data:"):
+                    if low.startswith("data:image/") and raw not in assets["images"]:
+                        assets["images"].append(raw)
+                    elif low.startswith(_FONT_DATA_PREFIXES) and raw not in assets["fonts"]:
+                        assets["fonts"].append(raw)
+                    continue
+                if not raw or raw.startswith("#"):
+                    continue
+                fu = urllib.parse.urljoin(cu, raw)
+                if fu in assets["fonts"]:
+                    continue
+                path = urllib.parse.urlparse(fu).path.lower()
+                if path.endswith(tuple(_FONT_EXT_ORDER)):
+                    if fu not in assets["fonts"]:
+                        assets["fonts"].append(fu)
+                elif path.endswith(".svg"):
+                    if fu not in assets["svg"]:
+                        assets["svg"].append(fu)
+                elif fu not in assets["images"]:
+                    assets["images"].append(fu)
     # woff2 first: a rebuild wants the modern format before the fallbacks.
     assets["fonts"].sort(key=_font_rank)
 
@@ -1026,46 +1025,60 @@ def grab(page_url: str, out_dir: str, *,
         "size-cap": defaultdict(list),
     }
 
-    _tick(progress, "downloading assets…")
-    for idx, (kind, u) in enumerate(flat):
-        if count >= max_assets:
-            for rest_kind, rest_url in flat[idx:]:
-                omitted["max-assets"][rest_kind].append(rest_url)
-            break
-        try:
-            if u.lower().startswith("data:"):
-                content, content_type = _decode_data_url(u)
-                final_url = u
-                backend = "inline"
-            elif u in css_cache:
-                ar = css_cache[u]
-                content, content_type = ar.content, ar.content_type
-                final_url, backend = ar.final_url, ar.backend
-            else:
-                ar = fetch_bytes(u, backends=["curl_cffi"], timeout=timeout)
-                content, content_type = ar.content, ar.content_type
-                final_url, backend = ar.final_url, ar.backend
-            if total + len(content) > max_total_mb * 1024 * 1024:
-                omitted["size-cap"][kind].append(u)
-                records.append({"source_url": u, "kind": kind, "ok": False,
-                                "error": "size-cap"})
-                continue
-            sub = out / kind
-            sub.mkdir(exist_ok=True)
-            if u.lower().startswith("data:"):
-                dest = _unique_path(sub / _data_url_filename(u, content_type))
-            else:
-                dest = _unique_path(sub / guess_filename(final_url, content_type))
-            dest.write_bytes(content)
-            total += len(content)
-            count += 1
-            records.append({"source_url": u, "kind": kind, "ok": True,
-                            "local_path": str(dest.relative_to(out)).replace("\\", "/"),
-                            "bytes": len(content), "content_type": content_type,
-                            "backend": backend})
-        except Exception as e:  # noqa: BLE001 - one bad asset never fails the grab
-            records.append({"source_url": u, "kind": kind, "ok": False,
-                            "error": f"{type(e).__name__}: {e}"})
+    # A fraction is honest only when this walk will visit every candidate.
+    # The cap stops early once enough assets are saved, so a bigger list must
+    # not be labelled "3/40" as if the rest were still coming.
+    show_fraction = bool(flat) and len(flat) <= max_assets
+    saved = 0
+    if flat:
+        with progress_phase("downloading assets…", enabled=bool(progress)) as dl:
+            for idx, (kind, u) in enumerate(flat):
+                if count >= max_assets:
+                    for rest_kind, rest_url in flat[idx:]:
+                        omitted["max-assets"][rest_kind].append(rest_url)
+                    break
+                if show_fraction:
+                    dl.update("downloading assets…", done=idx + 1, total=len(flat))
+                else:
+                    dl.update(f"downloading assets… {saved} saved")
+                try:
+                    if u.lower().startswith("data:"):
+                        content, content_type = _decode_data_url(u)
+                        final_url = u
+                        backend = "inline"
+                    elif u in css_cache:
+                        ar = css_cache[u]
+                        content, content_type = ar.content, ar.content_type
+                        final_url, backend = ar.final_url, ar.backend
+                    else:
+                        ar = fetch_bytes(u, backends=["curl_cffi"], timeout=timeout,
+                                         progress=False)
+                        content, content_type = ar.content, ar.content_type
+                        final_url, backend = ar.final_url, ar.backend
+                    if total + len(content) > max_total_mb * 1024 * 1024:
+                        omitted["size-cap"][kind].append(u)
+                        records.append({"source_url": u, "kind": kind, "ok": False,
+                                        "error": "size-cap"})
+                        continue
+                    sub = out / kind
+                    sub.mkdir(exist_ok=True)
+                    if u.lower().startswith("data:"):
+                        dest = _unique_path(sub / _data_url_filename(u, content_type))
+                    else:
+                        dest = _unique_path(sub / guess_filename(final_url, content_type))
+                    dest.write_bytes(content)
+                    total += len(content)
+                    count += 1
+                    saved = count
+                    if not show_fraction:
+                        dl.update(f"downloading assets… {saved} saved")
+                    records.append({"source_url": u, "kind": kind, "ok": True,
+                                    "local_path": str(dest.relative_to(out)).replace("\\", "/"),
+                                    "bytes": len(content), "content_type": content_type,
+                                    "backend": backend})
+                except Exception as e:  # noqa: BLE001 - one bad asset never fails the grab
+                    records.append({"source_url": u, "kind": kind, "ok": False,
+                                    "error": f"{type(e).__name__}: {e}"})
 
     # A failed curl-only asset may be a CDN that wants the browser's
     # fingerprint. Climb for a bounded number of them and keep whatever the
@@ -1074,37 +1087,47 @@ def grab(page_url: str, out_dir: str, *,
     failed = [r for r in records if not r.get("ok") and r.get("error") != "size-cap"]
     if failed:
         retry_budget = min(8, len(failed))
-        _tick(progress, f"climbing for {retry_budget} failed asset(s)…")
-        for rec in failed[:retry_budget]:
-            if count >= max_assets:
-                break
-            if rec["source_url"].lower().startswith("data:"):
-                continue
-            try:
-                ar = fetch_bytes(rec["source_url"], backends=["stealth-browser"],
-                                 timeout=timeout)
-            except Exception:  # noqa: BLE001 - stays a named failure
-                continue
-            if total + len(ar.content) > max_total_mb * 1024 * 1024:
-                omitted["size-cap"][rec["kind"]].append(rec["source_url"])
-                rec["error"] = "size-cap"
-                continue
-            sub = out / rec["kind"]
-            sub.mkdir(exist_ok=True)
-            dest = _unique_path(sub / guess_filename(ar.final_url, ar.content_type))
-            dest.write_bytes(ar.content)
-            total += len(ar.content)
-            count += 1
-            rec.update({"ok": True, "local_path": str(dest.relative_to(out)).replace("\\", "/"),
-                        "bytes": len(ar.content), "content_type": ar.content_type,
-                        "backend": ar.backend, "error": None})
+        climbed = failed[:retry_budget]
+        with progress_phase(
+            f"climbing for {retry_budget} failed asset(s)…",
+            enabled=bool(progress),
+        ) as climb:
+            for i, rec in enumerate(climbed, start=1):
+                climb.update(
+                    f"climbing for {retry_budget} failed asset(s)…",
+                    done=i,
+                    total=retry_budget,
+                )
+                if count >= max_assets:
+                    break
+                if rec["source_url"].lower().startswith("data:"):
+                    continue
+                try:
+                    ar = fetch_bytes(rec["source_url"], backends=["stealth-browser"],
+                                     timeout=timeout, progress=False)
+                except Exception:  # noqa: BLE001 - stays a named failure
+                    continue
+                if total + len(ar.content) > max_total_mb * 1024 * 1024:
+                    omitted["size-cap"][rec["kind"]].append(rec["source_url"])
+                    rec["error"] = "size-cap"
+                    continue
+                sub = out / rec["kind"]
+                sub.mkdir(exist_ok=True)
+                dest = _unique_path(sub / guess_filename(ar.final_url, ar.content_type))
+                dest.write_bytes(ar.content)
+                total += len(ar.content)
+                count += 1
+                rec.update({"ok": True, "local_path": str(dest.relative_to(out)).replace("\\", "/"),
+                            "bytes": len(ar.content), "content_type": ar.content_type,
+                            "backend": ar.backend, "error": None})
 
     page_md = None
     page_md_error = None
     if read:
         try:
             from searchts import unlocker
-            page_md = unlocker.fetch(page_url).text
+            with progress_phase("reading the page text…", enabled=bool(progress)):
+                page_md = unlocker.fetch(page_url, progress=progress).text
             (out / "page.md").write_text(page_md, encoding="utf-8")
         except Exception as e:  # noqa: BLE001 - named below, never silent
             page_md_error = f"{type(e).__name__}: {e}"

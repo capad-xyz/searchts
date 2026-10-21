@@ -831,7 +831,10 @@ class TestProgressTicks:
         captured = capsys.readouterr()
         assert captured.out == ""
         assert captured.err == (
-            "fetching subtitles…\ndownloading audio…\ntranscribing…\n"
+            "fetching subtitles…\n"
+            "downloading audio…\n"
+            "preparing audio…\n"
+            "transcribing…\n"
         )
 
     def test_progress_false_is_quiet(self, monkeypatch, fake_config, tmp_path, capsys):

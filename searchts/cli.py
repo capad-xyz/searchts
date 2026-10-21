@@ -684,7 +684,7 @@ def _cmd_install(args):
     if not dry_run:
         print()
         print("Testing channels...")
-        results = check_all(config)
+        results = check_all(config, progress=True)
         ok = sum(1 for r in results.values() if r["status"] == "ok")
         total = len(results)
 
@@ -1759,9 +1759,10 @@ def _cmd_read(args):
     proxy = _read_command_proxy(args)
 
     backends = [args.backend] if args.backend else None
-    # Progress is narration ("trying curl_cffi..."), not diagnosis. The reasons
-    # are printed once, together, below. Passing progress=False keeps them from
-    # being announced twice.
+    # Narrate the step that is running, except for --json where stderr must
+    # stay quiet. The per-backend reasons are printed once, in the failure
+    # block below, so the live line does not also echo them.
+    narrate = not args.json
     expand = bool(getattr(args, "expand", False))
     try:
         if getattr(args, "items", 0):
@@ -1771,21 +1772,22 @@ def _cmd_read(args):
                 print("--items and --pages are mutually exclusive; using --items.", file=sys.stderr)
             pages = unlocker.read_items(
                 args.url, args.items, backends=backends, allow_human=args.human,
-                scrub=args.scrub, progress=False, cookies=cookies, expand=expand,
+                scrub=args.scrub, progress=narrate, echo_attempts=False,
+                cookies=cookies, expand=expand,
                 proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )
         elif getattr(args, "pages", 1) > 1:
             pages = unlocker.read_pages(
                 args.url, args.pages, backends=backends, allow_human=args.human,
-                scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
-                expand=expand,
+                scrub=getattr(args, "scrub", False), progress=narrate,
+                echo_attempts=False, cookies=cookies, expand=expand,
                 proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )
         else:
             pages = [unlocker.fetch(
                 args.url, backends=backends, allow_human=args.human,
-                scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
-                expand=expand,
+                scrub=getattr(args, "scrub", False), progress=narrate,
+                echo_attempts=False, cookies=cookies, expand=expand,
                 proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
             )]
         result = pages[0]
@@ -2565,16 +2567,16 @@ def _is_newer_version(remote: str, local: str) -> bool:
 def _cmd_check_update():
     """Check for newer versions on GitHub."""
     from searchts import __version__
+    from searchts.progress import phase as progress_phase
 
     print(f"Current version: v{__version__}")
-    # One best-effort tick: the GitHub round-trip can block a few seconds.
-    if sys.stderr is not None:
-        print("checking for updates…", file=sys.stderr, flush=True)
     release_url = "https://api.github.com/repos/capad-xyz/searchts/releases/latest"
     commit_url = "https://api.github.com/repos/capad-xyz/searchts/commits/main"
 
-    # Fetch latest release with retry/backoff.
-    resp, err, attempts = _github_get_with_retry(release_url, timeout=10, retries=3)
+    # The GitHub round-trip can block for several seconds. Keep the line on
+    # this step, with the real elapsed time, until the response is back.
+    with progress_phase("checking for updates…"):
+        resp, err, attempts = _github_get_with_retry(release_url, timeout=10, retries=3)
     if err:
         print(f"[!] Could not check for updates ({_update_error_text(err)}, retried {attempts} times)")
         return "error"
@@ -2604,7 +2606,8 @@ def _cmd_check_update():
         return "error"
 
     # No releases yet, fall back to latest main commit.
-    resp2, err2, attempts2 = _github_get_with_retry(commit_url, timeout=10, retries=2)
+    with progress_phase("checking for updates…"):
+        resp2, err2, attempts2 = _github_get_with_retry(commit_url, timeout=10, retries=2)
     if err2:
         print(f"[!] Could not check for updates ({_update_error_text(err2)}, retried {attempts + attempts2} times)")
         return "error"
@@ -2635,14 +2638,15 @@ def _cmd_watch():
     from searchts import __version__
     from searchts.config import Config
     from searchts.doctor import check_all
+    from searchts.progress import phase as progress_phase
 
     config = Config()
     issues = []
 
-    # Check channels
-    if sys.stderr is not None:
-        print("checking channels…", file=sys.stderr, flush=True)
-    results = check_all(config)
+    # Check channels. The outer line names the whole pass; each channel then
+    # names itself for as long as that probe is actually running.
+    with progress_phase("checking channels…"):
+        results = check_all(config, progress=True)
     ok = sum(1 for r in results.values() if r["status"] == "ok")
     total = len(results)
 
@@ -2657,13 +2661,12 @@ def _cmd_watch():
     update_available = False
     new_version = ""
     release_body = ""
-    if sys.stderr is not None:
-        print("checking for updates…", file=sys.stderr, flush=True)
-    resp, err, _attempts = _github_get_with_retry(
-        "https://api.github.com/repos/capad-xyz/searchts/releases/latest",
-        timeout=10,
-        retries=2,
-    )
+    with progress_phase("checking for updates…"):
+        resp, err, _attempts = _github_get_with_retry(
+            "https://api.github.com/repos/capad-xyz/searchts/releases/latest",
+            timeout=10,
+            retries=2,
+        )
     if not err and resp and resp.status_code == 200:
         data = resp.json()
         latest = data.get("tag_name", "").lstrip("v")
