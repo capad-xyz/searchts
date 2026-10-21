@@ -80,7 +80,7 @@ def test_cache_hit_nudge(monkeypatch, tmp_path, capsys):
     assert "SEARCHTS_NO_UPDATE_CHECK=1" in err
     assert "still v1.4.2" in err
     assert "did not take effect" in err
-    assert "pipx upgrade searchts" in err
+    assert "searchts update" in err
     assert called["n"] == 0
 
 
@@ -88,7 +88,7 @@ def test_windows_pids_named_and_not_killed(monkeypatch, tmp_path, capsys):
     err = _cached_nudge(monkeypatch, tmp_path, capsys, install_kind="pip", pids=[4242])
     assert "PID 4242" in err
     assert "does not kill" in err
-    assert 'pip install -U "searchts[mcp]"' in err
+    assert "searchts update" in err
 
 
 def test_no_pid_line_when_no_pids(monkeypatch, tmp_path, capsys):
@@ -98,18 +98,16 @@ def test_no_pid_line_when_no_pids(monkeypatch, tmp_path, capsys):
     assert "did not take effect" in err
 
 
-def test_uvx_kind_points_at_latest(monkeypatch, tmp_path, capsys):
-    """uvx reuses a cached build, so 'nothing to upgrade' would be false here."""
+def test_uvx_kind_points_at_update(monkeypatch, tmp_path, capsys):
+    """uvx reuses a cached build. The nudge must not claim there is nothing to do."""
     err = _cached_nudge(monkeypatch, tmp_path, capsys, install_kind="uvx", pids=[])
-    assert '"searchts[mcp]@latest"' in err
+    assert "searchts update" in err
     assert "nothing to upgrade" not in err
-    assert "pipx upgrade" not in err
-    assert "pip install -U" not in err
 
 
 def test_uv_tool_kind_upgrade_command(monkeypatch, tmp_path, capsys):
     err = _cached_nudge(monkeypatch, tmp_path, capsys, install_kind="uv_tool", pids=[])
-    assert "uv tool upgrade searchts" in err
+    assert "searchts update" in err
 
 
 def test_did_not_take_effect_is_conditional(monkeypatch, tmp_path, capsys):
@@ -178,7 +176,7 @@ def test_nudge_prints_only_never_installs_or_kills(monkeypatch, tmp_path, capsys
     err = _cached_nudge(monkeypatch, tmp_path, capsys, install_kind="pipx", pids=[4242])
     assert "mcp stop" not in err
     assert "killed" not in err
-    assert "install" not in err.replace("pipx upgrade searchts", "")
+    assert "install" not in err.replace("searchts update", "")
 
 
 def test_cache_hit_silent_when_current(monkeypatch, tmp_path, capsys):

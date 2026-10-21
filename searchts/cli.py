@@ -5,6 +5,7 @@ searchts CLI — installer, doctor, and configuration tool.
 Usage:
     searchts install --env=auto
     searchts install --browser
+    searchts update
     searchts doctor
     searchts configure twitter-cookies "auth_token=xxx; ct0=yyy"
     searchts setup
@@ -430,6 +431,23 @@ def _run():
     sub.add_parser("check-update", parents=[_verbose],
                    help="Check for new versions and changes")
 
+    p_update = sub.add_parser(
+        "update",
+        aliases=["upgrade"],
+        parents=[_verbose],
+        help="Update this install to the latest release (upgrade is the same command)",
+    )
+    p_update.add_argument(
+        "--force",
+        action="store_true",
+        help="Reinstall even when this copy is already the latest release",
+    )
+    p_update.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the upgrade command and do not run it",
+    )
+
     # ── watch ──
     sub.add_parser("watch", parents=[_verbose],
                    help="Quick health check + update check (for scheduled tasks)")
@@ -462,6 +480,13 @@ def _run():
         _cmd_doctor(args)
     elif args.command == "check-update":
         _cmd_check_update()
+    elif args.command in ("update", "upgrade"):
+        from searchts.self_update import cmd_update
+
+        sys.exit(cmd_update(
+            force=bool(getattr(args, "force", False)),
+            dry_run=bool(getattr(args, "dry_run", False)),
+        ))
     elif args.command == "watch":
         _cmd_watch()
     elif args.command == "setup":
@@ -2533,13 +2558,18 @@ def _github_get_with_retry(url, timeout=10, retries=3, sleeper=time.sleep):
     return None, "unknown", retries
 
 
-#: pipx upgrade / venv pip -U / uvx already latest. See docs/update.md.
+#: What `searchts update` runs. Kept here so check-update still has a manual
+#: fallback on a copy that does not have the command yet. See docs/update.md.
 _UPDATE_INSTRUCTIONS = (
-    "How to update (copy this to an agent):\n"
-    "  Update searchts: https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md\n"
-    "Keep (pipx):  pipx upgrade searchts\n"
-    "venv:         pip install -U \"searchts[mcp]\"\n"
-    "uvx:          already latest PyPI; nothing to upgrade"
+    "How to update:\n"
+    "  searchts update\n"
+    "  searchts upgrade     (same command)\n"
+    "By hand, if this copy has no update command yet:\n"
+    "  pipx:      pipx upgrade searchts --include-injected\n"
+    "  uv tool:   uv tool upgrade searchts\n"
+    "  venv:      python -m pip install -U \"searchts[mcp]\"\n"
+    "  uvx:       uv cache clean --force searchts\n"
+    "Guide: https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md"
 )
 
 
@@ -2692,8 +2722,8 @@ def _cmd_watch():
         if release_body:
             for line in release_body.strip().split("\n")[:10]:
                 print(f"    {line}")
-        print("  Update (send this one line to your agent for a full update):")
-        print("    Update searchts for me: https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md")
+        print("  Update: searchts update")
+        print("    (searchts upgrade is the same command)")
 
 
 if __name__ == "__main__":
