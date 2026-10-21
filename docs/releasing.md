@@ -52,3 +52,5 @@ release-please writes these when the release PR merges:
 ## Who merges
 
 The author babysits the feature PR (CI, review, conflicts). A maintainer merges it once that is done, then merges the release PR under the rules above. Authors do not merge the release PR.
+
+The release PR runs the Ubuntu, Windows, and macOS test jobs. Merge it when those are green. The push to main runs them again, plus the other Python versions. A green Ubuntu job is not enough. The 0.17.0 release PR was green and the Windows file-URI tests failed on main.
