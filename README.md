@@ -37,9 +37,22 @@ claude mcp add searchts -- searchts mcp serve
 
 [Install](#install) covers uvx, pipx, venv and the browser extra. The CLI, the MCP server and the Python library all call the same read path.
 
-## What a built-in fetch does not do
+## Three things your agent's built-in fetch can't do
 
-### 1. Escalate past bot walls, or fail loudly instead of handing back a login screen
+### 1. Decode full ChatGPT, Claude, Gemini, Grok, Poe, DeepSeek, Perplexity and Copilot share links
+
+A shared conversation never sits in the initial page HTML as plain text. A raw fetch gets a JavaScript shell; a renderer can still cut the chat off mid-thread. `searchts read` recognizes share URLs and decodes each provider's own data channel into complete, role-labeled Markdown, keyless and without logging in:
+
+```bash
+searchts read https://chatgpt.com/share/...        # turbo-stream payload in the page (no browser)
+searchts read https://claude.ai/share/...          # keyless snapshot API behind Cloudflare (no browser)
+searchts read https://gemini.google.com/share/...  # keyless batchexecute RPC (no browser)
+searchts read https://chat.deepseek.com/share/...  # stealth render, auto-scrolls past list virtualization
+```
+
+Eight providers: ChatGPT (both `/share/<uuid>` and the newer `/s/<prefix>_<id>` short links), Claude, Gemini, Grok, Poe, DeepSeek, Perplexity and Copilot. The first five need no browser. The last three reuse the stealth tier, scroll until the page height stops changing, open the folds, then read.
+
+### 2. Escalate past bot walls, or fail loudly instead of hallucinating on a login screen
 
 Every `searchts read` walks a three-tier open-source unlocker and remembers which rung worked per domain:
 
@@ -60,18 +73,23 @@ searchts read https://www.linkedin.com/in/someone/
 
 A login you hand over is different from a login searchts guesses. In 0.15.0, local reuse is opt-in and fenced to the one host in the command: `--cookies-from-browser <browser> --yes`, `--cookies <path>`, or `--cdp-port <port>`. Without one of those, a wall is an error, not an article.
 
-### 2. Read works when the HTML is empty
-
-A shared conversation never sits in the initial page HTML as plain text. A raw fetch gets a JavaScript shell; a renderer can still cut the chat off mid-thread. That is still `searchts read`. It recognizes share URLs and decodes each provider's own data channel into complete, role-labeled Markdown, keyless and without logging in:
+### 3. Transcribe videos and grab fingerprint-gated design assets
 
 ```bash
-searchts read https://chatgpt.com/share/...        # turbo-stream payload in the page (no browser)
-searchts read https://claude.ai/share/...          # keyless snapshot API behind Cloudflare (no browser)
-searchts read https://gemini.google.com/share/...  # keyless batchexecute RPC (no browser)
-searchts read https://chat.deepseek.com/share/...  # stealth render, auto-scrolls past list virtualization
+searchts transcribe https://youtu.be/...                     # YouTube, TikTok, Instagram Reels, Reddit
+searchts transcribe https://www.instagram.com/reel/... --cookies-from-browser chrome
+searchts grab https://stripe.com --kinds images,fonts,svg --read --out ./stripe-kit
 ```
 
-Eight providers: ChatGPT (both `/share/<uuid>` and the newer `/s/<prefix>_<id>` short links), Claude, Gemini, Grok, Poe, DeepSeek, Perplexity and Copilot. The first five need no browser. The last three reuse the stealth tier, scroll until the page height stops changing, open the folds, then read.
+Transcription is subtitles-first, then `yt-dlp` audio plus Whisper when there are no captions. `grab` extracts a page's images, icons, CSS, fonts, SVGs and color palette through the same unlocker, so it works on fingerprint-gated CDNs, not just open ones.
+
+## Native web search
+
+A built-in fetch does not search. `searchts search` is keyless DuckDuckGo by default, with reciprocal rank fusion across SearXNG, Exa, Brave, and Tavily. A snippet is not the page. Read each URL.
+
+```bash
+searchts search "open source vector db"
+```
 
 ## Why it exists
 
@@ -89,7 +107,7 @@ searchts grew out of [Agent-Reach](https://github.com/Panniantong/Agent-Reach)'s
 | **Bot / JS escalation** | None | One Jina Reader hop for the web | Hosted proxies and rendering | **`curl_cffi` (TLS/JA3) → Jina → `patchright` stealth + `--human`** |
 | **Login or block** | Hands 200 OK login HTML to the model, or errors | Depends on the upstream CLI and its session | Credits, limits, or partial HTML | **Fails loudly with the tier and reason; local login reuse is opt-in** |
 | **AI-chat share links** | Empty JS shell or truncated | No share-link decoder; depends on Jina | Renderer can cut long chats | **Native decoders + auto-scroll stealth render (8 providers)** |
-| **Web search** | None | Exa via `mcporter` | Paid search endpoint | **Finds URLs to read. Keyless DuckDuckGo + RRF. A snippet is not the page** |
+| **Web search** | None | Exa via `mcporter` | Paid search endpoint | **Keyless DuckDuckGo + RRF across SearXNG / Exa / Brave / Tavily. A snippet is not the page** |
 | **Prompt-injection scrubbing** | None | — | — | **Built-in (`--scrub`)** |
 | **Benchmark** | None | None | Marketing pass rates | **Reproducible two-suite scorecard (`Smoke` vs `Walled`)** |
 | **Default cost** | Free | Free, plus the CLIs it installs | API key and per-page credits | **Free, MIT, keyless (no paid residential proxy by default)** |
@@ -102,9 +120,11 @@ searchts grew out of [Agent-Reach](https://github.com/Panniantong/Agent-Reach)'s
 - Works with Claude, Codex, and MCP agents
 - Extracts clean Markdown, ready to feed a model
 - Says when a page has more than it returned (a next page, a feed, folded text) and rebuilds search results and feeds the extractor mangles
+- Searches the web without API keys (DuckDuckGo, plus SearXNG, Exa, Brave, and Tavily). A snippet is not the page
+- Downloads a page's assets (images, fonts, palette)
+- Transcribes videos, subtitles-first
 - Names images, video, and embeds in the page. `searchts get <url>` fetches one of those URLs through the same ladder
 - On a player page, returns the captions, or fails and names `searchts transcribe` for the audio
-- `searchts search` finds URLs to read. A snippet is not the page
 
 ## When a read names a next step
 
@@ -139,7 +159,7 @@ If no tier comes back with real content, an optional human-in-the-loop step open
 
 ## AI-chat share links
 
-This is still `searchts read`. Share links are the case where the HTML is empty: the conversation never appears in the page as extractable text, so a raw fetch returns an empty shell, and a renderer can still cut it off mid-chat. `searchts read` decodes each provider's own data channel instead, returning the **complete conversation** as role-labeled Markdown, keyless, no login:
+Share links from AI chat apps are a special kind of hard: the conversation never appears in the page HTML as extractable text, so a raw fetch returns an empty shell, and a renderer can still cut it off mid-chat. `searchts read` recognizes these URLs and decodes each provider's own data channel instead, returning the **complete conversation** as role-labeled Markdown — keyless, no login:
 
 | Provider | Share URL | How it's read |
 |----------|-----------|---------------|
@@ -220,7 +240,7 @@ searchts install --browser
 
 ```bash
 searchts read https://en.wikipedia.org/wiki/Ada_Lovelace   # the page as Markdown, or a plain failure
-searchts search "open source vector db"    # URLs to read. A snippet is not the page
+searchts search "open source vector db"    # native multi-provider web search, keyless by default
 searchts transcribe https://youtu.be/...   # the audio, when a read found no captions
 searchts get https://example.com/logo.png  # one file a read named
 searchts grab https://example.com          # the set of files, when the files are the deliverable
