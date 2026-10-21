@@ -34,6 +34,7 @@ from typing import List, Optional
 import requests
 
 from searchts.config import Config
+from searchts.progress import phase as progress_phase
 
 # Whisper API limit is 25MB; leave headroom for multipart overhead.
 SIZE_LIMIT_BYTES = 24 * 1024 * 1024
@@ -145,18 +146,6 @@ def transcribe_chunk_local(
 def _require(binary: str) -> None:
     if not shutil.which(binary):
         raise MissingDependency(f"{binary} not found in PATH")
-
-
-def _tick(progress: bool, msg: str) -> None:
-    # Best-effort only: a closed/broken stderr must never abort a transcription.
-    if not progress:
-        return
-    if sys.stderr is None:
-        return
-    try:
-        print(msg, file=sys.stderr, flush=True)
-    except (OSError, ValueError):
-        pass
 
 
 def _ytdlp_module_available() -> bool:
@@ -757,11 +746,11 @@ def _run_transcription(
     is_local_file = src_path.is_file()
 
     if not is_local_file and prefer_subtitles:
-        _tick(progress, "fetching subtitles…")
         sub_kw = {}
         if cookies_from_browser:
             sub_kw["cookies_from_browser"] = cookies_from_browser
-        subs = fetch_subtitles(source, work_dir, config=cfg, **sub_kw)
+        with progress_phase("fetching subtitles…", enabled=bool(progress)):
+            subs = fetch_subtitles(source, work_dir, config=cfg, **sub_kw)
         if subs and len(subs.replace(" ", "")) >= MIN_SUBTITLE_CHARS:
             return subs
 
@@ -773,23 +762,27 @@ def _run_transcription(
     if is_local_file:
         audio = src_path  # a local file the caller owns; never deleted by us
     else:
-        _tick(progress, "downloading audio…")
         dl_kw = {}
         if cookies_from_browser:
             dl_kw["cookies_from_browser"] = cookies_from_browser
-        audio = download_audio(source, work_dir, **dl_kw)
+        with progress_phase("downloading audio…", enabled=bool(progress)):
+            audio = download_audio(source, work_dir, **dl_kw)
 
-    _tick(progress, "transcribing…")
-    compressed = compress_audio(audio, work_dir)
-    if compressed.stat().st_size <= SIZE_LIMIT_BYTES:
-        chunks = [compressed]
-    else:
-        chunks = chunk_audio(compressed, work_dir)
+    with progress_phase("preparing audio…", enabled=bool(progress)):
+        compressed = compress_audio(audio, work_dir)
+        if compressed.stat().st_size <= SIZE_LIMIT_BYTES:
+            chunks = [compressed]
+        else:
+            chunks = chunk_audio(compressed, work_dir)
 
     pieces: List[str] = []
-    for chunk in chunks:
-        text = _transcribe_with_fallback(chunk, order, cfg)
-        pieces.append(text.strip())
+    many = len(chunks) > 1
+    with progress_phase("transcribing…", enabled=bool(progress)) as spoken:
+        for i, chunk in enumerate(chunks, start=1):
+            if many:
+                spoken.update("transcribing…", done=i, total=len(chunks))
+            text = _transcribe_with_fallback(chunk, order, cfg)
+            pieces.append(text.strip())
     joined = "\n".join(p for p in pieces if p)
     if not joined.strip():
         raise TranscribeError("empty transcript")

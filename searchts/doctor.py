@@ -14,6 +14,8 @@ from typing import Callable, Dict, Optional, Sequence
 
 from searchts.channels import get_all_channels
 from searchts.config import Config
+from searchts.progress import phase as progress_phase
+from searchts.progress import wanted as progress_wanted
 
 # Rich styles used by format_report. Do not match status tokens like [ok] / [X] / [!].
 _RICH_TAG = re.compile(
@@ -29,14 +31,6 @@ def strip_rich_markup(text: str) -> str:
     return _RICH_TAG.sub("", text).replace("\\[", "[")
 
 
-def _tick(msg: str) -> None:
-    # Best-effort only: a closed/broken stderr must never abort a check.
-    try:
-        print(msg, file=sys.stderr, flush=True)
-    except (OSError, ValueError):
-        pass
-
-
 def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict]:
     """Check all channels and return status dict.
 
@@ -44,27 +38,25 @@ def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict
     so per-channel exceptions degrade to status=\"error\".
 
     progress:
-        True: stderr ticks. False: never ticks (CLI ``--json``). None: follow
-        ``SEARCHTS_PROGRESS=1``. Library/MCP callers omit the arg so they stay
-        quiet unless the env is set.
+        True: stderr names the channel being checked and reprints that name
+        with the real elapsed seconds while the check is still running.
+        False: never (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
+        Library/MCP callers omit the arg so they stay quiet unless the env
+        is set.
     """
-    if progress is None:
-        progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
-            "1", "true", "True", "yes",
-        )
+    progress = progress_wanted(progress)
 
     results = {}
     for ch in get_all_channels():
-        if progress:
-            _tick(f"checking {ch.name}…")
         reported = None
-        try:
-            status, message = ch.check(config)
-            active = getattr(ch, "active_backend", None)
-            reported = getattr(ch, "reported_backends", None)
-        except Exception as e:  # noqa: BLE001 — doctor must survive any channel
-            status, message, active = "error", f"Health check error: {e}", None
-            reported = None
+        with progress_phase(f"checking {ch.name}…", enabled=bool(progress)):
+            try:
+                status, message = ch.check(config)
+                active = getattr(ch, "active_backend", None)
+                reported = getattr(ch, "reported_backends", None)
+            except Exception as e:  # noqa: BLE001 — doctor must survive any channel
+                status, message, active = "error", f"Health check error: {e}", None
+                reported = None
         backends = list(reported) if reported is not None else list(ch.backends)
         results[ch.name] = {
             "status": status,

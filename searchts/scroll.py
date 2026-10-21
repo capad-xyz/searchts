@@ -487,6 +487,7 @@ def collect(
         if empty >= max(1, int(empty_steps)):
             stop = f"{empty_steps} scroll step(s) in a row added nothing"
             break
+        say("  scroll: looking further down the page…")
         try:
             page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
             page.wait_for_timeout(max(200, int(step_ms)))
@@ -656,8 +657,19 @@ def collect_url(
             try:
                 guard_browser_page(page, url)
                 started = time.monotonic()
+
+                def say(msg: str) -> None:
+                    if tick is None:
+                        return
+                    try:
+                        tick(msg)
+                    except Exception:  # noqa: BLE001 - narration never breaks a walk
+                        pass
+
+                say("scrolling: opening the page…")
                 page.goto(url, wait_until="domcontentloaded",
                           timeout=int(budget_seconds * 1000))
+                say("scrolling: waiting for the page…")
                 _settle(page, url, budget_seconds)
                 rep = collect(
                     page, want_rows=want_rows, max_clicks=max_clicks,
