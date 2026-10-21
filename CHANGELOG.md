@@ -2,6 +2,16 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.17.0](https://github.com/capad-xyz/searchts/compare/v0.16.1...v0.17.0) (2026-10-21)
+
+
+### Added
+
+* **cli:** narrate the step that is actually running ([#407](https://github.com/capad-xyz/searchts/issues/407)) ([c730719](https://github.com/capad-xyz/searchts/commit/c730719f414ff6a983fe8dcb44a8ea0a204c958a))
+* **cli:** update the running searchts install ([#406](https://github.com/capad-xyz/searchts/issues/406)) ([76fe8f0](https://github.com/capad-xyz/searchts/commit/76fe8f0734a7686c538a124f129b980a2e49bf22))
+* **grab:** open the output folder from the preview ([#408](https://github.com/capad-xyz/searchts/issues/408)) ([3443d74](https://github.com/capad-xyz/searchts/commit/3443d74b79d3cfedc55ae73e84ea59e435dce8f4))
+* **read:** a player page returns its words ([#403](https://github.com/capad-xyz/searchts/issues/403)) ([78a8779](https://github.com/capad-xyz/searchts/commit/78a8779ee5c34c6b7e5ba7dd68c7a559b14e02aa))
+
 ## [0.16.1](https://github.com/capad-xyz/searchts/compare/v0.16.0...v0.16.1) (2026-10-20)
 
 
