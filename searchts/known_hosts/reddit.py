@@ -811,8 +811,14 @@ def _one_per_image(urls: List[str]) -> List[str]:
 
 def _media_text(media: List[str]) -> str:
     shown = media[:_MAX_MEDIA]
-    more = f" (+{len(media) - len(shown)} more)" if len(media) > len(shown) else ""
-    return " · ".join(shown) + more
+    if len(media) <= len(shown):
+        return " · ".join(shown)
+    # The addresses past the sixth are not in this line. grab is the command
+    # that still has them; there is no flag on the read that prints the rest.
+    return (
+        " · ".join(shown)
+        + f" (+{len(media) - len(shown)} more; searchts grab saves the rest)"
+    )
 
 
 def _posted(attrs: Dict[str, str]) -> str:
@@ -1291,9 +1297,16 @@ def parse_reddit_thread_html(
         shown += 1
     notes: List[str] = []
     if in_page > shown:
+        from searchts.knobs import hard_cap
+
+        ceiling = hard_cap("items")
+        if cap < ceiling:
+            lever = f"; --items N (MCP max_items) raises it, ceiling {ceiling}"
+        else:
+            lever = f"; that is the ceiling ({ceiling})"
         notes.append(
             f"[truncated: {in_page - shown} more comments in the page were cut at the "
-            f"{cap}-comment cap]"
+            f"{cap}-comment cap{lever}]"
         )
     claimed = int(cc) if cc.isdigit() else 0
     if claimed > in_page:
