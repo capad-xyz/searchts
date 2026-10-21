@@ -994,3 +994,21 @@ class TestVerboseAfterSubcommand:
     def test_no_verbose_flag_stays_false(self, monkeypatch):
         seen = self._run_read(["searchts", "read", "https://example.com"], monkeypatch)
         assert seen["verbose"] is False
+
+
+def test_the_config_tip_names_the_mcp_alias_and_wraps(capsys):
+    """The tip echoes the note's own lever, and three tips still fit a terminal."""
+    from types import SimpleNamespace
+
+    result = SimpleNamespace(
+        more=[{"kind": "media", "note": "searchts grab saves the files"}]
+    )
+    tip = cli._read_config_tip(result)
+    assert "max_media" in tip
+    assert "ceiling 40" in tip
+
+    cli._print_tip(tip + " · " + "pass --items N (max 300) to read more rows")
+    lines = capsys.readouterr().err.splitlines()
+    assert lines[0].startswith("  [CONFIG] Tip: ")
+    assert all(len(line) <= 76 for line in lines)
+    assert lines[1].startswith(" " * len("  [CONFIG] Tip: "))

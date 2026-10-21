@@ -16,6 +16,7 @@ import difflib
 import json
 import os
 import sys
+import textwrap
 import time
 from typing import Callable, Optional
 
@@ -1880,7 +1881,7 @@ def _cmd_read(args):
         print(status, file=sys.stderr)
         tip = _read_config_tip(result)
         if tip:
-            print(f"  [CONFIG] Tip: {tip}", file=sys.stderr)
+            _print_tip(tip)
         print(result.text)
         for extra in pages[1:]:
             print(f"\n# {extra.final_url}\n\n{extra.text}")
@@ -1905,8 +1906,8 @@ def _read_config_tip(result) -> str:
         note = (item.get("note") or "") if isinstance(item, dict) else ""
         if kind == "media" and "searchts grab" in note:
             tips.append(
-                "pass --media N (max 40) to list the other image addresses; "
-                "searchts grab saves the files"
+                "pass --media N (MCP max_media) to list the other image "
+                "addresses, ceiling 40; searchts grab saves the files"
             )
         elif kind == "list" and note.startswith("[partial:"):
             tips.append("pass --items N (max 300) to read more rows")
@@ -1917,6 +1918,20 @@ def _read_config_tip(result) -> str:
         if tip not in seen:
             seen.append(tip)
     return " · ".join(seen)
+
+
+def _print_tip(tip: str, width: int = 76) -> None:
+    """Print the ``[CONFIG]`` line, wrapped under itself.
+
+    One note yields one tip, but a read can stop early on three counts, and the
+    three joined are past 180 columns. Printed raw they wrap wherever the
+    terminal feels like it, which breaks the mark away from its sentence.
+    """
+    prefix = "  [CONFIG] Tip: "
+    chunks = textwrap.wrap(tip, max(24, width - len(prefix))) or [""]
+    print(prefix + chunks[0], file=sys.stderr)
+    for chunk in chunks[1:]:
+        print(" " * len(prefix) + chunk, file=sys.stderr)
 
 
 def _read_command_proxy(args):
