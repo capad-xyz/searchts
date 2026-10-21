@@ -889,7 +889,14 @@ def _strip_keeping_links(html: str, url: Optional[str] = None) -> str:
         rendered = lhtml.tostring(doc, encoding="unicode", method="html")
     except Exception:  # noqa: BLE001 - serialization failed, keep the bare strip
         return _strip_html(html)
-    return _strip_html(rendered)
+    linked = _strip_html(rendered)
+    # libxml drops a text node past its limit and returns a tree with no words,
+    # which is how a capped document came back empty and lost its truncation
+    # marker. The bare strip still has the words. The size cap is applied by
+    # the caller.
+    if not linked.strip():
+        return _strip_html(html)
+    return linked
 
 
 def cap_html(body: str) -> str:

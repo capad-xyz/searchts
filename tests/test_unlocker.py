@@ -237,6 +237,18 @@ def test_crude_fallback_prints_a_relative_footer_as_markdown_links(monkeypatch):
     assert "https://" not in unlocker._strip_html(html)
 
 
+def test_a_parser_that_drops_the_body_keeps_the_bare_strip(monkeypatch):
+    """A tree with no words is not a read. The bare strip still has them."""
+    from lxml import html as lhtml
+
+    empty = lhtml.fromstring("<html><body></body></html>")
+    monkeypatch.setattr(lhtml, "fromstring", lambda *a, **k: empty)
+    html = "<html><body><p>" + ("visible word " * 30) + "</p></body></html>"
+    out = unlocker._strip_keeping_links(html, "https://example.com/page")
+    assert "visible word" in out
+    assert out == unlocker._strip_html(html)
+
+
 def test_a_genuinely_short_page_keeps_its_extract(monkeypatch):
     """The line-structure rule must not fire on a page that really is short."""
     import trafilatura
