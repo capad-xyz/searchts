@@ -1012,3 +1012,24 @@ def test_the_config_tip_names_the_mcp_alias_and_wraps(capsys):
     assert lines[0].startswith("  [CONFIG] Tip: ")
     assert all(len(line) <= 76 for line in lines)
     assert lines[1].startswith(" " * len("  [CONFIG] Tip: "))
+
+
+def test_posix_console_replaces_a_glyph_the_locale_cannot_carry(monkeypatch):
+    """LC_ALL=C is a real locale; an ellipsis must not end in a traceback."""
+    import io
+    import sys
+
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setattr(sys, "platform", "linux")
+    fake = io.TextIOWrapper(io.BytesIO(), encoding="ascii", errors="strict")
+    monkeypatch.setattr(sys, "stdout", fake)
+    monkeypatch.setattr(
+        sys, "stderr",
+        io.TextIOWrapper(io.BytesIO(), encoding="ascii", errors="strict"),
+    )
+
+    cli._ensure_utf8_console()
+    print("checking github…")
+    fake.flush()
+
+    assert fake.buffer.getvalue().strip() == b"checking github?"

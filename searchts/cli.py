@@ -27,21 +27,36 @@ _RDT_GIT_SOURCE = "git+https://github.com/public-clis/rdt-cli.git@5e4fb3720d5c17
 
 
 def _ensure_utf8_console():
-    """Best-effort Windows console UTF-8 setup for CLI runtime only."""
-    if sys.platform != "win32":
-        return
+    """Best-effort console encoding setup for CLI runtime only.
+
+    Windows writes UTF-8 through the console buffer, which the console decodes
+    to UTF-16, so braille and box drawing survive a cp437 code page. Everywhere
+    else the locale's encoding stays, but an unencodable glyph is replaced
+    instead of raising: ``LC_ALL=C`` in a container is the case that matters,
+    and a doctor tick carrying an ellipsis should not become a traceback.
+    """
     # Avoid interfering with pytest/captured streams.
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return
-    try:
-        import io
-        if hasattr(sys.stdout, "buffer"):
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-        if hasattr(sys.stderr, "buffer"):
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-    except Exception:
-        # Do not crash CLI just because encoding patch failed.
-        pass
+    if sys.platform == "win32":
+        try:
+            import io
+            if hasattr(sys.stdout, "buffer"):
+                sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            if hasattr(sys.stderr, "buffer"):
+                sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        except Exception:
+            # Do not crash CLI just because encoding patch failed.
+            pass
+        return
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (ValueError, OSError):
+            pass
 
 
 def _configure_logging(verbose: bool = False):
