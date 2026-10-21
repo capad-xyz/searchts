@@ -25,6 +25,8 @@ from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
 PYPI_JSON = "https://pypi.org/pypi/searchts/json"
+# One release document is a few kilobytes. Past this, the body is not a version.
+_PYPI_MAX_BYTES = 1024 * 1024
 
 #: Extra name -> distribution that means the extra is installed in this env.
 _EXTRAS = (
@@ -408,8 +410,11 @@ def fetch_pypi_version(timeout: float = 15.0) -> Optional[str]:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             if getattr(resp, "status", 200) != 200:
                 return None
-            data = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError):
+            raw = resp.read(_PYPI_MAX_BYTES + 1)
+            if len(raw) > _PYPI_MAX_BYTES:
+                return None
+            data = json.loads(raw.decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError, OSError):
         return None
     version = str((data.get("info") or {}).get("version") or "").strip()
     return version or None

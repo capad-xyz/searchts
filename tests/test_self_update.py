@@ -399,6 +399,56 @@ def test_help_lists_update_and_upgrade(monkeypatch, capsys):
     assert "upgrade" in out
 
 
+class _PypiBody:
+    def __init__(self, payload, status=200):
+        self.payload = payload
+        self.status = status
+        self.limit = None
+
+    def read(self, n=-1):
+        self.limit = n
+        if n is None or n < 0:
+            return self.payload
+        return self.payload[:n]
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _patch_pypi(monkeypatch, payload, status=200):
+    body = _PypiBody(payload, status)
+
+    def urlopen(req, timeout=15):
+        return body
+
+    monkeypatch.setattr(su.urllib.request, "urlopen", urlopen)
+    return body
+
+
+def test_pypi_version_reads_at_most_one_mib(monkeypatch):
+    body = _patch_pypi(monkeypatch, b'{"info": {"version": " 9.9.9 "}}')
+    assert su.fetch_pypi_version() == "9.9.9"
+    assert body.limit == su._PYPI_MAX_BYTES + 1
+
+
+def test_pypi_version_rejects_a_body_past_one_mib(monkeypatch):
+    raw = b'{"info":{"version":"9.9.9"}}' + (b" " * (su._PYPI_MAX_BYTES + 1))
+    _patch_pypi(monkeypatch, raw)
+    assert su.fetch_pypi_version() is None
+
+
+def test_pypi_version_accepts_a_body_at_the_cap(monkeypatch):
+    prefix = b'{"info":{"version":"1.2.3","pad":"'
+    suffix = b'"}}'
+    raw = prefix + (b"a" * (su._PYPI_MAX_BYTES - len(prefix) - len(suffix))) + suffix
+    assert len(raw) == su._PYPI_MAX_BYTES
+    _patch_pypi(monkeypatch, raw)
+    assert su.fetch_pypi_version() == "1.2.3"
+
+
 def test_update_help_mentions_force_and_dry_run(monkeypatch, capsys):
     monkeypatch.setattr(
         "searchts.integrations.memory_rule.refresh_known_rules",
