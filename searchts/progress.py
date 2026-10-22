@@ -114,6 +114,11 @@ def use_links(stream=None) -> bool:
         return False
     if _env_flag("SEARCHTS_LINKS"):
         return True
+    # A dumb terminal renders the escape bytes instead of following them. The
+    # label would still be readable, but the bytes are not part of the path a
+    # person or the next program should have to strip.
+    if os.environ.get("TERM", "").lower() == "dumb":
+        return False
     stream = stream or sys.stderr
     try:
         return bool(stream.isatty())

@@ -256,6 +256,25 @@ def test_a_path_links_to_a_file_uri():
     assert plain(got) == r"C:\tmp\shot.png"
 
 
+def test_links_stay_off_on_a_dumb_terminal(monkeypatch):
+    class Tty:
+        def isatty(self):
+            return True
+
+    monkeypatch.delenv("SEARCHTS_NO_LINKS", raising=False)
+    monkeypatch.delenv("SEARCHTS_LINKS", raising=False)
+    monkeypatch.setenv("TERM", "dumb")
+    assert progress.use_links(Tty()) is False
+    monkeypatch.setenv("TERM", "xterm")
+    assert progress.use_links(Tty()) is True
+    # An explicit request still wins over the terminal's advertised ability.
+    monkeypatch.setenv("TERM", "dumb")
+    monkeypatch.setenv("SEARCHTS_LINKS", "1")
+    assert progress.use_links(Tty()) is True
+    monkeypatch.setenv("SEARCHTS_NO_LINKS", "1")
+    assert progress.use_links(Tty()) is False
+
+
 def test_swatches_are_truecolor_or_nothing():
     assert progress.swatch("#635bff") == "\x1b[48;2;99;91;255m  \x1b[0m "
     assert progress.swatch("#635bff", False) == ""
