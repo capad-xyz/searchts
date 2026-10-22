@@ -6,6 +6,9 @@ monkeypatch that dict with canned ranked lists — nothing here touches a real
 search engine.
 """
 
+import re
+import time
+
 import pytest
 
 from searchts import search as S
@@ -251,6 +254,24 @@ def test_search_ticks_on_stderr(only_registry, monkeypatch, capsys):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == "searching p1…\nsearching p2…\n"
+
+
+def test_redirected_progress_does_not_reprint_the_clock(only_registry, monkeypatch, capsys):
+    """A captured stderr is a log, not a film: one line per provider, no ticks."""
+    monkeypatch.delenv("SEARCHTS_PROGRESS", raising=False)
+
+    def slow(query, max_results):
+        time.sleep(1.2)
+        return [_r("T", "https://s/t", "", "slow")]
+
+    only_registry["slow"] = slow
+    search("q", providers=["slow"], progress=True)
+
+    captured = capsys.readouterr()
+    lines = captured.err.splitlines()
+    assert lines and all(line.startswith("searching slow") for line in lines)
+    assert len(lines) == 1
+    assert re.search(r"\d+s", captured.err) is None
 
 
 def test_search_progress_false_silent_even_with_env(only_registry, monkeypatch, capsys):

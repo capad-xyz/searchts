@@ -1,246 +1,303 @@
-# -*- coding: utf-8 -*-
-"""The live status names the real step, times it for real, and then stops."""
+"""Tests for the live progress region.
+
+Two contracts matter here, and they point in opposite directions. A terminal
+gets motion: a repainted block, a clock that moves, rows that settle. A pipe,
+a log, or CI gets exactly the lines the tool printed before this module
+existed, because that is what the other test files assert on and what a
+redirected stderr is for. Neither half is optional.
+"""
 
 import io
-import time
+import re
 
 import pytest
 
 from searchts import progress
 
-
-class _TTY(io.StringIO):
-    def isatty(self) -> bool:
-        return True
-
-
-class _Boom:
-    def write(self, _text: str) -> None:
-        raise OSError("closed")
-
-    def flush(self) -> None:
-        raise OSError("closed")
-
-    def isatty(self) -> bool:
-        return False
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\]8;;.*?\x1b\\")
+ENV_VARS = (
+    "NO_COLOR", "FORCE_COLOR", "CI", "TERM",
+    "SEARCHTS_NO_PROGRESS", "SEARCHTS_PROGRESS_TTY", "SEARCHTS_PROGRESS_WIDTH",
+    "SEARCHTS_FORCE_COLOR", "SEARCHTS_NO_COLOR", "SEARCHTS_NO_LINKS",
+    "SEARCHTS_LINKS", "SEARCHTS_ASCII", "SEARCHTS_PROGRESS",
+)
 
 
-def test_render_uses_real_seconds_and_a_real_fraction():
-    assert progress.render("reading…") == "reading…"
-    # Under a second is not "0s". A frozen zero reads as stuck.
-    assert progress.render("reading…", elapsed=0.4) == "reading…"
-    # Whole seconds, floored. 3.9s is three seconds so far, not four.
-    assert progress.render("reading…", elapsed=3.9) == "reading… 3s"
-    assert (
-        progress.render("downloading assets…", done=3, total=12, elapsed=4)
-        == "downloading assets… 3/12 4s"
-    )
-    assert "%" not in progress.render("downloading assets…", done=3, total=12)
-    # No fraction unless both numbers are known.
-    assert progress.render("downloading assets…", done=3) == "downloading assets…"
-    assert progress.render("downloading assets…", total=12) == "downloading assets…"
+def plain(text: str) -> str:
+    return ANSI.sub("", text)
 
 
-def test_a_quiet_phase_is_a_finished_phase(capsys):
-    """Off, or a stream that cannot be written, never raises and never prints."""
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    for name in ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+    progress._set_current(None)
+    yield
+    progress._set_current(None)
+
+
+def live(width: int = 60, subject: str = "stripe.com", ascii_only: bool = False):
+    """A tracker that draws into a string, wired as the process-wide one."""
     stream = io.StringIO()
-    with progress.phase("reading…", enabled=False, stream=stream):
-        progress.update("still reading…")
+    tracker = progress.Tracker("grab", subject, stream=stream,
+                               enabled=True, ascii_only=ascii_only)
+    progress._set_current(tracker)
+    return tracker, stream
+
+
+# ── the plain half: a log, not a film ───────────────────────────────────────
+
+
+def test_narration_without_a_tracker_is_the_old_log(capsys):
+    progress.narrate("trying curl_cffi…")
+    progress.narrate("  curl_cffi: 403 forbidden")
+    progress.narrate("trying jina…")
+
+    assert capsys.readouterr().err == (
+        "trying curl_cffi…\n"
+        "  curl_cffi: 403 forbidden\n"
+        "trying jina…\n"
+    )
+
+
+def test_a_pipe_never_receives_escape_sequences(capsys):
+    progress.narrate("trying curl_cffi…")
+    progress.narrate("  curl_cffi: 403")
+    progress.counting("downloading assets", 4)
+    progress.advance(1, 100)
+
+    assert "\x1b" not in capsys.readouterr().err
+
+
+def test_counting_prints_one_line_and_advances_print_nothing(capsys):
+    progress.counting("downloading assets", 22)
+    progress.advance(1, 1000)
+    progress.advance(1, 1000)
+
+    assert capsys.readouterr().err == "downloading assets…\n"
+
+
+def test_disabled_narration_is_silent(capsys):
+    progress.narrate("trying curl_cffi…", enabled=False)
+    progress.counting("downloading assets", 4, enabled=False)
+
+    assert capsys.readouterr().err == ""
+
+
+def test_a_log_gets_no_receipt():
+    stream = io.StringIO()
+    tracker = progress.Tracker("read", "example.com", stream=stream, enabled=False)
+    tracker.summary("0.3s")
+    tracker.close()
+
     assert stream.getvalue() == ""
-    assert capsys.readouterr().out == ""
-
-    with progress.phase("reading…", enabled=True, stream=_Boom()):  # type: ignore[arg-type]
-        progress.update("still reading…")
+    assert tracker.wants() is False
 
 
-def test_elapsed_is_the_clock_not_the_number_of_reprints():
-    """Two reprints in the same second say 1s, not 2. A new step starts over."""
-    stream = io.StringIO()
-    clock = {"t": 10.0}
-    phase = progress.Phase(
-        "reading…",
-        enabled=True,
-        stream=stream,
-        interval=60,
-        clock=lambda: clock["t"],
+def test_wants_is_true_only_while_drawing():
+    tracker, _ = live()
+    assert tracker.wants() is True
+    tracker.close()
+    assert tracker.wants() is True  # still a terminal, just closed
+    assert tracker.is_live is False
+
+
+# ── the live half: motion that cannot wrap ──────────────────────────────────
+
+
+def test_redraw_replaces_the_block_instead_of_appending():
+    tracker, stream = live()
+    tracker.stage("trying curl_cffi…")
+    first = stream.getvalue()
+    drawn = tracker._drawn
+    assert drawn >= 3
+    assert "\x1b[" in first  # erase-line, at least
+
+    tracker.stage("trying jina…")
+    second = stream.getvalue()[len(first):]
+    assert second.startswith(f"\x1b[{drawn}A")
+    assert second.count("\x1b[2K") >= drawn
+
+
+def test_every_frame_fits_the_width(monkeypatch):
+    monkeypatch.setenv("SEARCHTS_PROGRESS_WIDTH", "60")
+    tracker, stream = live(subject="https://a-very-long-host.example.com/with/a/path")
+    tracker.stage("trying a-rather-long-backend-name")
+    tracker.detail("a detail long enough that it has to be trimmed somewhere")
+    tracker.counter("downloading assets", 22)
+    tracker.advance(3, 4096)
+    tracker.note("a note that is also too long for sixty columns, honestly")
+    tracker.close()
+
+    lines = [line for line in plain(stream.getvalue()).splitlines() if line]
+    over = [line for line in lines if len(line) > 60]
+    assert over == []
+
+
+def test_a_long_subject_is_trimmed_not_wrapped(monkeypatch):
+    monkeypatch.setenv("SEARCHTS_PROGRESS_WIDTH", "50")
+    tracker, stream = live(subject="x" * 200)
+    tracker.stage("trying curl_cffi…")
+    tracker.close()
+
+    lines = [line for line in plain(stream.getvalue()).splitlines() if line]
+    assert lines
+    assert max(len(line) for line in lines) <= 50
+
+
+def test_a_running_row_carries_a_clock():
+    tracker, _ = live()
+    tracker.stage("trying curl_cffi…")
+    blocks = plain("\n".join(tracker._blocks()))
+    assert re.search(r"\d+ms|\d\.\ds", blocks)
+
+
+def test_the_bar_fills_as_items_finish():
+    tracker, _ = live(width=80)
+    tracker.counter("downloading assets", 4)
+    empty = plain(tracker._blocks()[-1])
+    tracker.advance(2, 2048)
+    half = plain(tracker._blocks()[-1])
+
+    assert "0/4" in empty
+    assert "2/4" in half
+    assert half.count("█") > empty.count("█")
+    assert "2.0 KB" in half
+
+
+def test_ascii_mode_has_no_box_drawing(monkeypatch):
+    tracker, _ = live(width=80, ascii_only=True)
+    tracker.stage("trying curl_cffi…")
+    tracker.settle(progress.ROW_OK, "ok (200)")
+    text = "\n".join(tracker._blocks())
+
+    assert "⠋" not in text and "─" not in text and "✓" not in text
+    assert "+" in plain(text)
+
+
+# ── narration grammar ───────────────────────────────────────────────────────
+
+
+def test_a_trying_line_opens_a_row_and_a_detail_settles_it():
+    tracker, _ = live()
+    progress.narrate("trying curl_cffi…")
+    assert [row.label for row in tracker.rows] == ["curl_cffi"]
+    assert tracker.rows[0].status == progress.ROW_RUNNING
+
+    progress.narrate("  curl_cffi: 403 forbidden")
+    assert tracker.rows[0].status == progress.ROW_FAIL
+    assert tracker.rows[0].detail == "403 forbidden"
+
+
+def test_a_skipped_rung_is_a_skip_not_a_failure():
+    tracker, _ = live()
+    progress.narrate("trying jina…")
+    progress.narrate("  jina: skipped (SEARCHTS_NO_JINA)")
+
+    assert tracker.rows[0].status == progress.ROW_SKIP
+
+
+def test_an_unrecognised_reason_is_a_failure():
+    """A new backend's reason must show up loudly, not match nothing quietly."""
+    assert progress.classify("socket hang up") == progress.ROW_FAIL
+    assert progress.classify("ok (200, 40 KB)") == progress.ROW_OK
+
+
+def test_the_row_label_is_not_repeated_in_its_verdict():
+    assert progress._strip_owner("known-host:reddit: miss",
+                                 "known-host:reddit") == "miss"
+    assert progress._strip_owner("net::ERR_FAILED", "stealth") == "net::ERR_FAILED"
+
+
+def test_a_substep_attaches_to_the_running_row():
+    tracker, _ = live()
+    progress.narrate("trying stealth-browser…")
+    progress.narrate("waiting for page to settle…")
+
+    assert [row.label for row in tracker.rows] == ["stealth-browser"]
+    assert tracker.rows[0].detail == "waiting for page to settle"
+
+
+def test_a_saved_counter_advances_the_bar():
+    tracker, _ = live()
+    progress.counting("downloading assets", 5)
+    progress.narrate("downloading assets… 4 saved")
+
+    assert tracker.rows[-1].done == 4
+
+
+def test_live_narration_does_not_also_print(capsys):
+    tracker, _ = live()
+    progress.narrate("trying curl_cffi…")
+
+    assert capsys.readouterr().err == ""
+    assert tracker.rows[0].label == "curl_cffi"
+
+
+# ── links, colour, and small formatters ─────────────────────────────────────
+
+
+def test_links_are_plain_when_disabled():
+    assert progress.link_url("https://example.com", False) == "https://example.com"
+    assert progress.link("label", "https://example.com", False) == "label"
+
+
+def test_an_enabled_link_is_osc8_and_labelled():
+    got = progress.link_url("https://example.com", True)
+    assert got == (
+        "\x1b]8;;https://example.com\x1b\\https://example.com\x1b]8;;\x1b\\"
     )
-    with phase:
-        clock["t"] = 10.4
-        phase._beat_once()
-        assert stream.getvalue() == "reading…\n"
-        clock["t"] = 13.9
-        phase._beat_once()
-        assert "reading… 3s\n" in stream.getvalue()
-        assert "4s" not in stream.getvalue()
-        # The launch took 3s. Settling has not.
-        phase.update("waiting for the page to settle…")
-        clock["t"] = 15.2
-        phase._beat_once()
-    text = stream.getvalue()
-    assert "waiting for the page to settle…\n" in text
-    assert "waiting for the page to settle… 1s\n" in text
-    assert "waiting for the page to settle… 5s" not in text
+    assert plain(got) == "https://example.com"
 
 
-def test_a_result_line_is_not_overwritten_by_the_step():
-    stream = io.StringIO()
-    clock = {"t": 0.0}
-    phase = progress.Phase(
-        "trying curl_cffi…",
-        enabled=True,
-        stream=stream,
-        interval=60,
-        clock=lambda: clock["t"],
-    )
-    with phase:
-        clock["t"] = 4.0
-        phase._beat_once()
-        phase.note("  curl_cffi: http-403")
-        clock["t"] = 9.0
-        phase._beat_once()
-    text = stream.getvalue()
-    assert "  curl_cffi: http-403\n" in text
-    assert "9s" not in text
-    assert text.index("http-403") > text.index("4s")
+def test_a_path_links_to_a_file_uri():
+    got = progress.link_path(r"C:\tmp\shot.png", True)
+    assert got.startswith("\x1b]8;;file:///")
+    assert plain(got) == r"C:\tmp\shot.png"
 
 
-def test_tty_rewrites_one_line_and_commits_it():
-    stream = _TTY()
-    with progress.phase("reading…", enabled=True, stream=stream, interval=60):
-        pass
-    assert stream.getvalue() == "\rreading…\033[K\n"
+def test_links_stay_off_on_a_dumb_terminal(monkeypatch):
+    class Tty:
+        def isatty(self):
+            return True
+
+    monkeypatch.delenv("SEARCHTS_NO_LINKS", raising=False)
+    monkeypatch.delenv("SEARCHTS_LINKS", raising=False)
+    monkeypatch.setenv("TERM", "dumb")
+    assert progress.use_links(Tty()) is False
+    monkeypatch.setenv("TERM", "xterm")
+    assert progress.use_links(Tty()) is True
+    # An explicit request still wins over the terminal's advertised ability.
+    monkeypatch.setenv("TERM", "dumb")
+    monkeypatch.setenv("SEARCHTS_LINKS", "1")
+    assert progress.use_links(Tty()) is True
+    monkeypatch.setenv("SEARCHTS_NO_LINKS", "1")
+    assert progress.use_links(Tty()) is False
 
 
-def test_an_inner_step_replaces_the_outer_one():
-    """The outer label must not come back and claim it is still the work."""
-    stream = io.StringIO()
-    clock = {"t": 0.0}
-
-    def now() -> float:
-        return clock["t"]
-
-    with progress.Phase("fetching page…", enabled=True, stream=stream, interval=60, clock=now):
-        clock["t"] = 2.0
-        with progress.Phase(
-            "trying curl_cffi…", enabled=True, stream=stream, interval=60, clock=now
-        ) as inner:
-            clock["t"] = 5.0
-            inner._beat_once()
-        # The page phase is still open, but curl already finished. Reprinting
-        # "fetching page… 5s" would be the outer step pretending it never left.
-        outer = progress.current()
-        assert outer is not None
-        clock["t"] = 8.0
-        outer._beat_once()
-    text = stream.getvalue()
-    assert "fetching page…\n" in text
-    assert "trying curl_cffi… 3s\n" in text
-    assert "fetching page… 8s" not in text
+def test_swatches_are_truecolor_or_nothing():
+    assert progress.swatch("#635bff") == "\x1b[48;2;99;91;255m  \x1b[0m "
+    assert progress.swatch("#635bff", False) == ""
+    assert progress.swatch("not-a-colour") == ""
 
 
-def test_a_count_changes_the_line_and_the_same_count_does_not():
-    stream = io.StringIO()
-    with progress.phase("downloading assets…", enabled=True, stream=stream, interval=60) as ph:
-        ph.update("downloading assets…", done=1, total=4)
-        ph.update("downloading assets…", done=1, total=4)
-        once = stream.getvalue()
-        ph.update("downloading assets…", done=2, total=4)
-    text = stream.getvalue()
-    assert once.count("downloading assets… 1/4") == 1
-    assert "downloading assets… 2/4\n" in text
-    assert "%" not in text
+def test_fit_never_exceeds_its_width():
+    assert plain(progress.fit("x" * 50, 20)) == "x" * 19 + "…"
+    assert progress.fit("short", 20) == "short"
+    dimmed = progress.fit("\x1b[2m" + "x" * 50 + "\x1b[0m", 20)
+    assert len(plain(dimmed)) == 20
 
 
-def test_heartbeat_stops_when_the_phase_ends():
-    stream = io.StringIO()
-    with progress.phase(
-        "reading…", enabled=True, stream=stream, interval=0.05, show_after=0.0
-    ):
-        time.sleep(0.25)
-        during = stream.getvalue()
-    ended = stream.getvalue()
-    time.sleep(0.25)
-    assert stream.getvalue() == ended
-    assert during.count("reading…") >= 2
+def test_sizes_and_clocks_read_like_a_person_wrote_them():
+    assert progress.human_bytes(999) == "999 B"
+    assert progress.human_bytes(1536) == "1.5 KB"
+    assert progress.human_bytes(5 * 1024 * 1024) == "5.0 MB"
+    assert progress.human_time(0.25) == "250ms"
+    assert progress.human_time(2.34) == "2.3s"
+    assert progress.human_time(75) == "1m15s"
 
 
-def test_stdout_stays_empty(capsys):
-    with progress.phase("reading…", enabled=True, interval=60):
-        progress.announce("waiting for the page to render…")
-        progress.note("  curl_cffi: ok")
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "reading…" in captured.err
-    assert "waiting for the page to render…" in captured.err
-    assert "curl_cffi: ok" in captured.err
-
-
-def test_browser_worker_sees_the_phase_label():
-    """MCP runs the browser off the event-loop thread. The step name goes with it."""
-    import asyncio
-
-    from searchts import unlocker
-
-    seen: dict[str, str] = {}
-
-    def look() -> None:
-        phase = progress.current()
-        seen["label"] = phase.label if phase is not None else ""
-
-    async def main() -> None:
-        with progress.phase("trying stealth-browser…", enabled=True, stream=io.StringIO(), interval=60):
-            unlocker._call_sync_browser(look)
-
-    asyncio.run(main())
-    assert seen["label"] == "trying stealth-browser…"
-
-
-def test_read_narrates_the_rung_without_repeating_the_reason(monkeypatch, capsys):
-    """The live line is the step. The reason is printed once, by the caller."""
-    from searchts import unlocker
-
-    page = "<html><body>" + ("hello " * 200) + "</body></html>"
-    monkeypatch.setattr(
-        unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (200, page, url, {})
-    )
-    unlocker.fetch(
-        "https://example.com/progress",
-        backends=["curl_cffi"],
-        use_memory=False,
-        progress=True,
-        echo_attempts=False,
-    )
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "trying curl_cffi…" in captured.err
-    assert "curl_cffi: ok" not in captured.err
-
-    unlocker.fetch(
-        "https://example.com/progress",
-        backends=["curl_cffi"],
-        use_memory=False,
-        progress=True,
-    )
-    again = capsys.readouterr()
-    assert "curl_cffi: ok" in again.err
-    assert again.out == ""
-
-
-@pytest.mark.parametrize("flag", [False, None])
-def test_read_stays_quiet_when_progress_is_off(monkeypatch, capsys, flag):
-    from searchts import unlocker
-
-    monkeypatch.delenv("SEARCHTS_PROGRESS", raising=False)
-    page = "<html><body>" + ("hello " * 200) + "</body></html>"
-    monkeypatch.setattr(
-        unlocker, "_fetch_curl_cffi", lambda url, timeout=30: (200, page, url, {})
-    )
-    unlocker.fetch(
-        "https://example.com/quiet",
-        backends=["curl_cffi"],
-        use_memory=False,
-        progress=flag,
-    )
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert captured.err == ""
+def test_style_returns_its_input_when_colour_is_off():
+    style = progress.Style(False)
+    assert style.dim("plain") == "plain"
+    assert progress.Style(True).dim("x") == "\x1b[2mx\x1b[0m"

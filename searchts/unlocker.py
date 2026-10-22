@@ -1480,10 +1480,9 @@ def _is_nav_race(exc: BaseException) -> bool:
 def _stderr_tick(msg: str, progress: bool) -> None:
     if not progress:
         return
-    # A live phase renames the step. A one-shot caller still gets one line.
-    from searchts.progress import announce
+    from searchts import progress as _progress
 
-    announce(msg)
+    _progress.narrate(msg)
 
 
 def _progress_wanted(progress: Optional[bool] = None) -> bool:
@@ -2352,10 +2351,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         spans are additionally redacted from the text. Default False (report,
         don't alter visible content).
     progress:
-        True: stderr names the step that is running, and reprints it with the
-        real elapsed seconds while that step is still the one running.
-        False: never (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
-        MCP/library omit the arg.
+        True: stderr logs each step once when it starts, and nothing while it
+        runs. A live terminal updates that line's clock in place; a pipe gets
+        the lines only. False: never (CLI ``--json``). None: follow
+        ``SEARCHTS_PROGRESS=1``. MCP/library omit the arg.
     echo_attempts:
         True: also print each rung's result (``curl_cffi: ok``, ``thin-12b``).
         False: the live line is only the step. The caller prints the reasons
@@ -2414,14 +2413,20 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             "1", "true", "True", "yes",
         )
 
-    from searchts.progress import note as progress_note
+    from searchts import progress as _progress
     from searchts.progress import phase as progress_phase
 
     def _tick(msg: str) -> None:
         # Best-effort only: a closed/broken stderr must never abort the fetch.
-        # Indented lines are the rung's result. The CLI prints those once at
-        # the end, so it asks for the step without the copy. A proxy note and
-        # a "more:" note are not that copy.
+        #
+        # This must go through narrate, not print. A bare print lands *below*
+        # the live block without the tracker knowing, so the next repaint moves
+        # the cursor by the wrong number of lines and leaves the old frame on
+        # screen. That is the difference between a spinner and a hang.
+        #
+        # Indented lines are the rung's result. The CLI can ask for the step
+        # without the copy (``echo_attempts=False``) when it prints those once
+        # at the end; a proxy note and a "more:" note are never that copy.
         if not progress:
             return
         diagnosis = (
@@ -2431,7 +2436,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         )
         if diagnosis and not echo_attempts:
             return
-        progress_note(msg)
+        try:
+            _progress.narrate(msg)
+        except (OSError, ValueError):
+            pass
 
     try:
         url = normalize(url)

@@ -22,13 +22,13 @@ Design goals (parallel to ``unlocker.fetch``):
 from __future__ import annotations
 
 import os
+import sys
 import urllib.parse
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 #: Browser-ish UA so keyless HTTP providers (SearXNG instances) don't 403 us.
 #: Single source of truth lives in unlocker._UA_REAL — import, don't duplicate.
-from searchts.progress import phase as progress_phase
 from searchts.progress import wanted as progress_wanted
 from searchts.unlocker import _UA_REAL  # noqa: E402
 
@@ -52,6 +52,26 @@ _TRACKING_PARAMS = frozenset({
     "gclid", "fbclid", "msclkid", "mc_cid", "mc_eid", "ref", "ref_src",
     "igshid", "spm", "_ga", "yclid",
 })
+
+
+def _tick(msg: str) -> None:
+    # Best-effort only: a closed/broken stderr must never abort a search.
+    if sys.stderr is None:
+        return
+    from searchts import progress as _progress
+
+    _progress.narrate(msg)
+
+
+def _outcome(detail: str, status: Optional[str] = None) -> None:
+    """Record a provider's verdict, but only when a live region is drawing.
+
+    A piped search log gets the reasons once in the failure block; a person
+    watching a terminal gets them as the rungs report.
+    """
+    from searchts import progress as _progress
+
+    _progress.outcome(detail, status)
 
 
 @dataclass
@@ -385,10 +405,11 @@ def search(
         default is DuckDuckGo plus every provider whose key/env is present.
 
     progress:
-        True: stderr names the provider being searched and reprints that name
-        with the real elapsed seconds while the provider is still running.
-        False: never (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
-        Library/MCP callers omit the arg so they stay quiet unless the env is set.
+        True: stderr logs one line when a provider starts, and nothing while it
+        runs. A live terminal updates that line's clock in place; a pipe gets
+        the one line only. False: never (CLI ``--json``). None: follow
+        ``SEARCHTS_PROGRESS=1``. Library/MCP callers omit the arg so they stay
+        quiet unless the env is set.
 
     Returns the top ``max_results`` fused :class:`SearchResult` objects. Raises
     :class:`SearchError` (with a per-provider breakdown) if every selected
@@ -403,19 +424,30 @@ def search(
 
     for name in selected:
         fn = PROVIDERS.get(name)
-        with progress_phase(f"searching {name}…", enabled=bool(progress)):
-            if fn is None:
-                attempts.append((name, "unknown-provider"))
-                continue
-            try:
-                results = fn(query, max_results) or []
-            except Exception as e:  # noqa: BLE001 - any provider failure is recorded, never raised
-                attempts.append((name, f"{type(e).__name__}: {e}"))
-                continue
-            if not results:
-                attempts.append((name, "no-results"))
-                continue
-            per_provider.append((name, results))
+        if fn is None:
+            if progress:
+                _tick(f"searching {name}…")
+                _outcome("unknown provider")
+            attempts.append((name, "unknown-provider"))
+            continue
+        if progress:
+            _tick(f"searching {name}…")
+        try:
+            results = fn(query, max_results) or []
+        except Exception as e:  # noqa: BLE001 - any provider failure is recorded, never raised
+            attempts.append((name, f"{type(e).__name__}: {e}"))
+            if progress:
+                _outcome(f"{type(e).__name__}")
+            continue
+        if not results:
+            attempts.append((name, "no-results"))
+            if progress:
+                _outcome("no results", "skip")
+            continue
+        per_provider.append((name, results))
+        if progress:
+            _outcome(f"ok ({len(results)} results)", "ok")
+
 
     if not per_provider:
         raise SearchError(query, attempts)

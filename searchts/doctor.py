@@ -7,7 +7,6 @@ Each channel knows how to check itself. Doctor just collects the results.
 import csv
 import io
 import os
-import re
 import subprocess
 import sys
 from typing import Callable, Dict, Optional, Sequence
@@ -17,18 +16,12 @@ from searchts.config import Config
 from searchts.progress import phase as progress_phase
 from searchts.progress import wanted as progress_wanted
 
-# Rich styles used by format_report. Do not match status tokens like [ok] / [X] / [!].
-_RICH_TAG = re.compile(
-    r"\[\/?(?:bold|italic|underline|strike|dim|"
-    r"cyan|green|yellow|red|blue|magenta|white|black)"
-    r"(?: [a-z]+)?\]",
-    re.IGNORECASE,
-)
 
+def _tick(msg: str) -> None:
+    # Best-effort only: a closed/broken stderr must never abort a check.
+    from searchts import progress as _progress
 
-def strip_rich_markup(text: str) -> str:
-    """Drop Rich tags. Keep the [ok] / [!] / [X] tokens the report already uses."""
-    return _RICH_TAG.sub("", text).replace("\\[", "[")
+    _progress.narrate(msg)
 
 
 def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict]:
@@ -38,11 +31,11 @@ def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict
     so per-channel exceptions degrade to status=\"error\".
 
     progress:
-        True: stderr names the channel being checked and reprints that name
-        with the real elapsed seconds while the check is still running.
-        False: never (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
-        Library/MCP callers omit the arg so they stay quiet unless the env
-        is set.
+        True: stderr logs one line when a channel starts, and nothing while it
+        runs. A live terminal updates that line's clock in place; a pipe gets
+        the one line only. False: never (CLI ``--json``). None: follow
+        ``SEARCHTS_PROGRESS=1``. Library/MCP callers omit the arg so they stay
+        quiet unless the env is set.
     """
     progress = progress_wanted(progress)
 
@@ -69,13 +62,46 @@ def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict
     return results
 
 
-def _name_msg(r: dict, escape) -> str:
-    """Render one channel line; show the active backend when there is a choice."""
-    text = f"[bold]{escape(r['name'])}[/bold] — {escape(r['message'])}"
-    active = r.get("active_backend")
-    if active and len(r.get("backends", [])) > 1:
-        text += f" [dim](current backend: {escape(active)})[/dim]"
-    return text
+def _wrap_plain(text: str, width: int) -> list:
+    """Wrap one message to *width*, keeping explicit newlines as breaks."""
+    import textwrap
+
+    out = []
+    for line in str(text).splitlines() or [""]:
+        if not line.strip():
+            out.append("")
+            continue
+        out.extend(
+            textwrap.wrap(
+                line, width=width, break_long_words=True, break_on_hyphens=False,
+            ) or [""]
+        )
+    return out or [""]
+
+
+def _status_mark(status: str, unicode_ok: bool) -> tuple:
+    """The mark and its colour. The mark alone carries the verdict."""
+    if status == "ok":
+        return ("✓" if unicode_ok else "+"), "green"
+    if status == "warn":
+        return "!", "yellow"
+    return ("X" if unicode_ok else "x"), "red"
+
+
+def _report_row(lines: list, style, status: str, name: str, message: str,
+                unicode_ok: bool, *, active=None) -> None:
+    """One probe: the mark and the name, then the sentence under it.
+
+    The continuation indent is the point. At 71 columns a sentence about
+    Instagram wraps three times; under the mark it looks like the same row, at
+    column zero it looks like a new section.
+    """
+    mark, tone = _status_mark(status, unicode_ok)
+    lines.append(f"  {getattr(style, tone)(mark)}  {style.bold(name)}")
+    for chunk in _wrap_plain(message, 71):
+        lines.append("     " + chunk if chunk else "")
+    if active:
+        lines.append("     " + style.dim(f"current backend: {active}"))
 
 
 def _windows_parent_map() -> Dict[int, int]:
@@ -185,79 +211,80 @@ def windows_searchts_pids(
 
 
 def format_lock_note(pids: Sequence[int]) -> str:
+    """Name the PIDs that hold searchts.exe open, in the doctor's plain style."""
     if not pids:
         return ""
-    lines = [
-        "[yellow][!][/yellow] Windows: these PIDs have searchts.exe open. "
-        "Quit them before a pip or pipx upgrade. This command does not kill them."
-    ]
-    lines.extend(f"  PID {pid}" for pid in pids)
-    return "\n".join(lines)
+    wrapped = _wrap_plain(
+        "Windows: these PIDs have searchts.exe open. Quit them before a pip or "
+        "pipx upgrade. This command does not kill them.",
+        71,
+    )
+    out = [f"!  {wrapped[0]}"] if wrapped else []
+    out.extend("   " + chunk for chunk in wrapped[1:])
+    out.extend(f"   PID {pid}" for pid in pids)
+    return "\n".join(out)
 
 
-def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] = None) -> str:
-    """Format results as a readable text report (with Rich markup)."""
-    rich_escape: Optional[Callable[[str], str]]
-    try:
-        from rich.markup import escape as rich_escape_impl
-    except ImportError:
-        rich_escape = None
-    else:
-        rich_escape = rich_escape_impl
+def _active(r: dict):
+    """The backend name, but only when the channel actually chose one."""
+    if len(r.get("backends") or []) > 1:
+        return r.get("active_backend")
+    return None
 
-    def escape(value: str) -> str:
-        return rich_escape(value) if rich_escape is not None else value
 
-    lines = []
-    lines.append("[bold cyan]searchts status[/bold cyan]")
-    lines.append("[cyan]" + "=" * 40 + "[/cyan]")
-    lines.append(r"Legend: [green]\[ok][/green] probe passed  [yellow][!][/yellow] present but needs login  [red][X][/red] not on PATH")
+def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] = None,
+                  *, color: Optional[bool] = None) -> str:
+    """Format results as the doctor screen: a mark, a name, the sentence under it.
+
+    Plain text with ANSI colour, not Rich markup, so the wrapping is ours: a
+    channel sentence about Instagram folds under its own name instead of where
+    the terminal happens to end. ``color`` defaults to whether stdout is a
+    terminal; library callers pass ``False``.
+    """
+    from searchts import progress
+
+    if color is None:
+        color = progress.use_color(sys.stdout)
+    unicode_ok = progress.supports_unicode(sys.stdout)
+    s = progress.Style(color)
 
     ok_count = sum(1 for r in results.values() if r["status"] == "ok")
     total = len(results)
+    tone = "green" if ok_count == total else ("yellow" if ok_count else "red")
 
-    lines.append("")
-    lines.append(r"[bold]\[ok] Probes (not a routing table):[/bold]")
-    for key, r in results.items():
-        if r["tier"] == 0:
-            name_msg = _name_msg(r, escape)
-            if r["status"] == "ok":
-                lines.append(rf"  [green]\[ok][/green] {name_msg}")
-            elif r["status"] == "warn":
-                lines.append(f"  [yellow][!][/yellow]  {name_msg}")
-            elif r["status"] in ("off", "error"):
-                lines.append(f"  [red][X][/red]  {name_msg}")
+    lines = [
+        "",
+        "  " + s.bold("searchts doctor"),
+        "  " + s.dim("What each reader can do here. Probes, not a routing table."),
+        "",
+        "  " + getattr(s, tone)(f"{ok_count}/{total} probes passed"),
+    ]
 
-    tier1 = {k: r for k, r in results.items() if r["tier"] == 1}
-    tier1_active = {k: r for k, r in tier1.items() if r["status"] == "ok"}
-    tier1_inactive = {k: r for k, r in tier1.items() if r["status"] != "ok"}
-    if tier1_active:
+    probes = [r for r in results.values() if r["tier"] == 0]
+    if probes:
+        lines += ["", "  " + s.dim("PROBES")]
+        for r in probes:
+            _report_row(lines, s, r["status"], r["name"], r["message"],
+                        unicode_ok, active=_active(r))
+
+    optional = [r for r in results.values() if r["tier"] in (1, 2)]
+    present = [r for r in optional if r["status"] == "ok"]
+    missing = [r for r in optional if r["status"] != "ok"]
+    if present:
+        lines += ["", "  " + s.dim("OPTIONAL CLIS")]
+        for r in present:
+            _report_row(lines, s, r["status"], r["name"], r["message"],
+                        unicode_ok, active=_active(r))
+
+    if missing:
+        names = ", ".join(r["name"] for r in missing)
         lines.append("")
-        lines.append("[bold]Optional CLIs present:[/bold]")
-        for key, r in tier1_active.items():
-            lines.append(rf"  [green]\[ok][/green] {_name_msg(r, escape)}")
-
-    tier2 = {k: r for k, r in results.items() if r["tier"] == 2}
-    tier2_active = {k: r for k, r in tier2.items() if r["status"] == "ok"}
-    tier2_inactive = {k: r for k, r in tier2.items() if r["status"] != "ok"}
-    if tier2_active:
-        if not tier1_active:
-            lines.append("")
-            lines.append("[bold]Optional CLIs present:[/bold]")
-        for key, r in tier2_active.items():
-            lines.append(rf"  [green]\[ok][/green] {_name_msg(r, escape)}")
-
-    lines.append("")
-    status_color = "green" if ok_count == total else ("yellow" if ok_count > 0 else "red")
-    lines.append(f"Status: [{status_color}]{ok_count}/{total}[/{status_color}] probes ok")
-
-    all_inactive = list(tier1_inactive.values()) + list(tier2_inactive.values())
-    if all_inactive:
-        names = [r["name"] for r in all_inactive]
-        lines.append(
-            f"{len(names)} optional CLIs not present ({', '.join(names)}). "
-            "These are PATH checks, not searchts platform readers."
-        )
+        for chunk in _wrap_plain(
+            f"{len(missing)} not present: {names}. These are PATH checks, "
+            "not searchts platform readers.",
+            71,
+        ):
+            lines.append("  " + s.dim(chunk))
 
     import stat
 
@@ -266,17 +293,16 @@ def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] =
         try:
             mode = config_path.stat().st_mode
             if mode & (stat.S_IRGRP | stat.S_IROTH):
-                lines.append("")
-                lines.append(
-                    "[bold red][!]  Security note: config.yaml permissions are too broad (readable by other users)[/bold red]"
-                )
-                lines.append("   Fix: chmod 600 ~/.searchts/config.yaml")
+                lines += [
+                    "",
+                    "  " + s.yellow("!") + "  config.yaml is readable by other users",
+                    "     " + s.dim("Fix: chmod 600 ~/.searchts/config.yaml"),
+                ]
         except OSError:
             pass
 
     note = format_lock_note(windows_searchts_pids() if lock_pids is None else lock_pids)
     if note:
-        lines.append("")
-        lines.append(note)
+        lines += [""] + ["  " + line for line in note.splitlines()]
 
     return "\n".join(lines)

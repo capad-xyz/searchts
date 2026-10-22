@@ -27,17 +27,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from searchts.progress import note as progress_note
 from searchts.progress import phase as progress_phase
 from searchts.ssrf import guard_mcp_url, private_hop
 from searchts.unlocker import _UA_REAL, jina_enabled, looks_blocked, normalize
 
 
 def _tick(progress: bool, msg: str) -> None:
-    """A permanent stderr line. A live phase is committed first so they do not glue."""
-    if not progress:
-        return
-    progress_note(msg)
+    # Best-effort only: a closed/broken stderr must never abort a fetch/grab.
+    # Routed through progress.py so a terminal gets a live ladder and a pipe
+    # gets the same plain lines this function always printed.
+    from searchts import progress as _progress
+
+    _progress.tick(progress, msg)
 
 
 def _progress_default(progress: Optional[bool]) -> bool:
@@ -1025,60 +1026,60 @@ def grab(page_url: str, out_dir: str, *,
         "size-cap": defaultdict(list),
     }
 
-    # A fraction is honest only when this walk will visit every candidate.
-    # The cap stops early once enough assets are saved, so a bigger list must
-    # not be labelled "3/40" as if the rest were still coming.
-    show_fraction = bool(flat) and len(flat) <= max_assets
-    saved = 0
-    if flat:
-        with progress_phase("downloading assets…", enabled=bool(progress)) as dl:
-            for idx, (kind, u) in enumerate(flat):
-                if count >= max_assets:
-                    for rest_kind, rest_url in flat[idx:]:
-                        omitted["max-assets"][rest_kind].append(rest_url)
-                    break
-                if show_fraction:
-                    dl.update("downloading assets…", done=idx + 1, total=len(flat))
-                else:
-                    dl.update(f"downloading assets… {saved} saved")
-                try:
-                    if u.lower().startswith("data:"):
-                        content, content_type = _decode_data_url(u)
-                        final_url = u
-                        backend = "inline"
-                    elif u in css_cache:
-                        ar = css_cache[u]
-                        content, content_type = ar.content, ar.content_type
-                        final_url, backend = ar.final_url, ar.backend
-                    else:
-                        ar = fetch_bytes(u, backends=["curl_cffi"], timeout=timeout,
-                                         progress=False)
-                        content, content_type = ar.content, ar.content_type
-                        final_url, backend = ar.final_url, ar.backend
-                    if total + len(content) > max_total_mb * 1024 * 1024:
-                        omitted["size-cap"][kind].append(u)
-                        records.append({"source_url": u, "kind": kind, "ok": False,
-                                        "error": "size-cap"})
-                        continue
-                    sub = out / kind
-                    sub.mkdir(exist_ok=True)
-                    if u.lower().startswith("data:"):
-                        dest = _unique_path(sub / _data_url_filename(u, content_type))
-                    else:
-                        dest = _unique_path(sub / guess_filename(final_url, content_type))
-                    dest.write_bytes(content)
-                    total += len(content)
-                    count += 1
-                    saved = count
-                    if not show_fraction:
-                        dl.update(f"downloading assets… {saved} saved")
-                    records.append({"source_url": u, "kind": kind, "ok": True,
-                                    "local_path": str(dest.relative_to(out)).replace("\\", "/"),
-                                    "bytes": len(content), "content_type": content_type,
-                                    "backend": backend})
-                except Exception as e:  # noqa: BLE001 - one bad asset never fails the grab
-                    records.append({"source_url": u, "kind": kind, "ok": False,
-                                    "error": f"{type(e).__name__}: {e}"})
+    # The per-item count is the difference between "working" and "hung" on a
+    # page with 120 assets, so the count owns this line. Plain mode gets the
+    # phase line once, exactly as before.
+    from searchts import progress as _progress
+
+    _progress.counting("downloading assets", min(len(flat), max_assets),
+                       enabled=bool(progress))
+    for idx, (kind, u) in enumerate(flat):
+        if count >= max_assets:
+            for rest_kind, rest_url in flat[idx:]:
+                omitted["max-assets"][rest_kind].append(rest_url)
+            break
+        written = 0
+        try:
+            if u.lower().startswith("data:"):
+                content, content_type = _decode_data_url(u)
+                final_url = u
+                backend = "inline"
+            elif u in css_cache:
+                ar = css_cache[u]
+                content, content_type = ar.content, ar.content_type
+                final_url, backend = ar.final_url, ar.backend
+            else:
+                ar = fetch_bytes(u, backends=["curl_cffi"], timeout=timeout,
+                                 progress=False)
+                content, content_type = ar.content, ar.content_type
+                final_url, backend = ar.final_url, ar.backend
+            if total + len(content) > max_total_mb * 1024 * 1024:
+                omitted["size-cap"][kind].append(u)
+                records.append({"source_url": u, "kind": kind, "ok": False,
+                                "error": "size-cap"})
+                continue
+            sub = out / kind
+            sub.mkdir(exist_ok=True)
+            if u.lower().startswith("data:"):
+                dest = _unique_path(sub / _data_url_filename(u, content_type))
+            else:
+                dest = _unique_path(sub / guess_filename(final_url, content_type))
+            dest.write_bytes(content)
+            total += len(content)
+            count += 1
+            written = len(content)
+            records.append({"source_url": u, "kind": kind, "ok": True,
+                            "local_path": str(dest.relative_to(out)).replace("\\", "/"),
+                            "bytes": len(content), "content_type": content_type,
+                            "backend": backend})
+        except Exception as e:  # noqa: BLE001 - one bad asset never fails the grab
+            records.append({"source_url": u, "kind": kind, "ok": False,
+                            "error": f"{type(e).__name__}: {e}"})
+        finally:
+            # The counter has to advance on a failure too, or one dead CDN URL
+            # freezes the bar short of its total and the display lies about
+            # being stuck. `continue` above still reaches this.
+            _progress.advance(1, written)
 
     # A failed curl-only asset may be a CDN that wants the browser's
     # fingerprint. Climb for a bounded number of them and keep whatever the
@@ -1120,6 +1121,10 @@ def grab(page_url: str, out_dir: str, *,
                 rec.update({"ok": True, "local_path": str(dest.relative_to(out)).replace("\\", "/"),
                             "bytes": len(ar.content), "content_type": ar.content_type,
                             "backend": ar.backend, "error": None})
+
+    # The live row already ends on its own count; a log has no row, so give it
+    # the one fact it would otherwise never see.
+    _progress.log(f"downloading assets… {count} saved", enabled=bool(progress))
 
     page_md = None
     page_md_error = None

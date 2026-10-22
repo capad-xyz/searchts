@@ -148,6 +148,17 @@ def _require(binary: str) -> None:
         raise MissingDependency(f"{binary} not found in PATH")
 
 
+def _tick(progress: bool, msg: str) -> None:
+    # Best-effort only: a closed/broken stderr must never abort a transcription.
+    if not progress:
+        return
+    if sys.stderr is None:
+        return
+    from searchts import progress as _progress
+
+    _progress.narrate(msg)
+
+
 def _ytdlp_module_available() -> bool:
     """Return whether the `yt_dlp` Python module is importable."""
     return importlib.util.find_spec("yt_dlp") is not None

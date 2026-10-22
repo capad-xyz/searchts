@@ -280,15 +280,14 @@ def test_grab_count_is_a_real_fraction(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(assets, "fetch_bytes", _fake_fetch)
     assets.grab("https://demo.test/", str(tmp_path / "g"), progress=True)
     err = capsys.readouterr().err
-    pairs = [
-        (int(done), int(total))
-        for done, total in re.findall(r"downloading assets… (\d+)/(\d+)", err)
-    ]
-    assert pairs
-    denom = pairs[0][1]
-    assert [done for done, _total in pairs] == list(range(1, denom + 1))
-    assert all(done <= total == denom for done, total in pairs)
-    assert pairs[-1] == (denom, denom)
+    # A pipe gets a log, not a film: the count is stated once, with the number
+    # that really saved. The live region carries the bar (see test_progress).
+    lines = [line for line in err.splitlines()
+             if line.startswith("downloading assets")]
+    assert len(lines) == 2  # the phase name once, then the real ending count
+    assert lines[0] == "downloading assets…"
+    assert re.fullmatch(r"downloading assets… \d+ saved", lines[1])
+    assert re.search(r"\d+/\d+", err) is None
 
 
 def test_grab_cap_does_not_invent_a_fraction(monkeypatch, tmp_path, capsys):
@@ -750,6 +749,9 @@ def test_cli_grab_names_what_saved_and_links_the_folder_on_a_terminal(
     }
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TERM", "xterm")
+    # CI=true disables the live region by design. This case is about what a
+    # terminal sees, so force the terminal path rather than the CI one.
+    monkeypatch.setenv("SEARCHTS_PROGRESS_TTY", "1")
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
     monkeypatch.setattr("searchts.assets.grab", lambda url, out, **kw: manifest)
@@ -764,7 +766,10 @@ def test_cli_grab_names_what_saved_and_links_the_folder_on_a_terminal(
     uri = file_uri(folder)
     assert f"\033]8;;{uri}\033\\" in captured.err
     assert folder in captured.err
-    assert "downloaded 2 assets (1 images, 1 fonts)" in captured.err
+    # The receipt groups what landed by kind rather than restating the count
+    # in one phrase, so the heading and the two kind rows carry it.
+    assert "Delivered" in captured.err and "2 files" in captured.err
+    assert "fonts" in captured.err and "images" in captured.err
     assert "\033[48;2;10;10;35m" in captured.err
     assert "\033[48;2;255;255;255m" in captured.err
     assert "#0a0a23" in captured.err and "#ffffff" in captured.err
