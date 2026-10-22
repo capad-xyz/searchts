@@ -7,7 +7,6 @@ All notable changes to searchts are documented here. This project follows semant
 
 ### Added
 
-* **cli:** live progression, explained receipts, and a help screen ([7a9649b](https://github.com/capad-xyz/searchts/commit/7a9649b6016d2def44826087201339423d2ee60c))
 * **cli:** live progression, explained receipts, and a help screen ([#412](https://github.com/capad-xyz/searchts/issues/412)) ([7a9649b](https://github.com/capad-xyz/searchts/commit/7a9649b6016d2def44826087201339423d2ee60c))
 
 
