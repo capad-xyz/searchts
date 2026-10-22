@@ -506,6 +506,7 @@ def _run():
         sys.exit(cmd_update(
             force=bool(getattr(args, "force", False)),
             dry_run=bool(getattr(args, "dry_run", False)),
+            command=args.command,
         ))
     elif args.command == "watch":
         _cmd_watch()
@@ -550,7 +551,7 @@ def main():
     try:
         _run()
     except KeyboardInterrupt:
-        print("[!] Interrupted", file=sys.stderr)
+        print("! Interrupted", file=sys.stderr)
         # 128 + SIGINT, the shell convention for "cancelled by the user".
         sys.exit(130)
     except BrokenPipeError:
@@ -591,22 +592,42 @@ def _cmd_install(args):
     apply_system = args.system_deps
     safe_mode = not apply_system
 
+    from searchts import progress, receipts
+
     config = Config()
-    print()
-    print("searchts Installer")
-    print("=" * 40)
+    style, unicode_ok = receipts.for_stream(sys.stdout)
+
+    def row(item, label_w=9):
+        print("\n".join(receipts.row_lines(
+            style, item, unicode_ok=unicode_ok, label_w=label_w,
+        )))
+
+    # The old banner and its ==== rule are gone. The header says which command
+    # is running; the mode is the first row, not a second title.
+    print(receipts.header(
+        style,
+        "install",
+        subject=f"v{__version__}",
+        status=progress.ROW_SKIP,
+        unicode_ok=unicode_ok,
+    ))
 
     # Ensure tools directory exists (for upstream tool repos)
     tools_dir = os.path.expanduser("~/.searchts/tools")
     os.makedirs(tools_dir, exist_ok=True)
 
     if dry_run:
-        print("DRY RUN — showing what would be done (no changes)")
-        print()
+        mode = "dry run, no changes"
     elif apply_system:
+        mode = "system-deps mode, optional system packages"
+    else:
+        mode = "non-invasive, no system changes"
+    row(receipts.Row(progress.ROW_SKIP, "mode", mode), label_w=6)
+    print()
+    if apply_system:
         print("SYSTEM-DEPS MODE — will install optional system packages (gh, Node.js, npm globals)")
         print()
-    else:
+    elif not dry_run:
         print("Non-invasive install (default) — no system changes will be made.")
         print("The keyless core (searchts read/search/transcribe) needs none of these.")
         print("Re-run with --system-deps to actually install the optional system packages below.")
@@ -634,18 +655,19 @@ def _cmd_install(args):
     if env == "auto":
         env = _detect_environment()
 
-    if env == "server":
-        print("Environment: Server/VPS (auto-detected)")
-    else:
-        print("Environment: Local computer (auto-detected)")
+    row(receipts.Row(
+        progress.ROW_SKIP,
+        "env",
+        "server/VPS (auto-detected)" if env == "server" else "local computer (auto-detected)",
+    ), label_w=6)
 
     # Apply explicit flags
     if args.proxy:
         if dry_run:
-            print("[dry-run] Would save network proxy")
+            row(receipts.Row(progress.ROW_SKIP, "proxy", "would save the network proxy"), label_w=6)
         else:
             config.set("proxy", args.proxy)
-            print("[ok] Proxy saved (used when the agent accesses a restricted network)")
+            row(receipts.Row(progress.ROW_OK, "proxy", "saved (used for a restricted network)"), label_w=6)
 
     # ── Install core system dependencies (lightweight, always) ──
     print()
@@ -659,7 +681,11 @@ def _cmd_install(args):
     # ── mcporter (for Exa search) ──
     print()
     if dry_run:
-        print("[dry-run] Would install mcporter and configure Exa search")
+        row(receipts.Row(
+            progress.ROW_SKIP,
+            "mcporter",
+            "would install mcporter and configure Exa search",
+        ))
     elif safe_mode:
         _install_mcporter_safe()
     else:
@@ -672,7 +698,11 @@ def _cmd_install(args):
         if env == "server" and "opencli" in requested_channels:
             # OpenCLI rides a real desktop Chrome session — useless headless
             requested_channels.discard("opencli")
-            print("  -- OpenCLI requires a desktop environment + Chrome; skipping in a server environment")
+            row(receipts.Row(
+                progress.ROW_SKIP,
+                "opencli",
+                "needs a desktop + Chrome; skipped in a server environment",
+            ))
         for ch_name in sorted(requested_channels):
             installer = CHANNEL_INSTALLERS.get(ch_name)
             if installer:
@@ -680,13 +710,20 @@ def _cmd_install(args):
 
     if requested_channels and dry_run:
         print()
-        print(f"[dry-run] Would install optional channels: {', '.join(sorted(requested_channels))}")
+        row(receipts.Row(
+            progress.ROW_SKIP,
+            "channels",
+            "would install " + ", ".join(sorted(requested_channels)),
+        ))
     elif requested_channels and safe_mode:
         print()
-        print(f"Optional channels requested ({', '.join(sorted(requested_channels))}) but not installed: "
-              "installing them mutates the system (pipx/npm).")
-        print("   Re-run with --system-deps to install them: "
-              f"searchts install --system-deps --channels={','.join(sorted(requested_channels))}")
+        row(receipts.Row(
+            progress.ROW_WARN,
+            "channels",
+            f"requested {', '.join(sorted(requested_channels))} but not installed: "
+            "installing them mutates the system (pipx/npm). Re-run with "
+            f"--system-deps --channels={','.join(sorted(requested_channels))}",
+        ))
 
     # ── Auto-import cookies (only if cookie-needing channels are requested) ──
     needs_cookies = bool(requested_channels & COOKIE_CHANNELS)
@@ -701,21 +738,33 @@ def _cmd_install(args):
             found = False
             for platform, success, message in cookie_results:
                 if success:
-                    print(f"  [ok] {platform}: {message}")
+                    row(receipts.Row(progress.ROW_OK, platform, message))
                     found = True
             if not found:
                 cookie_results = configure_from_browser("firefox", config)
                 for platform, success, message in cookie_results:
                     if success:
-                        print(f"  [ok] {platform}: {message}")
+                        row(receipts.Row(progress.ROW_OK, platform, message))
                         found = True
             if not found:
-                print("  -- No cookies found (normal if you haven't logged into these sites)")
+                row(receipts.Row(
+                    progress.ROW_SKIP,
+                    "cookies",
+                    "none found (normal if you have not logged into these sites)",
+                ))
         except Exception:
-            print("  -- Could not read browser cookies (browser might be open or password was denied)")
+            row(receipts.Row(
+                progress.ROW_WARN,
+                "cookies",
+                "could not read browser cookies (browser open or password denied)",
+            ))
     elif env == "local" and needs_cookies and dry_run:
         print()
-        print("[dry-run] Would try to import cookies from Chrome/Firefox")
+        row(receipts.Row(
+            progress.ROW_SKIP,
+            "cookies",
+            "would try Chrome and Firefox",
+        ))
 
     # Environment-specific advice
     if env == "server":
@@ -725,27 +774,18 @@ def _cmd_install(args):
         print("   Save a proxy for the agent to use: searchts configure proxy http://user:pass@ip:port")
         print("   Cheap option: https://www.webshare.io ($1/month)")
 
-    # Test channels
+    # Test channels. install does not open a tracker of its own: check_all's
+    # rows are the only live region, and its report is the ending.
     if not dry_run:
         print()
-        print("Testing channels...")
-        results = check_all(config, progress=True)
-        ok = sum(1 for r in results.values() if r["status"] == "ok")
-        total = len(results)
+        results = check_all(config, progress=True, command="install")
 
-        # Final status
-        print()
-        print(format_report(results))
-        print()
-
-        # ── Install agent skill + user-scope reach rule ──
+        # Agent skill + reach rule first, so the doctor report stays last.
         _install_skill()
         from searchts.integrations.memory_rule import install_memory_rules
         print()
         print("Agent reach rule (user-scope)...")
         install_memory_rules()
-
-        print(f"[ok] Installation complete! {ok}/{total} channels active.")
 
         if not requested_channels:
             # First install — hint about optional channels
@@ -759,9 +799,19 @@ def _cmd_install(args):
         print("If searchts helped you, give it a Star so more people can find it:")
         print("   https://github.com/capad-xyz/searchts")
         print("   It takes just a second and means a lot to an independent developer. Thank you!")
+
+        print()
+        print(format_report(results))
     else:
         print()
-        print("Dry run complete. No changes were made.")
+        print(receipts.block(
+            style,
+            "install",
+            [receipts.Row(progress.ROW_SKIP, "dry run", "no changes were made")],
+            subject=f"v{__version__}",
+            status=progress.ROW_SKIP,
+            unicode_ok=unicode_ok,
+        ))
 
 
 def _install_skill():
@@ -861,8 +911,8 @@ def _install_skill():
         if _copy_skill_dir(target):
             print(f"Skill installed: {target}")
         else:
-            print("  -- Could not install agent skill (optional)")
-            print("  -- Tip: install OpenClaw, Claude Code, or create ~/.agents/skills/ manually")
+            print("  · Could not install agent skill (optional)")
+            print("  · Tip: install OpenClaw, Claude Code, or create ~/.agents/skills/ manually")
 
 
 def _uninstall_skill():
@@ -975,13 +1025,30 @@ def write_slash_command(target_dir):
 
 def _cmd_skill_install(args):
     """Write the Claude Code custom slash-command file (searchts.md)."""
+    from searchts import progress, receipts
+
     target_dir = _slash_command_target_dir(getattr(args, "dir", None))
-    path = write_slash_command(target_dir)
-    print(f"Wrote Claude Code slash-command: {path}")
-    print("Use it in Claude Code with: /searchts <url | video url | query>")
+    tracker = progress.live("skill install", summary_stream=sys.stderr)
+    with tracker:
+        if tracker.is_live:
+            tracker.stage("writing the slash command")
+        path = write_slash_command(target_dir)
+        if tracker.is_live:
+            tracker.settle(progress.ROW_OK, path)
+        receipts.emit(
+            tracker,
+            receipts.block(
+                tracker.color,
+                "skill install",
+                [receipts.Row(progress.ROW_OK, "command", _short_path(path))],
+                unicode_ok=tracker.unicode_ok,
+            ),
+            stream=sys.stderr,
+        )
+    # The path is the deliverable, alone on stdout.
+    print(_stdout_path(path))
     from searchts.integrations.memory_rule import install_memory_rules
-    print()
-    print("Agent reach rule (user-scope)...")
+
     install_memory_rules()
 
 
@@ -1034,15 +1101,56 @@ def _cmd_mcp(args):
     if mcp_command == "serve":
         _cmd_mcp_serve(args)
     elif mcp_command == "install":
-        print(mcp_install_text(getattr(args, "client", None)))
-        from searchts.integrations.agent_wiring import check_agent_wiring
-        checks = check_agent_wiring()
+        from searchts import progress, receipts
+
+        client = getattr(args, "client", None)
+        tracker = progress.live("mcp install", summary_stream=sys.stderr)
+        with tracker:
+            if tracker.is_live:
+                tracker.stage("reading agent wiring")
+            text = mcp_install_text(client)
+            from searchts.integrations.agent_wiring import check_agent_wiring
+
+            checks = check_agent_wiring()
+            if tracker.is_live:
+                tracker.settle(
+                    progress.ROW_OK,
+                    f"{len(checks)} clients detected" if checks else "no clients detected",
+                )
+            wiring = (
+                "claude mcp add searchts -- searchts mcp serve"
+                if client == "claude"
+                else "searchts mcp serve"
+            )
+            receipts.emit(
+                tracker,
+                receipts.block(
+                    tracker.color,
+                    "mcp install",
+                    [receipts.Row(progress.ROW_OK, "wiring", wiring)],
+                    unicode_ok=tracker.unicode_ok,
+                ),
+                stream=sys.stderr,
+            )
+
+        print(text)
         if checks:
-            print("\nDetected wiring on this machine:")
-            for c in checks:
-                mark = "[ok]" if c["wired"] else "[!] "
-                extra = "" if c["wired"] else f"  (not registered — run: {c['hint']})"
-                print(f"  {mark} {c['client']}{extra}")
+            style, unicode_ok = receipts.for_stream(sys.stdout)
+            rows = [
+                receipts.Row(
+                    progress.ROW_OK if c["wired"] else progress.ROW_WARN,
+                    c["client"],
+                    "registered" if c["wired"] else f"not registered; run: {c['hint']}",
+                )
+                for c in checks
+            ]
+            label_w = min(18, max(len(row.label) for row in rows))
+            print()
+            print("  " + style.dim("AGENT WIRING"))
+            for row in rows:
+                print("\n".join(receipts.row_lines(
+                    style, row, unicode_ok=unicode_ok, label_w=label_w,
+                )))
     else:
         print("Usage: searchts mcp serve [--http|--sse] [--host 127.0.0.1] [--port 8765]")
         print("   or: searchts mcp install [--client claude|cursor|json]")
@@ -1114,7 +1222,7 @@ def _install_system_deps():
 
     # ── gh CLI ──
     if shutil.which("gh"):
-        print("  [ok] gh CLI already installed")
+        print("  ✓ gh CLI already installed")
     else:
         print("  Installing gh CLI...")
         os_type = platform.system().lower()
@@ -1140,29 +1248,29 @@ def _install_system_deps():
                 subprocess.run(["apt-get", "update", "-qq"], capture_output=True, timeout=60)
                 subprocess.run(["apt-get", "install", "-y", "-qq", "gh"], capture_output=True, timeout=60)
                 if shutil.which("gh"):
-                    print("  [ok] gh CLI installed")
+                    print("  ✓ gh CLI installed")
                 else:
-                    print("  [!]  gh CLI install failed. You can try: snap install gh, or download from https://github.com/cli/cli/releases")
+                    print("  !  gh CLI install failed. You can try: snap install gh, or download from https://github.com/cli/cli/releases")
             except Exception:
-                print("  [!]  gh CLI install failed. You can try: snap install gh, or download from https://github.com/cli/cli/releases")
+                print("  !  gh CLI install failed. You can try: snap install gh, or download from https://github.com/cli/cli/releases")
         elif os_type == "darwin":
             if shutil.which("brew"):
                 try:
                     subprocess.run(["brew", "install", "gh"], capture_output=True, timeout=120)
                     if shutil.which("gh"):
-                        print("  [ok] gh CLI installed")
+                        print("  ✓ gh CLI installed")
                     else:
-                        print("  [!]  gh CLI install failed. Try: brew install gh")
+                        print("  !  gh CLI install failed. Try: brew install gh")
                 except Exception:
-                    print("  [!]  gh CLI install failed. Try: brew install gh")
+                    print("  !  gh CLI install failed. Try: brew install gh")
             else:
-                print("  [!]  gh CLI not found. Install: https://cli.github.com")
+                print("  !  gh CLI not found. Install: https://cli.github.com")
         else:
-            print("  [!]  gh CLI not found. Install: https://cli.github.com")
+            print("  !  gh CLI not found. Install: https://cli.github.com")
 
     # ── Node.js (needed for mcporter) ──
     if shutil.which("node") and shutil.which("npm"):
-        print("  [ok] Node.js already installed")
+        print("  ✓ Node.js already installed")
     else:
         print("  Installing Node.js...")
         try:
@@ -1186,11 +1294,11 @@ def _install_system_deps():
                 capture_output=True, timeout=120,
             )
             if shutil.which("node"):
-                print("  [ok] Node.js installed")
+                print("  ✓ Node.js installed")
             else:
-                print("  [!]  Node.js install failed. Try: apt install nodejs npm, or nvm install 22, or download from https://nodejs.org")
+                print("  !  Node.js install failed. Try: apt install nodejs npm, or nvm install 22, or download from https://nodejs.org")
         except Exception:
-            print("  [!]  Node.js install failed. Try: apt install nodejs npm, or nvm install 22, or download from https://nodejs.org")
+            print("  !  Node.js install failed. Try: apt install nodejs npm, or nvm install 22, or download from https://nodejs.org")
 
     # ── undici (proxy support for Node.js fetch) ──
     npm_cmd = shutil.which("npm")
@@ -1198,13 +1306,13 @@ def _install_system_deps():
         npm_root = subprocess.run([npm_cmd, "root", "-g"], capture_output=True, encoding="utf-8", errors="replace", timeout=5).stdout.strip()
         undici_path = os.path.join(npm_root, "undici", "index.js") if npm_root else ""
         if os.path.exists(undici_path):
-            print("  [ok] undici already installed (Node.js proxy support)")
+            print("  ✓ undici already installed (Node.js proxy support)")
         else:
             try:
                 subprocess.run([npm_cmd, "install", "-g", "undici"], capture_output=True, encoding="utf-8", errors="replace", timeout=60)
-                print("  [ok] undici installed (Node.js proxy support)")
+                print("  ✓ undici installed (Node.js proxy support)")
             except Exception:
-                print("  -- undici install failed (optional — may not work behind proxies)")
+                print("  · undici install failed (optional — may not work behind proxies)")
 
     # ── yt-dlp JS runtime config (YouTube requires external JS runtime) ──
     if shutil.which("node"):
@@ -1215,15 +1323,15 @@ def _install_system_deps():
             with open(ytdlp_config, "r", encoding="utf-8") as f:
                 if "--js-runtimes" in f.read():
                     needs_config = False
-                    print("  [ok] yt-dlp JS runtime already configured")
+                    print("  ✓ yt-dlp JS runtime already configured")
         if needs_config:
             try:
                 os.makedirs(ytdlp_config_dir, exist_ok=True)
                 with open(ytdlp_config, "a", encoding="utf-8") as f:
                     f.write("--js-runtimes node\n")
-                print("  [ok] yt-dlp configured to use Node.js as JS runtime (YouTube)")
+                print("  ✓ yt-dlp configured to use Node.js as JS runtime (YouTube)")
             except Exception:
-                print("  -- Could not configure yt-dlp JS runtime (YouTube may not work)")
+                print("  · Could not configure yt-dlp JS runtime (YouTube may not work)")
 
     # NOTE: twitter-cli etc. are optional.
     # They are installed via --channels flag, not here.
@@ -1237,7 +1345,7 @@ def _install_twitter_deps():
 
     print("Setting up Twitter (twitter-cli)...")
     if shutil.which("twitter"):
-        print("  [ok] twitter-cli already installed")
+        print("  ✓ twitter-cli already installed")
         return
     for tool, cmd in [("pipx", ["pipx", "install", "twitter-cli"]),
                       ("uv", ["uv", "tool", "install", "twitter-cli"])]:
@@ -1246,11 +1354,11 @@ def _install_twitter_deps():
                 subprocess.run(cmd, capture_output=True, encoding="utf-8",
                                errors="replace", timeout=120)
                 if shutil.which("twitter"):
-                    print("  [ok] twitter-cli installed")
+                    print("  ✓ twitter-cli installed")
                     return
             except Exception:
                 pass
-    print("  [!]  twitter-cli install failed. Run: pipx install twitter-cli")
+    print("  !  twitter-cli install failed. Run: pipx install twitter-cli")
 
 
 def _install_opencli_deps():
@@ -1273,13 +1381,13 @@ def _install_opencli_deps():
     print("Setting up OpenCLI (browser-session backend, desktop only)...")
     st = opencli_status()
     if st.installed and not st.broken:
-        print(f"  [ok] {opencli_summary(st)}")
+        print(f"  ✓ {opencli_summary(st)}")
         if not st.ready:
             print(f"  {st.hint}")
         return
 
     if not shutil.which("npm"):
-        print("  [!]  OpenCLI requires Node.js ≥ 20. Install Node first:")
+        print("  !  OpenCLI requires Node.js ≥ 20. Install Node first:")
         print("       https://nodejs.org  (or brew install node)")
         return
 
@@ -1293,13 +1401,13 @@ def _install_opencli_deps():
 
     st = opencli_status()
     if st.installed and not st.broken:
-        print("  [ok] OpenCLI installed")
+        print("  ✓ OpenCLI installed")
         print("  Final step (must be done manually, due to Chrome security restrictions): install the browser extension")
         print(f"    1. Open {OPENCLI_EXTENSION_URL}")
         print("    2. Click \"Add to Chrome\"")
         print("    3. Run `opencli doctor` to verify the connection")
     else:
-        print(f"  [!]  OpenCLI install failed. Run: npm install -g {OPENCLI_PACKAGE}")
+        print(f"  !  OpenCLI install failed. Run: npm install -g {OPENCLI_PACKAGE}")
 
 
 def _install_reddit_deps():
@@ -1313,7 +1421,7 @@ def _install_reddit_deps():
         print("  Reddit uses OpenCLI (works once you have logged into reddit.com in the browser)")
         import shutil
         if shutil.which("rdt"):
-            print("  [ok] Detected an existing rdt-cli; it will remain available as a fallback backend")
+            print("  ✓ Detected an existing rdt-cli; it will remain available as a fallback backend")
         return
 
     _install_rdt_cli()
@@ -1326,7 +1434,7 @@ def _install_rdt_cli():
 
     print("Setting up Reddit (rdt-cli)...")
     if shutil.which("rdt"):
-        print("  [ok] rdt-cli already installed")
+        print("  ✓ rdt-cli already installed")
         return
     for tool, cmd in [
         ("pipx", ["pipx", "install", _RDT_GIT_SOURCE]),
@@ -1337,11 +1445,11 @@ def _install_rdt_cli():
                 subprocess.run(cmd, capture_output=True, encoding="utf-8",
                                errors="replace", timeout=120)
                 if shutil.which("rdt"):
-                    print("  [ok] rdt-cli installed")
+                    print("  ✓ rdt-cli installed")
                     return
             except Exception:
                 pass
-    print(f"  [!]  rdt-cli install failed. Run: pipx install '{_RDT_GIT_SOURCE}'")
+    print(f"  !  rdt-cli install failed. Run: pipx install '{_RDT_GIT_SOURCE}'")
 
 
 def _install_system_deps_safe():
@@ -1359,9 +1467,9 @@ def _install_system_deps_safe():
     for name, binaries, label, install_hint in deps:
         found = any(shutil.which(b) for b in binaries)
         if found:
-            print(f"  [ok] {label} already installed")
+            print(f"  ✓ {label} already installed")
         else:
-            print(f"  -- {label} not found")
+            print(f"  \u00b7 {label} not found")
             missing.append((label, install_hint))
 
     if missing:
@@ -1377,7 +1485,7 @@ def _install_system_deps_dryrun():
     """Dry-run: just show what would be checked/installed."""
     import shutil
 
-    print("[dry-run] System dependency check:")
+    print("· System dependency check:")
 
     checks = [
         ("gh CLI", ["gh"], "apt install gh / brew install gh"),
@@ -1387,7 +1495,7 @@ def _install_system_deps_dryrun():
     for label, binaries, method in checks:
         found = any(shutil.which(b) for b in binaries)
         if found:
-            print(f"  [ok] {label}: already installed, skip")
+            print(f"  ✓ {label}: already installed, skip")
         else:
             print(f"  {label}: would install via: {method}")
 
@@ -1402,11 +1510,11 @@ def _install_mcporter():
           "search is the keyless built-in 'searchts search')...")
 
     if shutil.which("mcporter"):
-        print("  [ok] mcporter already installed")
+        print("  ✓ mcporter already installed")
     else:
         # Check for npm/npx
         if not shutil.which("npm") and not shutil.which("npx"):
-            print("  [!]  mcporter requires Node.js. Install Node.js first:")
+            print("  !  mcporter requires Node.js. Install Node.js first:")
             print("     https://nodejs.org/ or: curl -fsSL https://fnm.vercel.app/install | bash")
             return
         try:
@@ -1415,12 +1523,12 @@ def _install_mcporter():
                 capture_output=True, encoding="utf-8", errors="replace", timeout=120,
             )
             if shutil.which("mcporter"):
-                print("  [ok] mcporter installed")
+                print("  ✓ mcporter installed")
             else:
-                print("  [X] mcporter install failed. Retry: npm install -g mcporter (check network/timeout), or try: npx mcporter@latest list")
+                print("  ✗ mcporter install failed. Retry: npm install -g mcporter (check network/timeout), or try: npx mcporter@latest list")
                 return
         except Exception as e:
-            print(f"  [X] mcporter install failed: {e}")
+            print(f"  ✗ mcporter install failed: {e}")
             return
 
     # Configure Exa MCP (free, no key needed)
@@ -1433,11 +1541,11 @@ def _install_mcporter():
                 ["mcporter", "config", "add", "exa", "https://mcp.exa.ai/mcp"],
                 capture_output=True, encoding="utf-8", errors="replace", timeout=10,
             )
-            print("  [ok] Exa search configured (free, no API key needed)")
+            print("  ✓ Exa search configured (free, no API key needed)")
         else:
-            print("  [ok] Exa search already configured")
+            print("  ✓ Exa search already configured")
     except Exception:
-        print("  [!]  Could not configure Exa. Run manually: mcporter config add exa https://mcp.exa.ai/mcp")
+        print("  !  Could not configure Exa. Run manually: mcporter config add exa https://mcp.exa.ai/mcp")
 
 
 def _install_mcporter_safe():
@@ -1453,10 +1561,10 @@ def _install_mcporter_safe():
     print("Checking mcporter (optional extra Exa provider)...")
 
     if shutil.which("mcporter"):
-        print("  [ok] mcporter already installed")
+        print("  ✓ mcporter already installed")
         print("  Optional — to add Exa as an extra provider: mcporter config add exa https://mcp.exa.ai/mcp")
     else:
-        print("  -- mcporter not installed (optional; not required for search)")
+        print("  · mcporter not installed (optional; not required for search)")
         print("  Optional — to install: npm install -g mcporter")
         print("  Then add Exa: mcporter config add exa https://mcp.exa.ai/mcp")
 
@@ -1507,33 +1615,46 @@ def _cmd_configure(args):
     """Set a config value and test it, or auto-extract from browser."""
     import shutil
 
+    from searchts import progress, receipts
     from searchts.config import Config
 
     config = Config()
+    style, unicode_ok = receipts.for_stream(sys.stdout)
+
+    def receipt(rows, *, status=progress.ROW_OK, subject=""):
+        print(receipts.block(
+            style,
+            "configure",
+            rows,
+            subject=subject,
+            status=status,
+            unicode_ok=unicode_ok,
+        ))
 
     # ── Auto-extract from browser ──
     if args.from_browser:
         from searchts.cookie_extract import configure_from_browser
 
         browser = args.from_browser
-        print(f"Extracting cookies from {browser}...")
-        print()
-
         results = configure_from_browser(browser, config)
 
         found_any = False
+        rows = []
         for platform, success, message in results:
-            if success:
-                print(f"  [ok] {platform}: {message}")
-                found_any = True
-            else:
-                print(f"  -- {platform}: {message}")
-
-        print()
-        if found_any:
-            print("[ok] Cookies configured! Run `searchts doctor` to see updated status.")
-        else:
-            print(f"No cookies found. Make sure you're logged into the platforms in {browser}.")
+            rows.append(receipts.Row(
+                progress.ROW_OK if success else progress.ROW_SKIP,
+                platform,
+                message,
+            ))
+            found_any = found_any or success
+        rows.append(receipts.Row(
+            progress.ROW_OK if found_any else progress.ROW_WARN,
+            "done",
+            "cookies configured; run `searchts doctor` to see updated status"
+            if found_any
+            else f"no cookies found; make sure you are logged into the platforms in {browser}",
+        ))
+        receipt(rows, status=progress.ROW_OK if found_any else progress.ROW_FAIL, subject=browser)
         return
 
     # ── Manual configure ──
@@ -1543,24 +1664,38 @@ def _cmd_configure(args):
         return
 
     if args.key == "youtube-cookies":
-        print(
-            "[!] youtube-cookies is not wired and is not stored in YAML. "
-            "yt-dlp does not read a searchts key. Opt-in at transcribe time:\n"
-            "  searchts transcribe <url> --cookies-from-browser chrome\n"
-            "Never used by `searchts read`."
+        receipt(
+            [receipts.Row(
+                progress.ROW_WARN,
+                "youtube-cookies",
+                "not wired and not stored in YAML. yt-dlp does not read a searchts key. "
+                "Opt in at transcribe time: searchts transcribe <url> "
+                "--cookies-from-browser chrome. Never used by `searchts read`.",
+            )],
+            status=progress.ROW_WARN,
+            subject="not stored",
         )
         return
 
     if args.key == "github-token":
-        print(
-            "[!] github-token is not stored. Export GITHUB_TOKEN or GH_TOKEN in the environment "
-            "or put it in .env (see .env.example). Nothing in searchts reads a YAML token."
+        receipt(
+            [receipts.Row(
+                progress.ROW_WARN,
+                "github-token",
+                "not stored. Export GITHUB_TOKEN or GH_TOKEN in the environment, or put it "
+                "in .env (see .env.example). Nothing in searchts reads a YAML token.",
+            )],
+            status=progress.ROW_WARN,
+            subject="not stored",
         )
         return
 
     value = " ".join(args.value) if args.value else ""
     if not value:
-        print(f"Missing value for {args.key}")
+        receipt(
+            [receipts.Row(progress.ROW_FAIL, "reason", f"missing value for {args.key}")],
+            status=progress.ROW_FAIL,
+        )
         return
 
     if args.key == "proxy":
@@ -1568,7 +1703,12 @@ def _cmd_configure(args):
         # this key at runtime — agents read it back and export HTTP(S)_PROXY
         # before invoking upstream tools (see docs/install.md).
         config.set("proxy", value)
-        print("[ok] Proxy saved (for the agent to set HTTP_PROXY/HTTPS_PROXY when accessing networks that need a proxy, such as Reddit/Twitter)")
+        receipt([receipts.Row(
+            progress.ROW_OK,
+            "proxy",
+            "saved for the agent to set HTTP_PROXY/HTTPS_PROXY on a restricted network "
+            "(Reddit, Twitter)",
+        )], subject="saved")
 
     elif args.key == "twitter-cookies":
         # Accept two formats:
@@ -1580,17 +1720,21 @@ def _cmd_configure(args):
             config.set("twitter_auth_token", auth_token)
             config.set("twitter_ct0", ct0)
 
-            # Sync credentials to twitter-cli env
-            print("[ok] Twitter cookies configured!")
-
-            print("Testing Twitter access...", end=" ")
+            rows = [receipts.Row(
+                progress.ROW_OK,
+                "cookies",
+                "Twitter cookies configured",
+            )]
             try:
                 import subprocess
                 twitter_bin = shutil.which("twitter")
                 if not twitter_bin:
-                    print("[!] twitter-cli not installed. Run: pipx install twitter-cli")
+                    rows.append(receipts.Row(
+                        progress.ROW_WARN,
+                        "twitter-cli",
+                        "not installed; run: pipx install twitter-cli",
+                    ))
                 else:
-                    import os
                     env = os.environ.copy()
                     env["TWITTER_AUTH_TOKEN"] = auth_token
                     env["TWITTER_CT0"] = ct0
@@ -1601,24 +1745,53 @@ def _cmd_configure(args):
                     )
                     output = (result.stdout or "") + (result.stderr or "")
                     if "ok: true" in output:
-                        print("[ok] Twitter access works!")
+                        rows.append(receipts.Row(
+                            progress.ROW_OK,
+                            "access",
+                            "Twitter access works",
+                        ))
                     else:
-                        print("[!] Auth check failed (cookies might be wrong)")
+                        rows.append(receipts.Row(
+                            progress.ROW_WARN,
+                            "access",
+                            "auth check failed (cookies might be wrong)",
+                        ))
             except Exception as e:
-                print(f"[X] Failed: {e}")
+                rows.append(receipts.Row(
+                    progress.ROW_WARN,
+                    "access",
+                    f"check failed: {e}",
+                ))
+            receipt(rows, subject="saved")
         else:
-            print("[X] Could not find auth_token and ct0 in your input.")
-            print("   Accepted formats:")
-            print("   1. searchts configure twitter-cookies AUTH_TOKEN CT0")
-            print('   2. searchts configure twitter-cookies "auth_token=xxx; ct0=yyy; ..."')
+            receipt(
+                [
+                    receipts.Row(
+                        progress.ROW_FAIL,
+                        "reason",
+                        "could not find auth_token and ct0 in your input",
+                    ),
+                    receipts.Row(
+                        progress.ROW_SKIP,
+                        "format",
+                        "searchts configure twitter-cookies AUTH_TOKEN CT0",
+                    ),
+                    receipts.Row(
+                        progress.ROW_SKIP,
+                        "format",
+                        'searchts configure twitter-cookies "auth_token=xxx; ct0=yyy; ..."',
+                    ),
+                ],
+                status=progress.ROW_FAIL,
+            )
 
     elif args.key == "groq-key":
         config.set("groq_api_key", value)
-        print("[ok] Groq key configured!")
+        receipt([receipts.Row(progress.ROW_OK, "groq", "key configured")], subject="saved")
 
     elif args.key == "openai-key":
         config.set("openai_api_key", value)
-        print("[ok] OpenAI key configured!")
+        receipt([receipts.Row(progress.ROW_OK, "openai", "key configured")], subject="saved")
 
 
 def _cmd_transcribe(args):
@@ -1649,7 +1822,20 @@ def _cmd_transcribe(args):
             tracker.abort()
             # An error on stdout is invisible to every `2>` redirect and
             # makes a failed run look like a successful empty transcript.
-            print(f"[x] {e}", file=sys.stderr)
+            # The ending is the read ladder's shape: a red header and one
+            # reason row, not a bracketed marker from an older theme.
+            from searchts import receipts
+
+            text = receipts.block(
+                tracker.color,
+                "transcribe",
+                [receipts.Row(progress.ROW_FAIL, "reason", str(e))],
+                subject=tracker.subject,
+                elapsed=tracker.elapsed(),
+                status=progress.ROW_FAIL,
+                unicode_ok=tracker.unicode_ok,
+            )
+            print(text, file=sys.stderr)
             sys.exit(1)
         if tracker.wants():
             s = tracker.color
@@ -1695,6 +1881,8 @@ def _cmd_uninstall(args):
     import shutil
     import subprocess
 
+    from searchts import progress, receipts
+
     dry_run = args.dry_run
     if getattr(args, "chromium", False) and not getattr(args, "browser", False):
         print("--chromium only applies with --browser. It does not remove config.", file=sys.stderr)
@@ -1705,34 +1893,42 @@ def _cmd_uninstall(args):
         sys.exit(uninstall_browser(dry_run=dry_run, chromium=getattr(args, "chromium", False)))
     keep_config = args.keep_config
 
-    print()
-    print("searchts Uninstaller")
-    print("=" * 40)
+    style, unicode_ok = receipts.for_stream(sys.stdout)
+    print(receipts.header(
+        style,
+        "uninstall",
+        status=progress.ROW_SKIP,
+        unicode_ok=unicode_ok,
+    ))
 
-    if dry_run:
-        print("DRY RUN — showing what would be removed (no changes)")
-        print()
-
-    removed_any = False
+    rows: list[receipts.Item] = []
 
     # ── 1. Config directory (~/.searchts/) ──
     config_dir = os.path.expanduser("~/.searchts")
     if not keep_config:
         if os.path.isdir(config_dir):
             if dry_run:
-                print(f"[dry-run] Would remove config directory: {config_dir}")
-                print("          (contains config.yaml with all tokens/cookies/API keys)")
+                rows.append(receipts.Row(
+                    progress.ROW_SKIP,
+                    "config",
+                    f"would remove {_short_path(config_dir)} (tokens, cookies, API keys)",
+                ))
             else:
                 try:
                     shutil.rmtree(config_dir)
-                    print(f"  Removed config directory: {config_dir}")
-                    removed_any = True
+                    rows.append(receipts.Row(progress.ROW_OK, "config", f"removed {config_dir}"))
                 except Exception as e:
-                    print(f"  Could not remove {config_dir}: {e}")
+                    rows.append(receipts.Row(
+                        progress.ROW_FAIL, "config", f"could not remove {config_dir}: {e}",
+                    ))
         else:
-            print(f"  Config directory not found (already clean): {config_dir}")
+            rows.append(receipts.Row(
+                progress.ROW_SKIP, "config", f"not found (already clean): {config_dir}",
+            ))
     else:
-        print(f"  Skipping config directory (--keep-config): {config_dir}")
+        rows.append(receipts.Row(
+            progress.ROW_SKIP, "config", f"kept (--keep-config): {config_dir}",
+        ))
 
     # ── 2. Skill files ──
     skill_dirs = [
@@ -1745,17 +1941,23 @@ def _cmd_uninstall(args):
         skill_path = os.path.expanduser(skill_path_template)
         if os.path.isdir(skill_path):
             if dry_run:
-                print(f"[dry-run] Would remove {platform_name} skill: {skill_path}")
+                rows.append(receipts.Row(
+                    progress.ROW_SKIP, platform_name,
+                    f"would remove {_short_path(str(skill_path))}",
+                ))
             else:
                 try:
                     if os.path.islink(skill_path):
                         os.unlink(skill_path)
                     else:
                         shutil.rmtree(skill_path)
-                    print(f"  Removed {platform_name} skill: {skill_path}")
-                    removed_any = True
+                    rows.append(receipts.Row(
+                        progress.ROW_OK, platform_name, f"removed {skill_path}",
+                    ))
                 except Exception as e:
-                    print(f"  Could not remove {skill_path}: {e}")
+                    rows.append(receipts.Row(
+                        progress.ROW_FAIL, platform_name, f"could not remove {skill_path}: {e}",
+                    ))
 
     # ── 3. mcporter MCP entries ──
     if shutil.which("mcporter"):
@@ -1766,36 +1968,39 @@ def _cmd_uninstall(args):
                 )
                 if mcp_name in r.stdout:
                     if dry_run:
-                        print(f"[dry-run] Would remove mcporter entry: {mcp_name}")
+                        rows.append(receipts.Row(
+                            progress.ROW_SKIP, "mcporter", f"would remove {mcp_name}",
+                        ))
                     else:
                         subprocess.run(
                             ["mcporter", "config", "remove", mcp_name],
                             capture_output=True, encoding="utf-8", errors="replace", timeout=10,
                         )
-                        print(f"  Removed mcporter entry: {mcp_name}")
-                        removed_any = True
+                        rows.append(receipts.Row(
+                            progress.ROW_OK, "mcporter", f"removed {mcp_name}",
+                        ))
             except Exception:
                 pass
 
-    # ── 4. Summary and optional steps ──
+    rows.append(receipts.Section("optional"))
+    rows.append(receipts.Row(progress.ROW_SKIP, "package", "pip uninstall searchts"))
+    rows.append(receipts.Row(
+        progress.ROW_SKIP,
+        "tools",
+        "npm uninstall -g mcporter; pipx uninstall twitter-cli; npm uninstall -g undici",
+    ))
     print()
+    print(receipts.block(
+        style,
+        "uninstall",
+        rows,
+        status=progress.ROW_SKIP if dry_run else progress.ROW_OK,
+        subject="dry run" if dry_run else "",
+        unicode_ok=unicode_ok,
+    ))
     if dry_run:
-        print("Dry run complete. No changes were made.")
-        print("Run without --dry-run to actually remove the above.")
-    else:
-        if removed_any:
-            print("searchts data removed.")
-        else:
-            print("Nothing to remove — already clean.")
-
-    print()
-    print("Optional: remove the searchts Python package itself:")
-    print("  pip uninstall searchts")
-    print()
-    print("Optional: remove tools installed by searchts:")
-    print("  npm uninstall -g mcporter")
-    print("  pipx uninstall twitter-cli")
-    print("  npm uninstall -g undici")
+        print()
+        print("No changes were made. Run without --dry-run to remove the above.")
 
 
 def _short_subject(url: str) -> str:
@@ -1903,29 +2108,46 @@ def _cmd_read(args):
             if tracker.wants():
                 tracker.summary(_read_receipt(tracker, result, len(pages)))
     except unlocker.UnlockerError as e:
-        # The live block is already down; this block is the whole story and the
-        # only place these reasons are printed.
-        print(f"Failed to read {e.url}", file=sys.stderr)
-        for backend, why in e.attempts:
-            _print_reason(f"  {backend}: ", ux.tidy_reason(why))
-        # One extra line, only when fetch had something useful to add. The
+        # The live block is already down. The ending is the same ladder the
+        # user watched, with the failed rungs red and their reasons in the
+        # detail column -- not a separate prose block that repeats the header.
+        from searchts import receipts
+
+        rows = [
+            receipts.Row(progress.ROW_FAIL, backend, ux.tidy_reason(why))
+            for backend, why in e.attempts
+        ]
+        # One extra row, only when fetch had something useful to add. The
         # per-backend reasons above are each true; none of them says what to do
         # next, and a read that carried cookies is exactly the case where that
         # is the whole question.
         if e.hint:
-            _print_reason("  hint: ", e.hint)
+            rows.append(receipts.Row(progress.ROW_WARN, "hint", e.hint))
         # A login wall on an anonymous read is the one failure where the
         # reason is not the whole answer: the page exists, it is just
         # behind a login. Naming the commands here is what turns a wall into
-        # something an agent can act on, and it costs one line on a path
+        # something an agent can act on, and it costs one row on a path
         # that has already failed.
         if any("login-wall" in why for _, why in e.attempts):
-            _print_login_wall_hint(args.url)
+            rows.append(
+                receipts.Row(progress.ROW_WARN, "login", _login_wall_hint_text(args.url))
+            )
+        text = receipts.block(
+            tracker.color,
+            "read",
+            rows,
+            subject=tracker.subject,
+            elapsed=tracker.elapsed(),
+            status=progress.ROW_FAIL,
+            unicode_ok=tracker.unicode_ok,
+            width=78,
+        )
+        print(text, file=sys.stderr)
         sys.exit(1)
 
     # Surface prompt-injection findings to stderr so stdout stays clean content.
     if result.warnings:
-        print(f"[!] {len(result.warnings)} possible prompt-injection indicator(s) detected",
+        print(f"! {len(result.warnings)} possible prompt-injection indicator(s) detected",
               file=sys.stderr)
 
     if args.json:
@@ -2198,29 +2420,64 @@ def _cmd_login(args):
 
     action = getattr(args, "login_command", None) or "list"
 
+    from searchts import progress, receipts
+
+    style, unicode_ok = receipts.for_stream(sys.stdout)
+
+    def receipt(rows, *, subject="", status=progress.ROW_OK):
+        print(receipts.block(
+            style,
+            "login",
+            rows,
+            subject=subject,
+            status=status,
+            unicode_ok=unicode_ok,
+        ))
+
     if action == "list":
         a = audit()
         kept_sites = a.kept
+        rows = []
         if not kept_sites:
-            print("No site logins are kept. Nothing is stored between reads.")
+            rows.append(receipts.Row(
+                progress.ROW_SKIP,
+                "kept",
+                "no site logins are kept; nothing is stored between reads",
+            ))
         else:
-            print("Kept (searchts's own store):")
             for host, info in kept_sites.items():
                 extra = f" (from {info['browser']})" if info.get("browser") else ""
-                print(f"  {host}: {info['cookies']} cookies{extra}")
+                rows.append(receipts.Row(
+                    progress.ROW_OK,
+                    host,
+                    f"{info['cookies']} cookies{extra}",
+                ))
         if a.session_copy_granted:
             copied = a.session_copied_sites
-            print(f"\nThis session may copy logins. Copied so far: {', '.join(copied) or 'none'}.")
+            rows.append(receipts.Row(
+                progress.ROW_SKIP,
+                "session",
+                f"may copy logins; copied so far: {', '.join(copied) or 'none'}",
+            ))
         if a.scratch:
-            print(
-                f"\nScratch copies present: {len(a.scratch)} "
-                f"(deleted at the end of a read)"
-            )
+            rows.append(receipts.Row(
+                progress.ROW_SKIP,
+                "scratch",
+                f"Scratch copies present: {len(a.scratch)} (deleted at the end of a read)",
+            ))
+        receipt(rows, subject="kept")
         sys.exit(0)
 
     if action == "purge-scratch":
         gone = purge_scratch()
-        print(f"Deleted {len(gone)} scratch copy/copies.")
+        receipt(
+            [receipts.Row(
+                progress.ROW_OK,
+                "scratch",
+                f"Deleted {len(gone)} scratch copy/copies.",
+            )],
+            subject="scratch",
+        )
         sys.exit(0)
 
     if action == "kill":
@@ -2229,7 +2486,10 @@ def _cmd_login(args):
             print(f"{args.url!r} is not a site searchts can file a login under.", file=sys.stderr)
             sys.exit(2)
         killed = kill(args.url, browser_copies=bool(args.also_browser))
-        print(killed.why)
+        receipt(
+            [receipts.Row(progress.ROW_OK, "killed", killed.why)],
+            subject=host,
+        )
         sys.exit(0)
 
     if action == "keep":
@@ -2259,7 +2519,10 @@ def _cmd_login(args):
             print(str(e), file=sys.stderr)
             sys.exit(1)
         out = keep(args.url, source.cookies, browser=browser)
-        print(out.why)
+        receipt(
+            [receipts.Row(progress.ROW_OK, "kept", out.why)],
+            subject=host,
+        )
         sys.exit(0)
 
     if action == "signin":
@@ -2282,27 +2545,32 @@ def _cmd_login(args):
         # for a sign-in that never occurred. This says what was observed. The
         # read is a separate command, so it cannot be pointed at from here --
         # the point is that only a read can settle it, not that one is coming.
-        print(
-            f"read {source.count} cookie(s) for {host} from the sign-in browser "
+        rows = [receipts.Row(
+            progress.ROW_SKIP,
+            "read",
+            f"{source.count} cookie(s) for {host} from the sign-in browser "
             f"({source.via}). If no sign-in happened these are guest cookies, "
-            f"and only a later read of {host} can tell the difference."
-        )
+            f"and only a later read of {host} can tell the difference.",
+        )]
         if args.yes:
             kept_login = keep(args.url, source.cookies, browser=args.browser)
-            print(kept_login.why)
+            rows.append(receipts.Row(progress.ROW_OK, "kept", kept_login.why))
         else:
-            print(
+            rows.append(receipts.Row(
+                progress.ROW_WARN,
+                "kept",
                 "Nothing kept. The next logged-in read of "
-                f"{host} asks again. Pass --yes to keep it."
-            )
+                f"{host} asks again. Pass --yes to keep it.",
+            ))
+        receipt(rows, subject=host)
         sys.exit(0)
 
     print(f"unknown login action {action!r}", file=sys.stderr)
     sys.exit(2)
 
 
-def _print_login_wall_hint(url: str) -> None:
-    """On a login wall, name the two commands that can get past it.
+def _login_wall_hint_text(url: str) -> str:
+    """One sentence naming the two commands that can get past a login wall.
 
     Printed only when a rung actually reported ``login-wall``, so it never
     appears on a page that merely embeds a sign-in link, and never on a read
@@ -2319,10 +2587,41 @@ def _print_login_wall_hint(url: str) -> None:
 
     host = host_of(url)
     if not host:
-        return
+        return ""
     if kept(url):
         # Already kept and still a wall: the saved login is stale, so keeping
         # is not the fix and suggesting it would waste the user's time.
+        return (
+            f"{host} is already in the searchts store and still returned a "
+            f"login page, so that saved login has expired. Sign in again: "
+            f"searchts login kill {host}, then searchts login signin {url}.\n"
+            "Either way those cookies ride the direct request only. "
+            "That is why the browser tier is sent none of them, "
+            "so a logged-in browser is not what makes the next read work."
+        )
+    return (
+        f"{host} is behind a login. Two ways past it, your call:\n"
+        f"searchts login signin {url}\n"
+        f"searchts read {url} --cookies-from-browser firefox\n"
+        "Either way those cookies ride the direct request only. "
+        "That is why the browser tier is sent none of them, "
+        "so a logged-in browser is not what makes the next read work."
+    )
+
+
+def _print_login_wall_hint(url: str) -> None:
+    """Print the login-wall guidance as a plain stderr block.
+
+    Kept separate from the receipt row because the two commands are long, and
+    a receipt that hard-wraps a command is harder to copy than a short block
+    that never wraps one.
+    """
+    from searchts.login_store import host_of, kept
+
+    host = host_of(url)
+    if not host:
+        return
+    if kept(url):
         print(
             f"  {host} is already in the searchts store and still returned a "
             f"login page, so that saved login has expired. Sign in again: "
@@ -2350,6 +2649,34 @@ def _stdout_link(text: str, url: str) -> str:
     from searchts import progress
 
     return progress.link(text, url, enabled=progress.use_links(sys.stdout))
+
+
+def _home_relative(path: str) -> str:
+    """``~/.searchts`` instead of a home directory the reader already knows."""
+    home = os.path.expanduser("~")
+    try:
+        rel = os.path.relpath(path, home)
+    except ValueError:
+        return path
+    if rel == ".":
+        return "~"
+    if rel != ".." and not rel.startswith(".." + os.sep):
+        return "~" + os.sep + rel
+    return path
+
+
+def _short_path(path: str, limit: int = 63) -> str:
+    """A receipt-sized path: home-relative, or elided to its last components."""
+    shown = _home_relative(str(path))
+    if len(shown) <= limit:
+        return shown
+    parts = shown.split(os.sep)
+    if len(parts) >= 2:
+        tail = os.sep.join(parts[-2:])
+        candidate = "…" + os.sep + tail
+        if len(candidate) <= limit:
+            return candidate
+    return "…" + shown[-(limit - 1):]
 
 
 def _stdout_path(path: str) -> str:
@@ -2381,8 +2708,10 @@ def _cmd_get(args):
         if tracker.wants():
             s = tracker.color
             mark = "✓" if tracker.unicode_ok else "+"
+            label = _short_path(str(path), 58)
             tracker.summary(
-                f"  {s.green(mark)} {s.cyan('get')}  {progress.link_path(str(path), tracker.links)}"
+                f"  {s.green(mark)} {s.cyan('get')}  "
+                f"{progress.link(label, _file_uri(str(path)), tracker.links)}"
                 f"  {s.dim(progress.human_bytes(size))}  "
                 f"{s.dim(progress.human_time(tracker.elapsed()))}")
         else:
@@ -2818,12 +3147,17 @@ def _ask(prompt: str) -> str:
 
 
 def _cmd_setup():
+    from searchts import progress, receipts
     from searchts.config import Config
 
     config = Config()
-    print()
-    print("searchts Setup")
-    print("=" * 40)
+    style, unicode_ok = receipts.for_stream(sys.stdout)
+    print(receipts.header(
+        style,
+        "setup",
+        status=progress.ROW_SKIP,
+        unicode_ok=unicode_ok,
+    ))
     print()
 
     # Step 1: Web search — first-party keyless `searchts search` is recommended.
@@ -2844,9 +3178,9 @@ def _cmd_setup():
                 ["mcporter", "config", "list"], capture_output=True, encoding="utf-8", errors="replace", timeout=10
             )
             if "exa" in r.stdout.lower():
-                print("  Current status: [ok] configured")
+                print("  Current status: ✓ configured")
             else:
-                print("  Current status: -- not configured")
+                print("  Current status: · not configured")
                 setup_now = _ask("  Configure Exa automatically now? [y/N]: ").lower()
                 if setup_now in ("y", "yes"):
                     add_r = subprocess.run(
@@ -2854,12 +3188,12 @@ def _cmd_setup():
                         capture_output=True, encoding="utf-8", errors="replace", timeout=10,
                     )
                     if add_r.returncode == 0:
-                        print("  [ok] Exa configured")
+                        print("  ✓ Exa configured")
                     else:
-                        print("  [!] Automatic configuration failed, please run manually:")
+                        print("  ! Automatic configuration failed, please run manually:")
                         print("     mcporter config add exa https://mcp.exa.ai/mcp")
         except Exception:
-            print("  [!] Could not check the Exa configuration, please run manually:")
+            print("  ! Could not check the Exa configuration, please run manually:")
             print("     mcporter config add exa https://mcp.exa.ai/mcp")
         print()
 
@@ -2868,9 +3202,9 @@ def _cmd_setup():
     print("  Export GITHUB_TOKEN or add it to .env. searchts does not store this key.")
     print("  Get one: https://github.com/settings/tokens")
     if os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN"):
-        print("  Current status: [ok] GITHUB_TOKEN/GH_TOKEN is set in the environment")
+        print("  Current status: ✓ GITHUB_TOKEN/GH_TOKEN is set in the environment")
     else:
-        print("  Current status: -- not set. Skipped; the public API works too")
+        print("  Current status: · not set. Skipped; the public API works too")
     print()
 
     # Step 3: Reddit — rdt-cli (a channel; `read` does not need a login, F5f)
@@ -2886,21 +3220,29 @@ def _cmd_setup():
     print("  Free tier, sign up: https://console.groq.com")
     current = config.get("groq_api_key")
     if current:
-        print("  Current status: [ok] configured")
+        print("  Current status: ✓ configured")
     else:
         key = _ask("  GROQ_API_KEY (press Enter to skip): ")
         if key:
             config.set("groq_api_key", key)
-            print("  [ok] Speech-to-text enabled!")
+            print("  ✓ Speech-to-text enabled!")
         else:
             print("  Skipped")
     print()
 
-    # Summary
-    print("=" * 40)
-    print(f"[ok] Configuration saved to {config.config_path}")
-    print("Run searchts doctor to see the full status")
+    # Summary. The wizard's ending is one receipt, not a second banner.
     print()
+    print(receipts.block(
+        style,
+        "setup",
+        [
+            receipts.Row(
+                progress.ROW_OK, "config", f"saved to {_short_path(str(config.config_path))}"
+            ),
+            receipts.Row(progress.ROW_OK, "next", "run searchts doctor to see the full status"),
+        ],
+        unicode_ok=unicode_ok,
+    ))
 
 
 def _classify_update_error(exc):
@@ -3028,139 +3370,380 @@ def _is_newer_version(remote: str, local: str) -> bool:
     return remote_version > local_version
 
 
+def _release_rows(body: str, limit: int = 5):
+    """Release notes as ``(scope, subject)`` rows, without the GitHub markdown.
+
+    GitHub's auto-generated notes are a list of PR titles with links and
+    handles; pasting them into a terminal ignores the width and the reader.
+    This keeps the conventional-commit scope when there is one, strips the
+    link/handle decoration, and stops at *limit* rows.
+    """
+    import re
+
+    rows = []
+    seen = set()
+    for line in (body or "").splitlines():
+        text = line.strip()
+        if not text or text.startswith("#"):
+            continue
+        if text.lower().startswith(("what's changed", "new contributors",
+                                    "**full changelog**", "full changelog")):
+            continue
+        text = re.sub(r"^[-*+]\s+", "", text)
+        # Release-please writes the scope in bold before the colon, while the
+        # auto-generated "What's Changed" list repeats the same PR as
+        # `feat(scope): ...`. Remember the bold form so both parse alike; the
+        # duplicate is then dropped by the subject key below.
+        bold_scope = text.startswith("**")
+        text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+        text = re.sub(r"\s+by\s+@[\w-]+\s+in\s+\S+.*$", "", text, flags=re.I)
+        text = re.sub(r"\s+in\s+https?://\S+$", "", text)
+        text = text.replace("**", "").replace("`", "").strip()
+        if not text or "@" in text and "first contribution" in text.lower():
+            continue
+        match = re.match(
+            r"^(?P<type>feat|fix|perf|docs|refactor|test|build|ci|chore|revert)"
+            r"(?:\((?P<scope>[^)]+)\))?!?:\s*(?P<subject>.+)$",
+            text,
+            flags=re.I,
+        )
+        if match:
+            scope = (match.group("scope") or match.group("type")).lower()
+            subject = match.group("subject").strip()
+        elif bold_scope:
+            bold = re.match(
+                r"^(?P<scope>[a-z][\w-]*):\s*(?P<subject>.+)$", text, flags=re.I
+            )
+            if bold:
+                scope = bold.group("scope").lower()
+                subject = bold.group("subject").strip()
+            else:
+                scope, subject = "change", text
+        else:
+            scope, subject = "change", text
+        # A release-please "chore(main): release 0.18.0" is bookkeeping, not
+        # a change a reader can act on.
+        if scope in ("main", "chore") and subject.lower().startswith("release "):
+            continue
+        # The PR number and commit hash are how the release page navigates;
+        # the receipt has no links to attach them to, so they are noise here.
+        subject = re.sub(r"\s*\(#[0-9]+\)", "", subject)
+        subject = re.sub(r"\s*\([0-9a-f]{7,}\)", "", subject, flags=re.I).strip()
+        key = " ".join(subject.lower().split())
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append((scope, subject))
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def _check_update_receipt(tracker, status, rows, subject=""):
+    from searchts import receipts
+
+    style, unicode_ok = receipts.for_stream(sys.stdout)
+    return receipts.block(
+        style,
+        "check-update",
+        rows,
+        subject=subject,
+        elapsed=tracker.elapsed(),
+        status=status,
+        unicode_ok=unicode_ok,
+    )
+
+
 def _cmd_check_update():
     """Check for newer versions on GitHub."""
-    from searchts import __version__
-    from searchts.progress import phase as progress_phase
+    from searchts import __version__, progress, receipts
 
-    print(f"Current version: v{__version__}")
     release_url = "https://api.github.com/repos/capad-xyz/searchts/releases/latest"
     commit_url = "https://api.github.com/repos/capad-xyz/searchts/commits/main"
 
-    # The GitHub round-trip can block for several seconds. Keep the line on
-    # this step, with the real elapsed time, until the response is back.
-    with progress_phase("checking for updates…"):
+    tracker = progress.live("check-update", summary_stream=sys.stdout)
+    with tracker:
+        # The live row is the new wording; a pipe keeps the old plain line the
+        # tests and the logs already know, byte for byte.
+        if tracker.is_live:
+            tracker.stage("checking GitHub releases")
+        else:
+            progress.narrate("checking for updates…")
+
         resp, err, attempts = _github_get_with_retry(release_url, timeout=10, retries=3)
-    if err:
-        print(f"[!] Could not check for updates ({_update_error_text(err)}, retried {attempts} times)")
-        return "error"
+        if err:
+            reason = f"{_update_error_text(err)} (retried {attempts} times)"
+            if tracker.is_live:
+                tracker.settle(progress.ROW_FAIL, reason)
+            text = _check_update_receipt(
+                tracker,
+                progress.ROW_FAIL,
+                [receipts.Row(progress.ROW_SKIP, "reason", reason)],
+            )
+            receipts.emit(tracker, text, stream=sys.stdout)
+            return "error"
 
-    if resp.status_code == 200:
-        data = resp.json()
-        latest = data.get("tag_name", "").lstrip("v")
-        body = data.get("body", "")
+        if resp.status_code == 200:
+            data = resp.json()
+            latest = data.get("tag_name", "").lstrip("v")
+            body = data.get("body", "")
+            if tracker.is_live:
+                tracker.settle(
+                    progress.ROW_OK,
+                    f"v{latest} available"
+                    if latest and _is_newer_version(latest, __version__)
+                    else "current",
+                )
 
-        if latest and _is_newer_version(latest, __version__):
-            print(f"Latest version: v{latest} <- update available!")
-            if body:
-                print()
-                print("What's new:")
-                # Show first 20 lines of release notes
-                for line in body.strip().split("\n")[:20]:
-                    print(f"  {line}")
-            print()
-            print(_UPDATE_INSTRUCTIONS)
-            return "update_available"
-        print("[ok] Already up to date")
-        return "up_to_date"
+            if latest and _is_newer_version(latest, __version__):
+                rows = [
+                    receipts.Row(progress.ROW_SKIP, "current", f"v{__version__}"),
+                    receipts.Row(progress.ROW_SKIP, "latest", f"v{latest}  update available"),
+                    receipts.Section("What's new"),
+                ]
+                rows += [
+                    receipts.Row(progress.ROW_SKIP, scope, subject)
+                    for scope, subject in _release_rows(body)
+                ]
+                rows.append(
+                    receipts.Row(
+                        progress.ROW_OK,
+                        "searchts update",
+                        f"run it to move to v{latest}",
+                    )
+                )
+                receipts.emit(
+                    tracker,
+                    _check_update_receipt(
+                        tracker, progress.ROW_OK, rows, subject=f"v{__version__} -> v{latest}"
+                    ),
+                    stream=sys.stdout,
+                )
+                return "update_available"
 
-    release_err = _classify_github_response_error(resp)
-    if release_err == "rate_limit":
-        print("[!] Could not check for updates (GitHub API rate limit, please try again later)")
-        return "error"
+            receipts.emit(
+                tracker,
+                _check_update_receipt(
+                    tracker,
+                    progress.ROW_OK,
+                    [receipts.Row(
+                        progress.ROW_SKIP,
+                        "current",
+                        f"v{__version__} is the latest release",
+                    )],
+                    subject=f"v{__version__}",
+                ),
+                stream=sys.stdout,
+            )
+            return "up_to_date"
 
-    # No releases yet, fall back to latest main commit.
-    with progress_phase("checking for updates…"):
+        release_err = _classify_github_response_error(resp)
+        if release_err == "rate_limit":
+            if tracker.is_live:
+                tracker.settle(progress.ROW_FAIL, "GitHub API rate limit")
+            receipts.emit(
+                tracker,
+                _check_update_receipt(
+                    tracker,
+                    progress.ROW_FAIL,
+                    [receipts.Row(
+                        progress.ROW_SKIP,
+                        "reason",
+                        "GitHub API rate limit; try again later",
+                    )],
+                ),
+                stream=sys.stdout,
+            )
+            return "error"
+
+        # No releases yet, fall back to latest main commit.
+        if tracker.is_live:
+            tracker.stage("checking main")
+        else:
+            progress.narrate("checking for updates…")
         resp2, err2, attempts2 = _github_get_with_retry(commit_url, timeout=10, retries=2)
-    if err2:
-        print(f"[!] Could not check for updates ({_update_error_text(err2)}, retried {attempts + attempts2} times)")
-        return "error"
-    if resp2.status_code == 200:
-        commit = resp2.json()
-        sha = commit.get("sha", "")[:7]
-        msg = commit.get("commit", {}).get("message", "").split("\n")[0]
-        date = commit.get("commit", {}).get("committer", {}).get("date", "")[:10]
-        print(f"Latest commit: {sha} ({date}) {msg}")
-        print()
-        print(_UPDATE_INSTRUCTIONS)
-        return "unknown"
+        if err2:
+            reason = f"{_update_error_text(err2)} (retried {attempts + attempts2} times)"
+            if tracker.is_live:
+                tracker.settle(progress.ROW_FAIL, reason)
+            receipts.emit(
+                tracker,
+                _check_update_receipt(
+                    tracker,
+                    progress.ROW_FAIL,
+                    [receipts.Row(progress.ROW_SKIP, "reason", reason)],
+                ),
+                stream=sys.stdout,
+            )
+            return "error"
+        if resp2.status_code == 200:
+            commit = resp2.json()
+            sha = commit.get("sha", "")[:7]
+            msg = commit.get("commit", {}).get("message", "").split("\n")[0]
+            date = commit.get("commit", {}).get("committer", {}).get("date", "")[:10]
+            if tracker.is_live:
+                tracker.settle(progress.ROW_OK, f"latest commit {sha}")
+            receipts.emit(
+                tracker,
+                _check_update_receipt(
+                    tracker,
+                    progress.ROW_OK,
+                    [
+                        receipts.Row(
+                            progress.ROW_SKIP,
+                            "latest commit",
+                            f"{sha} ({date}) {msg}" if date else f"{sha} {msg}",
+                        ),
+                        receipts.Row(
+                            progress.ROW_OK,
+                            "searchts update",
+                            "fast-forward to the latest release",
+                        ),
+                    ],
+                    subject=f"v{__version__}",
+                ),
+                stream=sys.stdout,
+            )
+            return "unknown"
 
-    commit_err = _classify_github_response_error(resp2)
-    if commit_err == "rate_limit":
-        print("[!] Could not check for updates (GitHub API rate limit, please try again later)")
+        commit_err = _classify_github_response_error(resp2)
+        if commit_err == "rate_limit":
+            reason = "GitHub API rate limit; try again later"
+        else:
+            reason = f"GitHub returned {resp2.status_code}"
+        if tracker.is_live:
+            tracker.settle(progress.ROW_FAIL, reason)
+        receipts.emit(
+            tracker,
+            _check_update_receipt(
+                tracker,
+                progress.ROW_FAIL,
+                [receipts.Row(progress.ROW_SKIP, "reason", reason)],
+            ),
+            stream=sys.stdout,
+        )
         return "error"
-
-    print(f"[!] Could not check for updates (GitHub returned {resp2.status_code})")
-    return "error"
 
 
 def _cmd_watch():
     """Quick health check + update check, designed for scheduled tasks.
 
-    Only outputs problems. If everything is fine, outputs a single line.
+    A pipe keeps the old single line / monitoring report byte for byte. A
+    terminal gets the channel rows from ``check_all`` and one receipt; the
+    update check never opens a second live region.
     """
-    from searchts import __version__
+    from searchts import __version__, progress, receipts
     from searchts.config import Config
     from searchts.doctor import check_all
     from searchts.progress import phase as progress_phase
 
     config = Config()
-    issues = []
+    live = progress.live_available()
+    started = time.monotonic()
 
-    # Check channels. The outer line names the whole pass; each channel then
-    # names itself for as long as that probe is actually running.
-    with progress_phase("checking channels…"):
-        results = check_all(config, progress=True)
+    # Check channels. On a terminal check_all owns the one live region; in a
+    # pipe the outer line is the log's name for the whole pass.
+    if live:
+        results = check_all(config, progress=True, command="watch")
+    else:
+        with progress_phase("checking channels…"):
+            results = check_all(config, progress=True, command="watch")
     ok = sum(1 for r in results.values() if r["status"] == "ok")
     total = len(results)
 
-    # Find broken channels (were working, now broken)
+    broken = []
     for key, r in results.items():
         if r["status"] in ("off", "error"):
-            issues.append(f"[X] {r['name']}: {r['message']}")
+            broken.append((progress.ROW_FAIL, r))
         elif r["status"] == "warn":
-            issues.append(f"[!] {r['name']}: {r['message']}")
+            broken.append((progress.ROW_WARN, r))
 
-    # Check for updates
+    # Check for updates. No phase and no tracker on a terminal: the receipt
+    # carries the one fact this round-trip produces.
     update_available = False
     new_version = ""
-    release_body = ""
-    with progress_phase("checking for updates…"):
+    if live:
         resp, err, _attempts = _github_get_with_retry(
             "https://api.github.com/repos/capad-xyz/searchts/releases/latest",
             timeout=10,
             retries=2,
         )
+    else:
+        with progress_phase("checking for updates…"):
+            resp, err, _attempts = _github_get_with_retry(
+                "https://api.github.com/repos/capad-xyz/searchts/releases/latest",
+                timeout=10,
+                retries=2,
+            )
     if not err and resp and resp.status_code == 200:
         data = resp.json()
         latest = data.get("tag_name", "").lstrip("v")
         if latest and _is_newer_version(latest, __version__):
             update_available = True
             new_version = latest
-            release_body = data.get("body", "")
 
-    # Output
-    if not issues and not update_available:
-        print(f"searchts: All systems normal ({ok}/{total} channels available, v{__version__} is up to date)")
+    if not live:
+        # The scheduled-task surface. Its consumers parse this, so it stays.
+        if not broken and not update_available:
+            print(f"searchts: All systems normal ({ok}/{total} channels available, v{__version__} is up to date)")
+            return
+        print("searchts monitoring report")
+        print("=" * 40)
+        print(f"Version: v{__version__}  |  Channels: {ok}/{total}")
+        if broken:
+            print()
+            for status, r in broken:
+                issue = f"[X] {r['name']}: {r['message']}" if status == progress.ROW_FAIL \
+                    else f"[!] {r['name']}: {r['message']}"
+                print(f"  {issue}")
+        if update_available:
+            print()
+            print(f"New version available: v{new_version}")
+            print("  Update: searchts update")
+            print("    (searchts upgrade is the same command)")
         return
 
-    print("searchts monitoring report")
-    print("=" * 40)
-    print(f"Version: v{__version__}  |  Channels: {ok}/{total}")
+    style, unicode_ok = receipts.for_stream(sys.stdout)
+    if not broken and not update_available:
+        text = receipts.block(
+            style,
+            "watch",
+            [receipts.Row(
+                progress.ROW_SKIP,
+                "channels",
+                f"{ok}/{total}  v{__version__} current",
+            )],
+            subject=f"v{__version__}",
+            elapsed=time.monotonic() - started,
+            unicode_ok=unicode_ok,
+        )
+        print(text)
+        return
 
-    if issues:
-        print()
-        for issue in issues:
-            print(f"  {issue}")
-
+    rows = [
+        receipts.Row(status, r["name"], receipts.summary(r["message"]))
+        for status, r in broken
+    ]
     if update_available:
-        print()
-        print(f"New version available: v{new_version}")
-        if release_body:
-            for line in release_body.strip().split("\n")[:10]:
-                print(f"    {line}")
-        print("  Update: searchts update")
-        print("    (searchts upgrade is the same command)")
+        rows.append(
+            receipts.Row(
+                progress.ROW_WARN,
+                f"v{new_version} available",
+                "searchts update",
+            )
+        )
+    header_status = progress.ROW_FAIL if any(
+        status == progress.ROW_FAIL for status, _r in broken
+    ) else progress.ROW_WARN
+    print(receipts.block(
+        style,
+        "watch",
+        rows,
+        subject=f"channels {ok}/{total}",
+        elapsed=time.monotonic() - started,
+        status=header_status,
+        unicode_ok=unicode_ok,
+    ))
 
 
 if __name__ == "__main__":
