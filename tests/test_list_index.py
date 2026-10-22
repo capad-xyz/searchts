@@ -182,6 +182,34 @@ def test_bullet_blurbs_from_a_wrapped_card_keep_the_name_and_the_href():
     assert more.list_index(html, url, essay) is None
 
 
+def _ranked_shell(heading: str) -> str:
+    cards = "".join(
+        f'<li><a href="/categories/dev/c{i}"><div>Category {i} name</div>'
+        f"<p>Description of category {i} covering the tools engineers open every day.</p></a></li>"
+        for i in range(8)
+    )
+    return (
+        "<html><body><main>"
+        "<h1>Databases<span>in developer</span></h1>"
+        "<p>Databases and data stores for the engineers who run them every single day.</p>"
+        '<button type="button" disabled>← Previous</button><span>Page 1</span>'
+        '<button type="button">Next →</button>'
+        f"<h2>{heading}</h2><ul>{cards}</ul>"
+        "</main></body></html>"
+    )
+
+
+def test_a_related_block_under_a_client_pager_is_not_the_ranking():
+    """The rows load later. The "Other …" cards are not those rows."""
+    shell = _ranked_shell("Other developer subcategories")
+    assert more._best_list(more._parse(shell)) is None
+    assert more.list_index(shell, "https://example.com/categories/dev/databases?page=1", "Databases") is None
+    assert more.client_list_unrendered(shell) is True
+    ranked = _ranked_shell("Ranked sites")
+    assert more._best_list(more._parse(ranked)) is not None
+    assert more.client_list_unrendered(ranked) is False
+
+
 def test_a_long_byline_link_is_still_the_detail_row():
     user = "a" * 40
     rows = "".join(

@@ -883,17 +883,30 @@ def _table_rows(doc) -> Optional[List]:
     return best
 
 
-def _best_list(doc) -> Optional[List]:
-    """The repeated items the page is made of (results, cards, posts), or None."""
+def _introducing_heading(node) -> str:
+    """The heading that sits in front of ``node``, walking out to parents."""
+    current = node
+    while current is not None:
+        prev = current.getprevious()
+        while prev is not None:
+            if isinstance(prev.tag, str) and prev.tag.lower() in {"h1", "h2", "h3", "h4"}:
+                return _norm(prev.text_content())
+            prev = prev.getprevious()
+        current = current.getparent()
+    return ""
+
+
+def _related_list(items) -> bool:
+    """An "Other …" block. It is not the list the page is ranking."""
+    if not items:
+        return False
+    return _introducing_heading(items[0]).lower().startswith("other ")
+
+
+def _candidate_lists(doc):
+    """Repeated link groups long enough to be a list, related blocks included."""
     body = doc.find(".//body")
-    main = doc.find(".//main")
     root = body if body is not None else doc
-    measure = main if main is not None else root
-    page_len = len(_visible_text(measure))
-    if page_len < 400:
-        return None
-    best: Optional[List] = None
-    best_len = 0
     for parent in root.iter():
         if not isinstance(parent.tag, str) or len(parent) < _LIST_MIN_ITEMS:
             continue
@@ -909,9 +922,26 @@ def _best_list(doc) -> Optional[List]:
             real = [it for it in items if it.xpath(".//a[@href]") and len(_visible_text(it)) >= 25]
             if len(real) < 0.8 * len(items):
                 continue
-            total = sum(len(_visible_text(it)) for it in items)
-            if total > best_len:
-                best, best_len = items, total
+            yield items
+
+
+def _best_list(doc) -> Optional[List]:
+    """The repeated items the page is made of (results, cards, posts), or None."""
+    body = doc.find(".//body")
+    main = doc.find(".//main")
+    root = body if body is not None else doc
+    measure = main if main is not None else root
+    page_len = len(_visible_text(measure))
+    if page_len < 400:
+        return None
+    best: Optional[List] = None
+    best_len = 0
+    for items in _candidate_lists(doc):
+        if _related_list(items):
+            continue
+        total = sum(len(_visible_text(it)) for it in items)
+        if total > best_len:
+            best, best_len = items, total
     if not best or _in_chrome(best[0]) or _in_nav(best[0]) or best_len < _LIST_MIN_SHARE * page_len:
         best = None
     table = _table_rows(doc)
@@ -919,6 +949,23 @@ def _best_list(doc) -> Optional[List]:
     if table is not None and (best is None or best[0].tag.lower() == "tr"):
         return table
     return best
+
+
+def client_list_unrendered(html: str) -> bool:
+    """The pager is in the markup and the rows it pages are not.
+
+    The only list in the shell is a related "Other …" block. Curl's extract
+    of that shell is not the ranking, so the ladder has to render the page.
+    """
+    if not html or _PAGER_BUTTON_RE.search(html) is None:
+        return False
+    doc = _parse(html)
+    if doc is None:
+        return False
+    lists = list(_candidate_lists(doc))
+    if any(not _related_list(items) for items in lists):
+        return False
+    return any(_related_list(items) for items in lists)
 
 
 def _list_kept_items(best, text: str) -> Optional[Tuple[int, int]]:
@@ -1444,6 +1491,11 @@ _DATEISH_RE = re.compile(
 )
 _BREADCRUMB_RE = re.compile(r"^https?://\S+(?:\s+›\s+\S+)+$")
 _INDEX_MIN_COVERAGE = 0.6
+#: A client pager. The rows are not links yet; Previous and Next are buttons.
+_PAGER_BUTTON_RE = re.compile(
+    r"<button\b[^>]*>\s*(?:←\s*|&#8592;\s*|&larr;\s*)?(?:previous|next)\b",
+    re.I,
+)
 #: A markdown bullet is not on the page. Left in, it lands in the middle of a
 #: one-paragraph list and the coverage window misses text the extract did keep.
 _LIST_MARKER_RE = re.compile(r"(?m)^[ \t]*(?:[-*+]|\d+[.)])[ \t]+")

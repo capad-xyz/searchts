@@ -2834,6 +2834,26 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     and whole_short_page(body, text)
                 )
                 if len(text) >= min_chars or whole:
+                    # A client pager whose rows are not in the markup. The
+                    # shell's only list is a related block, and accepting it
+                    # publishes those links as the page. Render instead.
+                    if backend == "curl_cffi" and body:
+                        from searchts.more import client_list_unrendered
+
+                        if client_list_unrendered(body):
+                            attempts.append((backend, "list-unrendered"))
+                            _tick(f"  {backend}: list-unrendered, escalating")
+                            if backend == remembered:
+                                unpin(domain)
+                                remembered = None
+                            deferred = FetchResult(
+                                backend, text, status,
+                                final_url=final_url or url, headers=headers,
+                                page_html=body,
+                            )
+                            if best is None or len(text) > len(best.text):
+                                best = deferred
+                            continue
                     if memory_on and domain and backend != remembered:
                         # A win on the remembered rung does not extend its pin, so a
                         # pin earned by mistake heals once _MEMORY_TTL_SECONDS pass.
