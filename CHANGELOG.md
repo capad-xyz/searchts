@@ -2,6 +2,19 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.18.0](https://github.com/capad-xyz/searchts/compare/v0.17.1...v0.18.0) (2026-10-22)
+
+
+### Added
+
+* **cli:** live progression, explained receipts, and a help screen ([7a9649b](https://github.com/capad-xyz/searchts/commit/7a9649b6016d2def44826087201339423d2ee60c))
+* **cli:** live progression, explained receipts, and a help screen ([#412](https://github.com/capad-xyz/searchts/issues/412)) ([7a9649b](https://github.com/capad-xyz/searchts/commit/7a9649b6016d2def44826087201339423d2ee60c))
+
+
+### Fixed
+
+* **read:** keep looking when a related block is still the page ([#414](https://github.com/capad-xyz/searchts/issues/414)) ([8b18035](https://github.com/capad-xyz/searchts/commit/8b180351fc9c1184b8693e92e82418c708573753))
+
 ## [0.17.1](https://github.com/capad-xyz/searchts/compare/v0.17.0...v0.17.1) (2026-10-22)
 
 
