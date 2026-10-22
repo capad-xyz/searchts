@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.17.1](https://github.com/capad-xyz/searchts/compare/v0.17.0...v0.17.1) (2026-10-22)
+
+
+### Fixed
+
+* **read:** print fallback links and name the cap ([#410](https://github.com/capad-xyz/searchts/issues/410)) ([dfddb76](https://github.com/capad-xyz/searchts/commit/dfddb762865ebee544a7138a99f885f95285bd24))
+
 ## [0.17.0](https://github.com/capad-xyz/searchts/compare/v0.16.1...v0.17.0) (2026-10-21)
 
 
