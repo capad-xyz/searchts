@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """Tests for searchts CLI."""
 
+import json
 import os
+import pathlib
 import shutil
 import subprocess
 from unittest.mock import patch
@@ -702,6 +704,49 @@ class TestWatchVersionCompare:
         assert "checking for updates" in captured.err
 
 
+_HOME_ENV = ("APPDATA", "COPILOT_HOME", "OPENCLAW_HOME", "XDG_CONFIG_HOME")
+
+
+def _real_home_snapshot():
+    """Bytes of configs `mcp install` / `skill install` must not touch."""
+    home = pathlib.Path.home()
+    paths = [
+        home / ".claude.json",
+        home / ".claude" / "CLAUDE.md",
+        home / ".claude" / "commands" / "searchts.md",
+        home / ".claude" / "skills" / "searchts" / "SKILL.md",
+        home / ".agents" / "skills" / "searchts" / "SKILL.md",
+        home / ".cursor" / "mcp.json",
+        home / ".codex" / "config.toml",
+        home / ".gemini" / "settings.json",
+        home / ".copilot" / "mcp-config.json",
+        home / ".config" / "opencode" / "opencode.json",
+        home / ".codeium" / "windsurf" / "mcp_config.json",
+    ]
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        root = pathlib.Path(appdata)
+        paths.extend([
+            root / "Claude" / "claude_desktop_config.json",
+            root / "Code" / "User" / "mcp.json",
+            root / "devin" / "mcp_config.json",
+        ])
+    return {path: path.read_bytes() if path.exists() else None for path in paths}
+
+
+def _isolate_home(monkeypatch, home):
+    monkeypatch.setattr(
+        pathlib.Path, "home", classmethod(lambda cls, _home=home: _home),
+    )
+    for key in _HOME_ENV:
+        monkeypatch.delenv(key, raising=False)
+
+
+def _assert_home_unchanged(before):
+    after = {path: path.read_bytes() if path.exists() else None for path in before}
+    assert after == before
+
+
 class TestMcpInstall:
     def test_mcp_install_text_all_clients(self):
         text = cli.mcp_install_text()
@@ -731,13 +776,32 @@ class TestMcpInstall:
             assert '"mcp"' in text
             assert '"serve"' in text
 
-    def test_mcp_install_command_prints(self, capsys):
+    def test_mcp_install_command_prints(self, capsys, tmp_path, monkeypatch):
+        before = _real_home_snapshot()
+        _isolate_home(monkeypatch, tmp_path / "home")
         with patch("sys.argv", ["searchts", "mcp", "install"]):
             main()
         out = capsys.readouterr().out
         assert "claude mcp add searchts" in out
         assert '"searchts"' in out
         assert '"serve"' in out
+        _assert_home_unchanged(before)
+
+    def test_mcp_install_writes_a_client_already_on_the_machine(self, capsys, tmp_path, monkeypatch):
+        before = _real_home_snapshot()
+        home = tmp_path / "home"
+        (home / ".cursor").mkdir(parents=True)
+        _isolate_home(monkeypatch, home)
+        monkeypatch.chdir(tmp_path)
+        with patch("sys.argv", ["searchts", "mcp", "install"]):
+            main()
+        captured = capsys.readouterr()
+        saved = json.loads((home / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
+        assert saved["mcpServers"]["searchts"]["command"] == "searchts"
+        assert saved["mcpServers"]["searchts"]["args"] == ["mcp", "serve"]
+        assert "wrote" in captured.err
+        assert "claude mcp add searchts" in captured.out
+        _assert_home_unchanged(before)
 
     def test_mcp_serve_missing_mcp_exits_with_actionable_message(self, capsys, monkeypatch):
         """`mcp serve` without the mcp pkg must exit nonzero with a pip hint, not hang."""
@@ -809,10 +873,14 @@ class TestMcpInstall:
 
 
 class TestSkillInstallSlashCommand:
-    def test_skill_install_writes_searchts_md(self, capsys, tmp_path):
+    def test_skill_install_writes_searchts_md(self, capsys, tmp_path, monkeypatch):
+        before = _real_home_snapshot()
+        home = tmp_path / "home"
+        _isolate_home(monkeypatch, home)
         target = tmp_path / "commands"
         with patch("sys.argv", ["searchts", "skill", "install", "--dir", str(target)]):
             main()
+        captured = capsys.readouterr()
         out_file = target / "searchts.md"
         assert out_file.exists()
         body = out_file.read_text(encoding="utf-8")
@@ -821,7 +889,20 @@ class TestSkillInstallSlashCommand:
         assert "searchts transcribe" in body
         # Prefer searchts over built-in fetch for blocked pages.
         assert "WebFetch" in body or "built-in fetch" in body
-        assert str(out_file) in capsys.readouterr().out
+        # Stdout is the slash-command path. The bundle and the reach rule are stderr.
+        assert captured.out.strip() == str(out_file)
+        assert "reach rule" not in captured.out
+        assert "skill install" in captured.err
+        for skill in (
+            home / ".agents" / "skills" / "searchts" / "SKILL.md",
+            home / ".claude" / "skills" / "searchts" / "SKILL.md",
+        ):
+            assert skill.is_file()
+            assert "name: searchts" in skill.read_text(encoding="utf-8")
+        assert (home / ".agents" / "skills" / "searchts" / "references" / "web.md").is_file()
+        assert (home / ".claude" / "CLAUDE.md").is_file()
+        assert not (home / ".openclaw").exists()
+        _assert_home_unchanged(before)
 
     def test_skill_install_creates_missing_dir(self, tmp_path):
         target = tmp_path / "nested" / "claude" / "commands"
@@ -831,8 +912,7 @@ class TestSkillInstallSlashCommand:
         assert os.path.basename(path) == "searchts.md"
 
     def test_skill_install_default_dir_not_touched_in_tests(self, tmp_path):
-        """Sanity: the resolver points at ~/.claude/commands by default, but tests
-        always pass an explicit --dir so the real home dir is never written."""
+        """The slash-command default is ~/.claude/commands. Callers pass --dir."""
         default_dir = cli._slash_command_target_dir(None)
         assert default_dir.endswith(os.path.join(".claude", "commands"))
         # With an explicit dir we stay inside tmp_path.
