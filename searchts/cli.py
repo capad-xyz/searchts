@@ -315,9 +315,17 @@ def _run():
     )
     p_mcp_install = mcp_sub.add_parser(
         "install", parents=[_verbose],
-        help="Print the exact wiring for an AI agent client (no network)")
-    p_mcp_install.add_argument("--client", choices=["claude", "cursor", "json"], default=None,
-                               help="Which client to print wiring for (default: all)")
+        help="Wire the MCP server into agent configs already on this machine")
+    p_mcp_install.add_argument(
+        "--client",
+        choices=[
+            "claude", "cursor", "json", "desktop", "codex", "vscode",
+            "copilot", "windsurf", "devin", "gemini", "opencode",
+        ],
+        default=None,
+        help="Write one client (default: every client already on this machine). "
+             "json only prints the mcpServers snippet",
+    )
 
     # ── skill ──
     p_skill = sub.add_parser("skill", parents=[_verbose], help="Manage agent skill registration")
@@ -329,7 +337,7 @@ def _run():
     skill_sub = p_skill.add_subparsers(dest="skill_command", help="Skill subcommands")
     p_skill_install = skill_sub.add_parser(
         "install", parents=[_verbose],
-        help="Write a Claude Code slash-command (searchts.md) into the commands dir")
+        help="Write the slash command and the shared SKILL.md bundle")
     p_skill_install.add_argument("--dir", dest="dir", default=None,
                                  help="Target commands directory (default: ~/.claude/commands)")
 
@@ -1033,23 +1041,40 @@ def _cmd_skill_install(args):
         if tracker.is_live:
             tracker.stage("writing the slash command")
         path = write_slash_command(target_dir)
+        from pathlib import Path as _Path
+
+        from searchts.integrations.skill_bundle import install_shared_skills
+
+        home = _Path.home()
+        bundles = install_shared_skills(home)
         if tracker.is_live:
             tracker.settle(progress.ROW_OK, path)
+        bundle_rows = [
+            receipts.Row(
+                progress.ROW_OK if item["ok"] else progress.ROW_WARN,
+                "skill",
+                _short_path(str(item["path"]))
+                if item["ok"]
+                else "could not write " + _short_path(str(item["path"])),
+            )
+            for item in bundles
+        ]
         receipts.emit(
             tracker,
             receipts.block(
                 tracker.color,
                 "skill install",
-                [receipts.Row(progress.ROW_OK, "command", _short_path(path))],
+                [receipts.Row(progress.ROW_OK, "command", _short_path(path)), *bundle_rows],
                 unicode_ok=tracker.unicode_ok,
             ),
             stream=sys.stderr,
         )
-    # The path is the deliverable, alone on stdout.
+    # The slash-command path is the deliverable, alone on stdout.
     print(_stdout_path(path))
     from searchts.integrations.memory_rule import install_memory_rules
 
-    install_memory_rules()
+    # The path above is the whole stdout payload. Reach-rule notes stay on stderr.
+    install_memory_rules(home, log=lambda message: print(message, file=sys.stderr))
 
 
 # ── mcp command ─────────────────────────────────────
@@ -1083,16 +1108,58 @@ def mcp_install_text(client=None):
         f"  {claude_cmd}",
     ])
     cursor_block = "\n".join([
-        "Cursor / JSON config - add this to your mcp.json:",
+        "Cursor / Claude Desktop / Copilot / Gemini / Windsurf / Devin - mcpServers:",
         json_snippet,
     ])
+    vscode_snippet = json.dumps(
+        {"servers": {"searchts": {"type": "stdio", "command": "searchts", "args": ["mcp", "serve"]}}},
+        indent=2,
+    )
+    vscode_block = "\n".join([
+        "VS Code user mcp.json - top-level servers, type stdio:",
+        vscode_snippet,
+    ])
+    codex_block = "\n".join([
+        "Codex ~/.codex/config.toml:",
+        '[mcp_servers.searchts]',
+        'command = "searchts"',
+        'args = ["mcp", "serve"]',
+    ])
+    opencode_snippet = json.dumps(
+        {"mcp": {"searchts": {"type": "local", "command": ["searchts", "mcp", "serve"]}}},
+        indent=2,
+    )
+    opencode_block = "\n".join([
+        "OpenCode ~/.config/opencode/opencode.json - command is one array:",
+        opencode_snippet,
+    ])
+    write_note = (
+        "With no --client, this command writes the stdio server into each of "
+        "these that is already installed. --client NAME writes that one even "
+        "when it was not detected. --client json only prints the snippet."
+    )
 
     if client == "claude":
         return f"{claude_block}\n\n{path_note}\n\n{http_note}"
-    if client in ("cursor", "json"):
+    if client in ("cursor", "json", "desktop", "copilot", "gemini", "windsurf", "devin"):
         return f"{cursor_block}\n\n{path_note}\n\n{http_note}"
+    if client == "vscode":
+        return f"{vscode_block}\n\n{path_note}\n\n{http_note}"
+    if client == "codex":
+        return f"{codex_block}\n\n{path_note}\n\n{http_note}"
+    if client == "opencode":
+        return f"{opencode_block}\n\n{path_note}\n\n{http_note}"
 
-    return f"{claude_block}\n\n{cursor_block}\n\n{path_note}\n\n{http_note}"
+    return "\n\n".join([
+        claude_block,
+        cursor_block,
+        vscode_block,
+        codex_block,
+        opencode_block,
+        path_note,
+        http_note,
+        write_note,
+    ])
 
 
 def _cmd_mcp(args):
@@ -1107,7 +1174,12 @@ def _cmd_mcp(args):
         tracker = progress.live("mcp install", summary_stream=sys.stderr)
         with tracker:
             if tracker.is_live:
-                tracker.stage("reading agent wiring")
+                tracker.stage("writing agent config")
+            from pathlib import Path as _Path
+
+            from searchts.integrations.wire import apply_mcp
+
+            written = apply_mcp(_Path.home(), client=client)
             text = mcp_install_text(client)
             from searchts.integrations.agent_wiring import check_agent_wiring
 
@@ -1122,12 +1194,27 @@ def _cmd_mcp(args):
                 if client == "claude"
                 else "searchts mcp serve"
             )
+            write_rows = []
+            for item in written:
+                path = _short_path(str(item["path"]))
+                if item["status"] == "wrote":
+                    write_rows.append(receipts.Row(progress.ROW_OK, item["client"], f"wrote {path}"))
+                elif item["status"] == "already":
+                    write_rows.append(receipts.Row(progress.ROW_OK, item["client"], "already registered"))
+                elif item["status"] == "kept":
+                    write_rows.append(
+                        receipts.Row(progress.ROW_WARN, item["client"], "left the existing entry")
+                    )
+                else:
+                    write_rows.append(
+                        receipts.Row(progress.ROW_WARN, item["client"], "could not parse the config; left it")
+                    )
             receipts.emit(
                 tracker,
                 receipts.block(
                     tracker.color,
                     "mcp install",
-                    [receipts.Row(progress.ROW_OK, "wiring", wiring)],
+                    [*write_rows, receipts.Row(progress.ROW_OK, "wiring", wiring)],
                     unicode_ok=tracker.unicode_ok,
                 ),
                 stream=sys.stderr,
@@ -1153,7 +1240,7 @@ def _cmd_mcp(args):
                 )))
     else:
         print("Usage: searchts mcp serve [--http|--sse] [--host 127.0.0.1] [--port 8765]")
-        print("   or: searchts mcp install [--client claude|cursor|json]")
+        print("   or: searchts mcp install [--client claude|cursor|codex|vscode|gemini|opencode|json]")
         sys.exit(2)
 
 

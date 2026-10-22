@@ -49,8 +49,8 @@ ROOT_GROUPS: List[Tuple[str, List[Tuple[str, str]]]] = [
     ]),
     ("WIRE UP AN AGENT", [
         ("mcp serve", "Run the MCP server (stdio; --http for loopback)"),
-        ("mcp install", "Print the exact wiring for Claude or Cursor"),
-        ("skill install", "Register the Claude Code slash-command"),
+        ("mcp install", "Wire the MCP server into the agents on this machine"),
+        ("skill install", "Slash command plus the shared SKILL.md"),
         ("doctor", "Which channels are installed, configured, working"),
     ]),
     ("SET UP ONCE", [

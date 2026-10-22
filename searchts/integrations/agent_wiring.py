@@ -22,6 +22,9 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from searchts.integrations.skill_bundle import bundle_wired
+from searchts.integrations.wire import mcp_probes as _wire_probes
+
 SERVER_KEY = "searchts"
 CLAUDE_MCP_ONELINER = "claude mcp add searchts -- searchts mcp serve"
 
@@ -123,11 +126,17 @@ def check_agent_wiring(home: Optional[Path] = None, cwd: Optional[Path] = None) 
     probes = [
         ("Claude Code (MCP)", _claude_code_wired(home), CLAUDE_MCP_ONELINER),
         ("Claude Code (/searchts skill)", _skill_wired(home), "searchts skill install"),
+        ("Agent skill (SKILL.md)", bundle_wired(home), "searchts skill install"),
         ("Project .mcp.json", _project_mcp_wired(cwd), "searchts mcp install --client json"),
-        ("Claude Desktop", _claude_desktop_wired(home), "searchts mcp install --client json"),
-        ("Cursor", _cursor_wired(home, cwd), "searchts mcp install --client json"),
-        ("Codex CLI", _codex_wired(home), "searchts mcp install --client json"),
+        ("Claude Desktop", _claude_desktop_wired(home), "searchts mcp install --client desktop"),
+        ("Cursor", _cursor_wired(home, cwd), "searchts mcp install --client cursor"),
+        ("Codex CLI", _codex_wired(home), "searchts mcp install --client codex"),
     ]
+    seen = {client for client, _wired, _hint in probes}
+    for row in _wire_probes(home, cwd):
+        if row["client"] in seen:
+            continue
+        probes.append((row["client"], row["wired"], row["hint"]))
     return [
         {"client": client, "wired": bool(wired), "hint": hint}
         for client, wired, hint in probes
@@ -171,7 +180,8 @@ def format_wiring_report(checks: Optional[list] = None, *, color: Optional[bool]
     if not checks:
         row(
             "!", "yellow", "No supported agent configs found",
-            "Claude Code/Desktop, Cursor, and Codex configs were not detected.",
+            "Claude Code/Desktop, Cursor, Codex, VS Code, Copilot, Gemini, "
+            "OpenCode, Windsurf, and Devin configs were not detected.",
             CLAUDE_MCP_ONELINER,
         )
         return "\n".join(lines)

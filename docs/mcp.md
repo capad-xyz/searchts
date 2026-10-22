@@ -12,8 +12,10 @@ Keep the CLI (pipx, MCP extra included):
 
 ```bash
 pipx install "searchts[mcp]"
-searchts mcp install          # prints the exact wiring for your host
+searchts mcp install          # writes the stdio server into agents already installed
 ```
+
+`searchts mcp install` merges `searchts mcp serve` into the user config of each client it finds: Claude Code, Claude Desktop, Cursor, Codex (`~/.codex/config.toml`), VS Code (`servers` + `type: stdio`), Copilot CLI, Gemini CLI, OpenCode (`mcp` command array), Windsurf, and Devin Desktop. It does not create a config for a client that is not installed, and it does not touch a project file. `--client NAME` writes that one anyway. `--client json` only prints the `mcpServers` snippet. A config that does not parse, or that already points `searchts` at a different command, is left unchanged.
 
 Try / no install / host cannot see the pipx bin:
 
@@ -83,7 +85,7 @@ Every tool returns an `Error: …` **string** instead of raising, so failures st
 All three surfaces call the same core — pick by how your agent works:
 
 - **MCP server** (above) — always-on tools, no subprocess per call. Best for agents that speak MCP.
-- **Slash command** (`searchts skill install`) — a `/searchts` command for Claude Code that drives the CLI verbs.
+- **Slash command and skill** (`searchts skill install`) — a `/searchts` command for Claude Code, plus the Agent Skills bundle at `~/.claude/skills/searchts` and `~/.agents/skills/searchts` (OpenCode reads both).
 - **CLI** (`searchts read` / `search` / `transcribe` / `grab`) — the underlying commands; scriptable and pipeable.
 
 **Where MCP saves land.** Some hosts start the server with `/` as its working directory, where nothing can be saved. Set `SEARCHTS_MCP_OUT_DIR` in the server's environment (for example `SEARCHTS_MCP_OUT_DIR=~/Downloads/searchts`) to give `fetch_asset` and `grab_site` a folder of your choosing. The agent can still only pick relative folders inside it.

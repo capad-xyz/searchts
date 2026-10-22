@@ -276,11 +276,12 @@ Two ways, both one command:
 claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 # Keep (after pipx install "searchts[mcp]"):
 #   claude mcp add searchts -- searchts mcp serve
-# Desktop / Cursor JSON: `searchts mcp install`  (or uvx the same serve command)
+# Desktop / Cursor / the other local agents: `searchts mcp install`
+# writes the stdio server into each client already on the machine.
 # First read: Wikipedia shows more than example.com, which is one short paragraph.
 
-# 2) Slash command: type /searchts <url-or-query> in Claude Code
-searchts skill install        # writes ~/.claude/commands/searchts.md
+# 2) Skill: /searchts in Claude Code, plus SKILL.md for Claude and OpenCode
+searchts skill install        # ~/.claude/commands/searchts.md and the SKILL.md bundle
 ```
 
 See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/docs/mcp.md) for all nine tools (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_kill`), their inputs and outputs, and when to use each.
