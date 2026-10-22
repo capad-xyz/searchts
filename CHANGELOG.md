@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.20.0](https://github.com/capad-xyz/searchts/compare/v0.19.0...v0.20.0) (2026-10-22)
+
+
+### Added
+
+* **cli:** write agent configs from mcp install and skill install ([#418](https://github.com/capad-xyz/searchts/issues/418)) ([564b3dc](https://github.com/capad-xyz/searchts/commit/564b3dcd68e26d1e13b3cc88fb43fd330769723c))
+
 ## [0.19.0](https://github.com/capad-xyz/searchts/compare/v0.18.0...v0.19.0) (2026-10-22)
 
 
