@@ -1236,6 +1236,18 @@ def _app_signal(html: str, visible: str) -> bool:
     return False
 
 
+def _widget_rows_arrived(text: str) -> bool:
+    """True when a render replaced the widget shell with the ranking.
+
+    The shell is headings and a handful of glossary links. The ranking is a
+    table, or a run of links long enough that it cannot be that shell.
+    """
+    body = text or ""
+    if "|---" in body:
+        return True
+    return body.count("](") >= 15
+
+
 def _is_app_shell(html: str, text: str) -> bool:
     """True when the page was drawn by a client app this rung cannot run.
 
@@ -1675,6 +1687,8 @@ def _await_hydration(
     the extractor, which is the honest verdict for it.
     """
     _stderr_tick("waiting for the page to render…", progress)
+    from searchts.more import client_widgets_loading
+
     waited = 0
     painted_candidate: Optional[str] = None
     painted_stability = 0
@@ -1699,6 +1713,11 @@ def _await_hydration(
             continue
         if not _is_unpainted(current):
             latest_painted = current
+            # Headings paint first. A dashboard of skeleton widgets is that
+            # shell, and its rows arrive a few seconds later. Settling here
+            # returns the headings and drops the table.
+            if client_widgets_loading(current):
+                continue
             if len(current) < len(html):
                 if current != painted_candidate:
                     painted_candidate = current
@@ -2598,6 +2617,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             order.insert(0, remembered)
 
     attempts: List[Tuple[str, str]] = []
+    # Curl refused a dashboard whose widgets were still skeletons. A later
+    # rung wins only when its text has the rows, not a longer copy of the
+    # headings.
+    awaiting_widgets = False
     if _jina_dropped and not order:
         # `--backend jina --expand` leaves nothing to try. An empty reason list
         # says only "all backends failed"; name the real cause.
@@ -2835,15 +2858,21 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     and whole_short_page(body, text)
                 )
                 if len(text) >= min_chars or whole:
-                    # A client pager whose rows are not in the markup. The
-                    # shell's only list is a related block, and accepting it
-                    # publishes those links as the page. Render instead.
+                    # The rows are not in this markup. A pager whose only list
+                    # is a related block, or a dashboard whose widgets are
+                    # still skeletons. Accepting it publishes the shell.
                     if backend == "curl_cffi" and body:
-                        from searchts.more import client_list_unrendered
+                        from searchts.more import client_list_unrendered, client_widgets_loading
 
+                        unrendered = None
                         if client_list_unrendered(body):
-                            attempts.append((backend, "list-unrendered"))
-                            _tick(f"  {backend}: list-unrendered, escalating")
+                            unrendered = "list-unrendered"
+                        elif client_widgets_loading(body):
+                            unrendered = "widgets-loading"
+                            awaiting_widgets = True
+                        if unrendered:
+                            attempts.append((backend, unrendered))
+                            _tick(f"  {backend}: {unrendered}, escalating")
                             if backend == remembered:
                                 unpin(domain)
                                 remembered = None
@@ -2855,6 +2884,22 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                             if best is None or len(text) > len(best.text):
                                 best = deferred
                             continue
+                    # The shell's headings already cleared the length gate.
+                    # Jina repeats them without the table. Keep going until a
+                    # rung returns the rows.
+                    if awaiting_widgets and not _widget_rows_arrived(text):
+                        attempts.append((backend, "widgets-loading"))
+                        _tick(f"  {backend}: widgets-loading, escalating")
+                        if backend == remembered:
+                            unpin(domain)
+                            remembered = None
+                        if best is None or len(text) > len(best.text):
+                            best = FetchResult(
+                                backend, text, status,
+                                final_url=final_url or url, headers=headers,
+                                page_html=None if backend == "Jina Reader" else body,
+                            )
+                        continue
                     if memory_on and domain and backend != remembered:
                         # A win on the remembered rung does not extend its pin, so a
                         # pin earned by mistake heals once _MEMORY_TTL_SECONDS pass.

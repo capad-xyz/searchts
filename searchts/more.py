@@ -1031,6 +1031,32 @@ def client_list_unrendered(html: str) -> bool:
     return any(_related_list(items) for items in lists)
 
 
+def _loading_skeleton(el) -> bool:
+    """A widget that is still the placeholder, not the rows it will show."""
+    if (el.get("data-widget-state") or "").strip().lower() != "loading":
+        return False
+    for node in el.iter():
+        if isinstance(node.tag, str) and "skeleton" in (node.get("class") or "").lower():
+            return True
+    return len(_visible_text(el)) < 25
+
+
+def client_widgets_loading(html: str) -> bool:
+    """The page is a set of charts that have not loaded their rows.
+
+    The headings are in the markup and the tables are not. One chart beside
+    an article is left alone. Every widget still a skeleton means curl's
+    extract is the shell, and the ladder has to render the page.
+    """
+    doc = _parse(html)
+    if doc is None:
+        return False
+    widgets = [el for el in doc.xpath("//*[@data-widget-state]") if isinstance(el.tag, str)]
+    if len(widgets) < 2:
+        return False
+    return all(_loading_skeleton(el) for el in widgets)
+
+
 def _list_kept_items(best, text: str) -> Optional[Tuple[int, int]]:
     """(items on the page, items the extract kept) for a list the page is made of."""
     if not best:
