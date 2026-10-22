@@ -116,6 +116,38 @@ class TestDoctor:
         assert captured.out == ""
         assert captured.err == "checking web…\nchecking github…\n"
 
+    def test_check_all_live_block_settles_every_probe(
+        self, tmp_config, monkeypatch, capsys
+    ):
+        monkeypatch.setenv("SEARCHTS_PROGRESS_TTY", "1")
+        monkeypatch.setenv("SEARCHTS_PROGRESS_WIDTH", "78")
+        channels = [
+            _StubChannel(f"ch{i}", f"Channel {i}", 0, "ok", f"channel {i} is ready")
+            for i in range(9)
+        ]
+        channels.append(
+            _StubChannel("github", "GitHub", 0, "warn", "gh is not installed")
+        )
+        channels.append(
+            _StubChannel("linkedin", "LinkedIn", 2, "error", "health check timed out")
+        )
+        monkeypatch.setattr(doctor, "get_all_channels", lambda: channels)
+
+        doctor.check_all(tmp_config, progress=True)
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "checking ch0" in captured.err
+        assert "checking ch8" in captured.err
+        assert "gh is not installed" in captured.err
+        assert "health check timed out" in captured.err
+        # The warn is a bang, never a green tick on the same row.
+        assert "!" in captured.err
+        # 11 rows fit because check_all raises the cap; none are hidden.
+        assert "earlier" not in captured.err
+        # The report is the ending, not a second summary from the tracker.
+        assert "probes passed" not in captured.err
+
     def test_check_all_progress_env_var(self, tmp_config, monkeypatch, capsys):
         monkeypatch.setenv("SEARCHTS_PROGRESS", "1")
         monkeypatch.setattr(

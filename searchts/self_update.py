@@ -531,19 +531,85 @@ def _print_plan(plan: UpdatePlan) -> None:
         print("  " + format_argv(step.argv))
 
 
-def _print_pids(pids: Sequence[int], *, still_previous: bool) -> None:
+def _pids_text(pids: Sequence[int], *, still_previous: bool) -> str:
     if not pids:
-        return
+        return ""
     text = ", ".join(f"PID {pid}" for pid in pids)
     verb = "has" if len(pids) == 1 else "have"
     them = "it" if len(pids) == 1 else "them"
     if still_previous:
-        print(
+        return (
             f"{text} still {verb} searchts.exe open on the previous build. "
             f"This command does not kill {them}. A new command uses the updated install."
         )
-        return
-    print(f"Still open: {text}. This command does not kill {them}.")
+    return f"Still open: {text}. This command does not kill {them}."
+
+
+def _print_pids(pids: Sequence[int], *, still_previous: bool) -> None:
+    text = _pids_text(pids, still_previous=still_previous)
+    if text:
+        print(text)
+
+
+def _step_label(step: Step) -> str:
+    """The row's short name for an installer command."""
+    argv = list(step.argv)
+    exe = Path(argv[0]).name.lower() if argv else ""
+    if "pipx" in exe:
+        return "pipx upgrade"
+    if "uv" in exe:
+        if "tool" in argv:
+            return "uv tool upgrade"
+        if "cache" in argv:
+            return "uv cache clean"
+        return "uv"
+    if "git" in exe:
+        return "git pull"
+    if "python" in exe and "-m" in argv and "pip" in argv:
+        return "pip install"
+    return exe or "step"
+
+
+def _last_log_line(text: str) -> str:
+    """One useful line of installer output for a live row."""
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    if not lines:
+        return ""
+    preferred = (
+        "Successfully installed",
+        "Successfully uninstalled",
+        "Installed",
+        "Upgraded",
+        "error",
+        "ERROR",
+        "failed",
+        "Refused",
+    )
+    for line in reversed(lines):
+        if any(token in line for token in preferred):
+            return line
+    return lines[-1]
+
+
+def _update_receipt(tracker, command: str, rows, *, status: str, subject: str) -> str:
+    from searchts import receipts
+
+    style, unicode_ok = receipts.for_stream(sys.stdout)
+    return receipts.block(
+        style,
+        command,
+        rows,
+        subject=subject,
+        elapsed=tracker.elapsed(),
+        status=status,
+        unicode_ok=unicode_ok,
+    )
+
+
+def _emit_update(tracker, text: str) -> None:
+    from searchts import receipts
+
+    receipts.emit(tracker, text, stream=sys.stdout)
 
 
 def _blocked_message(pids: Sequence[int], plan: UpdatePlan) -> str:
@@ -557,103 +623,292 @@ def _blocked_message(pids: Sequence[int], plan: UpdatePlan) -> str:
     return "\n".join(lines)
 
 
-def cmd_update(*, force: bool = False, dry_run: bool = False) -> int:
+def cmd_update(
+    *,
+    force: bool = False,
+    dry_run: bool = False,
+    command: str = "update",
+) -> int:
     """Update this install. ``searchts upgrade`` calls the same function."""
+    import contextlib
+    import io
+
     import searchts as pkg
+    from searchts import progress, receipts
     from searchts.update_nudge import is_newer_version
 
     env = detect_env()
     local = pkg.__version__
-    latest = fetch_pypi_version()
-    if latest and env.kind != "editable" and is_newer_version(local, latest):
-        print(f"This copy is v{local}, ahead of PyPI v{latest}. Not downgrading.")
-        return 0
+    subject = f"searchts v{local} ({kind_label(env.kind)})"
 
-    repo = inspect_repo() if env.kind == "editable" else None
-    plan = build_plan(
-        kind=env.kind,
-        force=force,
-        extras=installed_extras(),
-        python=env.python or sys.executable,
-        pipx=tool_path("pipx"),
-        uv=tool_path("uv"),
-        git=tool_path("git"),
-        repo=repo,
-    )
-    if isinstance(plan, UpdateRefusal):
-        print(plan.message)
-        return plan.code
+    tracker = progress.live(command, summary_stream=sys.stdout)
+    with tracker:
+        # The PyPI round-trip is the first wait, so it is the first row.
+        if tracker.is_live:
+            tracker.stage("checking PyPI")
+        latest = fetch_pypi_version()
+        if tracker.is_live:
+            tracker.settle(
+                progress.ROW_OK if latest else progress.ROW_SKIP,
+                f"v{latest}" if latest else "PyPI unreachable",
+            )
 
-    print(f"searchts v{local} ({kind_label(env.kind)})")
-    print(plan.summary)
-    _print_plan(plan)
-    if dry_run:
-        print("Dry run. Nothing was changed.")
-        return 0
+        if latest and env.kind != "editable" and is_newer_version(local, latest):
+            _emit_update(
+                tracker,
+                _update_receipt(
+                    tracker,
+                    command,
+                    [receipts.Row(
+                        progress.ROW_SKIP,
+                        "ahead",
+                        f"This copy is v{local}, ahead of PyPI v{latest}. Not downgrading.",
+                    )],
+                    status=progress.ROW_OK,
+                    subject=subject,
+                ),
+            )
+            return 0
 
-    if sys.stderr is not None:
-        print("updating searchts…", file=sys.stderr, flush=True)
-
-    parked: list[tuple[Path, Path]] = []
-    if sys.platform == "win32" and env.kind != "ephemeral_uvx":
-        image = process_image()
-        parked = park_files(launcher_candidates(env.kind, env.python or sys.executable))
-        if image_blocks_replace(image):
-            settle_parked(parked)
-            print(_blocked_message(other_lock_pids(), plan))
-            return 2
-
-    code = 0
-    output = ""
-    try:
-        for step in plan.steps:
-            try:
-                code, output = run_step(step.argv, step.cwd)
-            except OSError as exc:
-                print(f"Could not run {format_argv(step.argv)}: {exc}")
-                code, output = 2, str(exc)
-            if code != 0:
-                break
-    finally:
-        leftovers = settle_parked(parked)
-
-    for path in leftovers:
-        print(f"Left the previous executable at {path}. Delete it after this process exits.")
-
-    if code != 0:
-        if env.kind in {"pip", "venv", "editable"} and "externally-managed-environment" in output:
-            print(_EXTERNALLY_MANAGED)
-        print("Update did not finish.")
-        _print_pids(other_lock_pids(), still_previous=False)
-        return code
-
-    if env.kind == "ephemeral_uvx":
-        print("Cleared the uv cache for searchts. The next uvx run is the latest PyPI release.")
-        print('Example: uvx --from "searchts[mcp]@latest" searchts --version')
-        return 0
-
-    launcher = primary_launcher(env.kind, env.python or sys.executable)
-    installed = read_installed_version(launcher) if launcher is not None else None
-    if installed is None:
-        print("The installer finished, but the updated searchts --version could not be read.")
-        _print_pids(other_lock_pids(), still_previous=False)
-        _print_plan(plan)
-        return 1
-    if latest and is_newer_version(latest, installed):
-        print(
-            f"Upgrade did not take effect. This command is still v{installed}. "
-            f"Latest on PyPI is v{latest}."
+        repo = inspect_repo() if env.kind == "editable" else None
+        plan = build_plan(
+            kind=env.kind,
+            force=force,
+            extras=installed_extras(),
+            python=env.python or sys.executable,
+            pipx=tool_path("pipx"),
+            uv=tool_path("uv"),
+            git=tool_path("git"),
+            repo=repo,
         )
-        _print_pids(other_lock_pids(), still_previous=False)
-        print("Run:")
-        _print_plan(plan)
-        return 1
+        if isinstance(plan, UpdateRefusal):
+            _emit_update(
+                tracker,
+                _update_receipt(
+                    tracker,
+                    command,
+                    [receipts.Row(progress.ROW_FAIL, "reason", plan.message)],
+                    status=progress.ROW_FAIL,
+                    subject=subject,
+                ),
+            )
+            return plan.code
 
-    print(f"searchts v{installed}")
-    copies: list[tuple[Path, Optional[str]]] = []
-    for path in path_launchers():
-        copies.append((path, read_installed_version(path)))
-    for line in other_copy_notes(copies, launcher, installed):
-        print(line)
-    _print_pids(other_lock_pids(), still_previous=True)
-    return 0
+        if dry_run:
+            commands = "\n".join(format_argv(step.argv) for step in plan.steps)
+            _emit_update(
+                tracker,
+                _update_receipt(
+                    tracker,
+                    command,
+                    [receipts.Row(
+                        progress.ROW_SKIP,
+                        "dry run",
+                        f"Dry run. Nothing was changed.\nWould run:\n{commands}",
+                    )],
+                    status=progress.ROW_OK,
+                    subject=subject,
+                ),
+            )
+            return 0
+
+        if not tracker.is_live and sys.stderr is not None:
+            print("updating searchts…", file=sys.stderr, flush=True)
+
+        parked: list[tuple[Path, Path]] = []
+        if sys.platform == "win32" and env.kind != "ephemeral_uvx":
+            image = process_image()
+            parked = park_files(launcher_candidates(env.kind, env.python or sys.executable))
+            if image_blocks_replace(image):
+                settle_parked(parked)
+                _emit_update(
+                    tracker,
+                    _update_receipt(
+                        tracker,
+                        command,
+                        [receipts.Row(
+                            progress.ROW_FAIL,
+                            "reason",
+                            _blocked_message(other_lock_pids(), plan),
+                        )],
+                        status=progress.ROW_FAIL,
+                        subject=subject,
+                    ),
+                )
+                return 2
+
+        code = 0
+        output = ""
+        step_rows = []
+        try:
+            for step in plan.steps:
+                label = _step_label(step)
+                if tracker.is_live:
+                    tracker.stage(label, format_argv(step.argv))
+                try:
+                    if tracker.is_live:
+                        # run_step still prints the installer's own output;
+                        # capture it so the cursor-up block is never mixed
+                        # with a subprocess line. The row carries the last
+                        # useful line, which is pip's verdict.
+                        buf_out, buf_err = io.StringIO(), io.StringIO()
+                        with contextlib.redirect_stdout(buf_out), \
+                                contextlib.redirect_stderr(buf_err):
+                            code, output = run_step(step.argv, step.cwd)
+                        log = (buf_out.getvalue() + buf_err.getvalue()).strip()
+                    else:
+                        code, output = run_step(step.argv, step.cwd)
+                        log = output
+                except OSError as exc:
+                    code = 2
+                    output = str(exc)
+                    log = f"Could not run {format_argv(step.argv)}: {exc}"
+                    if not tracker.is_live:
+                        print(log)
+                detail = _last_log_line(log) if code == 0 else (
+                    _last_log_line(log) or f"exit {code}"
+                )
+                if tracker.is_live:
+                    tracker.settle(
+                        progress.ROW_OK if code == 0 else progress.ROW_FAIL,
+                        detail or format_argv(step.argv),
+                    )
+                step_rows.append(receipts.Row(
+                    progress.ROW_OK if code == 0 else progress.ROW_FAIL,
+                    label,
+                    detail or format_argv(step.argv),
+                ))
+                if code != 0:
+                    break
+        finally:
+            leftovers = settle_parked(parked)
+
+        leftover_rows = [
+            receipts.Row(
+                progress.ROW_WARN,
+                "previous",
+                f"Left the previous executable at {path}. Delete it after this process exits.",
+            )
+            for path in leftovers
+        ]
+
+        if code != 0:
+            rows = list(step_rows)
+            if env.kind in {"pip", "venv", "editable"} and "externally-managed-environment" in output:
+                rows.append(receipts.Row(progress.ROW_WARN, "system Python", _EXTERNALLY_MANAGED))
+            rows.append(receipts.Row(progress.ROW_FAIL, "reason", "Update did not finish."))
+            pids = _pids_text(other_lock_pids(), still_previous=False)
+            if pids:
+                rows.append(receipts.Row(progress.ROW_WARN, "still open", pids))
+            rows.extend(leftover_rows)
+            _emit_update(
+                tracker,
+                _update_receipt(
+                    tracker,
+                    command,
+                    rows,
+                    status=progress.ROW_FAIL,
+                    subject=subject,
+                ),
+            )
+            return code
+
+        if env.kind == "ephemeral_uvx":
+            rows = list(step_rows)
+            rows.extend(leftover_rows)
+            rows.append(receipts.Row(
+                progress.ROW_OK,
+                "now on",
+                "Cleared the uv cache for searchts. The next uvx run is the latest PyPI release.",
+            ))
+            _emit_update(
+                tracker,
+                _update_receipt(
+                    tracker,
+                    command,
+                    rows,
+                    status=progress.ROW_OK,
+                    subject=subject,
+                ),
+            )
+            return 0
+
+        launcher = primary_launcher(env.kind, env.python or sys.executable)
+        installed = read_installed_version(launcher) if launcher is not None else None
+        if installed is None:
+            rows = list(step_rows)
+            rows.extend(leftover_rows)
+            rows.append(receipts.Row(
+                progress.ROW_FAIL,
+                "version",
+                "The installer finished, but the updated searchts --version could not be read.",
+            ))
+            pids = _pids_text(other_lock_pids(), still_previous=False)
+            if pids:
+                rows.append(receipts.Row(progress.ROW_WARN, "still open", pids))
+            rows.extend(
+                receipts.Row(progress.ROW_SKIP, _step_label(step), format_argv(step.argv))
+                for step in plan.steps
+            )
+            _emit_update(
+                tracker,
+                _update_receipt(
+                    tracker,
+                    command,
+                    rows,
+                    status=progress.ROW_FAIL,
+                    subject=subject,
+                ),
+            )
+            return 1
+
+        if latest and is_newer_version(latest, installed):
+            rows = list(step_rows)
+            rows.append(receipts.Row(
+                progress.ROW_FAIL,
+                "version",
+                f"Upgrade did not take effect. This command is still v{installed}. "
+                f"Latest on PyPI is v{latest}.",
+            ))
+            pids = _pids_text(other_lock_pids(), still_previous=False)
+            if pids:
+                rows.append(receipts.Row(progress.ROW_WARN, "still open", pids))
+            rows.extend(leftover_rows)
+            rows.extend(
+                receipts.Row(progress.ROW_SKIP, _step_label(step), format_argv(step.argv))
+                for step in plan.steps
+            )
+            _emit_update(
+                tracker,
+                _update_receipt(
+                    tracker,
+                    command,
+                    rows,
+                    status=progress.ROW_FAIL,
+                    subject=subject,
+                ),
+            )
+            return 1
+
+        copies: list[tuple[Path, Optional[str]]] = []
+        for path in path_launchers():
+            copies.append((path, read_installed_version(path)))
+        rows = list(step_rows)
+        rows.extend(leftover_rows)
+        rows.append(receipts.Row(progress.ROW_OK, "now on", f"v{installed}"))
+        for line in other_copy_notes(copies, launcher, installed):
+            rows.append(receipts.Row(progress.ROW_WARN, "other copy", line))
+        pids = _pids_text(other_lock_pids(), still_previous=True)
+        if pids:
+            rows.append(receipts.Row(progress.ROW_WARN, "still open", pids))
+        _emit_update(
+            tracker,
+            _update_receipt(
+                tracker,
+                command,
+                rows,
+                status=progress.ROW_OK,
+                subject=f"searchts v{installed} ({kind_label(env.kind)})",
+            ),
+        )
+        return 0

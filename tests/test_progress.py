@@ -197,6 +197,34 @@ def test_a_skipped_rung_is_a_skip_not_a_failure():
     assert tracker.rows[0].status == progress.ROW_SKIP
 
 
+def test_a_warning_is_a_bang_not_a_tick():
+    tracker, _ = live()
+    tracker.stage("checking github")
+    tracker.settle(progress.ROW_WARN, "gh is not installed")
+    text = plain("\n".join(tracker._blocks()))
+
+    row = next(line for line in text.splitlines() if "github" in line)
+    assert "!" in row
+    assert "✓" not in row
+
+
+def test_max_rows_lets_doctor_show_every_probe():
+    stream = io.StringIO()
+    tracker = progress.Tracker(
+        "doctor", stream=stream, enabled=True, max_rows=64,
+    )
+    progress._set_current(tracker)
+    for i in range(11):
+        tracker.stage(f"checking ch{i}")
+        tracker.settle(progress.ROW_OK, f"channel {i} is ready")
+    text = plain("\n".join(tracker._blocks()))
+
+    assert all(f"ch{i}" in text for i in range(11))
+    assert "earlier" not in text
+    tracker.close()
+    progress._set_current(None)
+
+
 def test_an_unrecognised_reason_is_a_failure():
     """A new backend's reason must show up loudly, not match nothing quietly."""
     assert progress.classify("socket hang up") == progress.ROW_FAIL

@@ -102,6 +102,26 @@ def use_color(stream=None) -> bool:
 
 
 
+def live_available(stream=None) -> bool:
+    """Would a tracker on this stream draw, without constructing one?
+
+    Used by ``watch`` to decide whether the outer "checking channels…" line is
+    the plain log or would be a duplicate of the tracker's own header.
+    """
+    return Tracker._detect_tty(stream or sys.stderr, None)
+
+
+def mark(status: str, unicode_ok: bool = True) -> str:
+    """The one-glyph verdict shared by the live rows and every receipt."""
+    if status == ROW_OK:
+        return "✓" if unicode_ok else "+"
+    if status == ROW_WARN:
+        return "!"
+    if status == ROW_FAIL:
+        return "✗" if unicode_ok else "x"
+    return "·" if unicode_ok else "."
+
+
 def use_links(stream=None) -> bool:
     """OSC 8 hyperlinks.
 
@@ -287,6 +307,7 @@ def _pad(text: str, width: int) -> str:
 ROW_PENDING = "pending"
 ROW_RUNNING = "running"
 ROW_OK = "ok"
+ROW_WARN = "warn"
 ROW_SKIP = "skip"
 ROW_FAIL = "fail"
 
@@ -330,10 +351,18 @@ class Tracker:
     MAX_ROWS = 8
 
     def __init__(self, command: str, subject: str = "", *, stream=None,
-                 enabled: Optional[bool] = None, ascii_only: Optional[bool] = None):
+                 enabled: Optional[bool] = None, ascii_only: Optional[bool] = None,
+                 max_rows: Optional[int] = None, summary_stream=None):
         self.command = command
         self.subject = subject
         self._stream = stream
+        #: Doctor probes 11 channels and the 8-row default would hide the first
+        #: three behind "… N earlier". A command that knows its whole block can
+        #: raise the cap; every other caller keeps the readable default.
+        self.max_rows = max(1, int(max_rows)) if max_rows is not None else self.MAX_ROWS
+        #: A receipt is stdout content on a status command. The live block is
+        #: still stderr; only the line close() writes goes to this stream.
+        self._summary_stream = summary_stream
         self.rows: List[Row] = []
         self._active: Optional[Row] = None
         self._lock = threading.RLock()
@@ -544,6 +573,8 @@ class Tracker:
     def _glyph(self, row: Row) -> str:
         if row.status == ROW_OK:
             return "✓" if self._unicode else "+"
+        if row.status == ROW_WARN:
+            return "!"
         if row.status == ROW_SKIP:
             return "·" if self._unicode else "."
         if row.status == ROW_FAIL:
@@ -591,7 +622,7 @@ class Tracker:
         rule = "─" if self._unicode else "-"
         out.append("  " + s.dim(rule * min(width - 4, 64)))
 
-        rows = self.rows[-self.MAX_ROWS:]
+        rows = self.rows[-self.max_rows:]
         hidden = len(self.rows) - len(rows)
         if hidden > 0:
             out.append("  " + s.dim(f"… {hidden} earlier"))
@@ -604,6 +635,8 @@ class Tracker:
             glyph = self._glyph(row)
             if row.status == ROW_OK:
                 glyph = s.green(glyph)
+            elif row.status == ROW_WARN:
+                glyph = s.yellow(glyph)
             elif row.status == ROW_FAIL:
                 glyph = s.red(glyph)
             elif row.status == ROW_SKIP:
@@ -723,7 +756,7 @@ class Tracker:
         by the command itself (or by ``ux`` on a failure), and adding a receipt
         line there would put the same fact on stderr twice.
         """
-        stream = self._stream or sys.stderr
+        stream = self._summary_stream or self._stream or sys.stderr
         if stream is None or not self._tty or self._summary is None:
             return
         try:

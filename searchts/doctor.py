@@ -24,41 +24,83 @@ def _tick(msg: str) -> None:
     _progress.narrate(msg)
 
 
-def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict]:
+def _row_status(status: str) -> str:
+    """The live row's verdict for a channel's report status.
+
+    ``off`` is a skip, not a failure: the optional CLI is simply not here.
+    A real error gets the red x, and a warning gets ``!`` rather than a tick.
+    """
+    from searchts import progress as _progress
+
+    return {
+        "ok": _progress.ROW_OK,
+        "warn": _progress.ROW_WARN,
+        "off": _progress.ROW_SKIP,
+        "error": _progress.ROW_FAIL,
+    }.get(status, _progress.ROW_SKIP)
+
+
+def _row_detail(message: str) -> str:
+    """One line for the live row. The full sentence stays in format_report."""
+    return " ".join(str(message or "").split())
+
+
+def check_all(
+    config: Config,
+    progress: Optional[bool] = None,
+    *,
+    command: str = "doctor",
+) -> Dict[str, dict]:
     """Check all channels and return status dict.
 
     A single misbehaving channel must never take the whole report down,
     so per-channel exceptions degrade to status=\"error\".
 
     progress:
-        True: stderr logs one line when a channel starts, and nothing while it
-        runs. A live terminal updates that line's clock in place; a pipe gets
-        the one line only. False: never (CLI ``--json``). None: follow
-        ``SEARCHTS_PROGRESS=1``. Library/MCP callers omit the arg so they stay
-        quiet unless the env is set.
+        True: one live region on stderr. Each channel opens one row, and the
+        row settles with the channel's own verdict and a flattened sentence.
+        Every probe is shown: the 8-row default would hide the first channels,
+        and the doctor's whole job is to name all of them. A pipe still gets
+        exactly the old ``checking <name>…`` line per channel. False: never
+        (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``. Library/MCP
+        callers omit the arg so they stay quiet unless the env is set.
+
+    No receipt is written. ``format_report`` is the ending; a summary here
+    would only repeat its "N/M probes passed" line.
     """
     progress = progress_wanted(progress)
+    if not progress:
+        tracker = None
+    else:
+        from searchts import progress as _progress
 
-    results = {}
-    for ch in get_all_channels():
-        reported = None
-        with progress_phase(f"checking {ch.name}…", enabled=bool(progress)):
-            try:
-                status, message = ch.check(config)
-                active = getattr(ch, "active_backend", None)
-                reported = getattr(ch, "reported_backends", None)
-            except Exception as e:  # noqa: BLE001 — doctor must survive any channel
-                status, message, active = "error", f"Health check error: {e}", None
-                reported = None
-        backends = list(reported) if reported is not None else list(ch.backends)
-        results[ch.name] = {
-            "status": status,
-            "name": ch.description,
-            "message": message,
-            "tier": ch.tier,
-            "backends": backends,
-            "active_backend": active,
-        }
+        tracker = _progress.live(command, max_rows=64)
+
+    from contextlib import nullcontext
+
+    with (tracker if tracker is not None else nullcontext()):
+        results = {}
+        for ch in get_all_channels():
+            reported = None
+            with progress_phase(f"checking {ch.name}…", enabled=bool(progress)):
+                try:
+                    status, message = ch.check(config)
+                    active = getattr(ch, "active_backend", None)
+                    reported = getattr(ch, "reported_backends", None)
+                except Exception as e:  # noqa: BLE001 — doctor must survive any channel
+                    status, message, active = "error", f"Health check error: {e}", None
+                    reported = None
+                if tracker is not None and tracker.is_live:
+                    tracker.settle(_row_status(status), _row_detail(message))
+            backends = list(reported) if reported is not None else list(ch.backends)
+            results[ch.name] = {
+                "status": status,
+                "name": ch.description,
+                "message": message,
+                "tier": ch.tier,
+                "backends": backends,
+                "active_backend": active,
+            }
     return results
 
 

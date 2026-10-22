@@ -264,8 +264,11 @@ class TestCLI:
                     main()
         assert exc_info.value.code != 0
         captured = capsys.readouterr()
-        assert "curl_cffi: http-403" in captured.err
-        assert "Jina Reader: challenge" in captured.err
+        assert "curl_cffi" in captured.err
+        assert "http-403" in captured.err
+        assert "Jina Reader" in captured.err
+        assert "challenge" in captured.err
+        assert "\u2717 read" in captured.err
         assert captured.out == ""  # nothing on stdout on failure
 
     def test_search_command_prints_numbered_list(self, capsys):
@@ -374,7 +377,7 @@ class TestCLI:
 
         out = capsys.readouterr().out
         assert commands == [["pipx", "install", cli._RDT_GIT_SOURCE]]
-        assert "[ok] rdt-cli installed" in out
+        assert "\u2713 rdt-cli installed" in out
 
     def test_install_reddit_deps_routes_by_environment(self, monkeypatch):
         """Desktop -> OpenCLI; server -> rdt-cli (pinned git source)."""
@@ -583,6 +586,61 @@ class TestCheckUpdateRetry:
         assert result == "error"
         assert "Network timeout" in captured.out
         assert "retried 3 times" in captured.out
+
+    def test_release_rows_drops_the_repeated_whats_changed_copy(self):
+        body = (
+            "### Added\n"
+            "* **cli:** live progression and receipts "
+            "([#412](https://x/412)) ([7a9649b](https://x/7a9649b))\n"
+            "### Fixed\n"
+            "* **read:** keep looking ([#414](https://x/414)) "
+            "([8b18035](https://x/8b18035))\n"
+            "## What's Changed\n"
+            "* feat(cli): live progression and receipts by @capad in "
+            "https://x/pull/412\n"
+            "* fix(read): keep looking by @capad in https://x/pull/414\n"
+            "* chore(main): release 0.18.0 by @capad in https://x/pull/415\n"
+            "**Full Changelog**: https://x/compare\n"
+        )
+        assert cli._release_rows(body) == [
+            ("cli", "live progression and receipts"),
+            ("read", "keep looking"),
+        ]
+
+    def test_check_update_live_block_has_one_loading_row(self, monkeypatch, capsys):
+        class R:
+            status_code = 200
+
+            @staticmethod
+            def json():
+                return {
+                    "tag_name": "v2.0.0",
+                    "body": (
+                        "## What's Changed\n"
+                        "* feat(cli): add a live frame to check-update\n"
+                        "* fix(read): keep the failure ladder\n"
+                        "**Full Changelog**: https://example.test/compare\n"
+                    ),
+                }
+
+        monkeypatch.setenv("SEARCHTS_PROGRESS_TTY", "1")
+        monkeypatch.setenv("SEARCHTS_PROGRESS_WIDTH", "78")
+        monkeypatch.setattr("searchts.__version__", "1.0.0")
+        with patch("searchts.cli._github_get_with_retry", return_value=(R(), None, 0)):
+            result = cli._cmd_check_update()
+
+        captured = capsys.readouterr()
+        assert result == "update_available"
+        assert "checking GitHub releases" in captured.err
+        assert "Current version:" not in captured.err
+        assert "current" in captured.out
+        assert "v2.0.0" in captured.out
+        assert "cli" in captured.out
+        assert "live frame" in captured.out
+        assert "searchts update" in captured.out
+        # GitHub markdown is source material, never the receipt.
+        assert "## What's Changed" not in captured.out
+        assert "Full Changelog" not in captured.out
 
     def test_check_update_ticks_on_stderr(self, capsys):
         with patch("searchts.cli._github_get_with_retry", return_value=(None, "timeout", 3)):

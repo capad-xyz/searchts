@@ -208,6 +208,30 @@ COMMANDS: Dict[str, dict] = {
         "lead": "Quick health check plus update check, for a scheduled task.",
         "examples": ["searchts watch"],
     },
+    "setup": {
+        "lead": "Walk through search, GitHub, Reddit, and Groq in one pass.",
+        "body": [
+            "Every prompt can be skipped with Enter. The summary says what was",
+            "saved and what is still optional; it never installs a system package.",
+        ],
+        "examples": ["searchts setup"],
+    },
+    "skill": {
+        "lead": "Write the Claude Code slash-command, or register the full skill bundle.",
+        "examples": [
+            "searchts skill install",
+            "searchts skill install --dir ~/.claude/commands",
+            "searchts skill --install",
+        ],
+    },
+    "version": {
+        "lead": "Print the installed version, one line on stdout.",
+        "examples": ["searchts version"],
+    },
+    "update": {
+        "lead": "Update this install to the latest release.",
+        "examples": ["searchts update", "searchts update --dry-run"],
+    },
     "upgrade": {
         "lead": "Update this install to the latest release.",
         "examples": ["searchts upgrade"],
