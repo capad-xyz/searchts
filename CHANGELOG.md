@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.19.0](https://github.com/capad-xyz/searchts/compare/v0.18.0...v0.19.0) (2026-10-22)
+
+
+### Added
+
+* **cli:** finish the receipt theme on the remaining screens ([#416](https://github.com/capad-xyz/searchts/issues/416)) ([5012013](https://github.com/capad-xyz/searchts/commit/5012013b96e7df3f8d3b50963bc2630904d6692c))
+
 ## [0.18.0](https://github.com/capad-xyz/searchts/compare/v0.17.1...v0.18.0) (2026-10-22)
 
 
