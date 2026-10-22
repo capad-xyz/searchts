@@ -8,8 +8,10 @@ structured entry for ``--json`` / MCP.
 
 Also keeps accordion and tab text through extraction (``prepare_panels``):
 Trafilatura drops ``<button>`` labels (the questions) and inline
-``display:none`` panels (the answers). ``tidy_markdown`` puts headings and
-code fences back on their own lines after extraction, and
+``display:none`` panels (the answers). ``keep_cell_labels`` keeps a table
+cell whose whole text is a share-button word (Reddit, LinkedIn, and the
+rest of that list), which Trafilatura otherwise deletes. ``tidy_markdown``
+puts headings and code fences back on their own lines after extraction, and
 :func:`space_after_inline` puts back a space the extractor drops next to
 inline code or bold. :func:`page_data_blocks` reads the page's own data, the
 typed ``<script type="application/ld+json">`` and the app state an inline
@@ -479,6 +481,60 @@ def prepare_panels(html: str) -> str:
 
         if not changed:
             return html
+        return lxml.html.tostring(doc, encoding="unicode")
+    except Exception:  # noqa: BLE001 - never lose a read over a preprocessing step
+        return html
+
+
+#: The mark that keeps a share-button word through Trafilatura's text filter.
+#: It is not whitespace, so the filter no longer matches the whole cell, and
+#: the markdown writer does not print it.
+_CELL_MARK = "\u2060"
+
+
+def _leaf(node) -> bool:
+    """True when ``node`` has no element children. Comments do not count."""
+    return not any(isinstance(child.tag, str) for child in node)
+
+
+def _share_label(text: str, pattern) -> bool:
+    """The cell text Trafilatura's share-button filter would delete."""
+    trimmed = " ".join(text.split()).strip()
+    return bool(trimmed) and pattern.match(trimmed) is not None
+
+
+def keep_cell_labels(html: str) -> str:
+    """Keep a table cell whose text is only a share-button word.
+
+    Trafilatura deletes that word (Reddit, LinkedIn, Google, and the rest of
+    its share-button list), so the row comes back with an empty name. A word
+    joiner on the leaf text keeps the word. A link in the cell is already
+    kept. Anything unexpected returns the HTML unchanged, and a page with no
+    such cell is returned byte for byte.
+    """
+    doc = _parse(html)
+    if doc is None:
+        return html
+    try:
+        from trafilatura.utils import RE_FILTER
+
+        changed = False
+        for cell in doc.xpath("//td|//th"):
+            for node in cell.iter():
+                if not isinstance(node.tag, str) or not _leaf(node):
+                    continue
+                if (
+                    not node.text
+                    or _CELL_MARK in node.text
+                    or not _share_label(node.text, RE_FILTER)
+                ):
+                    continue
+                node.text += _CELL_MARK
+                changed = True
+        if not changed:
+            return html
+        import lxml.html
+
         return lxml.html.tostring(doc, encoding="unicode")
     except Exception:  # noqa: BLE001 - never lose a read over a preprocessing step
         return html

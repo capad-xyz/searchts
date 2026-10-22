@@ -1091,9 +1091,10 @@ def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
     try:
         import trafilatura
 
-        from searchts.more import prepare_panels, tidy_markdown
+        from searchts.more import keep_cell_labels, prepare_panels, tidy_markdown
 
         html = prepare_panels(html)  # F23a: keep FAQ questions and hidden answers
+        html = keep_cell_labels(html)
         out = trafilatura.extract(
             html, url=url, output_format="markdown",
             include_links=True, include_tables=True, favor_recall=True,
