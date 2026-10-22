@@ -50,7 +50,10 @@ def test_comment_cap_is_reported(monkeypatch):
     md = reddit.parse_reddit_thread_html(html, THREAD)
     assert md is not None
     assert md.count("**/u/user") == 30
-    assert "[truncated: 5 more comments in the page were cut at the 30-comment cap]" in md
+    assert (
+        "[truncated: 5 more comments in the page were cut at the 30-comment cap; "
+        "--items N (MCP max_items) raises it, ceiling 300]"
+    ) in md
     assert "[partial" not in md
 
 

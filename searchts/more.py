@@ -8,10 +8,12 @@ structured entry for ``--json`` / MCP.
 
 Also keeps accordion and tab text through extraction (``prepare_panels``):
 Trafilatura drops ``<button>`` labels (the questions) and inline
-``display:none`` panels (the answers). ``tidy_markdown`` puts headings and
-code fences back on their own lines after extraction, and
+``display:none`` panels (the answers). ``keep_cell_labels`` keeps a table
+cell whose whole text is a share-button word (Reddit, LinkedIn, and the
+rest of that list), which Trafilatura otherwise deletes. ``tidy_markdown``
+puts headings and code fences back on their own lines after extraction, and
 :func:`space_after_inline` puts back a space the extractor drops next to
-inline code or bold. :func:`page_data_blocks` reads the page's own data, the
+inline code, bold, or a link. :func:`page_data_blocks` reads the page's own data, the
 typed ``<script type="application/ld+json">`` and the app state an inline
 script named ``__SOMETHING__`` holds, so a page that ships its body as data
 instead of markup can still be read from the bytes already downloaded.
@@ -23,6 +25,7 @@ not per-host code (Reddit keeps its own ring in ``known_hosts``).
 from __future__ import annotations
 
 import base64
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Tuple
@@ -483,6 +486,60 @@ def prepare_panels(html: str) -> str:
         return html
 
 
+#: The mark that keeps a share-button word through Trafilatura's text filter.
+#: It is not whitespace, so the filter no longer matches the whole cell, and
+#: the markdown writer does not print it.
+_CELL_MARK = "\u2060"
+
+
+def _leaf(node) -> bool:
+    """True when ``node`` has no element children. Comments do not count."""
+    return not any(isinstance(child.tag, str) for child in node)
+
+
+def _share_label(text: str, pattern) -> bool:
+    """The cell text Trafilatura's share-button filter would delete."""
+    trimmed = " ".join(text.split()).strip()
+    return bool(trimmed) and pattern.match(trimmed) is not None
+
+
+def keep_cell_labels(html: str) -> str:
+    """Keep a table cell whose text is only a share-button word.
+
+    Trafilatura deletes that word (Reddit, LinkedIn, Google, and the rest of
+    its share-button list), so the row comes back with an empty name. A word
+    joiner on the leaf text keeps the word. A link in the cell is already
+    kept. Anything unexpected returns the HTML unchanged, and a page with no
+    such cell is returned byte for byte.
+    """
+    doc = _parse(html)
+    if doc is None:
+        return html
+    try:
+        from trafilatura.utils import RE_FILTER
+
+        changed = False
+        for cell in doc.xpath("//td|//th"):
+            for node in cell.iter():
+                if not isinstance(node.tag, str) or not _leaf(node):
+                    continue
+                if (
+                    not node.text
+                    or _CELL_MARK in node.text
+                    or not _share_label(node.text, RE_FILTER)
+                ):
+                    continue
+                node.text += _CELL_MARK
+                changed = True
+        if not changed:
+            return html
+        import lxml.html
+
+        return lxml.html.tostring(doc, encoding="unicode")
+    except Exception:  # noqa: BLE001 - never lose a read over a preprocessing step
+        return html
+
+
 _FENCE_LINE_RE = re.compile(r"^([ \t]*)(`{3,}|~{3,})[^`]*$")
 _GLUED_FENCE_RE = re.compile(r"^(.*[^`\s])[ \t]*```[ \t]*$")
 _HEADING_LINE_RE = re.compile(r"^([ \t]*)(#{1,6} \S.*)$")
@@ -539,22 +596,28 @@ def tidy_markdown(markdown: str) -> str:
     return space_after_inline("\n".join(out))
 
 
-#: An inline code span or a bold run: the two things an extractor can leave
-#: glued to the word next to them. ``searchts`read`` comes from markup with no
-#: whitespace node between the ``<code>`` and the text; the tags are real and
-#: the space is not. Measured on real extracts from docs pages and wikis.
-_TOKEN_RE = re.compile(r"(`+[^`\n]*`+|\*\*|__)")
+#: An inline code span, a markdown link, or a bold run. An extractor can leave
+#: any of them glued to the word next to them. ``searchts`read`` and
+#: ``[by Ada](https://example.org/a)4 Min.`` come from markup with no whitespace
+#: node between the element and the text; the tags are real and the space is
+#: not. A parenthesis inside a link address stays inside the address.
+_LINK_RE = r"\[[^\]\n]*\]\([^()\n]*(?:\([^()\n]*\)[^()\n]*)*\)"
+_TOKEN_RE = re.compile(rf"(`+[^`\n]*`+|{_LINK_RE}|\*\*|__)")
 
 
 def space_after_inline(markdown: str) -> str:
-    """Put back the space an extractor drops next to inline code or bold.
+    """Put back the space an extractor drops next to inline code, bold, or a link.
 
-    One pass per line, over the inline code spans and the bold runs only:
+    One pass per line, over inline code spans, markdown links, and bold runs:
 
     - a **closing** code span followed immediately by a word gets a space
       (``searchts`read`` -> ``searchts` read``). The span is left byte for
       byte: the space belongs between the span and the word, never inside the
       code.
+    - a link followed immediately by a word gets a space
+      (``[by Ada](https://example.org/a)4 Min.`` -> the same link, then
+      `` 4 Min.``). The link is left byte for byte, including a parenthesis
+      inside the address.
     - a bold run gets a space after it when it closes and a word follows
       (``**bold**text`` -> ``**bold** text``), and not when it opens one
       (``**bold** more`` is already right and stays as it is).
@@ -591,8 +654,9 @@ def _space_line(line: str) -> str:
         out.append(line[pos : m.start()])
         token = m.group(0)
         glued = line[m.end() : m.end() + 1].isalnum()
-        out.append(token + (" " if glued and (token.startswith("`") or bold_open) else ""))
-        if not token.startswith("`"):
+        closes = token.startswith(("`", "[")) or bold_open
+        out.append(token + (" " if glued and closes else ""))
+        if token.startswith(("**", "__")):
             bold_open = not bold_open
         pos = m.end()
     out.append(line[pos:])
@@ -801,11 +865,19 @@ def _visible_text(el) -> str:
 
 
 def _item_key(item) -> str:
-    for xp in (".//h1|.//h2|.//h3|.//h4", ".//a[@href]"):
-        for el in item.xpath(xp):
-            txt = _norm(el.text_content())
-            if len(txt) >= 8:
-                return txt[:60].lower()
+    for el in item.xpath(".//h1|.//h2|.//h3|.//h4"):
+        txt = _norm(el.text_content())
+        if len(txt) >= 8:
+            return txt[:60].lower()
+    for el in item.xpath(".//a[@href]"):
+        # The name, when the anchor also wraps a paragraph. The whole
+        # text_content glues those together and is not what the rebuild prints.
+        labeled = _card_label(el)
+        if labeled is not None and len(labeled[1]) >= 8:
+            return labeled[1][:60].lower()
+        txt = _norm(el.text_content())
+        if len(txt) >= 8:
+            return txt[:60].lower()
     return _norm(item.text_content())[:60].lower()
 
 
@@ -874,17 +946,30 @@ def _table_rows(doc) -> Optional[List]:
     return best
 
 
-def _best_list(doc) -> Optional[List]:
-    """The repeated items the page is made of (results, cards, posts), or None."""
+def _introducing_heading(node) -> str:
+    """The heading that sits in front of ``node``, walking out to parents."""
+    current = node
+    while current is not None:
+        prev = current.getprevious()
+        while prev is not None:
+            if isinstance(prev.tag, str) and prev.tag.lower() in {"h1", "h2", "h3", "h4"}:
+                return _norm(prev.text_content())
+            prev = prev.getprevious()
+        current = current.getparent()
+    return ""
+
+
+def _related_list(items) -> bool:
+    """An "Other …" block. It is not the list the page is ranking."""
+    if not items:
+        return False
+    return _introducing_heading(items[0]).lower().startswith("other ")
+
+
+def _candidate_lists(doc):
+    """Repeated link groups long enough to be a list, related blocks included."""
     body = doc.find(".//body")
-    main = doc.find(".//main")
     root = body if body is not None else doc
-    measure = main if main is not None else root
-    page_len = len(_visible_text(measure))
-    if page_len < 400:
-        return None
-    best: Optional[List] = None
-    best_len = 0
     for parent in root.iter():
         if not isinstance(parent.tag, str) or len(parent) < _LIST_MIN_ITEMS:
             continue
@@ -900,9 +985,26 @@ def _best_list(doc) -> Optional[List]:
             real = [it for it in items if it.xpath(".//a[@href]") and len(_visible_text(it)) >= 25]
             if len(real) < 0.8 * len(items):
                 continue
-            total = sum(len(_visible_text(it)) for it in items)
-            if total > best_len:
-                best, best_len = items, total
+            yield items
+
+
+def _best_list(doc) -> Optional[List]:
+    """The repeated items the page is made of (results, cards, posts), or None."""
+    body = doc.find(".//body")
+    main = doc.find(".//main")
+    root = body if body is not None else doc
+    measure = main if main is not None else root
+    page_len = len(_visible_text(measure))
+    if page_len < 400:
+        return None
+    best: Optional[List] = None
+    best_len = 0
+    for items in _candidate_lists(doc):
+        if _related_list(items):
+            continue
+        total = sum(len(_visible_text(it)) for it in items)
+        if total > best_len:
+            best, best_len = items, total
     if not best or _in_chrome(best[0]) or _in_nav(best[0]) or best_len < _LIST_MIN_SHARE * page_len:
         best = None
     table = _table_rows(doc)
@@ -910,6 +1012,49 @@ def _best_list(doc) -> Optional[List]:
     if table is not None and (best is None or best[0].tag.lower() == "tr"):
         return table
     return best
+
+
+def client_list_unrendered(html: str) -> bool:
+    """The pager is in the markup and the rows it pages are not.
+
+    The only list in the shell is a related "Other …" block. Curl's extract
+    of that shell is not the ranking, so the ladder has to render the page.
+    """
+    if not html or _PAGER_BUTTON_RE.search(html) is None:
+        return False
+    doc = _parse(html)
+    if doc is None:
+        return False
+    lists = list(_candidate_lists(doc))
+    if any(not _related_list(items) for items in lists):
+        return False
+    return any(_related_list(items) for items in lists)
+
+
+def _loading_skeleton(el) -> bool:
+    """A widget that is still the placeholder, not the rows it will show."""
+    if (el.get("data-widget-state") or "").strip().lower() != "loading":
+        return False
+    for node in el.iter():
+        if isinstance(node.tag, str) and "skeleton" in (node.get("class") or "").lower():
+            return True
+    return len(_visible_text(el)) < 25
+
+
+def client_widgets_loading(html: str) -> bool:
+    """The page is a set of charts that have not loaded their rows.
+
+    The headings are in the markup and the tables are not. One chart beside
+    an article is left alone. Every widget still a skeleton means curl's
+    extract is the shell, and the ladder has to render the page.
+    """
+    doc = _parse(html)
+    if doc is None:
+        return False
+    widgets = [el for el in doc.xpath("//*[@data-widget-state]") if isinstance(el.tag, str)]
+    if len(widgets) < 2:
+        return False
+    return all(_loading_skeleton(el) for el in widgets)
 
 
 def _list_kept_items(best, text: str) -> Optional[Tuple[int, int]]:
@@ -1160,9 +1305,12 @@ def short_read(doc, text: str, region=None) -> Optional[More]:
 
 # ── F24a: the media in the main content ───────────────────────────────────────
 
-#: How many URLs one note may carry. A product page has ninety images and an
-#: agent needs to know they are there, not to read ninety URLs.
+#: How many URLs one note lists when nobody asked for more. A product page has
+#: ninety images and an agent needs to know they are there, not to read ninety
+#: URLs. ``--media N`` (MCP ``max_media``) or ``SEARCHTS_MAX_MEDIA`` /
+#: ``more.media`` raises the list, up to :data:`_MEDIA_LIST_MAX`.
 _MEDIA_MAX_LISTED = 4
+_MEDIA_LIST_MAX = 40
 #: A "URL" this long is a data URI or an inline blob, not an address.
 _MEDIA_MAX_URL = 300
 _MEDIA_URL_ATTRS = (
@@ -1206,18 +1354,80 @@ def _media_url(el, base: str = "") -> str:
     return ""
 
 
-def media_note(region, base: str = "") -> Optional[More]:
+def resolve_media_limit(asked: Optional[int] = None) -> Tuple[int, Optional[str]]:
+    """``(how many addresses to list, clamp note or None)``.
+
+    The quiet default is :data:`_MEDIA_MAX_LISTED`. ``SEARCHTS_MAX_MEDIA``,
+    then ``more.media`` in the config, replaces that default. ``--media N`` /
+    ``max_media`` replaces it for one read. Nothing lists more than
+    :data:`_MEDIA_LIST_MAX`; a request over it is clamped and named, because a
+    note that quietly stopped at 40 when 200 were asked for is a lie. ``0``
+    and ``None`` mean "not asked". A broken value is the default, never an
+    error.
+    """
+    default = _configured_media_default()
+    if asked is None or isinstance(asked, bool):
+        return default, None
+    try:
+        want = int(asked)
+    except (TypeError, ValueError):
+        return default, None
+    if want < 1:
+        return default, None
+    if want > _MEDIA_LIST_MAX:
+        return _MEDIA_LIST_MAX, (
+            f"[media: asked for {want}, the ceiling is {_MEDIA_LIST_MAX}]"
+        )
+    return want, None
+
+
+def _configured_media_default() -> int:
+    """The list length when this read did not pass ``--media``."""
+    raw = os.environ.get("SEARCHTS_MAX_MEDIA")
+    if raw is None or str(raw).strip() == "":
+        try:
+            from searchts.config import Config
+
+            block = Config().get("more")
+        except Exception:  # noqa: BLE001 - a bad config must never break a read
+            block = None
+        raw = block.get("media") if isinstance(block, dict) else None
+    if raw is None or str(raw).strip() == "":
+        return _MEDIA_MAX_LISTED
+    try:
+        value = int(float(str(raw).strip()))
+    except (TypeError, ValueError):
+        return _MEDIA_MAX_LISTED
+    if value < 1:
+        return 1
+    return min(value, _MEDIA_LIST_MAX)
+
+
+def media_note(region, base: str = "", limit: Optional[int] = None) -> Optional[More]:
     """The images, video and embeds in the main content, by URL.
 
     F24a. A read returns text, so a photo essay comes back as its captions and
     an embedded video as nothing at all; both are real content the page holds.
     The note lists the addresses the markup already carries and never fetches
     one. When an address is listed, the note names ``searchts get`` as the way
-    to fetch it. A page whose media has no address says so in the words PLAN.md
-    uses rather than pretending there is none.
+    to fetch it. When the list stops early, the note names ``--media`` and
+    ``searchts grab`` as the way to the rest. A page whose media has no address
+    says so in the words PLAN.md uses rather than pretending there is none.
+
+    ``limit`` is the resolved length for this read. ``None`` is the quiet
+    default, so a caller that is not a read (a unit of detection) does not
+    consult the user's config.
     """
     if region is None:
         return None
+    if limit is None:
+        cap = _MEDIA_MAX_LISTED
+    else:
+        try:
+            cap = int(limit)
+        except (TypeError, ValueError):
+            cap = _MEDIA_MAX_LISTED
+        cap = min(_MEDIA_LIST_MAX, max(1, cap))
     counts: Dict[str, int] = {}
     urls: List[str] = []
     try:
@@ -1231,7 +1441,7 @@ def media_note(region, base: str = "") -> Optional[More]:
         if not kind or _is_hidden(el):
             continue
         counts[kind] = counts.get(kind, 0) + 1
-        if len(urls) < _MEDIA_MAX_LISTED:
+        if len(urls) < cap:
             url = _media_url(el, base)
             if url and url not in urls:
                 urls.append(url)
@@ -1244,11 +1454,22 @@ def media_note(region, base: str = "") -> Optional[More]:
     if not urls:
         return More("media", f"[media: {said} in the main content; media present, not resolved]")
     listed = ", ".join(urls)
-    rest = f", and {total - len(urls)} more" if total > len(urls) else ""
+    hidden = total - len(urls)
+    rest = f", and {hidden} more" if hidden else ""
+    # The get sentence stays either way: it is how you fetch an address that
+    # is already written down. The rest of the sentence exists only when this
+    # note stopped early, and it names the two levers that reach what it did
+    # not write down. No URL in the tip: the addresses above are the page's,
+    # and the command is not.
+    tip = (
+        f" --media N (MCP max_media) lists more here, ceiling {_MEDIA_LIST_MAX};"
+        " searchts grab saves the files."
+        if hidden else ""
+    )
     return More(
         "media",
         f"[media: {said} in the main content: {listed}{rest}. "
-        "searchts get fetches one of these.]",
+        f"searchts get fetches one of these.{tip}]",
     )
 
 
@@ -1257,6 +1478,7 @@ def detect(
     url: str,
     text: str,
     headers: Optional[Mapping[str, str]] = None,
+    media_limit: Optional[int] = None,
 ) -> List[More]:
     """Findings for one read: the page HTML, its URL, and the extracted text.
 
@@ -1303,7 +1525,7 @@ def detect(
                 More(
                     "fold",
                     f"[folded: {folds} {_plural(folds, 'control', 'controls')} like \"{label}\" on the "
-                    "page; the text behind them may be missing]",
+                    "page; the text behind them may be missing; --expand (MCP expand) opens them]",
                 )
             )
         empty = _empty_panels(doc)
@@ -1312,19 +1534,25 @@ def detect(
                 More(
                     "fold",
                     f"[folded: {empty} collapsed {_plural(empty, 'section was', 'sections were')} "
-                    "empty in the page; that text loads on click]",
+                    "empty in the page; that text loads on click; --expand (MCP expand) opens them]",
                 )
             )
         if listed:
             total, kept = listed
-            found.append(More("list", f"[partial: the page lists {total} items; this read kept {kept}]"))
+            from searchts.knobs import hard_cap
+
+            found.append(More(
+                "list",
+                f"[partial: the page lists {total} items; this read kept {kept}; "
+                f"--items N (MCP max_items) reads more rows, ceiling {hard_cap('items')}]",
+            ))
         for said in _counts(doc):
             found.append(More("count", f"[page says: {said}]"))
         region = content_region(doc)
         short = short_read(doc, text, region=region)
         if short:
             found.append(short)
-        seen_media = media_note(region[0], base)
+        seen_media = media_note(region[0], base, limit=media_limit)
         if seen_media:
             found.append(seen_media)
         found.extend(left_out(doc, text))
@@ -1352,6 +1580,14 @@ _DATEISH_RE = re.compile(
 )
 _BREADCRUMB_RE = re.compile(r"^https?://\S+(?:\s+›\s+\S+)+$")
 _INDEX_MIN_COVERAGE = 0.6
+#: A client pager. The rows are not links yet; Previous and Next are buttons.
+_PAGER_BUTTON_RE = re.compile(
+    r"<button\b[^>]*>\s*(?:←\s*|&#8592;\s*|&larr;\s*)?(?:previous|next)\b",
+    re.I,
+)
+#: A markdown bullet is not on the page. Left in, it lands in the middle of a
+#: one-paragraph list and the coverage window misses text the extract did keep.
+_LIST_MARKER_RE = re.compile(r"(?m)^[ \t]*(?:[-*+]|\d+[.)])[ \t]+")
 
 
 def _text_pieces(item) -> List[Tuple[Any, str]]:
@@ -1400,12 +1636,35 @@ def _clean_item_url(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
+def _card_label(link) -> Optional[Tuple[Any, str]]:
+    """The name on an anchor that also wraps a description paragraph.
+
+    ``text_content`` glues the two with no space, and the whole anchor then
+    counts as the title, which drops the paragraph. The name stays the link.
+    """
+    pieces: List[Tuple[Any, str, bool]] = []
+    for el, text in _text_pieces(link):
+        node = el
+        in_p = False
+        while node is not None and node is not link.getparent():
+            if isinstance(node.tag, str) and node.tag.lower() == "p":
+                in_p = True
+                break
+            node = node.getparent()
+        pieces.append((el, text, in_p))
+    labels = [(el, text) for el, text, in_p in pieces if not in_p and 3 <= len(text) <= 160]
+    if not labels or not any(in_p and len(text) >= 40 for _el, text, in_p in pieces):
+        return None
+    return max(labels, key=lambda pair: len(pair[1]))
+
+
 def _item_parts(item, base: str) -> Optional[Dict[str, str]]:
     """Title, link, byline and snippet of one list item, or None."""
     heading = next(
         (h for h in item.xpath(".//h1|.//h2|.//h3|.//h4") if len(_norm(h.text_content())) >= 3), None
     )
     link = None
+    label_el = None
     if heading is not None:
         inside = heading.xpath(".//a[@href]")
         around = [a for a in heading.iterancestors("a") if a.get("href")]
@@ -1417,13 +1676,17 @@ def _item_parts(item, base: str) -> Optional[Dict[str, str]]:
             return None
         link = max(links, key=lambda a: len(_norm(a.text_content())))
         if heading is None:
-            title = _norm(link.text_content())
+            labeled = _card_label(link)
+            if labeled is not None:
+                label_el, title = labeled
+            else:
+                title = _norm(link.text_content())
     href = (link.get("href") or "").strip()
     if not href or href.startswith(("#", "javascript:")):
         return None
     url = _clean_item_url(urljoin(base, href))
 
-    title_el = heading if heading is not None else link
+    title_el = heading if heading is not None else (label_el if label_el is not None else link)
     pieces = [(el, t) for el, t in _text_pieces(item) if el is not title_el and title_el not in el.iterancestors()]
     detail = _following_detail_row(item) if isinstance(item.tag, str) and item.tag.lower() == "tr" else None
     if detail is not None:
@@ -1454,6 +1717,19 @@ def _item_parts(item, base: str) -> Optional[Dict[str, str]]:
 
 def _strip_md_links(text: str) -> str:
     return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+
+
+def _index_paragraphs(text: str) -> List[str]:
+    """Paragraphs of the extract, one markdown bullet each.
+
+    A bullet list is one block to a blank-line split, so the coverage window
+    was landing on the marker between two items and missing text the extract
+    had kept. Each bullet is its own paragraph, and the marker is not part of it.
+    """
+    body = _strip_md_links(text or "")
+    body = re.sub(r"\n(?=[ \t]*(?:[-*+]|\d+[.)])[ \t]+)", "\n\n", body)
+    body = _LIST_MARKER_RE.sub("", body)
+    return [p for p in (_norm(part).lower() for part in re.split(r"\n\s*\n", body)) if len(p) >= 30]
 
 
 def list_index(html: str, url: str, text: str) -> Optional[Tuple[str, More]]:
@@ -1499,8 +1775,7 @@ def list_index(html: str, url: str, text: str) -> Optional[Tuple[str, More]]:
         if not (lost == ["links"] and titles_present and table_list):
             # The extract must be mostly this list; otherwise it is an article with a list under it.
             item_text = " ".join(_norm(_visible_text(it)) for it in items).lower()
-            paras = [_norm(_strip_md_links(p)).lower() for p in re.split(r"\n\s*\n", text or "")]
-            paras = [p for p in paras if len(p) >= 30]
+            paras = _index_paragraphs(text)
             total = sum(len(p) for p in paras)
             covered = sum(len(p) for p in paras if p[len(p) // 2 - 15 : len(p) // 2 + 15] in item_text)
             if not total and _norm(text or ""):

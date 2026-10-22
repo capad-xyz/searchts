@@ -828,6 +828,77 @@ def _strip_html(html: str) -> str:
     return t.strip()
 
 
+def _strip_keeping_links(html: str, url: Optional[str] = None) -> str:
+    """The crude strip, with each real anchor kept as one markdown link.
+
+    This is only the text we return when the article extract loses. The recall
+    gate and the one-line gate still measure :func:`_strip_html`, which drops
+    hrefs, so a link in the answer cannot change which path wins.
+
+    The label's whitespace is collapsed. A relative href is joined to the page
+    URL, and a ``<base href>`` wins over that page URL. An empty label, a
+    ``#`` fragment and ``javascript:`` stay ordinary text. A ``]`` in the label
+    or a ``)`` in the URL would break the markdown, so those come out as the
+    label and the URL on two plain lines.
+    """
+    try:
+        from urllib.parse import urljoin
+
+        from lxml import html as lhtml
+    except Exception:  # noqa: BLE001 - the strip is the fallback, never raise
+        return _strip_html(html)
+    try:
+        doc = lhtml.fromstring(html or "")
+    except Exception:  # noqa: BLE001 - broken markup still has to yield text
+        return _strip_html(html)
+    if not hasattr(doc, "iter"):
+        return _strip_html(html)
+    for bad in list(doc.iter("script", "style", "noscript")):
+        parent = bad.getparent()
+        if parent is not None:
+            parent.remove(bad)
+    base = url or ""
+    for el in doc.iter("base"):
+        href = (el.get("href") or "").strip()
+        if href:
+            base = urljoin(base, href) if base else href
+            break
+    # Innermost first, so a nested anchor is already text when its parent is read.
+    for anchor in reversed(list(doc.iter("a"))):
+        if anchor.getparent() is None:
+            continue
+        href = (anchor.get("href") or "").strip()
+        label = " ".join((anchor.text_content() or "").split())
+        if (
+            not label
+            or not href
+            or href.startswith("#")
+            or href.lower().startswith("javascript:")
+        ):
+            continue
+        absolute = urljoin(base, href) if base else href
+        if "]" in label or ")" in absolute or "\n" in label or "\n" in absolute:
+            replacement = f"{label}\n{absolute}"
+        else:
+            replacement = f"[{label}]({absolute})"
+        tail = anchor.tail
+        anchor.clear()
+        anchor.text = "\n" + replacement + "\n"
+        anchor.tail = tail
+    try:
+        rendered = lhtml.tostring(doc, encoding="unicode", method="html")
+    except Exception:  # noqa: BLE001 - serialization failed, keep the bare strip
+        return _strip_html(html)
+    linked = _strip_html(rendered)
+    # libxml drops a text node past its limit and returns a tree with no words,
+    # which is how a capped document came back empty and lost its truncation
+    # marker. The bare strip still has the words. The size cap is applied by
+    # the caller.
+    if not linked.strip():
+        return _strip_html(html)
+    return linked
+
+
 def cap_html(body: str) -> str:
     """Drop a body too large to parse.
 
@@ -952,9 +1023,9 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
             _extract_within(_without_page_data(body), url, EXTRACTION_TIMEOUT) or ""
         )
     except _ExtractionTimeout:
-        text = cap_text(_tidy_crude(_strip_html(body), url))
+        text = cap_text(_tidy_crude(_strip_keeping_links(body, url), url))
     except Exception:
-        text = cap_text(_tidy_crude(_strip_html(body), url))
+        text = cap_text(_tidy_crude(_strip_keeping_links(body, url), url))
     return _prefer_structured(body, text)
 
 
@@ -1020,9 +1091,10 @@ def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
     try:
         import trafilatura
 
-        from searchts.more import prepare_panels, tidy_markdown
+        from searchts.more import keep_cell_labels, prepare_panels, tidy_markdown
 
         html = prepare_panels(html)  # F23a: keep FAQ questions and hidden answers
+        html = keep_cell_labels(html)
         out = trafilatura.extract(
             html, url=url, output_format="markdown",
             include_links=True, include_tables=True, favor_recall=True,
@@ -1038,7 +1110,7 @@ def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
             # the extract is longer than a third of the page. Structure is a
             # separate property from size, so it is checked separately.
             if _line_count(kept) <= 1 and _line_count(crude) >= _MIN_CRUDE_LINES:
-                return _tidy_crude(crude, url)
+                return _tidy_crude(_strip_keeping_links(html, url), url)
             # Cheap gate first: an extract that is nearly as long as the page
             # cannot be the one that dropped it.
             if len(kept) >= _EXTRACT_MIN_RECALL * len(crude) or len(
@@ -1047,10 +1119,10 @@ def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
                 return kept
             if _word_recall(kept, crude) >= _EXTRACT_MIN_RECALL:
                 return kept
-            return _tidy_crude(crude, url)
+            return _tidy_crude(_strip_keeping_links(html, url), url)
     except Exception:
         pass
-    return _tidy_crude(_strip_html(html), url)
+    return _tidy_crude(_strip_keeping_links(html, url), url)
 
 
 def extract_text(html: str, url: Optional[str] = None) -> str:
@@ -1162,6 +1234,18 @@ def _app_signal(html: str, visible: str) -> bool:
         if el.tag.lower() == "script" and (el.get("type") or "").strip().lower() == "module":
             return True
     return False
+
+
+def _widget_rows_arrived(text: str) -> bool:
+    """True when a render replaced the widget shell with the ranking.
+
+    The shell is headings and a handful of glossary links. The ranking is a
+    table, or a run of links long enough that it cannot be that shell.
+    """
+    body = text or ""
+    if "|---" in body:
+        return True
+    return body.count("](") >= 15
 
 
 def _is_app_shell(html: str, text: str) -> bool:
@@ -1603,6 +1687,8 @@ def _await_hydration(
     the extractor, which is the honest verdict for it.
     """
     _stderr_tick("waiting for the page to render…", progress)
+    from searchts.more import client_widgets_loading
+
     waited = 0
     painted_candidate: Optional[str] = None
     painted_stability = 0
@@ -1627,6 +1713,11 @@ def _await_hydration(
             continue
         if not _is_unpainted(current):
             latest_painted = current
+            # Headings paint first. A dashboard of skeleton widgets is that
+            # shell, and its rows arrive a few seconds later. Settling here
+            # returns the headings and drops the table.
+            if client_widgets_loading(current):
+                continue
             if len(current) < len(html):
                 if current != painted_candidate:
                     painted_candidate = current
@@ -2165,7 +2256,8 @@ class _ExpandSink:
 
 
 def _finalize(
-    result: FetchResult, scrub: bool, tick: Optional[Callable[[str], None]] = None
+    result: FetchResult, scrub: bool, tick: Optional[Callable[[str], None]] = None,
+    media_limit: Optional[int] = None, media_clamp: Optional[str] = None,
 ) -> FetchResult:
     """Sanitize a winning FetchResult before returning it.
 
@@ -2200,7 +2292,12 @@ def _finalize(
         rebuilt = more.list_index(result.page_html, result.final_url or "", result.text)
         if rebuilt:
             result.text = rebuilt[0]
-        found = more.detect(result.page_html, result.final_url or "", result.text, headers=result.headers)
+        found = more.detect(
+            result.page_html, result.final_url or "", result.text,
+            headers=result.headers, media_limit=media_limit,
+        )
+        if media_clamp:
+            found.append(more.More("media", media_clamp))
         if rebuilt:
             found.insert(0, rebuilt[1])
         if found:
@@ -2226,7 +2323,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
           allow_thin: bool = False, progress: Optional[bool] = None,
           cookies: Optional[List["CookieRecord"]] = None,
           proxy: Optional[str] = None, proxy_trusted: bool = False,
-          expand: bool = False, echo_attempts: bool = True) -> FetchResult:
+          expand: bool = False, echo_attempts: bool = True,
+          media: Optional[int] = None) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -2424,12 +2522,19 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     _limits = _knobs.resolve()
     expand_sink = _ExpandSink(max_clicks=_limits.expand_clicks)
 
+    from searchts import more as _more_mod
+
+    media_limit, media_clamp = _more_mod.resolve_media_limit(media)
+
     def _with_auth(result: FetchResult) -> FetchResult:
         result.authenticated = bool(cookie_header) and result.backend == cookie_rung
         note = expand_sink.note()
         if note:
             result.extra_notes = list(result.extra_notes or []) + [note]
-        return _finalize(result, scrub, tick=_tick)
+        return _finalize(
+            result, scrub, tick=_tick,
+            media_limit=media_limit, media_clamp=media_clamp,
+        )
 
     try:
         from searchts import share_extractors
@@ -2512,6 +2617,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             order.insert(0, remembered)
 
     attempts: List[Tuple[str, str]] = []
+    # Curl refused a dashboard whose widgets were still skeletons. A later
+    # rung wins only when its text has the rows, not a longer copy of the
+    # headings.
+    awaiting_widgets = False
     if _jina_dropped and not order:
         # `--backend jina --expand` leaves nothing to try. An empty reason list
         # says only "all backends failed"; name the real cause.
@@ -2749,6 +2858,48 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     and whole_short_page(body, text)
                 )
                 if len(text) >= min_chars or whole:
+                    # The rows are not in this markup. A pager whose only list
+                    # is a related block, or a dashboard whose widgets are
+                    # still skeletons. Accepting it publishes the shell.
+                    if backend == "curl_cffi" and body:
+                        from searchts.more import client_list_unrendered, client_widgets_loading
+
+                        unrendered = None
+                        if client_list_unrendered(body):
+                            unrendered = "list-unrendered"
+                        elif client_widgets_loading(body):
+                            unrendered = "widgets-loading"
+                            awaiting_widgets = True
+                        if unrendered:
+                            attempts.append((backend, unrendered))
+                            _tick(f"  {backend}: {unrendered}, escalating")
+                            if backend == remembered:
+                                unpin(domain)
+                                remembered = None
+                            deferred = FetchResult(
+                                backend, text, status,
+                                final_url=final_url or url, headers=headers,
+                                page_html=body,
+                            )
+                            if best is None or len(text) > len(best.text):
+                                best = deferred
+                            continue
+                    # The shell's headings already cleared the length gate.
+                    # Jina repeats them without the table. Keep going until a
+                    # rung returns the rows.
+                    if awaiting_widgets and not _widget_rows_arrived(text):
+                        attempts.append((backend, "widgets-loading"))
+                        _tick(f"  {backend}: widgets-loading, escalating")
+                        if backend == remembered:
+                            unpin(domain)
+                            remembered = None
+                        if best is None or len(text) > len(best.text):
+                            best = FetchResult(
+                                backend, text, status,
+                                final_url=final_url or url, headers=headers,
+                                page_html=None if backend == "Jina Reader" else body,
+                            )
+                        continue
                     if memory_on and domain and backend != remembered:
                         # A win on the remembered rung does not extend its pin, so a
                         # pin earned by mistake heals once _MEMORY_TTL_SECONDS pass.
@@ -3791,7 +3942,13 @@ def _scrolled(old: "FetchResult", rep, url: str, kwargs: Dict[str, Any]) -> "Fet
         authenticated=old.authenticated,
         page_html=rep.html,
     )
-    return _finalize(result, bool(kwargs.get("scrub")))
+    from searchts.more import resolve_media_limit
+
+    media_limit, media_clamp = resolve_media_limit(kwargs.get("media"))
+    return _finalize(
+        result, bool(kwargs.get("scrub")),
+        media_limit=media_limit, media_clamp=media_clamp,
+    )
 
 
 def _markup_first(backends: Optional[List[str]]) -> Optional[List[str]]:

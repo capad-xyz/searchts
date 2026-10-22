@@ -104,6 +104,11 @@ READ_URL_DESCRIPTION = (
     "for a page that serves only part of itself and keeps the rest behind its "
     "own controls -- Reddit's 'more replies' on a long thread, say -- and it "
     "needs the browser tier; it is off by default because it clicks things. "
+    "'max_media' lists more image and video addresses in the media note "
+    "(default 4, ceiling 40). It does not download them; searchts grab saves "
+    "the files, and the note says so when it stopped early. A request over 40 "
+    "is clamped and the note names the ceiling. SEARCHTS_MAX_MEDIA or more.media "
+    "in the config changes the default for a read that does not pass max_media. "
     "Returns an 'Error: ...' "
     "string (not an exception) when every tier fails."
 )
@@ -178,6 +183,7 @@ def create_server():
         cdp_port: str = "",
         proxy: str = "",
         proxy_trusted: bool = False,
+        max_media: int = 0,
     ) -> str:
         # The stealth-browser rung is sync Playwright work that refuses to run
         # on a running asyncio loop. ``asyncio.to_thread`` runs it in a worker
@@ -186,7 +192,7 @@ def create_server():
         return await asyncio.to_thread(
             read_url, url, max_pages, max_items, cursor, page_items,
             expand, cookies, cookies_from_browser, cdp_port, proxy,
-            proxy_trusted,
+            proxy_trusted, max_media,
         )
 
     @mcp.tool(name="web_search", description=WEB_SEARCH_DESCRIPTION)
@@ -555,6 +561,7 @@ def read_url(
     cdp_port: str = "",
     proxy: str = "",
     proxy_trusted: bool = False,
+    max_media: int = 0,
 ) -> str:
     """Fetch `url` via the unlocker and return a JSON source-receipt + markdown.
 
@@ -682,6 +689,10 @@ def read_url(
         # mechanics, and there is no parameter for "how far". F5f rides it: on a
         # Reddit thread this is what opens the "more replies" partials.
         extra["expand"] = True
+    if max_media:
+        # 0 is "not asked", same as max_items. fetch reads the config default
+        # when the key is absent, and clamps a request over 40.
+        extra["media"] = max_media
     try:
         if max_items:
             pages = unlocker.read_items(url, max_items, **extra)

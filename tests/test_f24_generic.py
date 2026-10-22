@@ -277,7 +277,7 @@ def test_the_note_counts_every_fold_on_the_page():
     html = _fold_page(("Show more", "Show all reviews", "Show all reviews", "Show all accessories"))
     notes = [m.note for m in more.detect(html, URL, _kept(40)) if m.kind == "fold"]
     assert notes == [
-        '[folded: 4 controls like "Show more" on the page; the text behind them may be missing]'
+        '[folded: 4 controls like "Show more" on the page; the text behind them may be missing; --expand (MCP expand) opens them]'
     ]
 
 
@@ -293,6 +293,14 @@ def test_the_note_counts_every_fold_on_the_page():
         ("**bold**text follows.", "**bold** text follows."),
         ("__bold__text follows.", "__bold__ text follows."),
         ("**bold** and `code`x", "**bold** and `code` x"),
+        (
+            "[by Ada Lovelace](https://example.org/author/ada/)4 Min.",
+            "[by Ada Lovelace](https://example.org/author/ada/) 4 Min.",
+        ),
+        (
+            "[wiki](https://en.wikipedia.org/wiki/Foo_(bar))next",
+            "[wiki](https://en.wikipedia.org/wiki/Foo_(bar)) next",
+        ),
     ],
 )
 def test_a_missing_space_comes_back(before, after):
@@ -304,6 +312,10 @@ def test_a_missing_space_comes_back(before, after):
     [
         "**bold** and more",
         "`code` alone",
+        "[see](https://example.org/a).",
+        "[see](https://example.org/a), and more",
+        "[see](https://example.org/a) already spaced",
+        "[a](https://example.org/a)[b](https://example.org/b)",
         "`code`. And `code`, and `code`;",
         "plain prose with no inline markup at all",
         "a `code` span\n\non its own line",
@@ -326,6 +338,24 @@ def test_code_inside_a_fence_is_never_touched():
 def test_a_code_span_is_never_edited_from_the_inside():
     assert more.space_after_inline("`foo bar`baz") == "`foo bar` baz"
     assert more.space_after_inline("`foo  bar`x") == "`foo  bar` x"
+
+
+def test_a_link_inside_a_fence_is_never_spaced():
+    fenced = "text\n\n```\n[a](https://example.org/a)b\n```\n\n[a](https://example.org/a)b"
+    out = more.space_after_inline(fenced)
+    assert "[a](https://example.org/a)b" in out
+    assert "[a](https://example.org/a) b" in out
+
+
+def test_a_byline_link_keeps_a_space_before_the_read_time():
+    html = (
+        "<html><body><article><h1>Most visited websites</h1>"
+        + _prose(8)
+        + '<div><a href="https://example.org/author/ada/">by Ada Lovelace</a>'
+        + "<span>4 Min.</span></div></article></body></html>"
+    )
+    text = unlocker.html_to_text(html, URL)
+    assert "[by Ada Lovelace](https://example.org/author/ada/) 4 Min." in text
 
 
 def test_the_extract_path_runs_the_fix():
@@ -684,8 +714,35 @@ def test_the_note_never_lists_more_than_four_addresses():
     images = "".join(f'<img src="/img/{i}.jpg" alt="Image {i}">' for i in range(30))
     note = _media_note(images)
     assert note.count("https://example.org/img/") == 4
-    assert note.endswith("and 26 more. searchts get fetches one of these.]")
+    assert note.endswith(
+        "and 26 more. searchts get fetches one of these. "
+        "--media N (MCP max_media) lists more here, ceiling 40; "
+        "searchts grab saves the files.]"
+    )
     assert "[media: 30 images" in note
+
+
+def test_a_higher_media_limit_lists_more_addresses():
+    images = "".join(f'<img src="/img/{i}.jpg" alt="Image {i}">' for i in range(12))
+    html = f"<html><body><main><h1>A page</h1>{_prose(40)}{images}</main></body></html>"
+    notes = [m.note for m in more.detect(html, URL, _kept(40), media_limit=10) if m.kind == "media"]
+    assert len(notes) == 1
+    assert notes[0].count("https://example.org/img/") == 10
+    assert "and 2 more" in notes[0]
+    assert "--media N" in notes[0] and "searchts grab" in notes[0]
+
+
+def test_media_limit_resolves_from_the_flag_and_the_config(monkeypatch):
+    monkeypatch.delenv("SEARCHTS_MAX_MEDIA", raising=False)
+    monkeypatch.setattr(more, "_configured_media_default", lambda: 4)
+    assert more.resolve_media_limit(None) == (4, None)
+    assert more.resolve_media_limit(0) == (4, None)
+    assert more.resolve_media_limit(12) == (12, None)
+    limit, note = more.resolve_media_limit(200)
+    assert limit == 40
+    assert note == "[media: asked for 200, the ceiling is 40]"
+    monkeypatch.setattr(more, "_configured_media_default", lambda: 20)
+    assert more.resolve_media_limit(None) == (20, None)
 
 
 def test_the_media_note_is_carried_on_the_read(monkeypatch):

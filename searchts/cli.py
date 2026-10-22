@@ -16,6 +16,7 @@ import difflib
 import json
 import os
 import sys
+import textwrap
 import time
 from typing import Callable, Optional
 
@@ -26,21 +27,36 @@ _RDT_GIT_SOURCE = "git+https://github.com/public-clis/rdt-cli.git@5e4fb3720d5c17
 
 
 def _ensure_utf8_console():
-    """Best-effort Windows console UTF-8 setup for CLI runtime only."""
-    if sys.platform != "win32":
-        return
+    """Best-effort console encoding setup for CLI runtime only.
+
+    Windows writes UTF-8 through the console buffer, which the console decodes
+    to UTF-16, so braille and box drawing survive a cp437 code page. Everywhere
+    else the locale's encoding stays, but an unencodable glyph is replaced
+    instead of raising: ``LC_ALL=C`` in a container is the case that matters,
+    and a doctor tick carrying an ellipsis should not become a traceback.
+    """
     # Avoid interfering with pytest/captured streams.
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return
-    try:
-        import io
-        if hasattr(sys.stdout, "buffer"):
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-        if hasattr(sys.stderr, "buffer"):
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-    except Exception:
-        # Do not crash CLI just because encoding patch failed.
-        pass
+    if sys.platform == "win32":
+        try:
+            import io
+            if hasattr(sys.stdout, "buffer"):
+                sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            if hasattr(sys.stderr, "buffer"):
+                sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        except Exception:
+            # Do not crash CLI just because encoding patch failed.
+            pass
+        return
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (ValueError, OSError):
+            pass
 
 
 def _configure_logging(verbose: bool = False):
@@ -193,6 +209,13 @@ def _run():
     p_read.add_argument("--items", type=int, default=0,
                         help="Keep following next pages, then scroll if the list only grows that way, "
                              "until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300)")
+    p_read.add_argument(
+        "--media", type=int, default=0,
+        help="How many image and video addresses the media note lists "
+             "(default 4, ceiling 40). Does not download them; "
+             "searchts grab saves the files. SEARCHTS_MAX_MEDIA or more.media "
+             "in the config changes the default.",
+    )
     p_read.add_argument(
         "--expand",
         action="store_true",
@@ -1800,6 +1823,7 @@ def _cmd_read(args):
                 scrub=args.scrub, progress=narrate, echo_attempts=False,
                 cookies=cookies, expand=expand,
                 proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                **_media_kw(args),
             )
         elif getattr(args, "pages", 1) > 1:
             pages = unlocker.read_pages(
@@ -1807,6 +1831,7 @@ def _cmd_read(args):
                 scrub=getattr(args, "scrub", False), progress=narrate,
                 echo_attempts=False, cookies=cookies, expand=expand,
                 proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                **_media_kw(args),
             )
         else:
             pages = [unlocker.fetch(
@@ -1814,6 +1839,7 @@ def _cmd_read(args):
                 scrub=getattr(args, "scrub", False), progress=narrate,
                 echo_attempts=False, cookies=cookies, expand=expand,
                 proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                **_media_kw(args),
             )]
         result = pages[0]
     except unlocker.UnlockerError as e:
@@ -1868,9 +1894,59 @@ def _cmd_read(args):
         if result.authenticated:
             status += " (logged in)"
         print(status, file=sys.stderr)
+        tip = _read_config_tip(result)
+        if tip:
+            _print_tip(tip)
         print(result.text)
         for extra in pages[1:]:
             print(f"\n# {extra.final_url}\n\n{extra.text}")
+
+
+def _media_kw(args) -> dict:
+    """``media=N`` only when the caller asked. ``0`` is "not asked"."""
+    asked = getattr(args, "media", 0) or 0
+    return {"media": asked} if asked else {}
+
+
+def _read_config_tip(result) -> str:
+    """One line under the receipt, from notes that already name a lever.
+
+    The page text carries the same words, which is what a pipe and an agent
+    see. This line is the ``[CONFIG]`` mark, so a person scanning the end of
+    the command finds the flag without reading the note.
+    """
+    tips = []
+    for item in getattr(result, "more", None) or []:
+        kind = item.get("kind") if isinstance(item, dict) else None
+        note = (item.get("note") or "") if isinstance(item, dict) else ""
+        if kind == "media" and "searchts grab" in note:
+            tips.append(
+                "pass --media N (MCP max_media) to list the other image "
+                "addresses, ceiling 40; searchts grab saves the files"
+            )
+        elif kind == "list" and note.startswith("[partial:"):
+            tips.append("pass --items N (max 300) to read more rows")
+        elif kind == "fold" and "--expand" in note:
+            tips.append("pass --expand to open the folded text")
+    seen = []
+    for tip in tips:
+        if tip not in seen:
+            seen.append(tip)
+    return " · ".join(seen)
+
+
+def _print_tip(tip: str, width: int = 76) -> None:
+    """Print the ``[CONFIG]`` line, wrapped under itself.
+
+    One note yields one tip, but a read can stop early on three counts, and the
+    three joined are past 180 columns. Printed raw they wrap wherever the
+    terminal feels like it, which breaks the mark away from its sentence.
+    """
+    prefix = "  [CONFIG] Tip: "
+    chunks = textwrap.wrap(tip, max(24, width - len(prefix))) or [""]
+    print(prefix + chunks[0], file=sys.stderr)
+    for chunk in chunks[1:]:
+        print(" " * len(prefix) + chunk, file=sys.stderr)
 
 
 def _read_command_proxy(args):

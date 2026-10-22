@@ -240,6 +240,36 @@ def test_tab_labels_move_into_their_panels():
     assert text.index("Monthly") < text.index("ten dollars") < text.index("Yearly") < text.index("one hundred")
 
 
+def test_a_table_cell_keeps_a_name_that_is_a_share_button_word():
+    """Reddit and LinkedIn are data rows. Trafilatura deletes those words."""
+    table = (
+        "<table>"
+        "<tr><th></th><th>Respondents</th><th>Percent</th></tr>"
+        "<tr><td>YouTube</td><td>6,272</td><td>58.4%</td></tr>"
+        "<tr><td>Reddit</td><td>5,784</td><td>53.8%</td></tr>"
+        "<tr><td>LinkedIn</td><td>4,058</td><td>37.8%</td></tr>"
+        "<tr><td><span>Instagram</span></td><td>9</td><td>1%</td></tr>"
+        '<tr><td><a href="https://example.com/fb">Facebook</a></td><td>10</td><td>1%</td></tr>'
+        "<tr><td>Discord</td><td>3,591</td><td>33.4%</td></tr>"
+        "</table>"
+        '<p><a href="https://reddit.com/submit">Reddit</a></p>'
+    )
+    text = unlocker.html_to_text(_page(table), URL)
+    assert "| Reddit | 5,784 | 53.8% |" in text
+    assert "| LinkedIn | 4,058 | 37.8% |" in text
+    assert "| Instagram | 9 | 1% |" in text
+    assert "| [Facebook](https://example.com/fb) | 10 | 1% |" in text
+    assert "| YouTube | 6,272 | 58.4% |" in text
+    assert "| Discord | 3,591 | 33.4% |" in text
+    assert "reddit.com/submit" not in text
+    assert "\u2060" not in text
+
+
+def test_ordinary_table_html_is_not_rewritten():
+    html = _page("<table><tr><td>YouTube</td><td>6,272</td></tr></table>")
+    assert more.keep_cell_labels(html) == html
+
+
 def test_menu_toggles_are_left_alone():
     html = _page('<button aria-expanded="false" aria-haspopup="true">Share</button><ul><li>X</li></ul>')
     assert more.prepare_panels(html) == html
@@ -397,7 +427,10 @@ def _list_page(n: int) -> str:
 def test_list_page_where_the_extract_kept_one_item():
     found = more.detect(_list_page(27), URL, "Story number 0 about something. A short teaser.")
     assert _kinds(found) == ["list"]
-    assert found[0].note == "[partial: the page lists 27 items; this read kept 1]"
+    assert found[0].note == (
+        "[partial: the page lists 27 items; this read kept 1; "
+        "--items N (MCP max_items) reads more rows, ceiling 300]"
+    )
 
 
 def test_list_page_fully_kept_has_no_note():
