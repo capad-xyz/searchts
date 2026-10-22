@@ -293,6 +293,14 @@ def test_the_note_counts_every_fold_on_the_page():
         ("**bold**text follows.", "**bold** text follows."),
         ("__bold__text follows.", "__bold__ text follows."),
         ("**bold** and `code`x", "**bold** and `code` x"),
+        (
+            "[by Ada Lovelace](https://example.org/author/ada/)4 Min.",
+            "[by Ada Lovelace](https://example.org/author/ada/) 4 Min.",
+        ),
+        (
+            "[wiki](https://en.wikipedia.org/wiki/Foo_(bar))next",
+            "[wiki](https://en.wikipedia.org/wiki/Foo_(bar)) next",
+        ),
     ],
 )
 def test_a_missing_space_comes_back(before, after):
@@ -304,6 +312,10 @@ def test_a_missing_space_comes_back(before, after):
     [
         "**bold** and more",
         "`code` alone",
+        "[see](https://example.org/a).",
+        "[see](https://example.org/a), and more",
+        "[see](https://example.org/a) already spaced",
+        "[a](https://example.org/a)[b](https://example.org/b)",
         "`code`. And `code`, and `code`;",
         "plain prose with no inline markup at all",
         "a `code` span\n\non its own line",
@@ -326,6 +338,24 @@ def test_code_inside_a_fence_is_never_touched():
 def test_a_code_span_is_never_edited_from_the_inside():
     assert more.space_after_inline("`foo bar`baz") == "`foo bar` baz"
     assert more.space_after_inline("`foo  bar`x") == "`foo  bar` x"
+
+
+def test_a_link_inside_a_fence_is_never_spaced():
+    fenced = "text\n\n```\n[a](https://example.org/a)b\n```\n\n[a](https://example.org/a)b"
+    out = more.space_after_inline(fenced)
+    assert "[a](https://example.org/a)b" in out
+    assert "[a](https://example.org/a) b" in out
+
+
+def test_a_byline_link_keeps_a_space_before_the_read_time():
+    html = (
+        "<html><body><article><h1>Most visited websites</h1>"
+        + _prose(8)
+        + '<div><a href="https://example.org/author/ada/">by Ada Lovelace</a>'
+        + "<span>4 Min.</span></div></article></body></html>"
+    )
+    text = unlocker.html_to_text(html, URL)
+    assert "[by Ada Lovelace](https://example.org/author/ada/) 4 Min." in text
 
 
 def test_the_extract_path_runs_the_fix():

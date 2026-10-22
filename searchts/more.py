@@ -13,7 +13,7 @@ cell whose whole text is a share-button word (Reddit, LinkedIn, and the
 rest of that list), which Trafilatura otherwise deletes. ``tidy_markdown``
 puts headings and code fences back on their own lines after extraction, and
 :func:`space_after_inline` puts back a space the extractor drops next to
-inline code or bold. :func:`page_data_blocks` reads the page's own data, the
+inline code, bold, or a link. :func:`page_data_blocks` reads the page's own data, the
 typed ``<script type="application/ld+json">`` and the app state an inline
 script named ``__SOMETHING__`` holds, so a page that ships its body as data
 instead of markup can still be read from the bytes already downloaded.
@@ -596,22 +596,28 @@ def tidy_markdown(markdown: str) -> str:
     return space_after_inline("\n".join(out))
 
 
-#: An inline code span or a bold run: the two things an extractor can leave
-#: glued to the word next to them. ``searchts`read`` comes from markup with no
-#: whitespace node between the ``<code>`` and the text; the tags are real and
-#: the space is not. Measured on real extracts from docs pages and wikis.
-_TOKEN_RE = re.compile(r"(`+[^`\n]*`+|\*\*|__)")
+#: An inline code span, a markdown link, or a bold run. An extractor can leave
+#: any of them glued to the word next to them. ``searchts`read`` and
+#: ``[by Ada](https://example.org/a)4 Min.`` come from markup with no whitespace
+#: node between the element and the text; the tags are real and the space is
+#: not. A parenthesis inside a link address stays inside the address.
+_LINK_RE = r"\[[^\]\n]*\]\([^()\n]*(?:\([^()\n]*\)[^()\n]*)*\)"
+_TOKEN_RE = re.compile(rf"(`+[^`\n]*`+|{_LINK_RE}|\*\*|__)")
 
 
 def space_after_inline(markdown: str) -> str:
-    """Put back the space an extractor drops next to inline code or bold.
+    """Put back the space an extractor drops next to inline code, bold, or a link.
 
-    One pass per line, over the inline code spans and the bold runs only:
+    One pass per line, over inline code spans, markdown links, and bold runs:
 
     - a **closing** code span followed immediately by a word gets a space
       (``searchts`read`` -> ``searchts` read``). The span is left byte for
       byte: the space belongs between the span and the word, never inside the
       code.
+    - a link followed immediately by a word gets a space
+      (``[by Ada](https://example.org/a)4 Min.`` -> the same link, then
+      `` 4 Min.``). The link is left byte for byte, including a parenthesis
+      inside the address.
     - a bold run gets a space after it when it closes and a word follows
       (``**bold**text`` -> ``**bold** text``), and not when it opens one
       (``**bold** more`` is already right and stays as it is).
@@ -648,8 +654,9 @@ def _space_line(line: str) -> str:
         out.append(line[pos : m.start()])
         token = m.group(0)
         glued = line[m.end() : m.end() + 1].isalnum()
-        out.append(token + (" " if glued and (token.startswith("`") or bold_open) else ""))
-        if not token.startswith("`"):
+        closes = token.startswith(("`", "[")) or bold_open
+        out.append(token + (" " if glued and closes else ""))
+        if token.startswith(("**", "__")):
             bold_open = not bold_open
         pos = m.end()
     out.append(line[pos:])
