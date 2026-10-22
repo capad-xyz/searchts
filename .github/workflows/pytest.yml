@@ -59,10 +59,19 @@ jobs:
       - name: Run mypy
         run: mypy searchts
 
-  # PRs: one interpreter. OS / version surprises wait for main.
+  # PRs run Ubuntu, Windows, and macOS on 3.12. The other Python
+  # versions stay on main (test-full). Windows used to run only after
+  # the merge, so the 0.17.0 release PR was green and main went red.
   test:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -84,6 +93,9 @@ jobs:
       - name: Run tests
         run: pytest -q
 
+  # Push to main repeats the OS jobs and adds the other Python versions.
+  # The OS jobs also run on the pull request, so the merge is not the
+  # first time Windows or macOS runs the suite.
   test-full:
     if: github.event_name == 'push'
     runs-on: ${{ matrix.os }}

@@ -761,6 +761,8 @@ def test_cli_grab_names_what_saved_and_links_the_folder_on_a_terminal(
     folder = str(tmp_path / "kit")
     assert captured.out.strip() == folder
     assert "\033" not in captured.out
+    # Same builder the CLI uses. "file://" plus pathname2url doubles the
+    # slashes on Windows (file://///C:/...) and the terminal never sees that.
     uri = file_uri(folder)
     assert f"\033]8;;{uri}\033\\" in captured.err
     assert folder in captured.err
