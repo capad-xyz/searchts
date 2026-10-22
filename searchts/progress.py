@@ -376,9 +376,8 @@ class Tracker:
             self._redraw()
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(self, exc_type, exc, tb) -> None:
         self.close(failed=exc_type is not None)
-        return False
 
     def close(self, *, failed: bool = False) -> None:
         with self._lock:
@@ -1008,7 +1007,7 @@ class _CompatPhase:
         self.label = label
         self.enabled = enabled
         self.stream = stream
-        self._token = None
+        self._token: Optional[contextvars.Token] = None
 
     def _say(self, text: str) -> None:
         if not self.enabled or not text:

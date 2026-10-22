@@ -1049,7 +1049,8 @@ def grab(page_url: str, out_dir: str, *,
                 content, content_type = ar.content, ar.content_type
                 final_url, backend = ar.final_url, ar.backend
             else:
-                ar = fetch_bytes(u, backends=["curl_cffi"], timeout=timeout)
+                ar = fetch_bytes(u, backends=["curl_cffi"], timeout=timeout,
+                                 progress=False)
                 content, content_type = ar.content, ar.content_type
                 final_url, backend = ar.final_url, ar.backend
             if total + len(content) > max_total_mb * 1024 * 1024:

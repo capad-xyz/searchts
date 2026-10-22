@@ -528,10 +528,10 @@ def render_command(parser: argparse.ArgumentParser, path: Sequence[str],
         for title, flags in groups:
             present = []
             for flag in flags:
-                action = by_flag.get(flag)
-                if action is not None and id(action) not in named:
-                    named.add(id(action))
-                    present.append(action)
+                found = by_flag.get(flag)
+                if found is not None and id(found) not in named:
+                    named.add(id(found))
+                    present.append(found)
             if present:
                 rows.append((title, present))
         leftover = [a for a in parser._actions

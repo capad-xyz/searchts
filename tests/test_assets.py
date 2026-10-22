@@ -749,6 +749,9 @@ def test_cli_grab_names_what_saved_and_links_the_folder_on_a_terminal(
     }
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("TERM", "xterm")
+    # CI=true disables the live region by design. This case is about what a
+    # terminal sees, so force the terminal path rather than the CI one.
+    monkeypatch.setenv("SEARCHTS_PROGRESS_TTY", "1")
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.setattr(sys.stderr, "isatty", lambda: True)
     monkeypatch.setattr("searchts.assets.grab", lambda url, out, **kw: manifest)

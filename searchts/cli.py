@@ -2593,21 +2593,23 @@ def _grab_receipt(tracker, manifest, out: str) -> str:
     if palette or fonts or tokens:
         lines.append("")
         lines.append(f"  {s.dim('Design')}")
-        rows = []
+        design_rows: List[Tuple[str, List[str], int]] = []
         if palette:
             pieces = [progress.swatch(c["hex"], tracker.color.enabled) + c["hex"]
                       for c in palette[:6]]
-            rows.append(("palette", _pack(pieces, width - 16), 3))
+            design_rows.append(("palette", _pack(pieces, width - 16), 3))
         if fonts:
-            rows.append(("fonts", _pack(", ".join(fonts[:4]).split(),
-                                        width - 16, sep=" "), 0))
+            design_rows.append(("fonts", _pack(", ".join(fonts[:4]).split(),
+                                               width - 16, sep=" "), 0))
         counts = [(k, len(v)) for k, v in tokens.items() if v]
         if counts:
             order = {"radius": 0, "shadow": 1, "spacing": 2}
             counts.sort(key=lambda kv: order.get(kv[0], 9))
-            rows.append(("tokens", ["   ".join(f"{n} {k}" for k, n in counts)], 0))
-        for is_last, (label, chunks, hang) in enumerate(rows):
-            _tree_row(s, lines, label, chunks, is_last == len(rows) - 1, hang)
+            design_rows.append(("tokens",
+                                ["   ".join(f"{n} {k}" for k, n in counts)], 0))
+        for is_last, (label, chunks, hang) in enumerate(design_rows):
+            _tree_row(s, lines, label, chunks,
+                      is_last == len(design_rows) - 1, hang)
 
     lines.append("")
     lines.append(f"  {s.dim('Saved to')}  {progress.link_path(out, tracker.links)}")
