@@ -2351,10 +2351,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         spans are additionally redacted from the text. Default False (report,
         don't alter visible content).
     progress:
-        True: stderr names the step that is running, and reprints it with the
-        real elapsed seconds while that step is still the one running.
-        False: never (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
-        MCP/library omit the arg.
+        True: stderr logs each step once when it starts, and nothing while it
+        runs. A live terminal updates that line's clock in place; a pipe gets
+        the lines only. False: never (CLI ``--json``). None: follow
+        ``SEARCHTS_PROGRESS=1``. MCP/library omit the arg.
     echo_attempts:
         True: also print each rung's result (``curl_cffi: ok``, ``thin-12b``).
         False: the live line is only the step. The caller prints the reasons

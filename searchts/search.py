@@ -405,10 +405,11 @@ def search(
         default is DuckDuckGo plus every provider whose key/env is present.
 
     progress:
-        True: stderr names the provider being searched and reprints that name
-        with the real elapsed seconds while the provider is still running.
-        False: never (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
-        Library/MCP callers omit the arg so they stay quiet unless the env is set.
+        True: stderr logs one line when a provider starts, and nothing while it
+        runs. A live terminal updates that line's clock in place; a pipe gets
+        the one line only. False: never (CLI ``--json``). None: follow
+        ``SEARCHTS_PROGRESS=1``. Library/MCP callers omit the arg so they stay
+        quiet unless the env is set.
 
     Returns the top ``max_results`` fused :class:`SearchResult` objects. Raises
     :class:`SearchError` (with a per-provider breakdown) if every selected

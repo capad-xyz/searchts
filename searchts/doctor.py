@@ -31,11 +31,11 @@ def check_all(config: Config, progress: Optional[bool] = None) -> Dict[str, dict
     so per-channel exceptions degrade to status=\"error\".
 
     progress:
-        True: stderr names the channel being checked and reprints that name
-        with the real elapsed seconds while the check is still running.
-        False: never (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
-        Library/MCP callers omit the arg so they stay quiet unless the env
-        is set.
+        True: stderr logs one line when a channel starts, and nothing while it
+        runs. A live terminal updates that line's clock in place; a pipe gets
+        the one line only. False: never (CLI ``--json``). None: follow
+        ``SEARCHTS_PROGRESS=1``. Library/MCP callers omit the arg so they stay
+        quiet unless the env is set.
     """
     progress = progress_wanted(progress)
 
