@@ -135,26 +135,60 @@ def check_agent_wiring(home: Optional[Path] = None, cwd: Optional[Path] = None) 
     ]
 
 
-def format_wiring_report(checks: Optional[list] = None) -> str:
-    """Render the wiring section for `doctor` (Rich markup, like format_report)."""
+def format_wiring_report(checks: Optional[list] = None, *, color: Optional[bool] = None) -> str:
+    """Render the wiring section for `doctor`, in the same plain style."""
+    import sys
+    import textwrap
+
+    from searchts import progress
+
     if checks is None:
         checks = check_agent_wiring()
+    if color is None:
+        color = progress.use_color(sys.stdout)
+    s = progress.Style(color)
+    check_mark = "✓" if progress.supports_unicode(sys.stdout) else "+"
 
-    lines = ["", "[bold]Agent wiring (is searchts visible to your AI agent?):[/bold]"]
+    def wrap(text: str) -> list:
+        out = []
+        for line in str(text).splitlines() or [""]:
+            out.extend(
+                textwrap.wrap(
+                    line, width=71, break_long_words=True, break_on_hyphens=False,
+                ) or [""]
+            )
+        return out
+
+    def row(mark: str, tone: str, client: str, detail: str, fix=None) -> None:
+        lines.append(f"  {getattr(s, tone)(mark)}  {s.bold(client)}")
+        for chunk in wrap(detail):
+            lines.append("     " + chunk if chunk else "")
+        if fix:
+            for chunk in wrap(f"Fix: {fix}"):
+                lines.append("     " + s.dim(chunk))
+
+    lines = ["", "  " + s.dim("AGENT WIRING")]
     if not checks:
-        lines.append("  [yellow][!][/yellow]  No supported agent configs found (Claude Code/Desktop, Cursor, Codex).")
-        lines.append(f"      To wire one up: {CLAUDE_MCP_ONELINER}")
+        row(
+            "!", "yellow", "No supported agent configs found",
+            "Claude Code/Desktop, Cursor, and Codex configs were not detected.",
+            CLAUDE_MCP_ONELINER,
+        )
         return "\n".join(lines)
 
     for c in checks:
         if c["wired"]:
-            lines.append(rf"  [green]\[ok][/green] {c['client']} — searchts is registered")
+            row(check_mark, "green", c["client"], "searchts is registered")
         else:
-            lines.append(f"  [yellow][!][/yellow]  {c['client']} — detected, but searchts is NOT registered ({c['hint']})")
+            row("!", "yellow", c["client"],
+                "Detected, but searchts is NOT registered.", c["hint"])
 
     if not any(c["wired"] for c in checks):
-        lines.append(
-            "      Installed on PATH is not enough: an agent only reaches for searchts "
-            "proactively when it is registered as an MCP server or slash command."
-        )
+        lines.append("")
+        for chunk in wrap(
+            "Installed on PATH is not enough: an agent only reaches for "
+            "searchts proactively when it is registered as an MCP server or "
+            "slash command."
+        ):
+            lines.append("  " + s.dim(chunk))
     return "\n".join(lines)

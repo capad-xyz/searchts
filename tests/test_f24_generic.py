@@ -277,7 +277,7 @@ def test_the_note_counts_every_fold_on_the_page():
     html = _fold_page(("Show more", "Show all reviews", "Show all reviews", "Show all accessories"))
     notes = [m.note for m in more.detect(html, URL, _kept(40)) if m.kind == "fold"]
     assert notes == [
-        '[folded: 4 controls like "Show more" on the page; the text behind them may be missing]'
+        '[folded: 4 controls like "Show more" on the page; the text behind them may be missing; --expand (MCP expand) opens them]'
     ]
 
 
@@ -684,8 +684,35 @@ def test_the_note_never_lists_more_than_four_addresses():
     images = "".join(f'<img src="/img/{i}.jpg" alt="Image {i}">' for i in range(30))
     note = _media_note(images)
     assert note.count("https://example.org/img/") == 4
-    assert note.endswith("and 26 more. searchts get fetches one of these.]")
+    assert note.endswith(
+        "and 26 more. searchts get fetches one of these. "
+        "--media N (MCP max_media) lists more here, ceiling 40; "
+        "searchts grab saves the files.]"
+    )
     assert "[media: 30 images" in note
+
+
+def test_a_higher_media_limit_lists_more_addresses():
+    images = "".join(f'<img src="/img/{i}.jpg" alt="Image {i}">' for i in range(12))
+    html = f"<html><body><main><h1>A page</h1>{_prose(40)}{images}</main></body></html>"
+    notes = [m.note for m in more.detect(html, URL, _kept(40), media_limit=10) if m.kind == "media"]
+    assert len(notes) == 1
+    assert notes[0].count("https://example.org/img/") == 10
+    assert "and 2 more" in notes[0]
+    assert "--media N" in notes[0] and "searchts grab" in notes[0]
+
+
+def test_media_limit_resolves_from_the_flag_and_the_config(monkeypatch):
+    monkeypatch.delenv("SEARCHTS_MAX_MEDIA", raising=False)
+    monkeypatch.setattr(more, "_configured_media_default", lambda: 4)
+    assert more.resolve_media_limit(None) == (4, None)
+    assert more.resolve_media_limit(0) == (4, None)
+    assert more.resolve_media_limit(12) == (12, None)
+    limit, note = more.resolve_media_limit(200)
+    assert limit == 40
+    assert note == "[media: asked for 200, the ceiling is 40]"
+    monkeypatch.setattr(more, "_configured_media_default", lambda: 20)
+    assert more.resolve_media_limit(None) == (20, None)
 
 
 def test_the_media_note_is_carried_on_the_read(monkeypatch):

@@ -124,8 +124,10 @@ def test_report_mixed_states():
         {"client": "Cursor", "wired": False, "hint": "searchts mcp install --client json"},
     ]
     text = format_wiring_report(checks)
-    assert "Claude Code (MCP) — searchts is registered" in text
-    assert "Cursor — detected, but searchts is NOT registered" in text
+    assert "Claude Code (MCP)" in text
+    assert "searchts is registered" in text
+    assert "Cursor" in text
+    assert "Detected, but searchts is NOT registered." in text
     # at least one client is wired, so the "PATH is not enough" lecture is omitted
     assert "not enough" not in text
 

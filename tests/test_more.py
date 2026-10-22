@@ -397,7 +397,10 @@ def _list_page(n: int) -> str:
 def test_list_page_where_the_extract_kept_one_item():
     found = more.detect(_list_page(27), URL, "Story number 0 about something. A short teaser.")
     assert _kinds(found) == ["list"]
-    assert found[0].note == "[partial: the page lists 27 items; this read kept 1]"
+    assert found[0].note == (
+        "[partial: the page lists 27 items; this read kept 1; "
+        "--items N (MCP max_items) reads more rows, ceiling 300]"
+    )
 
 
 def test_list_page_fully_kept_has_no_note():

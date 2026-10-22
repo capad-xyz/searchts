@@ -15,8 +15,9 @@ import difflib
 import json
 import os
 import sys
+import textwrap
 import time
-from typing import Callable
+from typing import Dict, List, Tuple
 
 from searchts import __version__
 
@@ -75,22 +76,9 @@ def _maybe_print_command_suggestion(argv, commands):
         print(f"did you mean '{matches[0]}'?", file=sys.stderr)
 
 
-#: Shown when `searchts` is run with no arguments. argparse prints sixteen
-#: subcommands and no first action, and for a tool pitched as "point your agent
-#: at this" that wall of text is the first thing a new user sees.
-_FIRST_RUN = """\
-Give your AI agent eyes. The two commands almost everyone needs:
-
-  searchts read <url>          fetch a page through the escalating unlocker
-  searchts search "<query>"    multi-provider web search, no API key
-
-Wiring an agent to use them automatically:
-
-  searchts mcp serve           the MCP server (read_url, web_search, ...)
-  searchts skill install       register the Claude Code skill
-
-Everything else: searchts --help
-"""
+#: The first-run screen is now drawn by ``searchts.helptext`` rather than by
+#: argparse: the zero-arg invocation and ``--help`` are the same document, and
+#: it opens with the belief rather than with ``positional arguments:``.
 
 
 def _run():
@@ -184,7 +172,9 @@ def _run():
     p_read.add_argument("--backend", default=None,
                         help="Force a single backend (e.g. curl_cffi, 'Jina Reader', stealth-browser)")
     p_read.add_argument("--json", action="store_true",
-                        help="Print {url,final_url,fetched_at,backend,status,chars,text,next_url,more} as JSON instead of raw text")
+                        help="Print the result as JSON instead of raw text: "
+                             "url, final_url, fetched_at, backend, status, chars, "
+                             "text, next_url and more")
     p_read.add_argument("--human", action="store_true",
                         help="If no tier gets clean content, open a headful browser to clear it by hand")
     p_read.add_argument("--pages", type=int, default=1,
@@ -192,6 +182,13 @@ def _run():
     p_read.add_argument("--items", type=int, default=0,
                         help="Keep following next pages, then scroll if the list only grows that way, "
                              "until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300)")
+    p_read.add_argument(
+        "--media", type=int, default=0,
+        help="How many image and video addresses the media note lists "
+             "(default 4, ceiling 40). Does not download them; "
+             "searchts grab saves the files. SEARCHTS_MAX_MEDIA or more.media "
+             "in the config changes the default.",
+    )
     p_read.add_argument(
         "--expand",
         action="store_true",
@@ -246,6 +243,7 @@ def _run():
                               help="Find URLs to read (fusion-merged across providers). A snippet is not the page")
     p_search.add_argument("query", help="The search query")
     p_search.add_argument("-n", dest="max_results", type=int, default=10,
+                          metavar="N",
                           help="Maximum number of fused results to return (default: 10)")
     p_search.add_argument("--json", action="store_true",
                           help="Print the list of result dicts as JSON instead of a numbered list")
@@ -438,16 +436,23 @@ def _run():
     sub.add_parser("version", parents=[_verbose], help="Show version")
 
     _maybe_print_command_suggestion(sys.argv[1:], sub.choices)
+
+    # Help is a document, not a syntax dump. Rendering it ourselves keeps the
+    # flag list generated from the live parsers (so it cannot drift) while the
+    # prose, the grouping and the width stay ours.
+    from searchts import helptext
+
+    if helptext.wants_help(sys.argv[1:]) or len(sys.argv) == 1:
+        helptext.render(parser, sys.argv[1:], __version__)
+        sys.exit(0)
+
     args = parser.parse_args()
 
     # Suppress loguru noise unless --verbose
     _configure_logging(getattr(args, "verbose", False))
 
     if not args.command:
-        # Orient first, then the full reference. argparse's help is the right
-        # thing to print and the wrong thing to print first.
-        print(_FIRST_RUN, file=sys.stderr)
-        parser.print_help()
+        helptext.render_root(__version__)
         sys.exit(0)
 
     if args.command == "version":
@@ -1586,26 +1591,42 @@ def _cmd_transcribe(args):
     """
     from pathlib import Path
 
+    from searchts import progress
     from searchts.transcribe import TranscribeError, transcribe
 
-    try:
-        text = transcribe(
-            args.source,
-            provider=args.provider,
-            prefer_subtitles=args.prefer_subtitles,
-            # Progress ticks make long ladder/audio runs visible; stderr only.
-            progress=True,
-            cookies_from_browser=getattr(args, "cookies_from_browser", None),
-        )
-    except TranscribeError as e:
-        print(f"[x] {e}")
-        sys.exit(1)
+    tracker = progress.live("transcribe", _short_subject(args.source))
+    with tracker:
+        try:
+            text = transcribe(
+                args.source,
+                provider=args.provider,
+                prefer_subtitles=args.prefer_subtitles,
+                # Progress ticks make long ladder/audio runs visible; stderr only.
+                progress=True,
+                cookies_from_browser=getattr(args, "cookies_from_browser", None),
+            )
+        except TranscribeError as e:
+            tracker.abort()
+            # An error on stdout is invisible to every `2>` redirect and
+            # makes a failed run look like a successful empty transcript.
+            print(f"[x] {e}", file=sys.stderr)
+            sys.exit(1)
+        if tracker.wants():
+            s = tracker.color
+            mark = "✓" if tracker.unicode_ok else "+"
+            tracker.summary(
+                f"  {s.green(mark)} {s.cyan('transcribe')}  "
+                f"{s.dim(_human_chars(len(text)))}  "
+                f"{s.dim(progress.human_time(tracker.elapsed()))}")
 
     if args.output:
         Path(args.output).write_text(text + "\n", encoding="utf-8")
-        print(f"[ok] Transcript written to {args.output}")
+        # The path is the deliverable, alone on stdout, exactly as `get` and
+        # `grab` end: clickable on a terminal, copyable in a pipe.
+        print(_stdout_path(args.output))
     else:
         print(text)
+
 
 
 def _parse_twitter_cookie_input(value: str):
@@ -1737,6 +1758,46 @@ def _cmd_uninstall(args):
     print("  npm uninstall -g undici")
 
 
+def _short_subject(url: str) -> str:
+    """`host/path?query` for a live-region header, short enough not to wrap."""
+    from urllib.parse import urlsplit
+
+    raw = url if "://" in url else "https://" + url
+    try:
+        parts = urlsplit(raw)
+    except ValueError:
+        return url
+    text = (parts.netloc or parts.path).lower()
+    path = (parts.path or "").rstrip("/")
+    if path and path != "/":
+        text += path
+    if parts.query:
+        text += "?" + parts.query
+    if len(text) > 58:
+        text = text[:55] + "…"
+    return text
+
+
+def _print_reason(prefix: str, why: str, width: int = 76) -> None:
+    """Print one backend's reason, wrapped under itself.
+
+    These reasons are forwarded from libraries and are often a full sentence
+    with an install command inside it. Printed raw they run past 160 columns and
+    the terminal folds them wherever it likes, which turns a tidy failure block
+    into a paragraph.
+    """
+    chunks = textwrap.wrap(why, max(24, width - len(prefix))) or [""]
+    print(prefix + chunks[0], file=sys.stderr)
+    for chunk in chunks[1:]:
+        print(" " * len(prefix) + chunk, file=sys.stderr)
+
+
+def _human_chars(n: int) -> str:
+    if n < 1024:
+        return f"{n} chars"
+    return f"{n / 1024:.1f} KB"
+
+
 def _cmd_read(args):
     """Fetch a URL through the unlocker and print clean markdown.
 
@@ -1744,7 +1805,7 @@ def _cmd_read(args):
     stderr. On total failure, print the per-backend breakdown to stderr and
     exit nonzero.
     """
-    from searchts import unlocker, ux
+    from searchts import progress, unlocker, ux
 
     # A typo is the most common mistake and used to be the most expensive: a
     # bare word is a valid hostname, so `read not-a-url` walked the whole ladder
@@ -1759,46 +1820,58 @@ def _cmd_read(args):
     proxy = _read_command_proxy(args)
 
     backends = [args.backend] if args.backend else None
-    # Progress is narration ("trying curl_cffi..."), not diagnosis. The reasons
-    # are printed once, together, below. Passing progress=False keeps them from
-    # being announced twice.
+    # Progress is narration ("trying curl_cffi..."), not diagnosis. On a
+    # terminal the ladder draws live and the reasons are part of the picture; in
+    # a pipe the same reasons are printed once, together, by the failure block
+    # below. `tracker.wants()` is exactly that distinction.
     expand = bool(getattr(args, "expand", False))
+    tracker = progress.live("read", _short_subject(args.url))
     try:
-        if getattr(args, "items", 0):
-            if getattr(args, "pages", 1) > 1:
-                # --items counts rows and --pages counts hops; together the
-                # first silently won. Say it rather than drop one.
-                print("--items and --pages are mutually exclusive; using --items.", file=sys.stderr)
-            pages = unlocker.read_items(
-                args.url, args.items, backends=backends, allow_human=args.human,
-                scrub=args.scrub, progress=False, cookies=cookies, expand=expand,
-                proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
-            )
-        elif getattr(args, "pages", 1) > 1:
-            pages = unlocker.read_pages(
-                args.url, args.pages, backends=backends, allow_human=args.human,
-                scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
-                expand=expand,
-                proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
-            )
-        else:
-            pages = [unlocker.fetch(
-                args.url, backends=backends, allow_human=args.human,
-                scrub=getattr(args, "scrub", False), progress=False, cookies=cookies,
-                expand=expand,
-                proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
-            )]
-        result = pages[0]
+        with tracker:
+            if getattr(args, "items", 0):
+                if getattr(args, "pages", 1) > 1:
+                    # --items counts rows and --pages counts hops; together the
+                    # first silently won. Say it rather than drop one.
+                    print("--items and --pages are mutually exclusive; using --items.",
+                          file=sys.stderr)
+                pages = unlocker.read_items(
+                    args.url, args.items, backends=backends, allow_human=args.human,
+                    scrub=args.scrub, progress=tracker.wants(), cookies=cookies,
+                    expand=expand,
+                    proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                    **_media_kw(args),
+                )
+            elif getattr(args, "pages", 1) > 1:
+                pages = unlocker.read_pages(
+                    args.url, args.pages, backends=backends, allow_human=args.human,
+                    scrub=getattr(args, "scrub", False), progress=tracker.wants(),
+                    cookies=cookies, expand=expand,
+                    proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                    **_media_kw(args),
+                )
+            else:
+                pages = [unlocker.fetch(
+                    args.url, backends=backends, allow_human=args.human,
+                    scrub=getattr(args, "scrub", False), progress=tracker.wants(),
+                    cookies=cookies, expand=expand,
+                    proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                    **_media_kw(args),
+                )]
+            result = pages[0]
+            if tracker.wants():
+                tracker.summary(_read_receipt(tracker, result, len(pages)))
     except unlocker.UnlockerError as e:
+        # The live block is already down; this block is the whole story and the
+        # only place these reasons are printed.
         print(f"Failed to read {e.url}", file=sys.stderr)
         for backend, why in e.attempts:
-            print(f"  {backend}: {ux.tidy_reason(why)}", file=sys.stderr)
+            _print_reason(f"  {backend}: ", ux.tidy_reason(why))
         # One extra line, only when fetch had something useful to add. The
         # per-backend reasons above are each true; none of them says what to do
         # next, and a read that carried cookies is exactly the case where that
         # is the whole question.
         if e.hint:
-            print(f"  hint: {e.hint}", file=sys.stderr)
+            _print_reason("  hint: ", e.hint)
         # A login wall on an anonymous read is the one failure where the
         # reason is not the whole answer: the page exists, it is just
         # behind a login. Naming the commands here is what turns a wall into
@@ -1837,13 +1910,79 @@ def _cmd_read(args):
         print(json.dumps(payload, ensure_ascii=False))
     else:
         # Status to stderr so stdout stays a clean, pipeable content stream.
-        status = f"[{result.backend}] status={result.status} chars={len(result.text)}"
-        if result.authenticated:
-            status += " (logged in)"
-        print(status, file=sys.stderr)
+        # A terminal already got that status as a receipt under the content
+        # stream, so only the non-terminal path repeats it as a line.
+        if not tracker.wants():
+            status = f"[{result.backend}] status={result.status} chars={len(result.text)}"
+            if result.authenticated:
+                status += " (logged in)"
+            print(status, file=sys.stderr)
         print(result.text)
         for extra in pages[1:]:
             print(f"\n# {extra.final_url}\n\n{extra.text}")
+
+
+def _media_kw(args) -> dict:
+    """``media=N`` only when the caller asked. ``0`` is "not asked"."""
+    asked = getattr(args, "media", 0) or 0
+    return {"media": asked} if asked else {}
+
+
+_LEVER_FLAGS = ("--media", "--items", "--expand")
+
+
+def _read_config_tip(result) -> str:
+    """The lever sentence a read note already carries, lifted verbatim.
+
+    The note owns the flag and its ceiling; this line repeats that sentence
+    under the receipt, so a person scanning the end of the command finds the
+    lever without rereading the body note. Notes that name no lever add
+    nothing, which is what a read before the levers landed looks like.
+    """
+    tips = []
+    for item in getattr(result, "more", None) or []:
+        note = (item.get("note") or "") if isinstance(item, dict) else ""
+        for flag in _LEVER_FLAGS:
+            if flag in note:
+                tail = note.split(flag, 1)[1].rstrip()
+                if tail.endswith("]"):
+                    tail = tail[:-1].rstrip()
+                tip = flag + tail
+                if not tip.endswith((".", "!", "?")):
+                    tip += "."
+                if tip not in tips:
+                    tips.append(tip)
+                break
+    return "  ".join(tips)
+
+
+def _read_receipt(tracker, result, page_count: int) -> str:
+    """One line under the content: who served it, how big it was, how long."""
+    from searchts import progress
+
+    s = tracker.color
+    mark = "✓" if tracker.unicode_ok else "+"
+    bits = [f"{s.green(mark)} {s.cyan('read')}",
+            progress.link_url(result.final_url or "", tracker.links) or ""]
+    bits = [b for b in bits if b]
+    bits.append(s.dim("via " + (result.backend or "?")))
+    if result.status:
+        bits.append(s.dim(str(result.status)))
+    bits.append(s.dim(_human_chars(len(result.text))))
+    if page_count > 1:
+        bits.append(s.dim(f"{page_count} pages"))
+    if result.authenticated:
+        bits.append(s.green("logged in"))
+    if result.next_url:
+        bits.append(s.dim("next page available"))
+    bits.append(s.dim(progress.human_time(tracker.elapsed())))
+    bits = [b for b in bits if b]
+    line = "  " + "  ".join(bits)
+    tip = _read_config_tip(result)
+    for tip_line in _tip_lines(tip, s) if tip else []:
+        line += "\n" + tip_line
+    return line
+
 
 
 def _read_command_proxy(args):
@@ -2151,25 +2290,57 @@ def _print_login_wall_hint(url: str) -> None:
     )
 
 
+def _stdout_link(text: str, url: str) -> str:
+    """A clickable label on stdout, and byte-identical text when piped."""
+    from searchts import progress
+
+    return progress.link(text, url, enabled=progress.use_links(sys.stdout))
+
+
+def _stdout_path(path: str) -> str:
+    return _stdout_link(path, _file_uri(path))
+
+
+def _file_uri(path: str) -> str:
+    try:
+        import pathlib
+
+        return pathlib.Path(path).resolve().as_uri()
+    except (ValueError, OSError):
+        return ""
+
+
 def _cmd_get(args):
     """Download one asset through the unlock ladder; print the saved path."""
-    from searchts import assets
+    from searchts import assets, progress
 
-    try:
-        path = assets.get_asset(args.url, args.output, progress=True)
-    except assets.AssetError as e:
-        print(f"Failed to get asset: {e}", file=sys.stderr)
-        sys.exit(1)
-    size = path.stat().st_size if path.exists() else 0
-    print(f"saved {path} ({size} bytes)", file=sys.stderr)
-    print(str(path))
+    tracker = progress.live("get", _short_subject(args.url))
+    with tracker:
+        try:
+            path = assets.get_asset(args.url, args.output, progress=True)
+        except assets.AssetError as e:
+            tracker.abort()
+            print(f"Failed to get asset: {e}", file=sys.stderr)
+            sys.exit(1)
+        size = path.stat().st_size if path.exists() else 0
+        if tracker.wants():
+            s = tracker.color
+            mark = "✓" if tracker.unicode_ok else "+"
+            tracker.summary(
+                f"  {s.green(mark)} {s.cyan('get')}  {progress.link_path(str(path), tracker.links)}"
+                f"  {s.dim(progress.human_bytes(size))}  "
+                f"{s.dim(progress.human_time(tracker.elapsed()))}")
+        else:
+            print(f"saved {path} ({size} bytes)", file=sys.stderr)
+    print(_stdout_path(str(path)))
+
 
 
 def _cmd_grab(args):
     """Save the files a read named, through the same unlock ladder."""
     from urllib.parse import urlparse
 
-    from searchts import assets
+    from searchts import assets, progress
 
     out = args.out
     if not out:
@@ -2184,16 +2355,23 @@ def _cmd_grab(args):
     except ValueError as e:
         print(f"--tokens: {e}", file=sys.stderr)
         sys.exit(2)
-    try:
-        manifest = assets.grab(
-            args.url, out, kinds=kinds, include_scripts=args.scripts,
-            read=args.read, max_assets=args.max_assets, max_tokens=max_tokens,
-            # Ticks go to stderr only, so --json stdout stays machine-clean.
-            progress=not getattr(args, "json", False),
-        )
-    except assets.AssetError as e:
-        print(f"Failed to grab {args.url}: {e}", file=sys.stderr)
-        sys.exit(1)
+    tracker = progress.live("grab", _short_subject(args.url))
+    with tracker:
+        try:
+            manifest = assets.grab(
+                args.url, out, kinds=kinds, include_scripts=args.scripts,
+                read=args.read, max_assets=args.max_assets, max_tokens=max_tokens,
+                # Ticks go to stderr only, so --json stdout stays machine-clean.
+                progress=not getattr(args, "json", False),
+            )
+        except assets.AssetError as e:
+            tracker.abort()
+            print(f"Failed to grab {args.url}: {e}", file=sys.stderr)
+            sys.exit(1)
+        if tracker.wants() and not getattr(args, "json", False):
+            # The receipt is written when the live block is taken down, so it
+            # has to be built here, inside the block it replaces.
+            tracker.summary(_grab_receipt(tracker, manifest, out))
 
     def omitted_note():
         entries = manifest.get("omitted") or []
@@ -2221,6 +2399,9 @@ def _cmd_grab(args):
         note = omitted_note()
         if note:
             print(note, file=sys.stderr)
+        for tip in _grab_tips(manifest):
+            for tip_line in _tip_lines(tip, progress.Style(False)):
+                print(tip_line, file=sys.stderr)
         note = token_note()
         if note:
             print(note, file=sys.stderr)
@@ -2229,26 +2410,198 @@ def _cmd_grab(args):
             print(note, file=sys.stderr)
         print(json.dumps(manifest, ensure_ascii=False))
         return
-    title = manifest.get("title") or "(no title)"
-    palette = " ".join(c["hex"] for c in manifest.get("palette", [])[:8])
-    fonts = ", ".join(manifest.get("fonts", [])[:6])
-    print(f"[grab] {title}", file=sys.stderr)
-    print(f"  page via {manifest.get('page_backend', '?')}; downloaded "
-          f"{manifest.get('downloaded', 0)} assets -> {out}/", file=sys.stderr)
-    if palette:
-        print(f"  palette: {palette}", file=sys.stderr)
-    if fonts:
-        print(f"  fonts:   {fonts}", file=sys.stderr)
-    note = omitted_note()
-    if note:
-        print(note, file=sys.stderr)
-    note = token_note()
-    if note:
-        print(note, file=sys.stderr)
+
+    manifest_path = os.path.join(out, "manifest.json")
+    if not tracker.wants():
+        title = manifest.get("title") or "(no title)"
+        palette = " ".join(c["hex"] for c in manifest.get("palette", [])[:8])
+        fonts = ", ".join(manifest.get("fonts", [])[:6])
+        print(f"[grab] {title}", file=sys.stderr)
+        print(f"  page via {manifest.get('page_backend', '?')}; downloaded "
+              f"{manifest.get('downloaded', 0)} assets -> {out}/", file=sys.stderr)
+        if palette:
+            print(f"  palette: {palette}", file=sys.stderr)
+        if fonts:
+            print(f"  fonts:   {fonts}", file=sys.stderr)
+        note = omitted_note()
+        if note:
+            print(note, file=sys.stderr)
+        note = token_note()
+        if note:
+            print(note, file=sys.stderr)
+        for tip in _grab_tips(manifest):
+            for tip_line in _tip_lines(tip, tracker.color):
+                print(tip_line, file=sys.stderr)
+    # The receipt cannot show a page.md failure, so that one always prints.
     note = page_md_note()
     if note:
         print(note, file=sys.stderr)
-    print(os.path.join(out, "manifest.json"))
+    print(_stdout_path(manifest_path))
+
+
+def _grab_receipt(tracker, manifest, out: str) -> str:
+    """The grab's ending: what landed, where, and the design it found.
+
+    Three ideas from the design pass, in one shape: a tree, because the assets
+    are grouped by kind and a flat column hides that; a design card, because the
+    palette and the tokens are the actual deliverable for someone rebuilding a
+    page; and the path last, dimmed and clickable, because that is what gets
+    pasted into the next command.
+
+    Everything here is width-fitted: a long Windows path is the fastest way to
+    wrap a terminal and turn a receipt into a paragraph.
+    """
+    from searchts import progress
+
+    s = tracker.color
+    mark = "✓" if tracker.unicode_ok else "+"
+    width = 76
+
+    by_kind: Dict[str, list] = {}
+    for rec in manifest.get("assets", []):
+        if not rec.get("ok"):
+            continue
+        entry = by_kind.setdefault(rec.get("kind", "other"), [0, 0])
+        entry[0] += 1
+        entry[1] += rec.get("bytes", 0) or 0
+    downloaded = manifest.get("downloaded", 0)
+    size = sum(v[1] for v in by_kind.values())
+    page_backend = manifest.get("page_backend", "?")
+
+    lines: List[str] = []
+    head = (f"  {s.green(mark)} {s.cyan('grab')}  {s.dim(tracker.subject)}")
+    tail = "  ".join([s.dim(progress.human_time(tracker.elapsed()))])
+    pad = " " * max(2, width - _plain_len(head) - _plain_len(tail) - 2)
+    lines.append(head + pad + tail)
+    lines.append("")
+
+    delivered = (f"  {s.dim('Delivered')}   {downloaded} files   "
+                 f"{progress.human_bytes(size)}   {s.dim('via ' + page_backend)}")
+    lines.append(delivered)
+
+    kinds = sorted(by_kind.items(), key=lambda kv: (-kv[1][0], kv[0]))
+    rows: List[Tuple[str, List[str]]] = []
+    for kind, (count, ksize) in kinds:
+        rows.append((kind, [f"{count:>3}   {s.dim(progress.human_bytes(ksize))}"]))
+    omitted = manifest.get("omitted") or []
+    if omitted:
+        total = manifest.get("omitted_count") or sum(e["count"] for e in omitted)
+        reasons = ", ".join(f"{e['count']} {e['kind']} ({e['reason']})"
+                            for e in omitted)
+        rows.append(("omitted",
+                     _pack(f"{total}: {reasons}".split(), width - 16, sep=" ")))
+    for is_last, (label, chunks) in enumerate(rows):
+        _tree_row(s, lines, label, chunks, is_last == len(rows) - 1)
+
+    tokens = manifest.get("tokens") or {}
+    palette = manifest.get("palette") or []
+    fonts = manifest.get("fonts") or []
+    if palette or fonts or tokens:
+        lines.append("")
+        lines.append(f"  {s.dim('Design')}")
+        rows = []
+        if palette:
+            pieces = [progress.swatch(c["hex"], tracker.color.enabled) + c["hex"]
+                      for c in palette[:6]]
+            rows.append(("palette", _pack(pieces, width - 16), 3))
+        if fonts:
+            rows.append(("fonts", _pack(", ".join(fonts[:4]).split(),
+                                        width - 16, sep=" "), 0))
+        counts = [(k, len(v)) for k, v in tokens.items() if v]
+        if counts:
+            order = {"radius": 0, "shadow": 1, "spacing": 2}
+            counts.sort(key=lambda kv: order.get(kv[0], 9))
+            rows.append(("tokens", ["   ".join(f"{n} {k}" for k, n in counts)], 0))
+        for is_last, (label, chunks, hang) in enumerate(rows):
+            _tree_row(s, lines, label, chunks, is_last == len(rows) - 1, hang)
+
+    lines.append("")
+    lines.append(f"  {s.dim('Saved to')}  {progress.link_path(out, tracker.links)}")
+    for tip in _grab_tips(manifest):
+        lines.extend(_tip_lines(tip, s))
+    return "\n".join(lines)
+
+
+def _sentence(text: str) -> List[str]:
+    return text.split()
+
+
+def _pack(pieces: List[str], room: int, sep: str = "  ") -> List[str]:
+    """Greedy fill into *room*-wide lines, keeping styled pieces whole."""
+    lines: List[str] = []
+    current = ""
+    for piece in pieces:
+        candidate = piece if not current else current + sep + piece
+        if current and _plain_len(candidate) > room:
+            lines.append(current)
+            current = piece
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
+_TIP_LEAD = "  [CONFIG] Tip: "
+
+
+def _tip_lines(tip: str, s, width: int = 76) -> List[str]:
+    """One shape for every [CONFIG] tip: a lead, then a hanging wrap.
+
+    The tip text is the note's own sentence; this renderer only decides where
+    it breaks, so a long flag sentence folds under the mark instead of under
+    whatever column the terminal's cursor happened to be at.
+    """
+    lead = "  " + s.cyan("[CONFIG]") + s.dim(" Tip: ")
+    chunks = _pack(_sentence(tip), width - len(_TIP_LEAD), sep=" ")
+    if not chunks:
+        return []
+    out = [lead + chunks[0]]
+    out.extend(" " * len(_TIP_LEAD) + chunk for chunk in chunks[1:])
+    return out
+
+
+def _tree_row(s, lines: List[str], label: str, chunks: List[str],
+              is_last: bool, hang: int = 0) -> None:
+    elbow = ("└─" if is_last else "├─")
+    head = f"  {s.dim(elbow)} {label:<10} "
+    lines.append(head + chunks[0])
+    indent = " " * (_plain_len(head) + hang)
+    for chunk in chunks[1:]:
+        lines.append(indent + chunk)
+
+
+def _plain_len(text: str) -> int:
+    import re
+
+    return len(re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", text))
+
+
+def _grab_tips(manifest) -> List[str]:
+    """The next levers this grab actually has, most relevant first.
+
+    A tip that guesses is worse than no tip: it sends someone to a flag that
+    will change nothing. Each branch here is a cap that really did cut this
+    result short. The token lever is always printed, because it is the one
+    knob this command exposes that raises the *quality* of what came back
+    rather than the quantity.
+    """
+    omitted = manifest.get("omitted") or []
+    limits = manifest.get("limits") or {}
+    tips: List[str] = []
+    if any(e.get("reason") == "max-assets" for e in omitted):
+        cap = limits.get("max_assets", 120)
+        tips.append(f"raise --max {cap} to save the rest "
+                    "(named in manifest.json)")
+    elif any(e.get("reason") == "size-cap" for e in omitted):
+        tips.append("raise --max-total-mb to save the rest")
+    if manifest.get("tokens_more") or manifest.get("tokens_omitted"):
+        tips.append("--tokens N (max 200) reads more radius, shadow and spacing")
+    else:
+        tips.append("--tokens N (max 200) reads past the default 24 values")
+    return tips
+
+
 
 
 def _parse_provider_flags(provider_args):
@@ -2274,28 +2627,43 @@ def _cmd_search(args):
     On total failure, print the per-provider breakdown to stderr and exit
     nonzero (mirrors `read`).
     """
+    from searchts import progress
     from searchts import search as search_mod
 
     providers = _parse_provider_flags(args.provider)
-    try:
-        results = search_mod.search(
-            args.query, max_results=args.max_results, providers=providers,
-            progress=not args.json,
-        )
-    except search_mod.SearchError as e:
-        print(f"Search failed for {e.query!r}", file=sys.stderr)
-        for provider, why in e.attempts:
-            print(f"  {provider}: {why}", file=sys.stderr)
-        sys.exit(1)
+    tracker = progress.live("search", f'"{args.query}"')
+    with tracker:
+        try:
+            results = search_mod.search(
+                args.query, max_results=args.max_results, providers=providers,
+                progress=not args.json,
+            )
+        except search_mod.SearchError as e:
+            tracker.abort()
+            print(f"Search failed for {e.query!r}", file=sys.stderr)
+            for provider, why in e.attempts:
+                print(f"  {provider}: {why}", file=sys.stderr)
+            sys.exit(1)
 
-    if args.json:
-        print(search_mod.SNIPPET_LINE, file=sys.stderr)
-        payload = [
-            {"title": r.title, "url": r.url, "snippet": r.snippet, "source": r.source}
-            for r in results
-        ]
-        print(json.dumps(payload, ensure_ascii=False))
-        return
+        if args.json:
+            print(search_mod.SNIPPET_LINE, file=sys.stderr)
+            payload = [
+                {"title": r.title, "url": r.url, "snippet": r.snippet, "source": r.source}
+                for r in results
+            ]
+            print(json.dumps(payload, ensure_ascii=False))
+            return
+
+        sources = {r.source for r in results if r.source}
+        if tracker.wants():
+            s = tracker.color
+            mark = "✓" if tracker.unicode_ok else "+"
+            bits = [f"{s.green(mark)} {s.cyan('search')}",
+                    s.dim(f"{len(results)} results")]
+            if sources:
+                bits.append(s.dim(f"{len(sources)} providers"))
+            bits.append(s.dim(progress.human_time(tracker.elapsed())))
+            tracker.summary("  " + "  ".join(bits))
 
     print(search_mod.SNIPPET_LINE)
     for i, r in enumerate(results, start=1):
@@ -2303,24 +2671,18 @@ def _cmd_search(args):
         if len(snippet) > 200:
             snippet = snippet[:197] + "..."
         print(f"{i}. {r.title or '(no title)'}")
-        print(f"   {r.url}")
+        print(f"   {_stdout_link(r.url, r.url)}")
         if snippet:
             print(f"   {snippet}")
         if r.source:
             print(f"   [{r.source}]")
 
 
+
 def _cmd_doctor(args=None):
     from searchts.config import Config
     from searchts.doctor import check_all, format_report
 
-    rprint: Callable[..., None]
-    try:
-        from rich import print as rich_print
-    except ImportError:
-        rprint = print
-    else:
-        rprint = rich_print
     config = Config()
     # Progress ticks go to stderr only, so --json stdout stays machine-clean.
     results = check_all(config, progress=not getattr(args, "json", False))
@@ -2330,14 +2692,15 @@ def _cmd_doctor(args=None):
         from searchts.doctor import format_lock_note, windows_searchts_pids
         note = format_lock_note(windows_searchts_pids())
         if note:
-            import re
-            print(re.sub(r"\[[^\]]*\]", "", note), file=sys.stderr)
+            print(note, file=sys.stderr)
         return
 
-    rprint(format_report(results))
+    # The report owns its wrapping and colour, so it prints as plain text;
+    # Rich would re-fold the 71-column lines at the terminal width.
+    print(format_report(results))
 
     from searchts.integrations.agent_wiring import format_wiring_report
-    rprint(format_wiring_report())
+    print(format_wiring_report())
     # doctor is read-only: skill install stays on `searchts install` / `searchts skill`.
 
 

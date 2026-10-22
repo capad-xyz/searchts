@@ -39,7 +39,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
-__all__ = ["Limits", "resolve", "PAYWALL_NOTE", "INTENT_NAMES"]
+__all__ = ["Limits", "resolve", "hard_cap", "PAYWALL_NOTE", "INTENT_NAMES"]
 
 
 #: The three things a caller can ask for. Each maps to one flag, one MCP
@@ -155,6 +155,11 @@ def _read(name: str, yaml_block: Dict[str, Any]) -> Optional[int]:
     if value < 1:
         return 1
     return min(value, hard_cap)
+
+
+def hard_cap(name: str) -> int:
+    """The product ceiling for ``name``. A user policy can only lower it."""
+    return _SPEC[name][3]
 
 
 def resolve(**asked: Optional[int]) -> Limits:

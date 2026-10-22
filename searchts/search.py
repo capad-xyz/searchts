@@ -57,10 +57,20 @@ def _tick(msg: str) -> None:
     # Best-effort only: a closed/broken stderr must never abort a search.
     if sys.stderr is None:
         return
-    try:
-        print(msg, file=sys.stderr, flush=True)
-    except (OSError, ValueError):
-        pass
+    from searchts import progress as _progress
+
+    _progress.narrate(msg)
+
+
+def _outcome(detail: str, status: Optional[str] = None) -> None:
+    """Record a provider's verdict, but only when a live region is drawing.
+
+    A piped search log gets the reasons once in the failure block; a person
+    watching a terminal gets them as the rungs report.
+    """
+    from searchts import progress as _progress
+
+    _progress.outcome(detail, status)
 
 
 @dataclass
@@ -417,6 +427,7 @@ def search(
         if fn is None:
             if progress:
                 _tick(f"searching {name}…")
+                _outcome("unknown provider")
             attempts.append((name, "unknown-provider"))
             continue
         if progress:
@@ -425,11 +436,18 @@ def search(
             results = fn(query, max_results) or []
         except Exception as e:  # noqa: BLE001 - any provider failure is recorded, never raised
             attempts.append((name, f"{type(e).__name__}: {e}"))
+            if progress:
+                _outcome(f"{type(e).__name__}")
             continue
         if not results:
             attempts.append((name, "no-results"))
+            if progress:
+                _outcome("no results", "skip")
             continue
         per_provider.append((name, results))
+        if progress:
+            _outcome(f"ok ({len(results)} results)", "ok")
+
 
     if not per_provider:
         raise SearchError(query, attempts)

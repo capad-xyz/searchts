@@ -153,10 +153,9 @@ def _tick(progress: bool, msg: str) -> None:
         return
     if sys.stderr is None:
         return
-    try:
-        print(msg, file=sys.stderr, flush=True)
-    except (OSError, ValueError):
-        pass
+    from searchts import progress as _progress
+
+    _progress.narrate(msg)
 
 
 def _ytdlp_module_available() -> bool:

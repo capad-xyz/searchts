@@ -23,6 +23,7 @@ not per-host code (Reddit keeps its own ring in ``known_hosts``).
 from __future__ import annotations
 
 import base64
+import os
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Mapping, Optional, Tuple
@@ -1160,9 +1161,12 @@ def short_read(doc, text: str, region=None) -> Optional[More]:
 
 # ── F24a: the media in the main content ───────────────────────────────────────
 
-#: How many URLs one note may carry. A product page has ninety images and an
-#: agent needs to know they are there, not to read ninety URLs.
+#: How many URLs one note lists when nobody asked for more. A product page has
+#: ninety images and an agent needs to know they are there, not to read ninety
+#: URLs. ``--media N`` (MCP ``max_media``) or ``SEARCHTS_MAX_MEDIA`` /
+#: ``more.media`` raises the list, up to :data:`_MEDIA_LIST_MAX`.
 _MEDIA_MAX_LISTED = 4
+_MEDIA_LIST_MAX = 40
 #: A "URL" this long is a data URI or an inline blob, not an address.
 _MEDIA_MAX_URL = 300
 _MEDIA_URL_ATTRS = (
@@ -1206,18 +1210,80 @@ def _media_url(el, base: str = "") -> str:
     return ""
 
 
-def media_note(region, base: str = "") -> Optional[More]:
+def resolve_media_limit(asked: Optional[int] = None) -> Tuple[int, Optional[str]]:
+    """``(how many addresses to list, clamp note or None)``.
+
+    The quiet default is :data:`_MEDIA_MAX_LISTED`. ``SEARCHTS_MAX_MEDIA``,
+    then ``more.media`` in the config, replaces that default. ``--media N`` /
+    ``max_media`` replaces it for one read. Nothing lists more than
+    :data:`_MEDIA_LIST_MAX`; a request over it is clamped and named, because a
+    note that quietly stopped at 40 when 200 were asked for is a lie. ``0``
+    and ``None`` mean "not asked". A broken value is the default, never an
+    error.
+    """
+    default = _configured_media_default()
+    if asked is None or isinstance(asked, bool):
+        return default, None
+    try:
+        want = int(asked)
+    except (TypeError, ValueError):
+        return default, None
+    if want < 1:
+        return default, None
+    if want > _MEDIA_LIST_MAX:
+        return _MEDIA_LIST_MAX, (
+            f"[media: asked for {want}, the ceiling is {_MEDIA_LIST_MAX}]"
+        )
+    return want, None
+
+
+def _configured_media_default() -> int:
+    """The list length when this read did not pass ``--media``."""
+    raw = os.environ.get("SEARCHTS_MAX_MEDIA")
+    if raw is None or str(raw).strip() == "":
+        try:
+            from searchts.config import Config
+
+            block = Config().get("more")
+        except Exception:  # noqa: BLE001 - a bad config must never break a read
+            block = None
+        raw = block.get("media") if isinstance(block, dict) else None
+    if raw is None or str(raw).strip() == "":
+        return _MEDIA_MAX_LISTED
+    try:
+        value = int(float(str(raw).strip()))
+    except (TypeError, ValueError):
+        return _MEDIA_MAX_LISTED
+    if value < 1:
+        return 1
+    return min(value, _MEDIA_LIST_MAX)
+
+
+def media_note(region, base: str = "", limit: Optional[int] = None) -> Optional[More]:
     """The images, video and embeds in the main content, by URL.
 
     F24a. A read returns text, so a photo essay comes back as its captions and
     an embedded video as nothing at all; both are real content the page holds.
     The note lists the addresses the markup already carries and never fetches
     one. When an address is listed, the note names ``searchts get`` as the way
-    to fetch it. A page whose media has no address says so in the words PLAN.md
-    uses rather than pretending there is none.
+    to fetch it. When the list stops early, the note names ``--media`` and
+    ``searchts grab`` as the way to the rest. A page whose media has no address
+    says so in the words PLAN.md uses rather than pretending there is none.
+
+    ``limit`` is the resolved length for this read. ``None`` is the quiet
+    default, so a caller that is not a read (a unit of detection) does not
+    consult the user's config.
     """
     if region is None:
         return None
+    if limit is None:
+        cap = _MEDIA_MAX_LISTED
+    else:
+        try:
+            cap = int(limit)
+        except (TypeError, ValueError):
+            cap = _MEDIA_MAX_LISTED
+        cap = min(_MEDIA_LIST_MAX, max(1, cap))
     counts: Dict[str, int] = {}
     urls: List[str] = []
     try:
@@ -1231,7 +1297,7 @@ def media_note(region, base: str = "") -> Optional[More]:
         if not kind or _is_hidden(el):
             continue
         counts[kind] = counts.get(kind, 0) + 1
-        if len(urls) < _MEDIA_MAX_LISTED:
+        if len(urls) < cap:
             url = _media_url(el, base)
             if url and url not in urls:
                 urls.append(url)
@@ -1244,11 +1310,22 @@ def media_note(region, base: str = "") -> Optional[More]:
     if not urls:
         return More("media", f"[media: {said} in the main content; media present, not resolved]")
     listed = ", ".join(urls)
-    rest = f", and {total - len(urls)} more" if total > len(urls) else ""
+    hidden = total - len(urls)
+    rest = f", and {hidden} more" if hidden else ""
+    # The get sentence stays either way: it is how you fetch an address that
+    # is already written down. The rest of the sentence exists only when this
+    # note stopped early, and it names the two levers that reach what it did
+    # not write down. No URL in the tip: the addresses above are the page's,
+    # and the command is not.
+    tip = (
+        f" --media N (MCP max_media) lists more here, ceiling {_MEDIA_LIST_MAX};"
+        " searchts grab saves the files."
+        if hidden else ""
+    )
     return More(
         "media",
         f"[media: {said} in the main content: {listed}{rest}. "
-        "searchts get fetches one of these.]",
+        f"searchts get fetches one of these.{tip}]",
     )
 
 
@@ -1257,6 +1334,7 @@ def detect(
     url: str,
     text: str,
     headers: Optional[Mapping[str, str]] = None,
+    media_limit: Optional[int] = None,
 ) -> List[More]:
     """Findings for one read: the page HTML, its URL, and the extracted text.
 
@@ -1303,7 +1381,7 @@ def detect(
                 More(
                     "fold",
                     f"[folded: {folds} {_plural(folds, 'control', 'controls')} like \"{label}\" on the "
-                    "page; the text behind them may be missing]",
+                    "page; the text behind them may be missing; --expand (MCP expand) opens them]",
                 )
             )
         empty = _empty_panels(doc)
@@ -1312,19 +1390,25 @@ def detect(
                 More(
                     "fold",
                     f"[folded: {empty} collapsed {_plural(empty, 'section was', 'sections were')} "
-                    "empty in the page; that text loads on click]",
+                    "empty in the page; that text loads on click; --expand (MCP expand) opens them]",
                 )
             )
         if listed:
             total, kept = listed
-            found.append(More("list", f"[partial: the page lists {total} items; this read kept {kept}]"))
+            from searchts.knobs import hard_cap
+
+            found.append(More(
+                "list",
+                f"[partial: the page lists {total} items; this read kept {kept}; "
+                f"--items N (MCP max_items) reads more rows, ceiling {hard_cap('items')}]",
+            ))
         for said in _counts(doc):
             found.append(More("count", f"[page says: {said}]"))
         region = content_region(doc)
         short = short_read(doc, text, region=region)
         if short:
             found.append(short)
-        seen_media = media_note(region[0], base)
+        seen_media = media_note(region[0], base, limit=media_limit)
         if seen_media:
             found.append(seen_media)
         found.extend(left_out(doc, text))

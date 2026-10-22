@@ -21,7 +21,6 @@ import hashlib
 import json
 import os
 import re
-import sys
 import urllib.parse
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -34,14 +33,11 @@ from searchts.unlocker import _UA_REAL, jina_enabled, looks_blocked, normalize
 
 def _tick(progress: bool, msg: str) -> None:
     # Best-effort only: a closed/broken stderr must never abort a fetch/grab.
-    if not progress:
-        return
-    if sys.stderr is None:
-        return
-    try:
-        print(msg, file=sys.stderr, flush=True)
-    except (OSError, ValueError):
-        pass
+    # Routed through progress.py so a terminal gets a live ladder and a pipe
+    # gets the same plain lines this function always printed.
+    from searchts import progress as _progress
+
+    _progress.tick(progress, msg)
 
 
 def _progress_default(progress: Optional[bool]) -> bool:
@@ -1026,12 +1022,19 @@ def grab(page_url: str, out_dir: str, *,
         "size-cap": defaultdict(list),
     }
 
-    _tick(progress, "downloading assets…")
+    # The per-item count is the difference between "working" and "hung" on a
+    # page with 120 assets, so the count owns this line. Plain mode gets the
+    # phase line once, exactly as before.
+    from searchts import progress as _progress
+
+    _progress.counting("downloading assets", min(len(flat), max_assets),
+                       enabled=bool(progress))
     for idx, (kind, u) in enumerate(flat):
         if count >= max_assets:
             for rest_kind, rest_url in flat[idx:]:
                 omitted["max-assets"][rest_kind].append(rest_url)
             break
+        written = 0
         try:
             if u.lower().startswith("data:"):
                 content, content_type = _decode_data_url(u)
@@ -1059,6 +1062,7 @@ def grab(page_url: str, out_dir: str, *,
             dest.write_bytes(content)
             total += len(content)
             count += 1
+            written = len(content)
             records.append({"source_url": u, "kind": kind, "ok": True,
                             "local_path": str(dest.relative_to(out)).replace("\\", "/"),
                             "bytes": len(content), "content_type": content_type,
@@ -1066,6 +1070,11 @@ def grab(page_url: str, out_dir: str, *,
         except Exception as e:  # noqa: BLE001 - one bad asset never fails the grab
             records.append({"source_url": u, "kind": kind, "ok": False,
                             "error": f"{type(e).__name__}: {e}"})
+        finally:
+            # The counter has to advance on a failure too, or one dead CDN URL
+            # freezes the bar short of its total and the display lies about
+            # being stuck. `continue` above still reaches this.
+            _progress.advance(1, written)
 
     # A failed curl-only asset may be a CDN that wants the browser's
     # fingerprint. Climb for a bounded number of them and keep whatever the

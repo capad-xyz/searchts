@@ -168,15 +168,38 @@ class TestDoctor:
                     "tier": 2,
                     "backends": ["mcporter"],
                 },
-            }
+            },
+            color=False,
         )
 
-        import re
-        plain = re.sub(r"\[[^\]]*\]", "", report)
-        assert "searchts" in plain
-        assert "Probes (not a routing table):" in plain
-        assert "1/3 probes ok" in plain
-        assert "optional CLIs not present" in plain
+        assert "searchts doctor" in report
+        assert "Probes, not a routing table." in report
+        assert "1/3 probes passed" in report
+        assert "2 not present:" in report
+        assert "Web-wide semantic search" in report
+        assert "LinkedIn" in report
+        # Plain text, not Rich markup: the report owns its own wrapping.
+        assert "[green]" not in report
+        assert "\x1b[" not in report
+
+    def test_format_report_wraps_a_long_sentence_under_its_name(self):
+        report = doctor.format_report(
+            {
+                "instagram": {
+                    "status": "ok",
+                    "name": "Instagram",
+                    "message": "Can download public posts with a local session. " * 6,
+                    "tier": 0,
+                    "backends": ["yt-dlp"],
+                },
+            },
+            color=False,
+        )
+        lines = report.splitlines()
+        start = lines.index("  " + ("✓" if "✓" in report else "+") + "  Instagram")
+        assert lines[start + 1].startswith("     Can download")
+        long = [ln for ln in lines if len(ln) > 76]
+        assert long == []
 
     def test_lock_pids_leave_out_this_command(self, monkeypatch):
         """The searchts.exe that launched this command is not 'still open'."""
@@ -223,37 +246,6 @@ class TestDoctor:
             lock_pids=[4242],
         )
         assert "4242" in report
-
-    def test_strip_rich_markup_keeps_status_tokens(self):
-        raw = (
-            "[bold cyan]searchts status[/bold cyan]\n"
-            "[green][ok][/green] web\n"
-            "[yellow][!][/yellow] login\n"
-            "[red][X][/red] missing"
-        )
-        plain = doctor.strip_rich_markup(raw)
-        assert "[bold" not in plain
-        assert plain.startswith("searchts status")
-        assert "[ok]" in plain
-        assert "[!]" in plain
-        assert "[X]" in plain
-
-    def test_strip_rich_markup_unescapes_format_report_ok(self):
-        report = doctor.format_report(
-            {
-                "web": {
-                    "status": "ok",
-                    "name": "Web page",
-                    "message": "Can scrape web pages",
-                    "tier": 0,
-                    "backends": ["requests"],
-                },
-            }
-        )
-        plain = doctor.strip_rich_markup(report)
-        assert "[bold" not in plain
-        assert "\\[ok]" not in plain
-        assert "[ok]" in plain
 
 
 def test_stale_active_backend_does_not_leak_into_errored_result(monkeypatch):

@@ -333,7 +333,10 @@ def test_the_comment_ceiling_is_the_items_knob_and_never_above_it(monkeypatch):
 
     md = page(THREAD, "reddit_thread_expanded.html").markdown
     assert md.count(" pts)") == 12
-    assert "[truncated: 19 more comments in the page were cut at the 12-comment cap]" in md
+    assert (
+        "[truncated: 19 more comments in the page were cut at the 12-comment cap; "
+        "--items N (MCP max_items) raises it, ceiling 300]"
+    ) in md
     # And the note the ceiling buys is named on the read, not left to be found.
     kinds = [m["kind"] for m in page(THREAD, "reddit_thread_expanded.html").more]
     assert "count" in kinds

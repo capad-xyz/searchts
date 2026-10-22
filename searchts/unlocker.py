@@ -29,7 +29,6 @@ import json
 import os
 import re
 import stat
-import sys
 import threading
 import urllib.parse
 import urllib.request
@@ -1396,10 +1395,9 @@ def _is_nav_race(exc: BaseException) -> bool:
 def _stderr_tick(msg: str, progress: bool) -> None:
     if not progress:
         return
-    try:
-        print(msg, file=sys.stderr, flush=True)
-    except (OSError, ValueError):
-        pass
+    from searchts import progress as _progress
+
+    _progress.narrate(msg)
 
 
 def _progress_wanted(progress: Optional[bool] = None) -> bool:
@@ -1992,10 +1990,11 @@ def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str,
             "searchts install --browser"
         ) from e
 
-    print(
-        f"A browser opened - solve the challenge/CAPTCHA; waiting up to {timeout} s...",
-        file=sys.stderr,
-        flush=True,
+    from searchts import progress as _progress
+
+    _progress.narrate(
+        f"A browser opened - solve the challenge/CAPTCHA; waiting up to "
+        f"{timeout} s..."
     )
 
     deadline_ms = int(timeout * 1000)
@@ -2142,7 +2141,8 @@ class _ExpandSink:
 
 
 def _finalize(
-    result: FetchResult, scrub: bool, tick: Optional[Callable[[str], None]] = None
+    result: FetchResult, scrub: bool, tick: Optional[Callable[[str], None]] = None,
+    media_limit: Optional[int] = None, media_clamp: Optional[str] = None,
 ) -> FetchResult:
     """Sanitize a winning FetchResult before returning it.
 
@@ -2177,7 +2177,12 @@ def _finalize(
         rebuilt = more.list_index(result.page_html, result.final_url or "", result.text)
         if rebuilt:
             result.text = rebuilt[0]
-        found = more.detect(result.page_html, result.final_url or "", result.text, headers=result.headers)
+        found = more.detect(
+            result.page_html, result.final_url or "", result.text,
+            headers=result.headers, media_limit=media_limit,
+        )
+        if media_clamp:
+            found.append(more.More("media", media_clamp))
         if rebuilt:
             found.insert(0, rebuilt[1])
         if found:
@@ -2203,7 +2208,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
           allow_thin: bool = False, progress: Optional[bool] = None,
           cookies: Optional[List["CookieRecord"]] = None,
           proxy: Optional[str] = None, proxy_trusted: bool = False,
-          expand: bool = False) -> FetchResult:
+          expand: bool = False, media: Optional[int] = None) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -2286,12 +2291,19 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             "1", "true", "True", "yes",
         )
 
+    from searchts import progress as _progress
+
     def _tick(msg: str) -> None:
         # Best-effort only: a closed/broken stderr must never abort the fetch.
+        #
+        # This must go through narrate, not print. A bare print lands *below*
+        # the live block without the tracker knowing, so the next repaint moves
+        # the cursor by the wrong number of lines and leaves the old frame on
+        # screen. That is the difference between a spinner and a hang.
         if not progress:
             return
         try:
-            print(msg, file=sys.stderr, flush=True)
+            _progress.narrate(msg)
         except (OSError, ValueError):
             pass
 
@@ -2384,12 +2396,19 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     _limits = _knobs.resolve()
     expand_sink = _ExpandSink(max_clicks=_limits.expand_clicks)
 
+    from searchts import more as _more_mod
+
+    media_limit, media_clamp = _more_mod.resolve_media_limit(media)
+
     def _with_auth(result: FetchResult) -> FetchResult:
         result.authenticated = bool(cookie_header) and result.backend == cookie_rung
         note = expand_sink.note()
         if note:
             result.extra_notes = list(result.extra_notes or []) + [note]
-        return _finalize(result, scrub, tick=_tick)
+        return _finalize(
+            result, scrub, tick=_tick,
+            media_limit=media_limit, media_clamp=media_clamp,
+        )
 
     try:
         from searchts import share_extractors
@@ -3738,7 +3757,13 @@ def _scrolled(old: "FetchResult", rep, url: str, kwargs: Dict[str, Any]) -> "Fet
         authenticated=old.authenticated,
         page_html=rep.html,
     )
-    return _finalize(result, bool(kwargs.get("scrub")))
+    from searchts.more import resolve_media_limit
+
+    media_limit, media_clamp = resolve_media_limit(kwargs.get("media"))
+    return _finalize(
+        result, bool(kwargs.get("scrub")),
+        media_limit=media_limit, media_clamp=media_clamp,
+    )
 
 
 def _markup_first(backends: Optional[List[str]]) -> Optional[List[str]]:

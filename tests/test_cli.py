@@ -32,8 +32,8 @@ class TestCLI:
         with patch("sys.argv", ["searchts", "doctor"]):
             main()
         captured = capsys.readouterr()
-        assert "searchts" in captured.out
-        assert "[ok]" in captured.out
+        assert "searchts doctor" in captured.out
+        assert "probes passed" in captured.out
         # CLI output is plain ASCII — no decorative emoji glyphs.
         assert "✅" not in captured.out
         assert "❌" not in captured.out
@@ -78,7 +78,9 @@ class TestCLI:
             with patch("sys.argv", ["searchts", "transcribe", "audio.mp3", "-o", str(out_file)]):
                 main()
         assert out_file.read_text(encoding="utf-8").strip() == "saved text"
-        assert "Transcript written" in capsys.readouterr().out
+        printed = capsys.readouterr().out
+        assert str(out_file) in printed
+        assert "[ok]" not in printed
 
     def test_transcribe_command_accepts_provider_local(self, capsys):
         seen = {}
@@ -971,3 +973,46 @@ class TestVerboseAfterSubcommand:
     def test_no_verbose_flag_stays_false(self, monkeypatch):
         seen = self._run_read(["searchts", "read", "https://example.com"], monkeypatch)
         assert seen["verbose"] is False
+
+
+def test_read_config_tip_quotes_the_note_and_keeps_its_ceiling():
+    """The note owns the flag and its ceiling; the receipt repeats the sentence."""
+    from searchts.cli import _read_config_tip
+
+    class R:
+        more = [{
+            "kind": "media",
+            "note": (
+                "[media: 9 images in the main content: a, b. "
+                "--media N (MCP max_media) lists more here, ceiling 40; "
+                "searchts grab saves the files.]"
+            ),
+        }]
+
+    tip = _read_config_tip(R())
+    assert tip.startswith("--media N (MCP max_media)")
+    assert "ceiling 40" in tip
+    assert tip.endswith(".")
+
+
+def test_read_config_tip_stays_quiet_without_a_lever_note():
+    from searchts.cli import _read_config_tip
+
+    class R:
+        more = [{"kind": "count", "note": "[page says: 1,204 items]"}]
+
+    assert _read_config_tip(R()) == ""
+
+
+def test_tip_lines_hang_under_the_config_mark():
+    from searchts.cli import _tip_lines
+    from searchts.progress import Style
+
+    lines = _tip_lines(
+        "--media N (MCP max_media) lists more here, ceiling 40; "
+        "searchts grab saves the files.",
+        Style(False),
+    )
+    assert lines[0].startswith("  [CONFIG] Tip: ")
+    assert all(len(line) <= 76 for line in lines)
+    assert lines[1].startswith(" " * len("  [CONFIG] Tip: "))
