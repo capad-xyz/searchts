@@ -73,8 +73,7 @@ searchts grab https://example.com --out ./inspo
 5. **Watch versions for the user**: after finishing a substantial research
    task, run `searchts check-update` (fast, one API call). If a new version
    exists, append one line to your wrap-up: "searchts vX.Y.Z is available —
-   paste this to me to update: please update searchts:
-   https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md".
+   `searchts update` installs it (`searchts upgrade` is the same command)."
    Never interrupt the current task to update; never nag about the same version twice.
 
 ## Routing table

@@ -5,6 +5,7 @@ searchts CLI — installer, doctor, and configuration tool.
 Usage:
     searchts install --env=auto
     searchts install --browser
+    searchts update
     searchts doctor
     searchts configure twitter-cookies "auth_token=xxx; ct0=yyy"
     searchts setup
@@ -17,7 +18,7 @@ import os
 import sys
 import textwrap
 import time
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from searchts import __version__
 
@@ -26,21 +27,36 @@ _RDT_GIT_SOURCE = "git+https://github.com/public-clis/rdt-cli.git@5e4fb3720d5c17
 
 
 def _ensure_utf8_console():
-    """Best-effort Windows console UTF-8 setup for CLI runtime only."""
-    if sys.platform != "win32":
-        return
+    """Best-effort console encoding setup for CLI runtime only.
+
+    Windows writes UTF-8 through the console buffer, which the console decodes
+    to UTF-16, so braille and box drawing survive a cp437 code page. Everywhere
+    else the locale's encoding stays, but an unencodable glyph is replaced
+    instead of raising: ``LC_ALL=C`` in a container is the case that matters,
+    and a doctor tick carrying an ellipsis should not become a traceback.
+    """
     # Avoid interfering with pytest/captured streams.
     if os.environ.get("PYTEST_CURRENT_TEST"):
         return
-    try:
-        import io
-        if hasattr(sys.stdout, "buffer"):
-            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-        if hasattr(sys.stderr, "buffer"):
-            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-    except Exception:
-        # Do not crash CLI just because encoding patch failed.
-        pass
+    if sys.platform == "win32":
+        try:
+            import io
+            if hasattr(sys.stdout, "buffer"):
+                sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+            if hasattr(sys.stderr, "buffer"):
+                sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+        except Exception:
+            # Do not crash CLI just because encoding patch failed.
+            pass
+        return
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(errors="replace")
+        except (ValueError, OSError):
+            pass
 
 
 def _configure_logging(verbose: bool = False):
@@ -428,6 +444,23 @@ def _run():
     sub.add_parser("check-update", parents=[_verbose],
                    help="Check for new versions and changes")
 
+    p_update = sub.add_parser(
+        "update",
+        aliases=["upgrade"],
+        parents=[_verbose],
+        help="Update this install to the latest release (upgrade is the same command)",
+    )
+    p_update.add_argument(
+        "--force",
+        action="store_true",
+        help="Reinstall even when this copy is already the latest release",
+    )
+    p_update.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the upgrade command and do not run it",
+    )
+
     # ── watch ──
     sub.add_parser("watch", parents=[_verbose],
                    help="Quick health check + update check (for scheduled tasks)")
@@ -467,6 +500,13 @@ def _run():
         _cmd_doctor(args)
     elif args.command == "check-update":
         _cmd_check_update()
+    elif args.command in ("update", "upgrade"):
+        from searchts.self_update import cmd_update
+
+        sys.exit(cmd_update(
+            force=bool(getattr(args, "force", False)),
+            dry_run=bool(getattr(args, "dry_run", False)),
+        ))
     elif args.command == "watch":
         _cmd_watch()
     elif args.command == "setup":
@@ -689,7 +729,7 @@ def _cmd_install(args):
     if not dry_run:
         print()
         print("Testing channels...")
-        results = check_all(config)
+        results = check_all(config, progress=True)
         ok = sum(1 for r in results.values() if r["status"] == "ok")
         total = len(results)
 
@@ -1825,7 +1865,9 @@ def _cmd_read(args):
     # a pipe the same reasons are printed once, together, by the failure block
     # below. `tracker.wants()` is exactly that distinction.
     expand = bool(getattr(args, "expand", False))
-    tracker = progress.live("read", _short_subject(args.url))
+    tracker = progress.live(
+        "read", _short_subject(args.url), enabled=False if args.json else None
+    )
     try:
         with tracker:
             if getattr(args, "items", 0):
@@ -1917,6 +1959,11 @@ def _cmd_read(args):
             if result.authenticated:
                 status += " (logged in)"
             print(status, file=sys.stderr)
+            # A pipe and an agent never see the receipt, so the lever note
+            # under it is repeated here as its own stderr line.
+            tip = _read_config_tip(result)
+            if tip:
+                _print_tip(tip)
         print(result.text)
         for extra in pages[1:]:
             print(f"\n# {extra.final_url}\n\n{extra.text}")
@@ -1954,6 +2001,14 @@ def _read_config_tip(result) -> str:
                     tips.append(tip)
                 break
     return "  ".join(tips)
+
+
+def _print_tip(tip: str, width: int = 76) -> None:
+    """Print one ``[CONFIG]`` line, wrapped under its own mark."""
+    from searchts import progress
+
+    for line in _tip_lines(tip, progress.Style(False), width):
+        print(line, file=sys.stderr)
 
 
 def _read_receipt(tracker, result, page_count: int) -> str:
@@ -2336,6 +2391,52 @@ def _cmd_get(args):
 
 
 
+def _grab_omitted_note(manifest: dict) -> Optional[str]:
+    entries = manifest.get("omitted") or []
+    if not entries:
+        return None
+    total = manifest.get("omitted_count") or sum(e.get("count", 0) for e in entries)
+    parts = ", ".join(f"{e['count']} {e['kind']} ({e['reason']})" for e in entries)
+    return f"  omitted: {total} asset(s) not saved: {parts}"
+
+
+def _grab_token_howto(omitted: dict, more: str) -> str:
+    """The cap sentence, without repeating counts the line above already gave.
+
+    ``tokens_more`` is ``kept N per list; 13 more radius, ...; --tokens N ...``.
+    When that middle clause is the same counts as what was left out, printing
+    both stutters. Drop the middle. When it differs, some of what was left
+    out is markup a higher cap cannot bring back, so the middle stays: it is
+    the part ``--tokens`` would actually return. Any other shape is printed
+    whole.
+    """
+    pieces = more.split("; ")
+    if len(pieces) != 3:
+        return more
+    kept, counts, howto = pieces
+    expected = ", ".join(f"{n} more {kind}" for kind, n in omitted.items())
+    if counts == expected:
+        return f"{kept}; {howto}"
+    return more
+
+
+def _grab_token_note(manifest: dict) -> Optional[str]:
+    left = manifest.get("tokens_omitted") or {}
+    if not left:
+        return None
+    parts = ", ".join(f"{n} {kind}" for kind, n in left.items())
+    head = f"  tokens left out: {parts}"
+    more = manifest.get("tokens_more")
+    if not more:
+        return head
+    return f"{head}\n    {_grab_token_howto(left, more)}"
+
+
+def _grab_page_md_note(manifest: dict) -> Optional[str]:
+    err = manifest.get("page_md_error")
+    return f"  page.md not saved: {err}" if err else None
+
+
 def _cmd_grab(args):
     """Save the files a read named, through the same unlock ladder."""
     from urllib.parse import urlparse
@@ -2346,6 +2447,10 @@ def _cmd_grab(args):
     if not out:
         host = urlparse(assets.normalize(args.url)).netloc.replace(":", "_") or "site"
         out = f"searchts-grab-{host}"
+    # One absolute folder is the contract: it is what stdout prints, what the
+    # receipt links, and what the user can paste into `cd`. A relative --out
+    # would make the link depend on the shell's cwd at read time.
+    out = os.path.abspath(out)
     kinds = tuple(k.strip() for k in (args.kinds or "").split(",") if k.strip())
     if args.max_assets < 0:
         print("--max cannot be negative", file=sys.stderr)
@@ -2355,7 +2460,10 @@ def _cmd_grab(args):
     except ValueError as e:
         print(f"--tokens: {e}", file=sys.stderr)
         sys.exit(2)
-    tracker = progress.live("grab", _short_subject(args.url))
+    tracker = progress.live(
+        "grab", _short_subject(args.url),
+        enabled=False if getattr(args, "json", False) else None,
+    )
     with tracker:
         try:
             manifest = assets.grab(
@@ -2373,39 +2481,17 @@ def _cmd_grab(args):
             # has to be built here, inside the block it replaces.
             tracker.summary(_grab_receipt(tracker, manifest, out))
 
-    def omitted_note():
-        entries = manifest.get("omitted") or []
-        if not entries:
-            return None
-        total = manifest.get("omitted_count") or sum(e.get("count", 0) for e in entries)
-        parts = ", ".join(f"{e['count']} {e['kind']} ({e['reason']})" for e in entries)
-        return f"  omitted: {total} asset(s) not saved: {parts}"
-
-    def token_note():
-        left = manifest.get("tokens_omitted") or {}
-        if not left:
-            return None
-        parts = ", ".join(f"{n} {kind}" for kind, n in left.items())
-        more = manifest.get("tokens_more")
-        if more:
-            return f"  tokens left out: {parts}. {more}"
-        return f"  tokens left out: {parts}"
-
-    def page_md_note():
-        err = manifest.get("page_md_error")
-        return f"  page.md not saved: {err}" if err else None
-
     if args.json:
-        note = omitted_note()
+        note = _grab_omitted_note(manifest)
         if note:
             print(note, file=sys.stderr)
         for tip in _grab_tips(manifest):
             for tip_line in _tip_lines(tip, progress.Style(False)):
                 print(tip_line, file=sys.stderr)
-        note = token_note()
+        note = _grab_token_note(manifest)
         if note:
             print(note, file=sys.stderr)
-        note = page_md_note()
+        note = _grab_page_md_note(manifest)
         if note:
             print(note, file=sys.stderr)
         print(json.dumps(manifest, ensure_ascii=False))
@@ -2414,29 +2500,37 @@ def _cmd_grab(args):
     manifest_path = os.path.join(out, "manifest.json")
     if not tracker.wants():
         title = manifest.get("title") or "(no title)"
-        palette = " ".join(c["hex"] for c in manifest.get("palette", [])[:8])
+        palette = " ".join(
+            str(c["hex"])
+            for c in manifest.get("palette", [])[:8]
+            if isinstance(c, dict) and c.get("hex")
+        )
         fonts = ", ".join(manifest.get("fonts", [])[:6])
         print(f"[grab] {title}", file=sys.stderr)
         print(f"  page via {manifest.get('page_backend', '?')}; downloaded "
-              f"{manifest.get('downloaded', 0)} assets -> {out}/", file=sys.stderr)
+              f"{manifest.get('downloaded', 0)} assets", file=sys.stderr)
+        # The folder is the thing to cd into; the manifest is named beside it
+        # so a script can find the structured result without guessing.
+        print(f"  folder: {out}", file=sys.stderr)
+        print(f"  manifest: {manifest_path}", file=sys.stderr)
         if palette:
             print(f"  palette: {palette}", file=sys.stderr)
         if fonts:
             print(f"  fonts:   {fonts}", file=sys.stderr)
-        note = omitted_note()
+        note = _grab_omitted_note(manifest)
         if note:
             print(note, file=sys.stderr)
-        note = token_note()
+        note = _grab_token_note(manifest)
         if note:
             print(note, file=sys.stderr)
         for tip in _grab_tips(manifest):
             for tip_line in _tip_lines(tip, tracker.color):
                 print(tip_line, file=sys.stderr)
     # The receipt cannot show a page.md failure, so that one always prints.
-    note = page_md_note()
+    note = _grab_page_md_note(manifest)
     if note:
         print(note, file=sys.stderr)
-    print(_stdout_path(manifest_path))
+    print(_stdout_path(out))
 
 
 def _grab_receipt(tracker, manifest, out: str) -> str:
@@ -2631,7 +2725,9 @@ def _cmd_search(args):
     from searchts import search as search_mod
 
     providers = _parse_provider_flags(args.provider)
-    tracker = progress.live("search", f'"{args.query}"')
+    tracker = progress.live(
+        "search", f'"{args.query}"', enabled=False if args.json else None
+    )
     with tracker:
         try:
             results = search_mod.search(
@@ -2896,13 +2992,18 @@ def _github_get_with_retry(url, timeout=10, retries=3, sleeper=time.sleep):
     return None, "unknown", retries
 
 
-#: pipx upgrade / venv pip -U / uvx already latest. See docs/update.md.
+#: What `searchts update` runs. Kept here so check-update still has a manual
+#: fallback on a copy that does not have the command yet. See docs/update.md.
 _UPDATE_INSTRUCTIONS = (
-    "How to update (copy this to an agent):\n"
-    "  Update searchts: https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md\n"
-    "Keep (pipx):  pipx upgrade searchts\n"
-    "venv:         pip install -U \"searchts[mcp]\"\n"
-    "uvx:          already latest PyPI; nothing to upgrade"
+    "How to update:\n"
+    "  searchts update\n"
+    "  searchts upgrade     (same command)\n"
+    "By hand, if this copy has no update command yet:\n"
+    "  pipx:      pipx upgrade searchts --include-injected\n"
+    "  uv tool:   uv tool upgrade searchts\n"
+    "  venv:      python -m pip install -U \"searchts[mcp]\"\n"
+    "  uvx:       uv cache clean --force searchts\n"
+    "Guide: https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md"
 )
 
 
@@ -2928,16 +3029,16 @@ def _is_newer_version(remote: str, local: str) -> bool:
 def _cmd_check_update():
     """Check for newer versions on GitHub."""
     from searchts import __version__
+    from searchts.progress import phase as progress_phase
 
     print(f"Current version: v{__version__}")
-    # One best-effort tick: the GitHub round-trip can block a few seconds.
-    if sys.stderr is not None:
-        print("checking for updates…", file=sys.stderr, flush=True)
     release_url = "https://api.github.com/repos/capad-xyz/searchts/releases/latest"
     commit_url = "https://api.github.com/repos/capad-xyz/searchts/commits/main"
 
-    # Fetch latest release with retry/backoff.
-    resp, err, attempts = _github_get_with_retry(release_url, timeout=10, retries=3)
+    # The GitHub round-trip can block for several seconds. Keep the line on
+    # this step, with the real elapsed time, until the response is back.
+    with progress_phase("checking for updates…"):
+        resp, err, attempts = _github_get_with_retry(release_url, timeout=10, retries=3)
     if err:
         print(f"[!] Could not check for updates ({_update_error_text(err)}, retried {attempts} times)")
         return "error"
@@ -2967,7 +3068,8 @@ def _cmd_check_update():
         return "error"
 
     # No releases yet, fall back to latest main commit.
-    resp2, err2, attempts2 = _github_get_with_retry(commit_url, timeout=10, retries=2)
+    with progress_phase("checking for updates…"):
+        resp2, err2, attempts2 = _github_get_with_retry(commit_url, timeout=10, retries=2)
     if err2:
         print(f"[!] Could not check for updates ({_update_error_text(err2)}, retried {attempts + attempts2} times)")
         return "error"
@@ -2998,14 +3100,15 @@ def _cmd_watch():
     from searchts import __version__
     from searchts.config import Config
     from searchts.doctor import check_all
+    from searchts.progress import phase as progress_phase
 
     config = Config()
     issues = []
 
-    # Check channels
-    if sys.stderr is not None:
-        print("checking channels…", file=sys.stderr, flush=True)
-    results = check_all(config)
+    # Check channels. The outer line names the whole pass; each channel then
+    # names itself for as long as that probe is actually running.
+    with progress_phase("checking channels…"):
+        results = check_all(config, progress=True)
     ok = sum(1 for r in results.values() if r["status"] == "ok")
     total = len(results)
 
@@ -3020,13 +3123,12 @@ def _cmd_watch():
     update_available = False
     new_version = ""
     release_body = ""
-    if sys.stderr is not None:
-        print("checking for updates…", file=sys.stderr, flush=True)
-    resp, err, _attempts = _github_get_with_retry(
-        "https://api.github.com/repos/capad-xyz/searchts/releases/latest",
-        timeout=10,
-        retries=2,
-    )
+    with progress_phase("checking for updates…"):
+        resp, err, _attempts = _github_get_with_retry(
+            "https://api.github.com/repos/capad-xyz/searchts/releases/latest",
+            timeout=10,
+            retries=2,
+        )
     if not err and resp and resp.status_code == 200:
         data = resp.json()
         latest = data.get("tag_name", "").lstrip("v")
@@ -3055,8 +3157,8 @@ def _cmd_watch():
         if release_body:
             for line in release_body.strip().split("\n")[:10]:
                 print(f"    {line}")
-        print("  Update (send this one line to your agent for a full update):")
-        print("    Update searchts for me: https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md")
+        print("  Update: searchts update")
+        print("    (searchts upgrade is the same command)")
 
 
 if __name__ == "__main__":

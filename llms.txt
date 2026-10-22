@@ -27,6 +27,7 @@ uvx --from "searchts[mcp]" searchts -v read https://en.wikipedia.org/wiki/Ada_Lo
 - `searchts transcribe <url>` — the audio, when a read found no captions, or a local file
 - `searchts login signin <url>` — sign in once for a site that is behind a login (also `login keep`, `kill`, `list`)
 - `searchts get <url>` — one file a read named. `searchts grab` saves the set when the files are the deliverable
+- `searchts update` — latest release for the copy that is running (`searchts upgrade` is the same command). Does not kill `searchts.exe`
 - `searchts doctor` — **read-only** health (does not install skills)
 - `searchts mcp serve` / `searchts skill install`
 

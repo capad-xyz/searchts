@@ -34,6 +34,7 @@ tick call sites into a ladder without editing sixty call sites.
 
 from __future__ import annotations
 
+import contextvars
 import os
 import re
 import shutil
@@ -671,7 +672,6 @@ class Tracker:
     def _redraw(self) -> None:
         if not self._tty or self._closed:
             return
-        s = self.color
         blocks = self._blocks()
         buf: List[str] = []
         if self._drawn:
@@ -940,3 +940,171 @@ def tick(progress: Optional[bool], message: str) -> None:
     else:
         enabled = bool(progress)
     narrate(message, enabled=enabled)
+
+
+def log(message: str, *, enabled: bool = True) -> None:
+    """A pipe-only line: the live region already says this in its row.
+
+    Use it for an ending fact (``downloading assets. 12 saved``) that a log
+    would otherwise never see, while keeping a terminal's block free of a
+    second copy under the counter that just finished.
+    """
+    if not enabled:
+        return
+    tracker = current()
+    if tracker is None or not tracker.is_live:
+        _plain(message)
+
+
+# --- the #407 phase API, routed into the tracker above ----------------------
+#
+# This module replaced the Phase engine with the live Tracker, but
+# browser_install, device_check and parts of unlocker still import phase/note/
+# announce/update. Those calls are kept working here and route into the tracker
+# that is already open, so there is exactly one live region: a nested phase
+# never draws a second spinner, and a pipe still gets one plain line per step.
+
+_INTERVAL_S = 1.0
+_SHOW_AFTER_S = 1.0
+
+_phase_var: "contextvars.ContextVar[Optional[_CompatPhase]]" = contextvars.ContextVar(
+    "searchts_compat_phase", default=None
+)
+
+
+def wanted(progress: Optional[bool]) -> bool:
+    """Resolve the tri-state flag. None follows ``SEARCHTS_PROGRESS=1``."""
+    if progress is None:
+        return _env_flag("SEARCHTS_PROGRESS")
+    return bool(progress)
+
+
+def render(
+    label: str,
+    *,
+    elapsed: Optional[float] = None,
+    done: Optional[int] = None,
+    total: Optional[int] = None,
+    show_after: float = _SHOW_AFTER_S,
+) -> str:
+    """Plain status text: a fraction only when both numbers are known."""
+    text = (label or "").rstrip()
+    if done is not None and total is not None and done >= 0 and total > 0:
+        text = f"{text} {done}/{total}"
+    if elapsed is not None and elapsed >= show_after:
+        text = f"{text} {int(elapsed)}s"
+    return text
+
+
+class _CompatPhase:
+    """A #407 ``Phase`` that never opens a second live region.
+
+    An explicit stream (tests, redirects) is written directly. Otherwise the
+    label goes through :func:`narrate`, so an open tracker owns the drawing and
+    a pipe gets one plain line per change.
+    """
+
+    def __init__(self, label: str, *, enabled: bool = True, stream=None) -> None:
+        self.label = label
+        self.enabled = enabled
+        self.stream = stream
+        self._token = None
+
+    def _say(self, text: str) -> None:
+        if not self.enabled or not text:
+            return
+        if self.stream is not None:
+            try:
+                print(text, file=self.stream, flush=True)
+            except (OSError, ValueError):
+                pass
+            return
+        narrate(text)
+
+    def __enter__(self) -> "_CompatPhase":
+        if self.enabled:
+            self._token = _phase_var.set(self)
+            self._say(self.label)
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if self._token is not None:
+            _phase_var.reset(self._token)
+            self._token = None
+        return None
+
+    def can_update(self) -> bool:
+        return self.enabled
+
+    def suspend(self) -> None:
+        return None
+
+    def resume(self) -> None:
+        return None
+
+    def update(self, label: str, *, done=None, total=None) -> None:
+        # Updating the step is not the same as narrating it. A live region
+        # already has the phase's name; repainting a fraction from every loop
+        # would either stack lines in a log or fight the counter row. The
+        # caller's real progress is expressed with counting()/advance().
+        self.label = label
+
+    def note(self, msg: str) -> None:
+        self._say((msg or "").rstrip("\n"))
+
+
+def phase(
+    label: str,
+    *,
+    enabled: bool = True,
+    stream=None,
+    interval: float = _INTERVAL_S,
+    show_after: float = _SHOW_AFTER_S,
+    heartbeat: bool = True,
+    clock=time.monotonic,
+) -> _CompatPhase:
+    """A :class:`_CompatPhase` for ``with phase(label):`` (the #407 API)."""
+    return _CompatPhase(label, enabled=enabled, stream=stream)
+
+
+def _compat_phase() -> Optional[_CompatPhase]:
+    return _phase_var.get()
+
+
+def note(msg: str) -> None:
+    """A permanent line, routed into the open tracker when there is one."""
+    text = (msg or "").rstrip("\n")
+    if not text:
+        return
+    active = _compat_phase()
+    if active is not None and active.enabled:
+        active.note(text)
+        return
+    tracker = current()
+    if tracker is not None and tracker.is_live:
+        narrate(text)
+        return
+    _plain(text)
+
+
+def announce(msg: str) -> None:
+    """Update the live step, or print one line when nothing is live."""
+    text = (msg or "").strip()
+    if not text:
+        return
+    active = _compat_phase()
+    if active is not None and active.enabled:
+        active.update(text)
+        return
+    tracker = current()
+    if tracker is not None and tracker.is_live:
+        narrate(text)
+        return
+    _plain(text)
+
+
+def update(label: str, *, done=None, total=None) -> None:
+    """Point the active compat phase at the step that is actually running."""
+    active = _compat_phase()
+    if active is not None:
+        active.update(label, done=done, total=total)

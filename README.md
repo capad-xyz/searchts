@@ -234,6 +234,12 @@ Stealth browser (installs into the same env as the running CLI). With uvx or uv 
 searchts install --browser
 ```
 
+Update the copy that is running (`searchts upgrade` is the same command):
+
+```bash
+searchts update
+```
+
 ## Quickstart
 
 `read` is the command. `search` finds URLs to read. `transcribe` and `get` are what a read names when the page's words are spoken or its files were not in the text.

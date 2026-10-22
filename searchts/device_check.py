@@ -262,6 +262,10 @@ def solve_simple_click(
         return html, None
     if not click_once(page, control):
         return html, "click-refused"
+    if progress:
+        from searchts.progress import announce
+
+        announce("waiting for the check to finish…")
     waited = 0
     while waited < budget_ms:
         page.wait_for_timeout(step_ms)

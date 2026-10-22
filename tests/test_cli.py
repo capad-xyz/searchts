@@ -226,6 +226,8 @@ class TestCLI:
             seen["url"] = url
             seen["backends"] = backends
             seen["allow_human"] = allow_human
+            seen["progress"] = kwargs.get("progress")
+            seen["echo_attempts"] = kwargs.get("echo_attempts")
             return FetchResult("stealth-browser", "x" * 10, 200)
 
         with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
@@ -234,6 +236,24 @@ class TestCLI:
                 main()
         assert seen["backends"] == ["stealth-browser"]
         assert seen["allow_human"] is True
+        # A captured stderr is not a terminal: the ladder stays quiet and the
+        # failure block owns the reasons (see progress.Tracker.wants).
+        assert seen["progress"] is False
+
+    def test_read_json_does_not_narrate(self, capsys):
+        from searchts.unlocker import FetchResult
+        seen = {}
+
+        def fake_fetch(url, backends=None, allow_human=False, **kwargs):
+            seen["progress"] = kwargs.get("progress")
+            return FetchResult("curl_cffi", "markdown text", 200)
+
+        with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+            with patch("sys.argv", ["searchts", "read", "https://x.test", "--json"]):
+                main()
+        assert seen["progress"] is False
+        captured = capsys.readouterr()
+        assert "trying" not in captured.err
 
     def test_read_command_failure_exits_nonzero(self, capsys):
         from searchts.unlocker import UnlockerError
@@ -389,8 +409,8 @@ class TestInstallNonInvasive:
         monkeypatch.setattr(cli, "_detect_environment", lambda: "local")
         monkeypatch.setattr(
             "searchts.doctor.check_all",
-            lambda config: {"web": {"status": "ok", "name": "Any web page", "message": "ok",
-                            "tier": 0, "backends": ["Jina Reader"], "active_backend": "Jina Reader"}},
+            lambda config, **_k: {"web": {"status": "ok", "name": "Any web page", "message": "ok",
+                                 "tier": 0, "backends": ["Jina Reader"], "active_backend": "Jina Reader"}},
         )
         return calls
 
@@ -574,7 +594,9 @@ class TestCheckUpdateRetry:
 
     def test_update_instructions_are_pipx_first(self):
         text = cli._UPDATE_INSTRUCTIONS
-        assert "pipx upgrade searchts" in text
+        assert "searchts update" in text
+        assert "searchts upgrade" in text
+        assert "pipx upgrade searchts --include-injected" in text
         assert "main.zip" not in text
         assert "pip install -U" in text
 
@@ -609,8 +631,8 @@ class TestWatchVersionCompare:
         monkeypatch.setattr(cli, "_github_get_with_retry", lambda *a, **k: (R(), None, 1))
         monkeypatch.setattr(
             "searchts.doctor.check_all",
-            lambda config: {"web": {"status": "ok", "name": "Any web page", "message": "ok",
-                            "tier": 0, "backends": ["Jina Reader"], "active_backend": "Jina Reader"}},
+            lambda config, **_k: {"web": {"status": "ok", "name": "Any web page", "message": "ok",
+                                 "tier": 0, "backends": ["Jina Reader"], "active_backend": "Jina Reader"}},
         )
         cli._cmd_watch()
         captured = capsys.readouterr()

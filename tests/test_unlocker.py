@@ -174,6 +174,9 @@ def test_recall_gate_keeps_links_on_a_link_list_page(monkeypatch):
     )
     out = html_to_text(html, "https://example.com/")
     assert "Distinctive headline number 39" in out
+    assert "[Distinctive headline number 39](https://example.com/story/39)" in out
+    # The gate still measures the bare strip. Links live only in the answer.
+    assert "https://" not in unlocker._strip_html(html)
     assert unlocker._word_recall(out, unlocker._strip_html(html)) >= 0.35
 
 
@@ -200,6 +203,50 @@ def test_one_line_extract_loses_to_the_crude_strip(monkeypatch):
     lines = [ln for ln in out.splitlines() if ln.strip()]
     assert len(lines) > 20, f"expected the structured strip, got {len(lines)} lines"
     assert "Headline about subject 29" in out
+    assert "[Headline about subject 29 and its consequences](https://example.com/n/29)" in out
+
+
+def test_crude_fallback_prints_a_relative_footer_as_markdown_links(monkeypatch):
+    """The one-line fallback keeps anchors. The bare strip, which the gate
+    measures, still has no hrefs."""
+    import trafilatura
+
+    rows = "".join(
+        f"<p><a href='/p/{i}'>Footer label {i}</a></p>" for i in range(25)
+    )
+    html = (
+        "<html><head><base href='https://openai.com/careers/x'></head><body>"
+        "<a href='/careers/'>Careers</a>"
+        "<a href='https://help.openai.com/'>Help Center(opens in a new window)</a>"
+        "<a href='#top'>Back</a>"
+        "<a href='javascript:void(0)'>Run</a>"
+        "<a href='https://x.com/OpenAI'>(opens in a new window)</a>"
+        "<a href='https://example.com/a)b'>Odd</a>"
+        f"{rows}</body></html>"
+    )
+    monkeypatch.setattr(trafilatura, "extract", lambda *a, **k: "one line of chrome")
+    out = html_to_text(html, "https://openai.com/")
+    assert "[Careers](https://openai.com/careers/)" in out
+    assert "[Help Center(opens in a new window)](https://help.openai.com/)" in out
+    assert "[(opens in a new window)](https://x.com/OpenAI)" in out
+    assert "[Footer label 24](https://openai.com/p/24)" in out
+    assert "[Back](" not in out and "Back" in out
+    assert "javascript:" not in out and "Run" in out
+    assert "[Odd](" not in out
+    assert "Odd" in out and "https://example.com/a)b" in out
+    assert "https://" not in unlocker._strip_html(html)
+
+
+def test_a_parser_that_drops_the_body_keeps_the_bare_strip(monkeypatch):
+    """A tree with no words is not a read. The bare strip still has them."""
+    from lxml import html as lhtml
+
+    empty = lhtml.fromstring("<html><body></body></html>")
+    monkeypatch.setattr(lhtml, "fromstring", lambda *a, **k: empty)
+    html = "<html><body><p>" + ("visible word " * 30) + "</p></body></html>"
+    out = unlocker._strip_keeping_links(html, "https://example.com/page")
+    assert "visible word" in out
+    assert out == unlocker._strip_html(html)
 
 
 def test_a_genuinely_short_page_keeps_its_extract(monkeypatch):

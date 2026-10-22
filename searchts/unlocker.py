@@ -29,6 +29,7 @@ import json
 import os
 import re
 import stat
+import sys
 import threading
 import urllib.parse
 import urllib.request
@@ -827,6 +828,77 @@ def _strip_html(html: str) -> str:
     return t.strip()
 
 
+def _strip_keeping_links(html: str, url: Optional[str] = None) -> str:
+    """The crude strip, with each real anchor kept as one markdown link.
+
+    This is only the text we return when the article extract loses. The recall
+    gate and the one-line gate still measure :func:`_strip_html`, which drops
+    hrefs, so a link in the answer cannot change which path wins.
+
+    The label's whitespace is collapsed. A relative href is joined to the page
+    URL, and a ``<base href>`` wins over that page URL. An empty label, a
+    ``#`` fragment and ``javascript:`` stay ordinary text. A ``]`` in the label
+    or a ``)`` in the URL would break the markdown, so those come out as the
+    label and the URL on two plain lines.
+    """
+    try:
+        from urllib.parse import urljoin
+
+        from lxml import html as lhtml
+    except Exception:  # noqa: BLE001 - the strip is the fallback, never raise
+        return _strip_html(html)
+    try:
+        doc = lhtml.fromstring(html or "")
+    except Exception:  # noqa: BLE001 - broken markup still has to yield text
+        return _strip_html(html)
+    if not hasattr(doc, "iter"):
+        return _strip_html(html)
+    for bad in list(doc.iter("script", "style", "noscript")):
+        parent = bad.getparent()
+        if parent is not None:
+            parent.remove(bad)
+    base = url or ""
+    for el in doc.iter("base"):
+        href = (el.get("href") or "").strip()
+        if href:
+            base = urljoin(base, href) if base else href
+            break
+    # Innermost first, so a nested anchor is already text when its parent is read.
+    for anchor in reversed(list(doc.iter("a"))):
+        if anchor.getparent() is None:
+            continue
+        href = (anchor.get("href") or "").strip()
+        label = " ".join((anchor.text_content() or "").split())
+        if (
+            not label
+            or not href
+            or href.startswith("#")
+            or href.lower().startswith("javascript:")
+        ):
+            continue
+        absolute = urljoin(base, href) if base else href
+        if "]" in label or ")" in absolute or "\n" in label or "\n" in absolute:
+            replacement = f"{label}\n{absolute}"
+        else:
+            replacement = f"[{label}]({absolute})"
+        tail = anchor.tail
+        anchor.clear()
+        anchor.text = "\n" + replacement + "\n"
+        anchor.tail = tail
+    try:
+        rendered = lhtml.tostring(doc, encoding="unicode", method="html")
+    except Exception:  # noqa: BLE001 - serialization failed, keep the bare strip
+        return _strip_html(html)
+    linked = _strip_html(rendered)
+    # libxml drops a text node past its limit and returns a tree with no words,
+    # which is how a capped document came back empty and lost its truncation
+    # marker. The bare strip still has the words. The size cap is applied by
+    # the caller.
+    if not linked.strip():
+        return _strip_html(html)
+    return linked
+
+
 def cap_html(body: str) -> str:
     """Drop a body too large to parse.
 
@@ -951,9 +1023,9 @@ def html_to_text(html: str, url: Optional[str] = None) -> str:
             _extract_within(_without_page_data(body), url, EXTRACTION_TIMEOUT) or ""
         )
     except _ExtractionTimeout:
-        text = cap_text(_tidy_crude(_strip_html(body), url))
+        text = cap_text(_tidy_crude(_strip_keeping_links(body, url), url))
     except Exception:
-        text = cap_text(_tidy_crude(_strip_html(body), url))
+        text = cap_text(_tidy_crude(_strip_keeping_links(body, url), url))
     return _prefer_structured(body, text)
 
 
@@ -1037,7 +1109,7 @@ def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
             # the extract is longer than a third of the page. Structure is a
             # separate property from size, so it is checked separately.
             if _line_count(kept) <= 1 and _line_count(crude) >= _MIN_CRUDE_LINES:
-                return _tidy_crude(crude, url)
+                return _tidy_crude(_strip_keeping_links(html, url), url)
             # Cheap gate first: an extract that is nearly as long as the page
             # cannot be the one that dropped it.
             if len(kept) >= _EXTRACT_MIN_RECALL * len(crude) or len(
@@ -1046,10 +1118,10 @@ def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
                 return kept
             if _word_recall(kept, crude) >= _EXTRACT_MIN_RECALL:
                 return kept
-            return _tidy_crude(crude, url)
+            return _tidy_crude(_strip_keeping_links(html, url), url)
     except Exception:
         pass
-    return _tidy_crude(_strip_html(html), url)
+    return _tidy_crude(_strip_keeping_links(html, url), url)
 
 
 def extract_text(html: str, url: Optional[str] = None) -> str:
@@ -1600,6 +1672,7 @@ def _await_hydration(
     and a page that never paints ends at the budget and is then judged thin by
     the extractor, which is the honest verdict for it.
     """
+    _stderr_tick("waiting for the page to render…", progress)
     waited = 0
     painted_candidate: Optional[str] = None
     painted_stability = 0
@@ -1619,6 +1692,8 @@ def _await_hydration(
             painted_stability = 0
             if not _is_unpainted(current):
                 latest_painted = current
+            # The document grew, so "waiting to render" is no longer the step.
+            _stderr_tick("waiting for the page to finish rendering…", progress)
             continue
         if not _is_unpainted(current):
             latest_painted = current
@@ -1656,8 +1731,14 @@ def _call_sync_browser(fn: Callable[..., _T], *args, **kwargs) -> _T:
         asyncio.get_running_loop()
     except RuntimeError:
         return fn(*args, **kwargs)
+    # The worker is a different thread, and this runtime does not copy
+    # context into the pool. The live step is a context var, so copy it
+    # or the browser rung narrates the wrong (or no) step.
+    import contextvars
+
+    ctx = contextvars.copy_context()
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        return pool.submit(fn, *args, **kwargs).result()
+        return pool.submit(lambda: ctx.run(fn, *args, **kwargs)).result()
 
 
 def _expand_clicks(expand_sink: Optional["_ExpandSink"]) -> int:
@@ -1774,6 +1855,8 @@ def _fetch_stealth_impl(
     # when a wall is blocking the address rather than the request. Passed only
     # when set so a proxy-free read launches exactly as before.
     proxy_kwargs: Dict[str, Any] = {"proxy": proxy} if proxy else {}
+    want_tick = _progress_wanted(progress)
+    _stderr_tick("launching the browser…", want_tick)
     with sync_playwright() as p:
         persistent = _use_persistent_profile()
         try:
@@ -1805,10 +1888,10 @@ def _fetch_stealth_impl(
                 page = ctx.new_page()
             from searchts.ssrf import guard_browser_page
             guard_browser_page(page, url)
+            _stderr_tick("opening the page…", want_tick)
             resp = page.goto(url, wait_until="domcontentloaded", timeout=ms)
             init_status = resp.status if resp else None
             headers = _normalize_headers(resp.all_headers()) if resp else {}
-            want_tick = _progress_wanted(progress)
             # Redirects after DCL: wait for load before the first content().
             _wait_settled_load(
                 page, timeout_ms=min(_SETTLE_LOAD_MS, ms), progress=want_tick
@@ -1821,6 +1904,8 @@ def _fetch_stealth_impl(
             from searchts import device_check as _dc
 
             waited = 0
+            if looks_blocked(200, html) == "challenge":
+                _stderr_tick("waiting for the check to clear…", want_tick)
             while waited < 15000 and looks_blocked(200, html) == "challenge":
                 # A puzzle that needs a person will not resolve itself, and
                 # waiting 15s on it only delays the naming of the reason.
@@ -1847,6 +1932,7 @@ def _fetch_stealth_impl(
                 from searchts import expand as _expand_mod
 
                 want_tick = _progress_wanted(progress)
+                _stderr_tick("opening the rest of the page…", want_tick)
                 opened = _expand_mod.open_details_in_page(page)
                 if opened:
                     html = _page_content(page, progress=want_tick)
@@ -1990,12 +2076,20 @@ def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str,
             "searchts install --browser"
         ) from e
 
-    from searchts import progress as _progress
+    from searchts.progress import current as progress_current
+    from searchts.progress import note as progress_note
+    from searchts.progress import update as progress_update
 
-    _progress.narrate(
-        f"A browser opened - solve the challenge/CAPTCHA; waiting up to "
-        f"{timeout} s..."
+    msg = (
+        f"A browser opened - solve the challenge/CAPTCHA; waiting up to {timeout} s..."
     )
+    # The instruction stays. The live line after it is the wait itself, so a
+    # person who is still solving it can see the seconds move.
+    if progress_current() is not None:
+        progress_note(msg)
+        progress_update("waiting for you in the browser…")
+    else:
+        print(msg, file=sys.stderr, flush=True)
 
     deadline_ms = int(timeout * 1000)
     from searchts.ssrf import chromium_pin_args
@@ -2208,7 +2302,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
           allow_thin: bool = False, progress: Optional[bool] = None,
           cookies: Optional[List["CookieRecord"]] = None,
           proxy: Optional[str] = None, proxy_trusted: bool = False,
-          expand: bool = False, media: Optional[int] = None) -> FetchResult:
+          expand: bool = False, echo_attempts: bool = True,
+          media: Optional[int] = None) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -2236,8 +2331,15 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         spans are additionally redacted from the text. Default False (report,
         don't alter visible content).
     progress:
-        True: stderr ticks per ladder rung. False: never (CLI ``--json``).
-        None: follow ``SEARCHTS_PROGRESS=1``. MCP/library omit the arg.
+        True: stderr names the step that is running, and reprints it with the
+        real elapsed seconds while that step is still the one running.
+        False: never (CLI ``--json``). None: follow ``SEARCHTS_PROGRESS=1``.
+        MCP/library omit the arg.
+    echo_attempts:
+        True: also print each rung's result (``curl_cffi: ok``, ``thin-12b``).
+        False: the live line is only the step. The caller prints the reasons
+        once, which is what ``searchts read`` does so a failure is not said
+        twice.
     cookies:
         Session cookies to present as an already-logged-in reader, from
         ``searchts.session_cookies``. Default None: no cookie material anywhere,
@@ -2292,6 +2394,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         )
 
     from searchts import progress as _progress
+    from searchts.progress import phase as progress_phase
 
     def _tick(msg: str) -> None:
         # Best-effort only: a closed/broken stderr must never abort the fetch.
@@ -2300,7 +2403,18 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         # the live block without the tracker knowing, so the next repaint moves
         # the cursor by the wrong number of lines and leaves the old frame on
         # screen. That is the difference between a spinner and a hang.
+        #
+        # Indented lines are the rung's result. The CLI can ask for the step
+        # without the copy (``echo_attempts=False``) when it prints those once
+        # at the end; a proxy note and a "more:" note are never that copy.
         if not progress:
+            return
+        diagnosis = (
+            msg.startswith("  ")
+            and not msg.startswith("  proxy:")
+            and not msg.startswith("  more:")
+        )
+        if diagnosis and not echo_attempts:
             return
         try:
             _progress.narrate(msg)
@@ -2426,8 +2540,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     try:
         from searchts import players
         if players.matches(url):
-            _tick("trying player captions…")
-            played = players.extract(url)
+            with progress_phase("trying player captions…", enabled=bool(progress)):
+                played = players.extract(url)
         else:
             played = None
     except Exception:  # noqa: BLE001 - a player miss must not break the ladder
@@ -2448,8 +2562,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         from searchts import known_hosts as _known_hosts
         if _known_hosts.matches(url):
             kh_name = _known_hosts.matching_name(url) or "known-host"
-            _tick(f"trying known-host:{kh_name}…")
-            kh = _known_hosts.extract(url)
+            with progress_phase(f"trying known-host:{kh_name}…", enabled=bool(progress)):
+                kh = _known_hosts.extract(url)
             if kh is not None and kh.markdown:
                 _tick(
                     f"  known-host:{kh.provider}: ok ({len(kh.markdown)} chars)"
@@ -2529,241 +2643,282 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             attempts.append((backend, "skipped-no-new-tls"))
             _tick(f"  {backend}: skipped, {refusal_status} already refused twice")
             continue
-        _tick(f"trying {backend}…")
-        try:
-            final_url = url
-            headers: Dict[str, str] = {}
-            if backend == "curl_cffi":
-                # The one rung that talks to the target host, so the one rung
-                # that may carry its cookies. Passed only when there is a header
-                # to pass, so a cookie-free read calls the fetcher exactly as
-                # before. Jina's and the browser's call sites below stay bare:
-                # that is the fence, and it is a call-site fence, not a filter.
-                if cookie_header or proxy_curl:
-                    # Both kwargs are passed only when they carry something, so a
-                    # plain read calls the fetcher with the identical argument
-                    # list it always had. That is not only tidiness: existing
-                    # test stubs are `lambda url, timeout=30`, and passing a
-                    # keyword they do not declare is a TypeError, not a no-op.
-                    kwargs: Dict[str, Any] = {}
-                    if cookie_header:
-                        kwargs["extra_headers"] = {"Cookie": cookie_header}
-                    if proxy_curl:
-                        kwargs["proxy"] = proxy_curl
-                    status, body, final_url, headers = _fetch_curl_cffi(url, **kwargs)
+        with progress_phase(f"trying {backend}…", enabled=bool(progress)):
+            try:
+                final_url = url
+                headers: Dict[str, str] = {}
+                if backend == "curl_cffi":
+                    # The one rung that talks to the target host, so the one rung
+                    # that may carry its cookies. Passed only when there is a header
+                    # to pass, so a cookie-free read calls the fetcher exactly as
+                    # before. Jina's and the browser's call sites below stay bare:
+                    # that is the fence, and it is a call-site fence, not a filter.
+                    if cookie_header or proxy_curl:
+                        # Both kwargs are passed only when they carry something, so a
+                        # plain read calls the fetcher with the identical argument
+                        # list it always had. That is not only tidiness: existing
+                        # test stubs are `lambda url, timeout=30`, and passing a
+                        # keyword they do not declare is a TypeError, not a no-op.
+                        kwargs: Dict[str, Any] = {}
+                        if cookie_header:
+                            kwargs["extra_headers"] = {"Cookie": cookie_header}
+                        if proxy_curl:
+                            kwargs["proxy"] = proxy_curl
+                        status, body, final_url, headers = _fetch_curl_cffi(url, **kwargs)
+                    else:
+                        status, body, final_url, headers = _fetch_curl_cffi(url)
+                elif backend == "Jina Reader":
+                    # FENCE, and deliberately unchanged by the proxy work: this rung
+                    # takes a URL and nothing else. It fetches from r.jina.ai's
+                    # address, so our proxy cannot move it either, and a cookie here
+                    # would be a live login handed to a third party.
+                    status, body, final_url, headers = _fetch_jina(url)
+                elif backend == "stealth-browser":
+                    # No cookie header here, ever. The browser may carry the proxy,
+                    # because that changes the address the challenge is judged from.
+                    if proxy_browser or expand:
+                        status, body, final_url, headers = _fetch_stealth(
+                            url, progress=progress, proxy=proxy_browser,
+                            expand=expand, expand_sink=expand_sink,
+                        )
+                    else:
+                        status, body, final_url, headers = _fetch_stealth(
+                            url, progress=progress,
+                        )
                 else:
-                    status, body, final_url, headers = _fetch_curl_cffi(url)
-            elif backend == "Jina Reader":
-                # FENCE, and deliberately unchanged by the proxy work: this rung
-                # takes a URL and nothing else. It fetches from r.jina.ai's
-                # address, so our proxy cannot move it either, and a cookie here
-                # would be a live login handed to a third party.
-                status, body, final_url, headers = _fetch_jina(url)
-            elif backend == "stealth-browser":
-                # No cookie header here, ever. The browser may carry the proxy,
-                # because that changes the address the challenge is judged from.
-                if proxy_browser or expand:
-                    status, body, final_url, headers = _fetch_stealth(
-                        url, progress=progress, proxy=proxy_browser,
-                        expand=expand, expand_sink=expand_sink,
-                    )
-                else:
-                    status, body, final_url, headers = _fetch_stealth(
-                        url, progress=progress,
-                    )
-            else:
-                attempts.append((backend, "unknown-backend"))
-                _tick(f"  {backend}: unknown-backend")
-                if backend == remembered:
-                    unpin(domain)
-                    remembered = None
-                continue
-
-            if status is not None and 400 <= status < 500 and status not in (404, 429):
-                # A refusal status that survives a change of TLS fingerprint and
-                # user agent is the server declining on the request itself, not
-                # on how it arrived. Measured across 13 sites: stackoverflow,
-                # economist and science return 403 to curl AND 403 to the
-                # stealth browser; arstechnica 405 and 405; reuters 401 and 401.
-                # Each browser launch cost 18-20s to confirm the refusal.
-                #
-                # GitLab is the case this must not break, and it does not: curl
-                # returns 200 there with a thin 279-char extract, so there is no
-                # refusal to repeat and the ladder escalates on thinness as
-                # before. 404 and 429 are excluded because both can legitimately
-                # differ per client - a path may exist only in the rendered
-                # app, and a rate limit may reset between rungs.
-                if status == refusal_status:
-                    refusal_count += 1
-                else:
-                    refusal_status = status
-                    refusal_count = 1
-                if status in (403, 405, 401) and _is_vendor_wall(body or ""):
-                    # The refusal carried a vendor's own wall markup, so the
-                    # browser's answer is a rendered challenge rather than the
-                    # same status. Worth the launch; see browser_would_differ.
-                    browser_would_differ = True
-
-            hop = private_hop(url, final_url)
-            if hop:
-                attempts.append((backend, hop))
-                _tick(f"  {backend}: {hop}")
-                if backend == remembered:
-                    unpin(domain)
-                    remembered = None
-                continue
-
-            if backend == "Jina Reader":
-                reason = looks_blocked(status, body, headers)
-                if status == 403:
-                    _spend_jina()
-                if reason:
-                    attempts.append((backend, reason))
-                    _tick(f"  {backend}: {reason}")
+                    attempts.append((backend, "unknown-backend"))
+                    _tick(f"  {backend}: unknown-backend")
                     if backend == remembered:
                         unpin(domain)
                         remembered = None
                     continue
-                text = body  # Jina already returns markdown
-            else:
-                reason = looks_blocked(status, body, headers)
-                if reason == "challenge":
-                    # F5f: "challenge" says a wall was here. When a known host
-                    # can say WHICH one, that is the only actionable fact in the
-                    # run. Measured 2026-10-17: Reddit answers a direct request
-                    # for a next-batch cursor with HTTP 200 and its "Prove your
-                    # humanity" page, which is indistinguishable from any other
-                    # challenge in the body alone.
-                    reason = _host_wall_reason(url, body) or reason
-                if reason:
-                    # Say WHICH wall it was when the rung can name one. The
-                    # stealth browser reports its device-check stop in headers,
-                    # and collapsing that to a bare "http-403" throws away the
-                    # only actionable fact in the whole run: whether a person
-                    # is required, and which vendor wants one.
-                    stop = headers.get("x-searchts-device-stop")
-                    if stop:
-                        reason = "%s (needs a person: %s)" % (reason, stop)
-                    attempts.append((backend, reason))
-                    _tick(f"  {backend}: {reason}")
+
+                if status is not None and 400 <= status < 500 and status not in (404, 429):
+                    # A refusal status that survives a change of TLS fingerprint and
+                    # user agent is the server declining on the request itself, not
+                    # on how it arrived. Measured across 13 sites: stackoverflow,
+                    # economist and science return 403 to curl AND 403 to the
+                    # stealth browser; arstechnica 405 and 405; reuters 401 and 401.
+                    # Each browser launch cost 18-20s to confirm the refusal.
+                    #
+                    # GitLab is the case this must not break, and it does not: curl
+                    # returns 200 there with a thin 279-char extract, so there is no
+                    # refusal to repeat and the ladder escalates on thinness as
+                    # before. 404 and 429 are excluded because both can legitimately
+                    # differ per client - a path may exist only in the rendered
+                    # app, and a rate limit may reset between rungs.
+                    if status == refusal_status:
+                        refusal_count += 1
+                    else:
+                        refusal_status = status
+                        refusal_count = 1
+                    if status in (403, 405, 401) and _is_vendor_wall(body or ""):
+                        # The refusal carried a vendor's own wall markup, so the
+                        # browser's answer is a rendered challenge rather than the
+                        # same status. Worth the launch; see browser_would_differ.
+                        browser_would_differ = True
+
+                hop = private_hop(url, final_url)
+                if hop:
+                    attempts.append((backend, hop))
+                    _tick(f"  {backend}: {hop}")
                     if backend == remembered:
                         unpin(domain)
                         remembered = None
                     continue
-                # F5c/F5f: Reddit listing, feed batch, thread, profile or search
-                # from the HTML this rung already downloaded. A page that is a
-                # wall reports itself and the ladder keeps going, so a private,
-                # banned, quarantined, gone or NSFW page never comes back as
-                # navigation chrome wearing a URL.
-                reddit_hit = _reddit_listing.extract_page(url, body)
-                if reddit_hit is not None:
-                    if reddit_hit.failure:
-                        attempts.append((backend, reddit_hit.failure))
-                        _tick(f"  {backend}: {reddit_hit.failure}")
+
+                if backend == "Jina Reader":
+                    reason = looks_blocked(status, body, headers)
+                    if status == 403:
+                        _spend_jina()
+                    if reason:
+                        attempts.append((backend, reason))
+                        _tick(f"  {backend}: {reason}")
                         if backend == remembered:
                             unpin(domain)
                             remembered = None
                         continue
-                    _tick(reddit_hit.label)
-                    page_result = FetchResult(
-                        backend,
-                        reddit_hit.markdown,
-                        status,
-                        final_url=final_url or url,
-                        headers=headers,
-                        next_url=reddit_hit.next_url,
-                        more=reddit_hit.as_dicts(),
-                        index_keys=reddit_hit.keys or None,
-                    )
-                    return _with_auth(page_result)
-                if _is_plain_text_body(body, headers):
-                    # The server sent text, not markup: a README, a JSON
-                    # document, an rST file. The article extractor is shaped for
-                    # HTML and throws away what it cannot read as a paragraph,
-                    # which for a README is most of the code. The body is
-                    # already the page, so it is the text.
-                    text = cap_text(body)
+                    text = body  # Jina already returns markdown
                 else:
-                    text = html_to_text(body, url)
+                    reason = looks_blocked(status, body, headers)
+                    if reason == "challenge":
+                        # F5f: "challenge" says a wall was here. When a known host
+                        # can say WHICH one, that is the only actionable fact in the
+                        # run. Measured 2026-10-17: Reddit answers a direct request
+                        # for a next-batch cursor with HTTP 200 and its "Prove your
+                        # humanity" page, which is indistinguishable from any other
+                        # challenge in the body alone.
+                        reason = _host_wall_reason(url, body) or reason
+                    if reason:
+                        # Say WHICH wall it was when the rung can name one. The
+                        # stealth browser reports its device-check stop in headers,
+                        # and collapsing that to a bare "http-403" throws away the
+                        # only actionable fact in the whole run: whether a person
+                        # is required, and which vendor wants one.
+                        stop = headers.get("x-searchts-device-stop")
+                        if stop:
+                            reason = "%s (needs a person: %s)" % (reason, stop)
+                        attempts.append((backend, reason))
+                        _tick(f"  {backend}: {reason}")
+                        if backend == remembered:
+                            unpin(domain)
+                            remembered = None
+                        continue
+                    # F5c/F5f: Reddit listing, feed batch, thread, profile or search
+                    # from the HTML this rung already downloaded. A page that is a
+                    # wall reports itself and the ladder keeps going, so a private,
+                    # banned, quarantined, gone or NSFW page never comes back as
+                    # navigation chrome wearing a URL.
+                    reddit_hit = _reddit_listing.extract_page(url, body)
+                    if reddit_hit is not None:
+                        if reddit_hit.failure:
+                            attempts.append((backend, reddit_hit.failure))
+                            _tick(f"  {backend}: {reddit_hit.failure}")
+                            if backend == remembered:
+                                unpin(domain)
+                                remembered = None
+                            continue
+                        _tick(reddit_hit.label)
+                        page_result = FetchResult(
+                            backend,
+                            reddit_hit.markdown,
+                            status,
+                            final_url=final_url or url,
+                            headers=headers,
+                            next_url=reddit_hit.next_url,
+                            more=reddit_hit.as_dicts(),
+                            index_keys=reddit_hit.keys or None,
+                        )
+                        return _with_auth(page_result)
+                    if _is_plain_text_body(body, headers):
+                        # The server sent text, not markup: a README, a JSON
+                        # document, an rST file. The article extractor is shaped for
+                        # HTML and throws away what it cannot read as a paragraph,
+                        # which for a README is most of the code. The body is
+                        # already the page, so it is the text.
+                        text = cap_text(body)
+                    else:
+                        text = html_to_text(body, url)
 
-            text = text or ""
-            # F23d: a rung that produced HTML gets the no-browser half of the
-            # expand pass before extraction, so a closed `<details>` becomes
-            # text. `body` is only set on the non-Jina path, which is exactly
-            # where there is markup to rewrite.
-            if expand and body:
-                rep = _expand.expand_html(body)
-                if rep.html != body:
-                    body = rep.html
-                    if backend != "Jina Reader":
-                        opened_text = html_to_text(body, url)
-                        # Measured, so the note says what the rewrite really
-                        # did. And never trade text for text: an extract that
-                        # came out shorter with the folds open keeps the one
-                        # the read already had.
-                        rep.added_chars = len(opened_text) - len(text)
-                        if rep.added_chars > 0:
-                            text = opened_text
-                expand_sink.add(rep)
-            # Login-wall on the extract only (raw HTML often has a sign-in modal).
-            # `final_url` rides along: a redirect onto /login is the wall, even
-            # when the shell that renders there is too short to be scored.
-            extract_reason = looks_blocked(200, text, login_wall=True,
-                                           final_url=final_url)
-            if extract_reason:
-                attempts.append((backend, extract_reason))
-                _tick(f"  {backend}: {extract_reason}")
-                if backend == remembered:
-                    unpin(domain)
-                    remembered = None
-                continue
-
-            # F25: a short page that is the whole page, as curl got it, is a
-            # read. Starting a browser for it was slow, failed without the
-            # browser extra, and pinned the domain to the browser.
-            whole = (
-                len(text) < min_chars
-                and backend == "curl_cffi"
-                and status is not None and 200 <= status < 300
-                and whole_short_page(body, text)
-            )
-            if len(text) >= min_chars or whole:
-                if memory_on and domain and backend != remembered:
-                    # A win on the remembered rung does not extend its pin, so a
-                    # pin earned by mistake heals once _MEMORY_TTL_SECONDS pass.
-                    remember(domain, backend)
-                # F23d: the caller asked for the text behind the folds and this
-                # rung's HTML has buttons whose text is not in it. Say why the
-                # rung is passing and escalate; a read that quietly returns the
-                # window is the failure `--expand` exists to remove. The second
-                # clause covers the harder case: a page that builds its "Show
-                # more" in JavaScript leaves nothing in its markup for the
-                # first check to find, and only the rendered DOM can answer.
-                if expand and backend == "curl_cffi" and (
-                    expand_sink.buttons or not expand_sink.produced()
-                ):
-                    why = (
-                        f"expand-needed-{expand_sink.buttons}-control(s)"
-                        if expand_sink.buttons
-                        else "expand-not-satisfied-by-markup"
-                    )
-                    attempts.append((backend, why))
-                    _tick(f"  {backend}: {why}, escalating to the browser")
+                text = text or ""
+                # F23d: a rung that produced HTML gets the no-browser half of the
+                # expand pass before extraction, so a closed `<details>` becomes
+                # text. `body` is only set on the non-Jina path, which is exactly
+                # where there is markup to rewrite.
+                if expand and body:
+                    rep = _expand.expand_html(body)
+                    if rep.html != body:
+                        body = rep.html
+                        if backend != "Jina Reader":
+                            opened_text = html_to_text(body, url)
+                            # Measured, so the note says what the rewrite really
+                            # did. And never trade text for text: an extract that
+                            # came out shorter with the folds open keeps the one
+                            # the read already had.
+                            rep.added_chars = len(opened_text) - len(text)
+                            if rep.added_chars > 0:
+                                text = opened_text
+                    expand_sink.add(rep)
+                # Login-wall on the extract only (raw HTML often has a sign-in modal).
+                # `final_url` rides along: a redirect onto /login is the wall, even
+                # when the shell that renders there is too short to be scored.
+                extract_reason = looks_blocked(200, text, login_wall=True,
+                                               final_url=final_url)
+                if extract_reason:
+                    attempts.append((backend, extract_reason))
+                    _tick(f"  {backend}: {extract_reason}")
                     if backend == remembered:
                         unpin(domain)
                         remembered = None
-                    deferred = FetchResult(
-                        backend, text, status,
-                        final_url=final_url or url, headers=headers,
-                        page_html=body,
-                    )
-                    if best is None or len(text) > len(best.text):
-                        best = deferred
                     continue
-                _tick(f"  {backend}: ok ({len(text)} chars{', whole page' if whole else ''})")
-                # clean win, stop here — sanitize untrusted content before return
-                return _with_auth(
-                    FetchResult(
+
+                # F25: a short page that is the whole page, as curl got it, is a
+                # read. Starting a browser for it was slow, failed without the
+                # browser extra, and pinned the domain to the browser.
+                whole = (
+                    len(text) < min_chars
+                    and backend == "curl_cffi"
+                    and status is not None and 200 <= status < 300
+                    and whole_short_page(body, text)
+                )
+                if len(text) >= min_chars or whole:
+                    # A client pager whose rows are not in the markup. The
+                    # shell's only list is a related block, and accepting it
+                    # publishes those links as the page. Render instead.
+                    if backend == "curl_cffi" and body:
+                        from searchts.more import client_list_unrendered
+
+                        if client_list_unrendered(body):
+                            attempts.append((backend, "list-unrendered"))
+                            _tick(f"  {backend}: list-unrendered, escalating")
+                            if backend == remembered:
+                                unpin(domain)
+                                remembered = None
+                            deferred = FetchResult(
+                                backend, text, status,
+                                final_url=final_url or url, headers=headers,
+                                page_html=body,
+                            )
+                            if best is None or len(text) > len(best.text):
+                                best = deferred
+                            continue
+                    if memory_on and domain and backend != remembered:
+                        # A win on the remembered rung does not extend its pin, so a
+                        # pin earned by mistake heals once _MEMORY_TTL_SECONDS pass.
+                        remember(domain, backend)
+                    # F23d: the caller asked for the text behind the folds and this
+                    # rung's HTML has buttons whose text is not in it. Say why the
+                    # rung is passing and escalate; a read that quietly returns the
+                    # window is the failure `--expand` exists to remove. The second
+                    # clause covers the harder case: a page that builds its "Show
+                    # more" in JavaScript leaves nothing in its markup for the
+                    # first check to find, and only the rendered DOM can answer.
+                    if expand and backend == "curl_cffi" and (
+                        expand_sink.buttons or not expand_sink.produced()
+                    ):
+                        why = (
+                            f"expand-needed-{expand_sink.buttons}-control(s)"
+                            if expand_sink.buttons
+                            else "expand-not-satisfied-by-markup"
+                        )
+                        attempts.append((backend, why))
+                        _tick(f"  {backend}: {why}, escalating to the browser")
+                        if backend == remembered:
+                            unpin(domain)
+                            remembered = None
+                        deferred = FetchResult(
+                            backend, text, status,
+                            final_url=final_url or url, headers=headers,
+                            page_html=body,
+                        )
+                        if best is None or len(text) > len(best.text):
+                            best = deferred
+                        continue
+                    _tick(f"  {backend}: ok ({len(text)} chars{', whole page' if whole else ''})")
+                    # clean win, stop here — sanitize untrusted content before return
+                    return _with_auth(
+                        FetchResult(
+                            backend,
+                            text,
+                            status,
+                            final_url=final_url or url,
+                            headers=headers,
+                            page_html=None if backend == "Jina Reader" else body,
+                        )
+                    )
+                # Real but thin (e.g. JS-rendered or genuinely short): keep as a
+                # fallback and escalate in case a richer backend renders more.
+                if body and not app_shell:
+                    app_shell = _is_app_shell(body, text)
+                attempts.append((backend, f"thin-{len(text)}b"))
+                _tick(f"  {backend}: thin-{len(text)}b")
+                if backend == remembered:
+                    # Remembered backend produced a thin result, not a clean win —
+                    # unpin so the ladder isn't stuck on a flaky winner.
+                    unpin(domain)
+                    remembered = None
+                if best is None or len(text) > len(best.text):
+                    best = FetchResult(
                         backend,
                         text,
                         status,
@@ -2771,59 +2926,38 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         headers=headers,
                         page_html=None if backend == "Jina Reader" else body,
                     )
-                )
-            # Real but thin (e.g. JS-rendered or genuinely short): keep as a
-            # fallback and escalate in case a richer backend renders more.
-            if body and not app_shell:
-                app_shell = _is_app_shell(body, text)
-            attempts.append((backend, f"thin-{len(text)}b"))
-            _tick(f"  {backend}: thin-{len(text)}b")
-            if backend == remembered:
-                # Remembered backend produced a thin result, not a clean win —
-                # unpin so the ladder isn't stuck on a flaky winner.
-                unpin(domain)
-                remembered = None
-            if best is None or len(text) > len(best.text):
-                best = FetchResult(
-                    backend,
-                    text,
-                    status,
-                    final_url=final_url or url,
-                    headers=headers,
-                    page_html=None if backend == "Jina Reader" else body,
-                )
-        except Exception as e:  # noqa: BLE001 — any backend failure escalates
-            why = f"{type(e).__name__}: {e}"
-            attempts.append((backend, why))
-            _tick(f"  {backend}: {why}")
-            # A rung that REFUSES by raising still counts toward the repeat
-            # limit. Jina is the common case: urllib raises HTTPError on a 4xx
-            # rather than returning it, so before this the refusal count only
-            # ever advanced on curl, the fail-fast in #338 fired on one rung,
-            # and stackoverflow still paid a browser launch - 29.9s where the
-            # intent was to stop at two.
-            refused = getattr(e, "code", None)
-            if not isinstance(refused, int):
-                refused = getattr(getattr(e, "status", None), "code", None)
-            if (
-                isinstance(refused, int)
-                and 400 <= refused < 500
-                and refused not in (404, 429)
-            ):
-                if refused == refusal_status:
-                    refusal_count += 1
-                else:
-                    refusal_status = refused
-                    refusal_count = 1
-            if refused in (403, 405, 401) and _is_vendor_wall(_raised_body(e)):
-                # A vendor wall is the one case where the browser is expected to
-                # answer differently, because it renders a challenge instead of
-                # repeating the status. See browser_would_differ above.
-                browser_would_differ = True
-            if backend == remembered:
-                unpin(domain)
-                remembered = None
-            continue
+            except Exception as e:  # noqa: BLE001 — any backend failure escalates
+                why = f"{type(e).__name__}: {e}"
+                attempts.append((backend, why))
+                _tick(f"  {backend}: {why}")
+                # A rung that REFUSES by raising still counts toward the repeat
+                # limit. Jina is the common case: urllib raises HTTPError on a 4xx
+                # rather than returning it, so before this the refusal count only
+                # ever advanced on curl, the fail-fast in #338 fired on one rung,
+                # and stackoverflow still paid a browser launch - 29.9s where the
+                # intent was to stop at two.
+                refused = getattr(e, "code", None)
+                if not isinstance(refused, int):
+                    refused = getattr(getattr(e, "status", None), "code", None)
+                if (
+                    isinstance(refused, int)
+                    and 400 <= refused < 500
+                    and refused not in (404, 429)
+                ):
+                    if refused == refusal_status:
+                        refusal_count += 1
+                    else:
+                        refusal_status = refused
+                        refusal_count = 1
+                if refused in (403, 405, 401) and _is_vendor_wall(_raised_body(e)):
+                    # A vendor wall is the one case where the browser is expected to
+                    # answer differently, because it renders a challenge instead of
+                    # repeating the status. See browser_would_differ above.
+                    browser_would_differ = True
+                if backend == remembered:
+                    unpin(domain)
+                    remembered = None
+                continue
 
     # Human-in-the-loop last resort. Runs BEFORE the `best` fallback below:
     # a soft wall (login page served as HTTP 200) leaves a thin `best`, and
@@ -2832,86 +2966,86 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     # clean win, and the flag is explicit and off by default, so honour it
     # rather than second-guessing which failures a human could fix.
     if allow_human:
-        _tick("trying human-browser…")
-        human_error = ""
-        try:
-            status, html, final_url = _fetch_human(url)
-        except Exception as e:  # noqa: BLE001 - patchright missing/launch failure
-            status, html, final_url = None, "", url
-            human_error = f"{type(e).__name__}: {e}"
-        blocked_reason = looks_blocked(status, html)
-        if blocked_reason is not None:
-            # Fail loud: the rung the user asked for must show up in the error.
-            why = human_error or blocked_reason
-            attempts.append(("human-browser", why))
-            _tick(f"  human-browser: {why}")
-        else:
-            hop = private_hop(url, final_url or url)
-            page_hit = None
-            text = ""
-            if not hop:
-                # F5c/F5f: listing, batch, thread, profile or search (human
-                # rung). Wins even if short, and even when an earlier rung left
-                # a longer thin `best`. A page that is a wall reports itself, so
-                # a private or quarantined community never reads as its nav bar.
-                # A wall is not ticked here: one rung says its one reason, below,
-                # so the page's own name cannot be answered by "empty-extract"
-                # underneath it.
-                try:
-                    page_hit = _reddit_listing.extract_page(url, html)
-                    if page_hit is not None:
-                        if not page_hit.failure:
-                            _tick(page_hit.label)
-                            text = page_hit.markdown
-                    if not text and page_hit is None:
-                        text = html_to_text(html, url)
-                except Exception as e:  # noqa: BLE001 - fail loud, not a traceback
-                    text = ""
-                    human_error = human_error or f"extract failed ({type(e).__name__}: {e})"
-            wall = looks_blocked(200, text, login_wall=True, final_url=final_url) if text else None
-            if (
-                text
-                and wall is None
-                and (
-                    page_hit is not None
-                    or best is None
-                    or len(text) > len(best.text)
-                )
-            ):
-                human = FetchResult(
-                    backend="human-browser", text=text, status=status,
-                    final_url=final_url or url,
-                    page_html=None if page_hit is not None else html,
-                    next_url=page_hit.next_url if page_hit is not None else None,
-                    more=page_hit.as_dicts() if page_hit is not None else [],
-                    index_keys=(page_hit.keys or None) if page_hit is not None else None,
-                )
-                if page_hit is not None or len(text) >= min_chars:
-                    return _with_auth(human)
-                best = human
-                attempts.append(("human-browser", f"thin-{len(text)}b"))
-                _tick(f"  human-browser: thin-{len(text)}b")
-            else:
-                # One rung, one line. The reason is decided here and nowhere
-                # else: a page that is a wall is named by that wall, and the
-                # generic "nothing came out" answer cannot be printed under it.
-                # Printing both made one rung read as two failures, and the
-                # second was a lie about the page: it was not empty, it was
-                # refused.
-                if hop:
-                    why = hop
-                elif human_error:
-                    why = human_error
-                elif page_hit is not None and page_hit.failure:
-                    why = page_hit.failure
-                elif not text:
-                    why = "empty-extract"
-                elif wall is not None:
-                    why = wall
-                else:
-                    why = f"thin-{len(text)}b"
+        with progress_phase("trying human-browser…", enabled=bool(progress)):
+            human_error = ""
+            try:
+                status, html, final_url = _fetch_human(url)
+            except Exception as e:  # noqa: BLE001 - patchright missing/launch failure
+                status, html, final_url = None, "", url
+                human_error = f"{type(e).__name__}: {e}"
+            blocked_reason = looks_blocked(status, html)
+            if blocked_reason is not None:
+                # Fail loud: the rung the user asked for must show up in the error.
+                why = human_error or blocked_reason
                 attempts.append(("human-browser", why))
                 _tick(f"  human-browser: {why}")
+            else:
+                hop = private_hop(url, final_url or url)
+                page_hit = None
+                text = ""
+                if not hop:
+                    # F5c/F5f: listing, batch, thread, profile or search (human
+                    # rung). Wins even if short, and even when an earlier rung left
+                    # a longer thin `best`. A page that is a wall reports itself, so
+                    # a private or quarantined community never reads as its nav bar.
+                    # A wall is not ticked here: one rung says its one reason, below,
+                    # so the page's own name cannot be answered by "empty-extract"
+                    # underneath it.
+                    try:
+                        page_hit = _reddit_listing.extract_page(url, html)
+                        if page_hit is not None:
+                            if not page_hit.failure:
+                                _tick(page_hit.label)
+                                text = page_hit.markdown
+                        if not text and page_hit is None:
+                            text = html_to_text(html, url)
+                    except Exception as e:  # noqa: BLE001 - fail loud, not a traceback
+                        text = ""
+                        human_error = human_error or f"extract failed ({type(e).__name__}: {e})"
+                wall = looks_blocked(200, text, login_wall=True, final_url=final_url) if text else None
+                if (
+                    text
+                    and wall is None
+                    and (
+                        page_hit is not None
+                        or best is None
+                        or len(text) > len(best.text)
+                    )
+                ):
+                    human = FetchResult(
+                        backend="human-browser", text=text, status=status,
+                        final_url=final_url or url,
+                        page_html=None if page_hit is not None else html,
+                        next_url=page_hit.next_url if page_hit is not None else None,
+                        more=page_hit.as_dicts() if page_hit is not None else [],
+                        index_keys=(page_hit.keys or None) if page_hit is not None else None,
+                    )
+                    if page_hit is not None or len(text) >= min_chars:
+                        return _with_auth(human)
+                    best = human
+                    attempts.append(("human-browser", f"thin-{len(text)}b"))
+                    _tick(f"  human-browser: thin-{len(text)}b")
+                else:
+                    # One rung, one line. The reason is decided here and nowhere
+                    # else: a page that is a wall is named by that wall, and the
+                    # generic "nothing came out" answer cannot be printed under it.
+                    # Printing both made one rung read as two failures, and the
+                    # second was a lie about the page: it was not empty, it was
+                    # refused.
+                    if hop:
+                        why = hop
+                    elif human_error:
+                        why = human_error
+                    elif page_hit is not None and page_hit.failure:
+                        why = page_hit.failure
+                    elif not text:
+                        why = "empty-extract"
+                    elif wall is not None:
+                        why = wall
+                    else:
+                        why = f"thin-{len(text)}b"
+                    attempts.append(("human-browser", why))
+                    _tick(f"  human-browser: {why}")
 
     if allow_thin and best is not None:
         return _with_auth(best)
@@ -3070,10 +3204,13 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
     that never mentioned it.
     """
     from searchts import knobs
+    from searchts.progress import note as progress_note
+    from searchts.progress import wanted as progress_wanted
 
     asked = max(1, int(pages or 1))
     limits = knobs.resolve(pages=asked)
     wanted = max(1, int(limits.pages))
+    show_progress = progress_wanted(kwargs.get("progress"))
     seen = set()
     out: List[FetchResult] = []
     current = url
@@ -3083,6 +3220,8 @@ def read_pages(url: str, pages: int = 1, **kwargs) -> List[FetchResult]:
     repeated = 0
     last_next = ""
     for i in range(wanted):
+        if show_progress and wanted > 1:
+            progress_note(f"reading page {i + 1} of {wanted}…")
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
             break
@@ -3514,6 +3653,8 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     own page, and scrolling page 3 of a static list adds nothing.
     """
     from searchts import knobs
+    from searchts.progress import note as progress_note
+    from searchts.progress import wanted as progress_wanted
 
     # `pages` is the user's ceiling here, never something the caller asked
     # for: passing the product cap as a request made any lower ceiling look
@@ -3541,7 +3682,10 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     repeated_pages = 0
     fetched = 0
     last_next = ""
+    show_progress = progress_wanted(kwargs.get("progress"))
     for i in range(limits.pages):
+        if show_progress and i:
+            progress_note(f"reading page {i + 1}…")
         key = current.split("#", 1)[0].rstrip("/")
         if key in seen:
             # The cursor pointed at a page this walk already read. A list that
@@ -3702,8 +3846,11 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
             # rows wanted in all, not for what the page walk left over: it
             # re-reads the rows the walk already has, and asking for the
             # remainder ended it early or handed back rows the walk repeated.
-            note, rep = _scroll_feed(url, want, limits,
-                                     relay_only=not _has_markup(out[0]))
+            note, rep = _scroll_feed(
+                url, want, limits,
+                relay_only=not _has_markup(out[0]),
+                progress=kwargs.get("progress"),
+            )
         if note:
             extra += f"\n\n{note}"
         if rep is not None and rep.stop != "not-a-feed" and rep.html:
@@ -3786,7 +3933,8 @@ def _has_markup(page: "FetchResult") -> bool:
 
 
 def _scroll_feed(url: str, want: int, limits, *,
-                  relay_only: bool = False) -> Tuple[str, Any]:
+                  relay_only: bool = False,
+                  progress: Optional[bool] = None) -> Tuple[str, Any]:
     """Scroll ``url`` for ``want`` more rows: ``(note, report)``.
 
     Every outcome is a note, including "this is not a feed": the caller asked
@@ -3802,6 +3950,14 @@ def _scroll_feed(url: str, want: int, limits, *,
     help would leave the obvious question open.
     """
     from searchts import scroll
+    from searchts.progress import announce
+    from searchts.progress import phase as progress_phase
+    from searchts.progress import wanted as progress_wanted
+
+    show = progress_wanted(progress)
+
+    def say(msg: str) -> None:
+        announce(msg)
 
     if not scroll.browser_available():
         if relay_only:
@@ -3812,11 +3968,13 @@ def _scroll_feed(url: str, want: int, limits, *,
                 "searchts install --browser]"
             ), None
         return scroll.NO_BROWSER, None
-    rep, why = scroll.collect_url(
-        url, want_rows=want, max_clicks=limits.expand_clicks,
-        budget_seconds=limits.seconds, step_ms=limits.step_ms,
-        empty_steps=limits.empty_steps, persistent=True,
-    )
+    with progress_phase("scrolling the page for more rows…", enabled=show):
+        rep, why = scroll.collect_url(
+            url, want_rows=want, max_clicks=limits.expand_clicks,
+            budget_seconds=limits.seconds, step_ms=limits.step_ms,
+            empty_steps=limits.empty_steps, persistent=True,
+            tick=say if show else None,
+        )
     if rep is None:
         if why == "no-browser":
             return scroll.NO_BROWSER, None

@@ -3,60 +3,74 @@
 Copy for an agent:
 
 ```
-Update searchts using https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md
+Update searchts: run `searchts update`
 ```
 
 ---
 
 ## For AI agents
 
-**Do not** `pip install` onto system Python. **Do not** unzip `main.zip` as the default. **Do not** uninstall the user's tools.
+**Do not** `pip install` onto system Python. **Do not** unzip `main.zip` as the default. **Do not** uninstall the user's tools. **Do not** kill `searchts.exe`.
 
-### 1. How they installed
+### 1. Update the copy that is running
 
 ```bash
-searchts --version
-command -v searchts || true
+searchts update
 ```
 
-### 2. Update the package
+`searchts upgrade` is the same command.
+
+That command:
+
+- upgrades a **pipx** install, including packages injected into it (for example patchright)
+- upgrades a **uv tool** install
+- upgrades a **venv** or pip install in place, keeping the extras already installed (`mcp`, `browser`, `cookies`, `local-transcribe`)
+- fast-forwards a clean **git checkout** and reinstalls that checkout
+- clears the **uvx** cache so the next `uvx` run is the latest PyPI release
+
+It does not downgrade a copy that is already ahead of PyPI. On Windows it renames a running `searchts.exe` aside so the new file can be written. If that rename fails, it prints the PIDs and the one command to run after you quit them, and changes nothing.
+
+`searchts update --dry-run` prints the command and does not run it. `--force` reinstalls even when the version already matches.
+
+### 2. If this version has no `searchts update` yet
 
 **Keep (pipx):**
 
 ```bash
-pipx upgrade searchts
+pipx upgrade searchts --include-injected
+```
+
+**uv tool:**
+
+```bash
+uv tool upgrade searchts
 ```
 
 **venv / packaging:**
 
 ```bash
-pip install -U "searchts[mcp]"
+python -m pip install -U "searchts[mcp]"
 ```
 
-**Try (uvx):** already the latest PyPI each run. Nothing to upgrade.
+Add the extras this environment already has.
 
-If `searchts.exe` / `mcp serve` is running (Windows), stop it first or pipx will hit a file lock (**F11**).
+**uvx:** `uv cache clean --force searchts`, then the next run. There is no persistent uvx install.
 
-### Windows: one install
+Quit every `searchts.exe` first on Windows, or the file stays locked (**F11**). `searchts doctor` lists the PIDs.
 
-`where.exe searchts` can list more than one binary. The first PATH hit is what a host launches as MCP.
+### 3. One install on PATH
 
-Do not keep pipx (`~/.local/bin`) and an editable Desktop checkout on PATH together. Pick one:
+`where.exe searchts` can list more than one binary. `searchts update` updates the copy that is running and names any other copy that is still older. Do not keep a pipx install and a Desktop checkout on PATH together.
 
-- **pipx** after a PyPI release: `pipx upgrade searchts`
-- **repo / main:** from the checkout, `python -m searchts …`. Point the host MCP `cwd` at that folder.
+### 4. Skill
 
-Quit every host that spawned `mcp serve` before replacing `searchts.exe`. `searchts doctor` lists the PIDs. There is no `searchts mcp stop`.
-
-### 3. Skill (optional)
-
-Doctor does **not** install skills.
+Doctor does not install skills, and `searchts update` does not either.
 
 ```bash
 searchts skill install
 ```
 
-### 4. Verify
+### 5. Verify
 
 ```bash
 searchts --version
@@ -69,13 +83,9 @@ First read after update: Wikipedia shows the most; `example.com` is one short pa
 searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace
 ```
 
-### 5. Tell the user
+### 6. Tell the user
 
 1. Version (`searchts --version`)
-2. How they install (pipx / venv / uvx)
-3. Doctor warnings only — optional CLIs on PATH, not “searchts reads Twitter”
-4. `check-update` notes if any
-5. Optional: a one-line stderr nudge on interactive commands when a newer
-   GitHub release exists (F13). Hidden by `SEARCHTS_NO_UPDATE_CHECK=1`.
-   Never on `mcp serve` or pipes. It also says when this process is still the
-   old build (F19).
+2. How this copy is installed (pipx / uv tool / venv / uvx / checkout)
+3. Doctor warnings only — optional CLIs on PATH, not "searchts reads Twitter"
+4. Any other `searchts` still on PATH at an older version
