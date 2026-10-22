@@ -201,6 +201,11 @@ def test_skill_bundle_homes(tmp_path):
 
     oc = tmp_path / "oc"
     rows = install_shared_skills(home, environ={"OPENCLAW_HOME": str(oc)})
+    assert oc / ".openclaw" / "skills" / "searchts" not in [row["path"] for row in rows]
+    assert not oc.exists()
+
+    (oc / ".openclaw" / "skills").mkdir(parents=True)
+    rows = install_shared_skills(home, environ={"OPENCLAW_HOME": str(oc)})
     assert rows[0]["path"] == oc / ".openclaw" / "skills" / "searchts"
     assert (rows[0]["path"] / "SKILL.md").is_file()
 

@@ -72,7 +72,9 @@ def bundle_dirs(home: Path, environ: Optional[dict] = None) -> list:
         dirs.append(openclaw / "searchts")
     openclaw_home = env.get("OPENCLAW_HOME")
     if openclaw_home:
-        dirs.insert(0, Path(openclaw_home) / ".openclaw" / "skills" / "searchts")
+        candidate = Path(openclaw_home) / ".openclaw" / "skills"
+        if candidate.is_dir():
+            dirs.insert(0, candidate / "searchts")
     unique = []
     for path in dirs:
         if path not in unique:
