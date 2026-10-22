@@ -210,6 +210,30 @@ def test_a_related_block_under_a_client_pager_is_not_the_ranking():
     assert more.client_list_unrendered(ranked) is False
 
 
+def test_a_related_block_is_not_the_list_rows():
+    """Jina can return the same Other list curl already refused."""
+    crumb = "\n".join(
+        f"{i}. [Crumb {i}](https://example.com/c{i})" for i in range(1, 4)
+    )
+    other = "\n".join(
+        f"* [Category {i} name Description of category {i} for engineers.]"
+        f"(https://example.com/categories/dev/c{i})"
+        for i in range(8)
+    )
+    shell = f"## Databases in developer\n\n{crumb}\n\n## Other developer subcategories\n\n{other}\n"
+    assert unlocker._list_rows_arrived(shell) is False
+    cards = "\n".join(
+        f"* [Site {i}](https://example.com/site/s{i}.example)" for i in range(8)
+    )
+    ranking = f"## Databases in developer\n\n{cards}\n\n## Other developer subcategories\n\n{other}\n"
+    assert unlocker._list_rows_arrived(ranking) is True
+    rendered = "\n".join(
+        f"[site {i}](https://example.com/site/s{i}.example)" for i in range(15)
+    )
+    assert unlocker._list_rows_arrived(rendered) is True
+    assert unlocker._list_rows_arrived("[Home](https://example.com/)\n") is False
+
+
 def _widget_shell(*states: str) -> str:
     figures = []
     for i, state in enumerate(states):

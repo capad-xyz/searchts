@@ -1248,6 +1248,30 @@ def _widget_rows_arrived(text: str) -> bool:
     return body.count("](") >= 15
 
 
+# A rendered ranking, counted the same way as a widget table that is not the
+# glossary shell: enough links that the page is no longer a handful of chrome.
+_RENDERED_LINK_RUN = 15
+_OTHER_HEADING_RE = re.compile(r"(?m)^#{1,3} Other\b")
+_LIST_ITEM_LINK_RE = re.compile(r"(?m)^\s*(?:[-*]|\d+\.)\s+\[[^\n]*\]\(")
+
+
+def _list_rows_arrived(text: str) -> bool:
+    """True when a render replaced the related-block shell with the ranking.
+
+    The shell's only list sits under an Other heading, with the breadcrumb
+    above it. The ranking is a list of that size above the heading. A render
+    that drops the heading is the ranking when it carries a real run of links.
+    """
+    from searchts.more import _LIST_MIN_ITEMS
+
+    body = text or ""
+    heading = _OTHER_HEADING_RE.search(body)
+    if heading is None:
+        return body.count("](") >= _RENDERED_LINK_RUN
+    before = body[: heading.start()]
+    return len(_LIST_ITEM_LINK_RE.findall(before)) >= _LIST_MIN_ITEMS
+
+
 def _is_app_shell(html: str, text: str) -> bool:
     """True when the page was drawn by a client app this rung cannot run.
 
@@ -2617,10 +2641,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             order.insert(0, remembered)
 
     attempts: List[Tuple[str, str]] = []
-    # Curl refused a dashboard whose widgets were still skeletons. A later
-    # rung wins only when its text has the rows, not a longer copy of the
-    # headings.
+    # Curl refused a shell. A later rung wins only when its text has the
+    # rows: the widget table, or the ranking above the related block.
     awaiting_widgets = False
+    awaiting_list = False
     if _jina_dropped and not order:
         # `--backend jina --expand` leaves nothing to try. An empty reason list
         # says only "all backends failed"; name the real cause.
@@ -2867,6 +2891,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         unrendered = None
                         if client_list_unrendered(body):
                             unrendered = "list-unrendered"
+                            awaiting_list = True
                         elif client_widgets_loading(body):
                             unrendered = "widgets-loading"
                             awaiting_widgets = True
@@ -2884,9 +2909,22 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                             if best is None or len(text) > len(best.text):
                                 best = deferred
                             continue
-                    # The shell's headings already cleared the length gate.
-                    # Jina repeats them without the table. Keep going until a
-                    # rung returns the rows.
+                    # The shell already cleared the length gate. Jina can
+                    # repeat the related block, or the headings without the
+                    # table. Keep going until a rung returns the rows.
+                    if awaiting_list and not _list_rows_arrived(text):
+                        attempts.append((backend, "list-unrendered"))
+                        _tick(f"  {backend}: list-unrendered, escalating")
+                        if backend == remembered:
+                            unpin(domain)
+                            remembered = None
+                        if best is None or len(text) > len(best.text):
+                            best = FetchResult(
+                                backend, text, status,
+                                final_url=final_url or url, headers=headers,
+                                page_html=None if backend == "Jina Reader" else body,
+                            )
+                        continue
                     if awaiting_widgets and not _widget_rows_arrived(text):
                         attempts.append((backend, "widgets-loading"))
                         _tick(f"  {backend}: widgets-loading, escalating")
