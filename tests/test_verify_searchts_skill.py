@@ -24,7 +24,7 @@ FEATURES = ROOT / ".agents/skills/verify-searchts/features"
 # Every verb a user runs that reaches the network or their disk. The map has to
 # account for each one, so a new verb fails until the map says how to drive it or
 # why it is out of scope.
-USER_FACING = ("read", "search", "transcribe", "grab", "get", "doctor")
+USER_FACING = ("read", "search", "transcribe", "grab", "get", "doctor", "login")
 
 # The feature entry contract, in order, exactly as the example specifies.
 CONTRACT = (
@@ -35,13 +35,13 @@ CONTRACT = (
 )
 
 
-def _help(verb: str) -> set[str]:
-    """The flags this verb really has, from the CLI itself."""
+def _help(command: str) -> set[str]:
+    """The flags this command path really has, from the CLI itself."""
     out = subprocess.run(
-        [sys.executable, "-m", "searchts", verb, "--help"],
+        [sys.executable, "-m", "searchts", *command.split(), "--help"],
         cwd=ROOT, capture_output=True, text=True, timeout=120,
     )
-    assert out.returncode == 0, f"`searchts {verb} --help` failed: {out.stderr[-300:]}"
+    assert out.returncode == 0, f"`searchts {command} --help` failed: {out.stderr[-300:]}"
     return set(re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", out.stdout))
 
 
@@ -125,16 +125,16 @@ def test_the_drive_lines_use_flags_the_cli_really_has() -> None:
             continue
         for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip().lstrip("-* ").strip("`")
-            m = re.search(r"searchts ([a-z-]+)", line)
-            if not m or m.group(1) not in USER_FACING:
+            m = re.search(r"searchts ([a-z-]+(?: [a-z-]+)*)", line)
+            if not m or m.group(1).split()[0] not in USER_FACING:
                 continue
-            verb = m.group(1)
+            command = m.group(1)
             flags = {f for f in re.findall(r"(?<![\w-])(--[a-z][a-z-]+)", line) if f != "--help"}
             if not flags:
                 continue
-            help_flags = _help(verb)
+            help_flags = _help(command)
             for flag in flags:
-                assert flag in help_flags, f"{path.name}: `searchts {verb}` has no {flag}"
+                assert flag in help_flags, f"{path.name}: `searchts {command}` has no {flag}"
 
 
 def test_the_map_says_what_is_not_covered_yet() -> None:

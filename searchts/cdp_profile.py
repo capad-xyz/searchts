@@ -195,11 +195,12 @@ def _windows_app_path(exe_name: str) -> str:
         return ""
     import winreg
 
+    registry: Any = winreg
     subkey = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{exe_name}"
-    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+    for hive in (registry.HKEY_CURRENT_USER, registry.HKEY_LOCAL_MACHINE):
         try:
-            with winreg.OpenKey(hive, subkey) as key:
-                val, _ = winreg.QueryValueEx(key, "")
+            with registry.OpenKey(hive, subkey) as key:
+                val, _ = registry.QueryValueEx(key, "")
         except OSError:
             continue
         if isinstance(val, str) and val and os.path.isfile(val):
@@ -214,19 +215,20 @@ def browser_executable(browser: str) -> str:
         found = shutil.which(name)
         if found:
             return found
-    for name in _EXE_NAMES.get(b, ()):
-        exe = name if name.lower().endswith(".exe") else name + ".exe"
-        found = _windows_app_path(exe)
-        if found:
-            return found
-    for root_var in ("LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"):
-        root = os.environ.get(root_var) or os.environ.get(root_var.lower()) or ""
-        if not root:
-            continue
-        for rel in _WINDOWS_EXE.get(b, ()):
-            cand = os.path.join(root, rel)
-            if os.path.isfile(cand):
-                return cand
+    if os.name == "nt":
+        for name in _EXE_NAMES.get(b, ()):
+            exe = name if name.lower().endswith(".exe") else name + ".exe"
+            found = _windows_app_path(exe)
+            if found:
+                return found
+        for root_var in ("LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"):
+            root = os.environ.get(root_var) or os.environ.get(root_var.lower()) or ""
+            if not root:
+                continue
+            for rel in _WINDOWS_EXE.get(b, ()):
+                cand = os.path.join(root, rel)
+                if os.path.isfile(cand):
+                    return cand
     mac_linux = {
         "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         "edge": "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",

@@ -793,6 +793,7 @@ class TestRealHelpers:
         )
         assert cdp_profile.browser_executable("brave").endswith("brave")
 
+    @pytest.mark.skipif(os.name != "nt", reason="uses the Windows App Paths registry")
     def test_browser_executable_uses_the_windows_app_path(self, monkeypatch):
         """Chrome Dev registers chrome.exe and does not sit in the Stable dir."""
         target = r"C:\Program Files\Google\Chrome Dev\Application\chrome.exe"
@@ -803,6 +804,7 @@ class TestRealHelpers:
         )
         assert cdp_profile.browser_executable("chrome") == target
 
+    @pytest.mark.skipif(os.name != "nt", reason="searches Windows installation paths")
     def test_browser_executable_finds_chrome_dev_on_disk(self, monkeypatch, tmp_path):
         monkeypatch.setattr(cdp_profile.shutil, "which", lambda name: None)
         monkeypatch.setattr(cdp_profile, "_windows_app_path", lambda name: "")
@@ -815,6 +817,7 @@ class TestRealHelpers:
             monkeypatch.setenv(var, str(tmp_path / "missing"))
         assert cdp_profile.browser_executable("chrome") == str(exe)
 
+    @pytest.mark.skipif(os.name != "nt", reason="searches Windows installation paths")
     def test_vivaldi_uses_its_own_install_path_without_chrome(self, monkeypatch, tmp_path):
         monkeypatch.setattr(cdp_profile.shutil, "which", lambda name: None)
         monkeypatch.setattr(cdp_profile, "_windows_app_path", lambda name: "")

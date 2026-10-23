@@ -650,11 +650,20 @@ def read_url(
             # This is the answer an agent needs most and had no way to get: the
             # read stopped because it wanted a login, and here is the exact
             # command that gets it one.
+            chromium_hint = ""
+            if cookies_from_browser.strip().lower() in {
+                "vivaldi", "chrome", "edge", "brave", "opera", "arc", "chromium",
+            }:
+                chromium_hint = (
+                    " For Chromium, start the browser with "
+                    "`--remote-debugging-port=9222` and pass `cdp_port='9222'` "
+                    "to read_url (the MCP equivalent of `--cdp-port`)."
+                )
             return (
                 f"Error: this read needs a login and did not have one.\n{e}\n"
                 f"Either ask the user to approve one copy for this session, or "
                 f"have them sign in once with the `login_signin` tool, then "
-                f"call read_url again."
+                f"call read_url again.{chromium_hint}"
             )
         except CookieReadError as e:
             if not cookies_from_browser:

@@ -26,6 +26,10 @@ login.
 Preconditions: the chosen browser is signed in to the requested host. Vivaldi
 also needs the browser extra installed with `searchts install --browser`.
 
+**Proof.** The plain read succeeds with exit code `0`, reports
+`authenticated: true`, and contains a signed-in-only marker from the requested
+site. A cookie count alone does not prove the login worked.
+
 - **Keep from Zen.** Run `searchts login keep <url> --cookies-from-browser zen --yes`. Exit code `0`; the receipt names the host and cookie count, and prints no values.
 - **Keep from Vivaldi.** Run `searchts login keep <url> --cookies-from-browser vivaldi --yes`. Exit code `0`; stderr explains the local debugger window, the receipt names the host and cookie count, and no cookie values are printed.
 - **Reuse.** Run `searchts read <same-url> --json`. Stderr says `cookies: owned store`; assert the JSON says `authenticated: true` and its `text` contains a signed-in-only marker for that site. A live drive succeeded through both `curl_cffi` and `stealth-browser`. The response body was not retained because the verified page was personal account settings.
