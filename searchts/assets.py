@@ -285,7 +285,11 @@ class _SavedImages:
                 continue
             for path in folder.iterdir():
                 if path.is_file():
-                    self.by_hash.setdefault(hashlib.sha256(path.read_bytes()).hexdigest(), path)
+                    digest = hashlib.sha256()
+                    with path.open("rb") as handle:
+                        for chunk in iter(lambda: handle.read(65536), b""):
+                            digest.update(chunk)
+                    self.by_hash.setdefault(digest.hexdigest(), path)
 
     def place(self, kind: str, content: bytes, candidate: Path) -> Tuple[Path, bool]:
         """Return ``(path, reused)``. Non-images keep the numbered-name write."""
