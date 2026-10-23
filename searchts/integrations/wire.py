@@ -123,7 +123,7 @@ def _keys(container) -> tuple:
 
 def _lookup(data: dict, container) -> Optional[dict]:
     """The dict at ``container``, or None when any level is missing or not a dict."""
-    node = data
+    node: object = data
     for key in _keys(container):
         if not isinstance(node, dict):
             return None
@@ -150,21 +150,16 @@ def merge_json(path: Path, container, entry: dict, *, create: bool) -> str:
 
     wrote, already, kept, skipped, absent.
     """
-    if not path.exists():
-        if not create:
-            return "absent"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        data = {}
-        _ensure(data, container)[SERVER] = entry
-        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-        return "wrote"
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, ValueError):
-        return "skipped"
-    if not isinstance(data, dict):
-        return "skipped"
+    data: dict = {}
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return "skipped"
+        if not isinstance(data, dict):
+            return "skipped"
+    elif not create:
+        return "absent"
     block = _ensure(data, container)
     if block is None:
         return "skipped"
@@ -174,6 +169,7 @@ def merge_json(path: Path, container, entry: dict, *, create: bool) -> str:
     if current is not None:
         return "kept"
     block[SERVER] = entry
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return "wrote"
 
