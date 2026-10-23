@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.21.1](https://github.com/capad-xyz/searchts/compare/v0.21.0...v0.21.1) (2026-10-23)
+
+
+### Fixed
+
+* **login:** persist usable browser sign-ins ([#426](https://github.com/capad-xyz/searchts/issues/426)) ([83a4660](https://github.com/capad-xyz/searchts/commit/83a4660d2cab679391aadb6bdbbf9ae73ba0f2df))
+
 ## [0.21.0](https://github.com/capad-xyz/searchts/compare/v0.20.1...v0.21.0) (2026-10-23)
 
 
