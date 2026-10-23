@@ -174,7 +174,7 @@ def test_extra_clients_and_skill_bundle(tmp_path, monkeypatch):
     )
     _write(
         markers["OpenCode"] / "opencode.json",
-        {"mcp": {"searchts": {"type": "local", "command": ["searchts", "mcp", "serve"]}}},
+        {"mcp": {"servers": {"searchts": {"type": "local", "command": ["searchts", "mcp", "serve"]}}}},
     )
     _write(markers["Windsurf"] / "mcp_config.json", {"mcpServers": {"searchts": {"command": "searchts"}}})
     _write(

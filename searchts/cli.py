@@ -1126,11 +1126,11 @@ def mcp_install_text(client=None):
         'args = ["mcp", "serve"]',
     ])
     opencode_snippet = json.dumps(
-        {"mcp": {"searchts": {"type": "local", "command": ["searchts", "mcp", "serve"]}}},
+        {"mcp": {"servers": {"searchts": {"type": "local", "command": ["searchts", "mcp", "serve"]}}}},
         indent=2,
     )
     opencode_block = "\n".join([
-        "OpenCode ~/.config/opencode/opencode.json - command is one array:",
+        "OpenCode ~/.config/opencode/opencode.json - servers map, command is one array:",
         opencode_snippet,
     ])
     write_note = (

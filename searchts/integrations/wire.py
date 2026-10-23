@@ -24,7 +24,11 @@ SERVER = "searchts"
 #: command + args. Clients that want a ``type`` field add it themselves.
 STDIO = {"command": "searchts", "args": ["mcp", "serve"]}
 STDIO_TYPED = {"type": "stdio", "command": "searchts", "args": ["mcp", "serve"]}
-OPENCODE = {"type": "local", "command": ["searchts", "mcp", "serve"], "enabled": True}
+OPENCODE = {"type": "local", "command": ["searchts", "mcp", "serve"]}
+
+#: OpenCode v2 nests MCP servers under ``mcp.servers``. The flat ``mcp.<name>``
+#: form is deprecated and loads as ``pending``; ``mcp.servers.<name>`` connects.
+OPENCODE_CONTAINER = ("mcp", "servers")
 
 CODEX_HEADER = "[mcp_servers.searchts]"
 CODEX_HEADER_QUOTED = '[mcp_servers."searchts"]'
@@ -112,30 +116,52 @@ def _same_stdio(current, expected: dict) -> bool:
     return True
 
 
-def merge_json(path: Path, container: str, entry: dict, *, create: bool) -> str:
+def _keys(container) -> tuple:
+    """``"mcpServers"`` and ``("mcp", "servers")`` both name a nesting path."""
+    return (container,) if isinstance(container, str) else tuple(container)
+
+
+def _lookup(data: dict, container) -> Optional[dict]:
+    """The dict at ``container``, or None when any level is missing or not a dict."""
+    node: object = data
+    for key in _keys(container):
+        if not isinstance(node, dict):
+            return None
+        node = node.get(key)
+    return node if isinstance(node, dict) else None
+
+
+def _ensure(data: dict, container) -> Optional[dict]:
+    """The dict at ``container``, creating missing levels. None when a level is taken."""
+    node = data
+    for key in _keys(container):
+        child = node.get(key)
+        if child is None:
+            child = {}
+            node[key] = child
+        elif not isinstance(child, dict):
+            return None
+        node = child
+    return node
+
+
+def merge_json(path: Path, container, entry: dict, *, create: bool) -> str:
     """Insert ``searchts`` under ``container``. Returns a status word.
 
     wrote, already, kept, skipped, absent.
     """
-    if not path.exists():
-        if not create:
-            return "absent"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        data = {container: {SERVER: entry}}
-        path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-        return "wrote"
-    try:
-        raw = path.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (OSError, ValueError):
-        return "skipped"
-    if not isinstance(data, dict):
-        return "skipped"
-    block = data.get(container)
+    data: dict = {}
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return "skipped"
+        if not isinstance(data, dict):
+            return "skipped"
+    elif not create:
+        return "absent"
+    block = _ensure(data, container)
     if block is None:
-        block = {}
-        data[container] = block
-    if not isinstance(block, dict):
         return "skipped"
     current = block.get(SERVER)
     if _same_stdio(current, entry):
@@ -143,6 +169,7 @@ def merge_json(path: Path, container: str, entry: dict, *, create: bool) -> str:
     if current is not None:
         return "kept"
     block[SERVER] = entry
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     return "wrote"
 
@@ -169,7 +196,7 @@ def merge_codex(path: Path, *, create: bool) -> str:
     return "wrote"
 
 
-def _json_has(path: Path, container: str) -> Optional[bool]:
+def _json_has(path: Path, container) -> Optional[bool]:
     """True/False when the file exists, None when it does not."""
     if not path.exists():
         return None
@@ -179,8 +206,8 @@ def _json_has(path: Path, container: str) -> Optional[bool]:
         return False
     if not isinstance(data, dict):
         return False
-    block = data.get(container)
-    return isinstance(block, dict) and SERVER in block
+    block = _lookup(data, container)
+    return block is not None and SERVER in block
 
 
 class _Target:
@@ -358,7 +385,7 @@ def _targets() -> list:
         ),
         _JsonTarget(
             "opencode", "OpenCode", "searchts mcp install --client opencode",
-            "mcp", OPENCODE, opencode_path, opencode_marker,
+            OPENCODE_CONTAINER, OPENCODE, opencode_path, opencode_marker,
         ),
         _JsonTarget(
             "windsurf", "Windsurf", "searchts mcp install --client windsurf",
