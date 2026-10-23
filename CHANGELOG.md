@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.20.1](https://github.com/capad-xyz/searchts/compare/v0.20.0...v0.20.1) (2026-10-23)
+
+
+### Fixed
+
+* **wire:** write OpenCode MCP servers under mcp.servers ([#420](https://github.com/capad-xyz/searchts/issues/420)) ([9642d61](https://github.com/capad-xyz/searchts/commit/9642d613a19bd6a16514c460f0f9aff35f24e4bf))
+
 ## [0.20.0](https://github.com/capad-xyz/searchts/compare/v0.19.0...v0.20.0) (2026-10-22)
 
 
