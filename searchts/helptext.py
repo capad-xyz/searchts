@@ -56,7 +56,7 @@ ROOT_GROUPS: List[Tuple[str, List[Tuple[str, str]]]] = [
     ("SET UP ONCE", [
         ("install", "One-shot installer; --system-deps to change things"),
         ("setup", "Interactive wizard"),
-        ("configure <key>", "Set a value, or copy cookies from a browser"),
+        ("configure", "List the keys, set one, or copy cookies from a browser"),
         ("login <verb>", "Site logins searchts keeps, and what it copied"),
         ("uninstall", "Remove config, tokens and skill files"),
     ]),
@@ -201,8 +201,11 @@ COMMANDS: Dict[str, dict] = {
         "examples": ["searchts uninstall --dry-run", "searchts uninstall"],
     },
     "configure": {
-        "lead": "Set one config value, or copy cookies from a browser.",
-        "examples": ["searchts configure --from-browser firefox"],
+        "lead": "List every key, set one value, or copy cookies from a browser.",
+        "examples": [
+            "searchts configure",
+            "searchts configure --from-browser firefox",
+        ],
     },
     "watch": {
         "lead": "Quick health check plus update check, for a scheduled task.",

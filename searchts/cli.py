@@ -25,6 +25,18 @@ from searchts import __version__
 # Pinned to the 0.4.2 state — PyPI still only has 0.4.1 (upstream issue #10).
 _RDT_GIT_SOURCE = "git+https://github.com/public-clis/rdt-cli.git@5e4fb3720d5c174e976cd425ccc3b879d52cac66"
 
+# Keys `searchts configure` accepts, in the order a bare `configure` lists them.
+# github-token and youtube-cookies stay in the list so the refusal is
+# discoverable. Neither is written to the YAML file.
+_CONFIGURE_KEYS = (
+    "proxy",
+    "github-token",
+    "groq-key",
+    "openai-key",
+    "twitter-cookies",
+    "youtube-cookies",
+)
+
 
 def _ensure_utf8_console():
     """Best-effort console encoding setup for CLI runtime only.
@@ -165,11 +177,11 @@ def _run():
 
     # ── configure ──
     p_conf = sub.add_parser("configure", parents=[_verbose],
-                            help="Set a config value or auto-extract from browser")
+                            help="List keys, set a value, or copy cookies from a browser")
     p_conf.add_argument("key", nargs="?", default=None,
-                        choices=["proxy", "github-token", "groq-key", "openai-key",
-                                 "twitter-cookies", "youtube-cookies"],
-                        help="What to configure (omit if using --from-browser). "
+                        choices=list(_CONFIGURE_KEYS),
+                        help="What to configure. Omit the key to list every key, "
+                             "its default, and set or unset. "
                              "github-token and youtube-cookies are accepted so the "
                              "refusal is discoverable, but are not stored: "
                              "github-token -> export GITHUB_TOKEN/GH_TOKEN (or .env); "
@@ -1698,8 +1710,119 @@ def _detect_environment():
     return "server" if indicators >= 2 else "local"
 
 
+def _value_set(value) -> bool:
+    return value is not None and str(value).strip() != ""
+
+
+def _field_winner(config, field):
+    """Return ``(source, value, file_has_value)``.
+
+    A present environment variable wins over the YAML key, the same rule as
+    ``Config.get``. ``file_has_value`` is true when the file also holds a
+    non-empty value, so the row can name the winner.
+    """
+    env_name = field.upper()
+    file_value = config.data.get(field)
+    file_has_value = _value_set(file_value)
+    if env_name in os.environ:
+        return env_name, os.environ.get(env_name, ""), file_has_value
+    if file_has_value:
+        return "config.yaml", file_value, False
+    return None, None, False
+
+
+def _proxy_public(url: str) -> str:
+    """A proxy URL with the password replaced. The host stays visible."""
+    import re
+
+    text = str(url).strip()
+    text = re.sub(r"(//[^/@:\s]+):[^@/\s]+@", r"\1:***@", text)
+    return re.sub(r"^([^/@:\s]+):[^@/\s]+@", r"\1:***@", text)
+
+
+def _secret_now(config, fields) -> str:
+    """``set`` or ``unset`` for YAML fields. The value itself is never included."""
+    bits = []
+    saw_value = False
+    for field in fields:
+        source, value, file_too = _field_winner(config, field)
+        if source is None:
+            continue
+        if _value_set(value):
+            saw_value = True
+            if file_too and source != "config.yaml":
+                bits.append(f"{source} over the file")
+            else:
+                bits.append(source)
+        elif file_too:
+            bits.append(f"unset in {source} over the file")
+    if not bits:
+        return "unset"
+    ordered = list(dict.fromkeys(bits))
+    if not saw_value:
+        return "; ".join(ordered)
+    return "set in " + " and ".join(ordered)
+
+
+def _proxy_now(config) -> str:
+    source, value, file_too = _field_winner(config, "proxy")
+    if source is None or not _value_set(value):
+        if source and file_too:
+            return f"unset in {source} over the file"
+        return "unset"
+    shown = _proxy_public(value)
+    if file_too and source != "config.yaml":
+        return f"{shown} in {source} over the file"
+    if source != "config.yaml":
+        return f"{shown} in {source}"
+    return shown
+
+
+def _github_now() -> str:
+    """GITHUB_TOKEN is the name on the row. GH_TOKEN counts when it is the one set."""
+    if _value_set(os.environ.get("GITHUB_TOKEN")):
+        return "set in GITHUB_TOKEN"
+    if _value_set(os.environ.get("GH_TOKEN")):
+        return "set in GH_TOKEN"
+    return "unset"
+
+
+def _configure_list_rows(config):
+    """One receipt row per key ``configure`` accepts. No saved-state row for the browser copy."""
+    from searchts import progress, receipts
+
+    def row(name, now, extra=""):
+        detail = f"default unset, now {now}"
+        if extra:
+            detail = f"{detail}. {extra}"
+        unset = now == "unset" or now.startswith("unset ")
+        status = progress.ROW_SKIP if unset else progress.ROW_OK
+        return receipts.Row(status, name, detail)
+
+    built = {
+        "proxy": row(
+            "proxy",
+            _proxy_now(config),
+            "in the file; searchts does not apply it",
+        ),
+        "github-token": row(
+            "github-token",
+            _github_now(),
+            "lives in GITHUB_TOKEN, not in the file",
+        ),
+        "groq-key": row("groq-key", _secret_now(config, ("groq_api_key",))),
+        "openai-key": row("openai-key", _secret_now(config, ("openai_api_key",))),
+        "twitter-cookies": row(
+            "twitter-cookies",
+            _secret_now(config, ("twitter_auth_token", "twitter_ct0")),
+        ),
+        "youtube-cookies": row("youtube-cookies", "unset", "not stored"),
+    }
+    return [built[name] for name in _CONFIGURE_KEYS]
+
+
 def _cmd_configure(args):
-    """Set a config value and test it, or auto-extract from browser."""
+    """List the keys, set a config value, or copy cookies from a browser."""
     import shutil
 
     from searchts import progress, receipts
@@ -1744,10 +1867,19 @@ def _cmd_configure(args):
         receipt(rows, status=progress.ROW_OK if found_any else progress.ROW_FAIL, subject=browser)
         return
 
-    # ── Manual configure ──
+    # ── Bare configure lists the keys. Writes stay above and below. ──
     if not args.key:
-        print("Usage: searchts configure <key> <value>")
-        print("   or: searchts configure --from-browser chrome")
+        err_style, err_unicode = receipts.for_stream(sys.stderr)
+        print(
+            receipts.block(
+                err_style,
+                "configure",
+                _configure_list_rows(config),
+                status=progress.ROW_OK,
+                unicode_ok=err_unicode,
+            ),
+            file=sys.stderr,
+        )
         return
 
     if args.key == "youtube-cookies":
