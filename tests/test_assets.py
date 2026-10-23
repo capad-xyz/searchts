@@ -181,6 +181,123 @@ def test_grab_respects_max_assets(monkeypatch, tmp_path):
     assert manifest["downloaded"] <= 1
 
 
+def _grab_page(monkeypatch, tmp_path, html, bodies, folder_name="g"):
+    """Grab one tiny page. `bodies` maps a fetched URL to its bytes."""
+
+    def fetch(url, *, backends=None, timeout=30, progress=None):
+        if url in bodies:
+            kind = "text/css" if url.endswith(".css") else "image/png"
+            return assets.AssetResult(bodies[url], kind, url, "curl_cffi")
+        return assets.AssetResult(html.encode(), "text/html", url, "curl_cffi")
+
+    monkeypatch.setattr(assets, "fetch_bytes", fetch)
+    out = tmp_path / folder_name
+    return out, assets.grab("https://demo.test/", str(out))
+
+
+def test_grab_reuses_an_image_with_the_same_bytes(monkeypatch, tmp_path):
+    html = (
+        "<html><head><title>T</title></head><body>"
+        '<img src="/a.png"><img src="/b.png"></body></html>'
+    )
+    body = b"SAMEBYTES"
+    out, manifest = _grab_page(
+        monkeypatch, tmp_path, html,
+        {"https://demo.test/a.png": body, "https://demo.test/b.png": body},
+    )
+    images = [r for r in manifest["assets"] if r.get("kind") == "images" and r.get("ok")]
+    assert len(images) == 2
+    assert images[0]["local_path"] == images[1]["local_path"]
+    assert images[1]["reused"] is True
+    assert "reused" not in images[0]
+    assert manifest["reused"] == 1
+    files = list((out / "images").iterdir())
+    assert len(files) == 1
+    assert files[0].read_bytes() == body
+
+
+def test_grab_keeps_a_different_size_of_the_same_picture(monkeypatch, tmp_path):
+    html = (
+        "<html><head><title>T</title></head><body>"
+        '<img src="/photo.jpg?w=336"><img src="/photo.jpg?w=672"></body></html>'
+    )
+    small, large = b"SMALL", b"LARGE-BYTES"
+    out, manifest = _grab_page(
+        monkeypatch, tmp_path, html,
+        {
+            "https://demo.test/photo.jpg?w=336": small,
+            "https://demo.test/photo.jpg?w=672": large,
+        },
+    )
+    images = [r for r in manifest["assets"] if r.get("kind") == "images" and r.get("ok")]
+    assert len(images) == 2
+    assert all("reused" not in r for r in images)
+    assert manifest["reused"] == 0
+    names = sorted(p.name for p in (out / "images").iterdir())
+    assert names == ["photo-1.jpg", "photo.jpg"]
+    assert {p.read_bytes() for p in (out / "images").iterdir()} == {small, large}
+
+
+def test_grab_reuses_an_image_already_in_the_folder(monkeypatch, tmp_path):
+    html = (
+        "<html><head><title>T</title></head><body>"
+        '<img src="/logo.png"></body></html>'
+    )
+    body = b"SAMEBYTES"
+    folder = tmp_path / "g" / "images"
+    folder.mkdir(parents=True)
+    (folder / "logo.png").write_bytes(body)
+    out, manifest = _grab_page(
+        monkeypatch, tmp_path, html, {"https://demo.test/logo.png": body},
+    )
+    assert not (out / "images" / "logo-1.png").exists()
+    images = [r for r in manifest["assets"] if r.get("kind") == "images" and r.get("ok")]
+    assert images[0]["local_path"] == "images/logo.png"
+    assert images[0]["reused"] is True
+    assert manifest["reused"] == 1
+    assert list((out / "images").iterdir()) == [out / "images" / "logo.png"]
+
+
+def test_grab_numbers_a_taken_image_name_when_the_bytes_differ(monkeypatch, tmp_path):
+    html = (
+        "<html><head><title>T</title></head><body>"
+        '<img src="/logo.png"></body></html>'
+    )
+    folder = tmp_path / "g" / "images"
+    folder.mkdir(parents=True)
+    (folder / "logo.png").write_bytes(b"OLD")
+    out, manifest = _grab_page(
+        monkeypatch, tmp_path, html, {"https://demo.test/logo.png": b"NEW"},
+    )
+    assert (out / "images" / "logo.png").read_bytes() == b"OLD"
+    assert (out / "images" / "logo-1.png").read_bytes() == b"NEW"
+    images = [r for r in manifest["assets"] if r.get("kind") == "images" and r.get("ok")]
+    assert images[0]["local_path"] == "images/logo-1.png"
+    assert "reused" not in images[0]
+    assert manifest["reused"] == 0
+
+
+def test_grab_keeps_two_stylesheets_with_the_same_bytes(monkeypatch, tmp_path):
+    html = (
+        "<html><head><title>T</title>"
+        '<link rel="stylesheet" href="/a.css">'
+        '<link rel="stylesheet" href="/b.css">'
+        "</head><body></body></html>"
+    )
+    body = b"body{color:#000}"
+    out, manifest = _grab_page(
+        monkeypatch, tmp_path, html,
+        {"https://demo.test/a.css": body, "https://demo.test/b.css": body},
+    )
+    css = [r for r in manifest["assets"] if r.get("kind") == "css" and r.get("ok")]
+    assert len(css) == 2
+    assert all("reused" not in r for r in css)
+    assert manifest["reused"] == 0
+    files = sorted((out / "css").iterdir(), key=lambda p: p.name)
+    assert [p.name for p in files] == ["a.css", "b.css"]
+    assert files[0].read_bytes() == body and files[1].read_bytes() == body
+
+
 # ── CLI: get / grab ──────────────────────────────────────────────────────────
 
 from unittest.mock import patch  # noqa: E402
