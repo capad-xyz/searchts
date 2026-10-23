@@ -1074,6 +1074,149 @@ class TestConfigureDeadKnobs:
         assert "Missing value" not in gh
 
 
+_CONFIGURE_ENV = (
+    "PROXY",
+    "GROQ_API_KEY",
+    "OPENAI_API_KEY",
+    "TWITTER_AUTH_TOKEN",
+    "TWITTER_CT0",
+    "GITHUB_TOKEN",
+    "GH_TOKEN",
+)
+
+
+class TestConfigureList:
+    """Bare `searchts configure` is a stderr receipt. It does not print secrets."""
+
+    @staticmethod
+    def _flat(text):
+        import re
+
+        text = re.sub(r"\x1b\[[0-9;]*m", "", text)
+        return " ".join(text.split())
+
+    def _isolate(self, tmp_path, monkeypatch):
+        from searchts.config import Config
+
+        cfg = Config(config_path=tmp_path / "config.yaml")
+        monkeypatch.setattr("searchts.config.Config", lambda: cfg)
+        monkeypatch.setattr("searchts.config.load_dotenv_if_available", lambda: None)
+        for name in _CONFIGURE_ENV:
+            monkeypatch.delenv(name, raising=False)
+        return cfg
+
+    def _bare(self):
+        with patch("sys.argv", ["searchts", "configure"]):
+            main()
+
+    def test_lists_every_accepted_key_on_stderr(self, tmp_path, monkeypatch, capsys):
+        self._isolate(tmp_path, monkeypatch)
+
+        self._bare()
+        captured = capsys.readouterr()
+
+        assert captured.out == ""
+        err = self._flat(captured.err)
+        assert err.count("default unset") == len(cli._CONFIGURE_KEYS)
+        positions = [err.index(name) for name in cli._CONFIGURE_KEYS]
+        assert positions == sorted(positions)
+        assert "in the file; searchts does not apply it" in err
+        assert "lives in GITHUB_TOKEN, not in the file" in err
+        assert "not stored" in err
+        assert "from-browser" not in err
+        assert not (tmp_path / "config.yaml").exists()
+
+    def test_secrets_stay_off_the_screen_and_the_proxy_url_is_shown(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        cfg = self._isolate(tmp_path, monkeypatch)
+        groq = "gsk_test_secret_value_should_not_print"
+        openai = "sk_test_openai_secret_value"
+        auth = "auth_secret_value_zzzz"
+        ct0 = "ct0_secret_value_zzzz"
+        token = "ghp_secret_value_zzzz"
+        password = "proxy_password_secret"
+        cfg.set("groq_api_key", groq)
+        cfg.set("openai_api_key", openai)
+        cfg.set("twitter_auth_token", auth)
+        cfg.set("twitter_ct0", ct0)
+        cfg.set("proxy", f"http://user:{password}@127.0.0.1:8080")
+        monkeypatch.setenv("GITHUB_TOKEN", token)
+        before = dict(cfg.data)
+
+        self._bare()
+        err = self._flat(capsys.readouterr().err)
+
+        for secret in (groq, openai, auth, ct0, token, password):
+            assert secret not in err
+        assert "http://user:***@127.0.0.1:8080" in err
+        assert "set in config.yaml" in err
+        assert "set in GITHUB_TOKEN" in err
+        assert "lives in GITHUB_TOKEN, not in the file" in err
+        assert "searchts does not apply it" in err
+        assert cfg.data == before
+        assert "github_token" not in cfg.data
+
+    def test_env_name_wins_over_the_file(self, tmp_path, monkeypatch, capsys):
+        cfg = self._isolate(tmp_path, monkeypatch)
+        file_secret = "file_groq_secret_value"
+        env_secret = "env_groq_secret_value"
+        file_proxy = "http://file-proxy.example:1"
+        env_proxy = "http://env-proxy.example:2"
+        cfg.set("groq_api_key", file_secret)
+        cfg.set("proxy", file_proxy)
+        monkeypatch.setenv("GROQ_API_KEY", env_secret)
+        monkeypatch.setenv("PROXY", env_proxy)
+
+        self._bare()
+        err = self._flat(capsys.readouterr().err)
+
+        assert "set in GROQ_API_KEY over the file" in err
+        assert "http://env-proxy.example:2 in PROXY over the file" in err
+        assert file_secret not in err
+        assert env_secret not in err
+        assert file_proxy not in err
+
+    def test_empty_env_hides_the_file_value(self, tmp_path, monkeypatch, capsys):
+        cfg = self._isolate(tmp_path, monkeypatch)
+        cfg.set("openai_api_key", "file_openai_secret_value")
+        monkeypatch.setenv("OPENAI_API_KEY", "")
+
+        self._bare()
+        err = self._flat(capsys.readouterr().err)
+
+        assert "unset in OPENAI_API_KEY over the file" in err
+        assert "file_openai_secret_value" not in err
+
+    def test_rejected_key_never_reaches_the_list(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["searchts", "configure", "not-a-key"]):
+                main()
+
+        assert exc_info.value.code == 2
+        err = capsys.readouterr().err
+        assert "invalid choice" in err
+        assert "default unset" not in err
+
+    def test_from_browser_stays_a_write(self, tmp_path, monkeypatch, capsys):
+        self._isolate(tmp_path, monkeypatch)
+        calls = {}
+
+        def fake(browser, config):
+            calls["browser"] = browser
+            return [("Twitter/X", True, "auth_token + ct0")]
+
+        monkeypatch.setattr("searchts.cookie_extract.configure_from_browser", fake)
+        with patch("sys.argv", ["searchts", "configure", "--from-browser", "chrome"]):
+            main()
+
+        out, err = capsys.readouterr()
+        assert calls["browser"] == "chrome"
+        assert "Twitter/X" in out
+        assert "default unset" not in out
+        assert "default unset" not in err
+
+
 class TestHelpMentionsRealSurface:
     """Help must name what the code actually accepts/installs."""
 
