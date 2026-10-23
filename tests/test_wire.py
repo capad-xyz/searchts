@@ -40,8 +40,10 @@ def test_writes_each_present_client_in_its_shape(tmp_path, monkeypatch):
     assert "mcpServers" not in vscode
 
     opencode = json.loads((home / ".config" / "opencode" / "opencode.json").read_text(encoding="utf-8"))
-    assert opencode["mcp"]["searchts"]["type"] == "local"
-    assert opencode["mcp"]["searchts"]["command"] == ["searchts", "mcp", "serve"]
+    assert opencode["mcp"]["servers"]["searchts"]["type"] == "local"
+    assert opencode["mcp"]["servers"]["searchts"]["command"] == ["searchts", "mcp", "serve"]
+    assert "enabled" not in opencode["mcp"]["servers"]["searchts"]
+    assert "searchts" not in opencode["mcp"]
 
     codex = (home / ".codex" / "config.toml").read_text(encoding="utf-8")
     assert codex == '[mcp_servers.searchts]\ncommand = "searchts"\nargs = ["mcp", "serve"]\n'
