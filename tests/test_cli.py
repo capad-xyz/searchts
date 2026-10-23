@@ -164,7 +164,8 @@ class TestCLI:
             ):
                 main()
 
-    def test_unknown_subcommand_suggests_nearest_match(self, capsys):
+    def test_unknown_subcommand_suggests_nearest_match(self, capsys, monkeypatch):
+        monkeypatch.delenv("SEARCHTS_PROGRESS_TTY", raising=False)
         with pytest.raises(SystemExit) as exc_info:
             with patch("sys.argv", ["searchts", "reserch", "x"]):
                 main()
@@ -172,6 +173,48 @@ class TestCLI:
         captured = capsys.readouterr()
         assert "did you mean 'search'?" in captured.err
         assert "invalid choice" in captured.err
+
+    def test_unknown_subcommand_draws_a_receipt_on_a_terminal(self, capsys, monkeypatch):
+        monkeypatch.setenv("SEARCHTS_PROGRESS_TTY", "1")
+        monkeypatch.delenv("TERM", raising=False)
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["searchts", "config"]):
+                main()
+        assert exc_info.value.code == 2
+        err = capsys.readouterr().err
+        assert "unknown command: config" in err
+        assert "did you mean" in err
+        assert "configure" in err
+        # The list is rows a person can read, not argparse's one wrapped line.
+        assert "COMMANDS" in err
+        assert "Fetch a page and print clean markdown." in err
+        assert "usage:" not in err
+        assert "invalid choice" not in err
+
+    def test_unknown_subcommand_without_a_match_still_lists_commands(self, capsys, monkeypatch):
+        monkeypatch.setenv("SEARCHTS_PROGRESS_TTY", "1")
+        monkeypatch.delenv("TERM", raising=False)
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["searchts", "zzzzzz"]):
+                main()
+        assert exc_info.value.code == 2
+        err = capsys.readouterr().err
+        assert "unknown command: zzzzzz" in err
+        assert "did you mean" not in err
+        assert "COMMANDS" in err
+        assert "usage:" not in err
+
+    def test_unknown_subcommand_stays_plain_on_a_dumb_terminal(self, capsys, monkeypatch):
+        monkeypatch.setenv("SEARCHTS_PROGRESS_TTY", "1")
+        monkeypatch.setenv("TERM", "dumb")
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["searchts", "config"]):
+                main()
+        assert exc_info.value.code == 2
+        err = capsys.readouterr().err
+        assert "usage:" in err
+        assert "invalid choice" in err
+        assert "COMMANDS" not in err
 
     def test_valid_subcommand_does_not_suggest_match(self, capsys):
         from searchts.search import SearchResult
