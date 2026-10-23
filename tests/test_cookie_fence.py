@@ -345,23 +345,30 @@ def test_a_jar_with_nothing_for_this_host_reads_anonymously(ladder):
     assert ladder.call("curl").cookie_header() is None
 
 
-# ── the browser rung is fenced too ──────────────────────────────────────────
+# ── the browser rung gets the same host-scoped login ───────────────────────
 
 
-def test_stealth_browser_never_receives_cookie_material(ladder):
-    """Every rung is reached, and only the host rung has the login.
+def test_stealth_browser_receives_only_the_requested_host_cookies(ladder):
+    """The local browser gets the requested site's records, and no other site's.
 
     curl and the relay are both left thin, so the walk reaches the browser rung
-    without tripping the repeated-4xx fail-fast that would skip it. This
-    change does not wire cookies into the browser; that is asserted, not
-    assumed.
+    without tripping the repeated-4xx fail-fast that would skip it. The relay
+    stays cookie-free, while the local browser gets only records the target
+    host would receive.
     """
-    ladder.walk("https://site.test/account", cookies=[LOGIN])
+    ladder.state["stealth"] = (200, PAGE)
+    result = ladder.walk(
+        "https://site.test/account", cookies=[LOGIN, OTHER_SITE]
+    )
 
     ladder.must_reach("curl", "jina", "stealth")
     assert ladder.call("curl").cookie_header() == f"{COOKIE_NAME}={SECRET}"
-    assert ladder.call("stealth").cookie_header() is None
-    assert SECRET not in ladder.call("stealth").haystack()
+    assert ladder.call("jina").cookie_header() is None
+    assert ladder.call("stealth").kwargs["cookies"] == [LOGIN]
+    assert OTHER_SITE.value not in ladder.call("stealth").haystack()
+    assert result is not None and result.backend == "stealth-browser"
+    assert result.authenticated is True
+    assert SECRET not in repr(result.__dict__)
 
 
 # ── it never leaks into anything a human reads ──────────────────────────────
@@ -404,12 +411,11 @@ def test_a_successful_read_returns_content_with_no_trace_of_the_cookie(ladder):
     assert SECRET not in repr(result.__dict__)
 
 
-def test_build_header_is_the_only_thing_that_renders_a_value(ladder):
-    """Pin the seam: the header comes from one helper, and stays a local.
+def test_curl_header_is_built_from_the_scoped_cookie_records(ladder):
+    """Pin the direct-request seam: the header comes from one helper.
 
-    Not a claim about every line of the package, just about this path. The
-    value exists as a string in exactly one local, and ``fetch`` puts it on the
-    wire in exactly one place.
+    The local browser receives structured cookie records through its context;
+    only this direct request renders a Cookie header.
     """
     assert build_header(filter_for_host([LOGIN], "site.test")) == f"{COOKIE_NAME}={SECRET}"
 

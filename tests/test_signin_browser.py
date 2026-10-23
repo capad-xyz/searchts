@@ -106,6 +106,38 @@ def test_the_wait_returns_false_rather_than_looping_forever():
     assert sb._wait_for_debugger(1, 0.05) is False
 
 
+def test_the_signin_window_opens_the_site(no_browser, monkeypatch):
+    """The window must open the site. A blank window cannot take a sign-in,
+    so the cookies a later read needs are never saved."""
+    seen = {}
+
+    def launch(exe, port, profile, **kw):
+        seen.update(kw)
+        return _FakeLaunched()
+
+    monkeypatch.setattr(no_browser, "_launch_browser", launch)
+    monkeypatch.setattr(sb, "_wait_for_debugger", lambda port, t: True)
+
+    with sb.signin_window("example.com", browser="chrome"):
+        pass
+
+    assert seen["open_url"] == "https://example.com"
+    assert seen["extra_args"] == ["--disable-sync"]
+
+
+def test_a_new_sign_in_profile_starts_empty(tmp_path, monkeypatch):
+    """A leftover profile restores its own tabs and hides the site."""
+    monkeypatch.setattr(sb, "signin_root", lambda: str(tmp_path))
+    stale = tmp_path / "chrome" / "Default"
+    stale.mkdir(parents=True)
+    (stale / "Cookies").write_text("old", encoding="utf-8")
+
+    path = sb._profile_for("chrome")
+
+    assert path == str(tmp_path / "chrome")
+    assert not (tmp_path / "chrome" / "Default").exists()
+
+
 def test_the_signin_window_closes_even_when_the_block_raises(no_browser, monkeypatch):
     """A failed sign-in must still close the browser it opened."""
     closed = []

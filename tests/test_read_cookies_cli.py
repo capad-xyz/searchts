@@ -64,7 +64,10 @@ def test_read_browser_cookie_line_has_no_value(monkeypatch, capsys, temp_home):
         site="https://example.com", cookies=[record], browser="zen",
         via="browser", count=1,
     )
-    monkeypatch.setattr("searchts.session_cookies.for_site", lambda site, browser: source)
+    monkeypatch.setattr(
+        "searchts.cdp_profile.read_site_cookies",
+        lambda site, browser, **kwargs: source,
+    )
     monkeypatch.setattr("searchts.unlocker.fetch", _fake_fetch({}))
 
     _run(monkeypatch, ["read", "https://example.com", "--cookies-from-browser", "zen"])
@@ -85,8 +88,8 @@ def test_read_without_the_session_approval_refuses_to_copy(monkeypatch, capsys, 
     """
     called = []
     monkeypatch.setattr(
-        "searchts.session_cookies.for_site",
-        lambda site, browser: called.append(site),
+        "searchts.cdp_profile.read_site_cookies",
+        lambda site, browser, **kwargs: called.append(site),
     )
 
     with pytest.raises(SystemExit) as exc:
@@ -120,7 +123,10 @@ def test_yes_grants_the_copy_from_the_command_line(monkeypatch, capsys, temp_hom
         site="https://example.com", cookies=[record], browser="zen",
         via="browser", count=1,
     )
-    monkeypatch.setattr("searchts.session_cookies.for_site", lambda site, browser: source)
+    monkeypatch.setattr(
+        "searchts.cdp_profile.read_site_cookies",
+        lambda site, browser, **kwargs: source,
+    )
     monkeypatch.setattr("searchts.unlocker.fetch", _fake_fetch({}))
 
     _run(monkeypatch, [
@@ -143,8 +149,8 @@ def test_yes_without_a_browser_still_copies_nothing(monkeypatch, temp_home):
 
     called = []
     monkeypatch.setattr(
-        "searchts.session_cookies.for_site",
-        lambda site, browser: called.append(site),
+        "searchts.cdp_profile.read_site_cookies",
+        lambda site, browser, **kwargs: called.append(site),
     )
 
     _run(monkeypatch, ["read", "https://example.com", "--yes"])
@@ -158,10 +164,10 @@ def test_cookie_read_error_is_one_clean_line(monkeypatch, capsys, temp_home):
 
     grant_session_copy()
 
-    def fail(site, browser):
+    def fail(site, browser, **kwargs):
         raise CookieReadError("no cookies for example.com")
 
-    monkeypatch.setattr("searchts.session_cookies.for_site", fail)
+    monkeypatch.setattr("searchts.cdp_profile.read_site_cookies", fail)
 
     with pytest.raises(SystemExit) as exc:
         _run(monkeypatch, ["read", "https://example.com", "--cookies-from-browser", "zen"])
@@ -194,27 +200,58 @@ def test_kept_login_is_used_by_a_bare_read_with_no_flag(monkeypatch, capsys, tem
     assert "KEPT-VALUE" not in captured.out
 
 
-def test_chromium_cookie_error_explains_cdp(monkeypatch, capsys, tmp_home):
-    """A Chromium cookie file cannot be read, and says what does work.
+def test_chromium_cookie_copy_requires_explicit_approval(monkeypatch, capsys, tmp_home):
+    called = []
+    monkeypatch.setattr(
+        "searchts.cdp_profile.cdp_read_site",
+        lambda *a, **k: called.append(a),
+    )
 
-    Asserted on the real ``chromium_locked_message`` rather than on a literal,
-    because that message is deliberately platform-specific: App-Bound
-    Encryption is Windows-only since Chrome 127, and macOS and Linux get the
-    system-keyring explanation instead. Pinning the Windows wording here made
-    this fail on CI's Linux runner while passing on the dev machine, which is
-    the failure mode this is meant to avoid.
-    """
-    from searchts.session_cookies import chromium_locked_message
+    with pytest.raises(SystemExit) as exc:
+        _run(monkeypatch, [
+            "read", "https://example.com", "--cookies-from-browser", "vivaldi",
+        ])
 
-    with pytest.raises(SystemExit):
-        _run(monkeypatch, ["read", "https://example.com", "--cookies-from-browser", "chrome"])
+    assert exc.value.code == 3
+    assert called == []
+    assert "approval once per session" in capsys.readouterr().err
 
-    err = capsys.readouterr().err
-    # The parts that are true on every platform.
-    assert "locked" in err
-    assert "--cdp-port" in err
-    # And the platform's own reason, whatever it is.
-    assert chromium_locked_message("chrome") in err
+
+def test_vivaldi_cookies_reach_the_direct_read_after_yes(monkeypatch, capsys, tmp_home):
+    from searchts import cdp_profile
+
+    seen = {}
+    source = CookieSource(
+        site="https://example.com/article",
+        cookies=[CookieRecord("session", "SECRET-VALUE", ".example.com")],
+        browser="vivaldi",
+        via="debugger port",
+        count=1,
+    )
+
+    def fake_cdp(site, browser, *, confirm):
+        seen["source"] = (site, browser)
+        seen["confirmed"] = confirm("Vivaldi CDP port 55123")
+        return source
+
+    def fake_fetch(url, **kwargs):
+        seen["cookies"] = kwargs.get("cookies")
+        return FetchResult("curl_cffi", "body", 200)
+
+    monkeypatch.setattr(cdp_profile, "cdp_read_site", fake_cdp)
+    monkeypatch.setattr("searchts.unlocker.fetch", fake_fetch)
+    _run(monkeypatch, [
+        "read", "https://example.com/article", "--cookies-from-browser", "vivaldi",
+        "--yes", "--json",
+    ])
+
+    captured = capsys.readouterr()
+    assert seen["source"] == ("https://example.com/article", "vivaldi")
+    assert seen["confirmed"] is True
+    assert len(seen["cookies"]) == 1
+    assert "Vivaldi CDP port 55123" in captured.err
+    assert "cookies: debugger port -> 1 cookies" in captured.err
+    assert "SECRET-VALUE" not in captured.out + captured.err
 
 
 def test_cdp_non_localhost_rejected_before_connect(monkeypatch, capsys):

@@ -18,7 +18,7 @@ searchts -v read https://en.wikipedia.org/wiki/Ada_Lovelace
 
 **Reddit / LinkedIn / X often fail loud.** That is honesty, not a broken pip. Do not claim 0.8.1 unlocked them (**N7**).
 
-**A read says the page is behind a login.** That is a fail-loud, not a broken install. The error names two ways past it: `searchts login signin URL` (sign in once in a browser searchts opens), or `searchts read URL --cookies-from-browser firefox --yes` (copy that one site's cookies from a Firefox-family browser, this session only). A saved login that has expired: `searchts login kill URL`, then sign in again. `searchts login list` shows what is kept.
+**A read says the page is behind a login.** That is a fail-loud, not a broken install. To use an existing profile, run `searchts login keep URL --cookies-from-browser zen --yes` or use `vivaldi` in place of `zen`. Zen is read from its Firefox profile; Vivaldi is opened with a loopback debugger port and a throwaway profile copy. Only that site's cookies are saved, and a later plain `searchts read URL` uses the saved login. For a one-read copy, use `searchts read URL --cookies-from-browser zen --yes` or `vivaldi`. A saved login that has expired: `searchts login kill URL`, then keep it again. `searchts login list` shows which sites are kept without showing cookie values.
 
 **`externally-managed-environment` (PEP 668):** do not `pip install` onto Homebrew / system Python. Keep = `pipx install "searchts[mcp]"`. Try = `uvx --from "searchts[mcp]" searchts …`.
 

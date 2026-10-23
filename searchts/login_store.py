@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
@@ -278,8 +279,8 @@ def decide(site: str, *, browser: str = "") -> Decision:
 
     Read-only by construction: it opens no browser, reads no cookie database,
     and copies nothing. The order is the spec's order, and the order matters --
-    a kept login is used even when a browser is named, because the whole point
-    of keeping is that Chrome does not open.
+    a kept login is used even when a browser is named, because the source
+    browser does not need to be consulted again.
     """
     host = host_of(site)
     if not host:
@@ -292,7 +293,8 @@ def decide(site: str, *, browser: str = "") -> Decision:
             return Decision(
                 site, KEPT,
                 f"{host} is already kept in the searchts store "
-                f"({source.count} cookies). No browser opens and nothing is copied.",
+                f"({source.count} cookies). The source browser is not consulted "
+                f"and nothing is copied.",
                 source=source,
             )
     except CookieReadError:
@@ -381,7 +383,7 @@ def keep(site: str, records: List[CookieRecord], *, browser: str = "") -> Kept:
         kept=True,
         count=count,
         why=f"kept {host_of(site)} in the searchts store ({count} cookies). "
-            f"The next read of that site uses the store and opens no browser.",
+            f"The next read of that site can use the saved login.",
     )
 
 
@@ -391,7 +393,7 @@ def keep_question(site: str) -> str:
     return (
         f"keep {host}'s login for next time? A yes writes only {host} into the "
         f"searchts store, the same place as a login searchts owns. The next "
-        f"read of {host} uses that store and does not open a browser again. "
+        f"read of {host} can use that saved login. "
         f"A no keeps nothing, and the next logged-in read of {host} asks again."
     )
 
@@ -667,21 +669,19 @@ def prepare(site: str, *, browser: str = "", allow_signin: bool = False) -> Cook
         return decision.source
 
     if decision.state == COPY:
-        # Settle "can this browser be read at all" before asking for consent.
-        # A Chromium cookie file is locked, and a user asked to approve a copy
-        # that cannot happen has been asked a question whose answer does not
-        # matter -- and has spent the session's one approval on it. The refusal
-        # from for_site carries the real reason and the working alternative.
-        from searchts.session_cookies import (
-            chromium_locked_message,
-            family_of,
-            for_site,
-        )
-
-        if family_of(browser) == "chromium":
-            raise CookieReadError(chromium_locked_message(browser))
+        # The named profile is the requested source. Firefox-family browsers
+        # are read-only SQLite; Chromium uses a disposable profile copy and a
+        # loopback CDP port. The one session approval must exist before either
+        # path reads browser data.
         require_copy_consent(site)
-        source = for_site(site, browser)
+
+        from searchts.cdp_profile import read_site_cookies
+
+        def confirm_debugger(prompt: str) -> bool:
+            print(prompt, file=sys.stderr, flush=True)
+            return session_granted()
+
+        source = read_site_cookies(site, browser, confirm=confirm_debugger)
         note_copied(site)
         return source
 

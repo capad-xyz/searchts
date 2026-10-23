@@ -77,6 +77,8 @@ required state and observable proof.
   writes.
 - [Check the environment](./doctor.md) covers per-channel status, the active
   backend, and the read-tier report that bounds every other feature.
+- [Keep a site login](./login.md) covers copying one site's cookies from Zen or
+  Vivaldi, saving them, and proving a later read uses the saved login.
 
 Not covered, and named so no run claims it: `searchts mcp serve` is a second
 surface over the same functions and no feature file here drives it. The

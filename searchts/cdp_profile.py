@@ -60,8 +60,10 @@ from searchts.session_cookies import (
     CookieReadError,
     CookieRecord,
     CookieSource,
+    family_of,
     filter_for_host,
     for_site,
+    read_firefox_family,
 )
 
 #: Where the CDP read gives up waiting for the debugger port to answer.
@@ -80,6 +82,23 @@ _PROFILE_NOISE = (
     "SingletonSocket",
     "lockfile",
     "lockfiles",
+    # These Chromium caches can dwarf the cookies and Local State the CDP
+    # reader needs. Copying multi-gigabyte caches just to read one host's
+    # cookies made an otherwise narrow operation look stuck.
+    "Cache",
+    "CacheStorage",
+    "Code Cache",
+    "Crashpad",
+    "DawnCache",
+    "DawnWebGPUCache",
+    "GPUCache",
+    "GraphiteDawnCache",
+    "GrShaderCache",
+    "ShaderCache",
+    "Service Worker",
+    "component_crx_cache",
+    "extensions_crx_cache",
+    "Webstore Downloads",
 )
 
 #: Executable names per browser, for PATH lookup.
@@ -94,13 +113,20 @@ _EXE_NAMES = {
 }
 
 #: Windows install paths, for the browsers that are not on PATH.
+#: Chrome ships as Stable, Dev, Beta, and Canary (SxS). A machine with only
+#: Dev still has a chrome.exe; the Stable directory is just empty.
 _WINDOWS_EXE = {
-    "chrome": r"Google\Chrome\Application\chrome.exe",
-    "edge": r"Microsoft\Edge\Application\msedge.exe",
-    "brave": r"BraveSoftware\Brave-Browser\Application\brave.exe",
-    "vivaldi": r"Vivaldi\Application\vivaldi.exe",
-    "opera": r"Opera\Opera Stable\Launcher.exe",
-    "chromium": r"Chromium\Application\chrome.exe",
+    "chrome": (
+        r"Google\Chrome\Application\chrome.exe",
+        r"Google\Chrome Dev\Application\chrome.exe",
+        r"Google\Chrome Beta\Application\chrome.exe",
+        r"Google\Chrome SxS\Application\chrome.exe",
+    ),
+    "edge": (r"Microsoft\Edge\Application\msedge.exe",),
+    "brave": (r"BraveSoftware\Brave-Browser\Application\brave.exe",),
+    "vivaldi": (r"Vivaldi\Application\vivaldi.exe",),
+    "opera": (r"Opera\Opera Stable\Launcher.exe",),
+    "chromium": (r"Chromium\Application\chrome.exe",),
 }
 
 
@@ -157,6 +183,31 @@ def _need_chromium(browser: str) -> str:
     return b
 
 
+def _windows_app_path(exe_name: str) -> str:
+    """Where Windows says `exe_name` is installed, or "" when it does not.
+
+    Chrome Dev registers itself as ``chrome.exe`` under App Paths and does not
+    live in ``Google\\Chrome\\Application``. PATH lookup and that Stable
+    directory both miss it, and ``searchts login signin`` then reports that
+    Chrome is not installed on a machine that opens Chrome every day.
+    """
+    if os.name != "nt" or not exe_name:
+        return ""
+    import winreg
+
+    registry: Any = winreg
+    subkey = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{exe_name}"
+    for hive in (registry.HKEY_CURRENT_USER, registry.HKEY_LOCAL_MACHINE):
+        try:
+            with registry.OpenKey(hive, subkey) as key:
+                val, _ = registry.QueryValueEx(key, "")
+        except OSError:
+            continue
+        if isinstance(val, str) and val and os.path.isfile(val):
+            return val
+    return ""
+
+
 def browser_executable(browser: str) -> str:
     """Path to `browser`, or a CookieReadError naming how to fix it."""
     b = _need_chromium(browser)
@@ -164,14 +215,20 @@ def browser_executable(browser: str) -> str:
         found = shutil.which(name)
         if found:
             return found
-    for root_var in ("LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"):
-        root = os.environ.get(root_var) or os.environ.get(root_var.lower()) or ""
-        rel = _WINDOWS_EXE.get(b)
-        if not root or not rel:
-            continue
-        cand = os.path.join(root, rel)
-        if os.path.isfile(cand):
-            return cand
+    if os.name == "nt":
+        for name in _EXE_NAMES.get(b, ()):
+            exe = name if name.lower().endswith(".exe") else name + ".exe"
+            found = _windows_app_path(exe)
+            if found:
+                return found
+        for root_var in ("LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"):
+            root = os.environ.get(root_var) or os.environ.get(root_var.lower()) or ""
+            if not root:
+                continue
+            for rel in _WINDOWS_EXE.get(b, ()):
+                cand = os.path.join(root, rel)
+                if os.path.isfile(cand):
+                    return cand
     mac_linux = {
         "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         "edge": "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
@@ -267,7 +324,7 @@ def _purge(path: str) -> Optional[str]:
     jar of every login the user has.
     """
     last: Optional[str] = None
-    for attempt in range(5):
+    for attempt in range(10):
         try:
             shutil.rmtree(path)
             return None
@@ -275,8 +332,9 @@ def _purge(path: str) -> Optional[str]:
             return None
         except OSError as e:
             last = f"{type(e).__name__}: {e}"
-            # Windows releases a profile file a moment after the browser exits.
-            time.sleep(0.2 * (attempt + 1))
+            # Windows can hold a profile file for several seconds after the
+            # browser process exits. Give it a bounded, growing retry window.
+            time.sleep(0.5 * (attempt + 1))
     return last
 
 
@@ -387,8 +445,17 @@ def _launch_browser(
     scratch: str,
     *,
     clock: Optional[Callable[[], float]] = None,
+    open_url: str = "",
+    extra_args: Optional[List[str]] = None,
 ) -> LaunchedBrowser:
-    """Start `executable` on a scratch profile with a debugger port open."""
+    """Start `executable` on a scratch profile with a debugger port open.
+
+    ``open_url`` is the page to show. Chromium treats a trailing argument as
+    that page, and treats anything after it as another URL, so flags stay in
+    front. A cookie-copy launch passes no URL: navigating would be a second
+    thing the copied profile did not ask for. The sign-in window does pass
+    one, because a window that opens on the new-tab page is not a sign-in.
+    """
     # The address is pinned rather than left to a Chromium default: this port
     # hands over every login in the copied profile, and a default that changed
     # to 0.0.0.0 would put it on the network.
@@ -400,6 +467,10 @@ def _launch_browser(
         "--no-first-run",
         "--no-default-browser-check",
     ]
+    if extra_args:
+        args.extend(extra_args)
+    if open_url:
+        args.append(open_url)
     try:
         process = subprocess.Popen(
             args,
@@ -766,11 +837,22 @@ def _disconnect_quietly(browser_obj: Any) -> None:
 # ── public: everything that is not Chromium ──────────────────────────────────
 
 
-def read_site_cookies(site: str, browser: str = "") -> CookieSource:
-    """Best local source for `site`, delegating to ``session_cookies``.
+def read_site_cookies(
+    site: str,
+    browser: str = "",
+    *,
+    confirm: Optional[Callable[[str], bool]] = None,
+) -> CookieSource:
+    """Read `site` from the named browser, or use the owned store by default.
 
-    The owned store and the Firefox-derived browsers are read straight off
-    disk by ``session_cookies.for_site``; a Chromium browser named here is
-    refused there with the reason, pointing at the debugger port.
+    Firefox-family profiles, including Zen, are read-only SQLite databases.
+    Chromium profiles, including Vivaldi, are copied to a throwaway profile
+    and read through CDP after ``confirm`` approves opening the local port.
+    Naming a browser means that profile is the requested source; with no
+    browser name, ``for_site`` gives the searchts-owned store precedence.
     """
-    return for_site(site, browser)
+    if not browser:
+        return for_site(site)
+    if family_of(browser) == "chromium":
+        return cdp_read_site(site, browser, confirm=confirm)
+    return read_firefox_family(browser, site)

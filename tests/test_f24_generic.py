@@ -873,7 +873,7 @@ def test_a_real_app_shell_page_gets_the_js_app_hint(monkeypatch):
     assert "this page is a JS app" in raised.value.hint
 
 
-def test_the_cookie_hint_says_the_browser_tier_gets_no_cookies(monkeypatch):
+def test_the_cookie_hint_says_when_the_browser_rung_was_not_selected(monkeypatch):
     monkeypatch.setattr(
         unlocker,
         "_fetch_curl_cffi",
@@ -887,8 +887,8 @@ def test_the_cookie_hint_says_the_browser_tier_gets_no_cookies(monkeypatch):
             ],
         )
     hint = raised.value.hint
-    assert "browser tier is sent no cookies at all" in hint
-    assert "ride the direct request only" in hint
+    assert "local browser rung was not run" in hint
+    assert "Jina relay never receives cookies" in hint
 
 
 def test_the_login_wall_hint_names_the_fence_on_stderr(capsys):
@@ -896,7 +896,7 @@ def test_the_login_wall_hint_names_the_fence_on_stderr(capsys):
 
     cli._print_login_wall_hint("https://example.org/private/page")
     err = capsys.readouterr().err
-    assert "the browser tier is sent none of them" in err
+    assert "Jina relay never receives them" in err
     assert "searchts login signin https://example.org/private/page" in err
 
 
@@ -911,7 +911,7 @@ def test_a_stale_kept_login_says_so_and_still_names_the_fence(capsys, tmp_home):
     cli._print_login_wall_hint("https://example.org/private/page")
     err = capsys.readouterr().err
     assert "already in the searchts store" in err
-    assert "the browser tier is sent none of them" in err
+    assert "Jina relay never receives them" in err
 
 
 # ── --expand: the HTML count and the browser finder are one list ─────────────
