@@ -259,6 +259,68 @@ def _unique_path(path: Path) -> Path:
         i += 1
 
 
+#: Raster images grab saves under these folders. A 1:1 byte match is rejected
+#: only here. A stylesheet or font with the same bytes is a different file.
+_IMAGE_KINDS = frozenset({"images", "icons"})
+
+
+class _SavedImages:
+    """Images this grab has already saved, keyed by SHA-256 of the bytes.
+
+    The filename is not the check. ``photo.jpg?w=336`` and ``photo.jpg?w=672``
+    share a basename and both stay, because a different size is different
+    bytes. A second download of the same bytes reuses the first file.
+    """
+
+    def __init__(self, root: Path):
+        self.by_hash: Dict[str, Path] = {}
+        self._seed(root)
+
+    def _seed(self, root: Path) -> None:
+        if not root.is_dir():
+            return
+        for kind in _IMAGE_KINDS:
+            folder = root / kind
+            if not folder.is_dir():
+                continue
+            for path in folder.iterdir():
+                if path.is_file():
+                    self.by_hash.setdefault(hashlib.sha256(path.read_bytes()).hexdigest(), path)
+
+    def place(self, kind: str, content: bytes, candidate: Path) -> Tuple[Path, bool]:
+        """Return ``(path, reused)``. Non-images keep the numbered-name write."""
+        if kind not in _IMAGE_KINDS:
+            dest = _unique_path(candidate)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(content)
+            return dest, False
+        digest = hashlib.sha256(content).hexdigest()
+        prior = self.by_hash.get(digest)
+        if prior is not None and prior.is_file():
+            return prior, True
+        dest = _unique_path(candidate)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(content)
+        self.by_hash[digest] = dest
+        return dest, False
+
+
+def _saved_record(out: Path, dest: Path, source_url: str, kind: str, content: bytes,
+                  content_type: str, backend: str, reused: bool) -> Dict:
+    rec = {
+        "source_url": source_url,
+        "kind": kind,
+        "ok": True,
+        "local_path": str(dest.relative_to(out)).replace("\\", "/"),
+        "bytes": len(content),
+        "content_type": content_type,
+        "backend": backend,
+    }
+    if reused:
+        rec["reused"] = True
+    return rec
+
+
 def get_asset(url: str, out_path: Optional[str] = None, *, timeout: int = 30,
               progress: Optional[bool] = None, overwrite: bool = True) -> Path:
     """Download one asset to disk; return the saved path.
@@ -917,7 +979,10 @@ def grab(page_url: str, out_dir: str, *,
     """Fetch a page, download its assets, and extract design tokens.
 
     Writes the assets under out_dir/<kind>/, a manifest.json, and (with read=True)
-    a page.md. Every URL the page named is either saved, recorded as a failure,
+    a page.md. An image whose bytes match one already saved is not written
+    again: the record points at the first file and sets ``reused``. A different
+    size of the same picture has different bytes and is kept. Every URL the
+    page named is either saved, recorded as a failure,
     or listed in ``omitted`` with the reason (``--max`` or the byte cap), so a
     cap never truncates silently. ``max_tokens`` is how many radius, shadow,
     and spacing values to keep (default 24, ceiling 200). ``tokens_more`` names
@@ -934,6 +999,7 @@ def grab(page_url: str, out_dir: str, *,
         raise AssetError(page_url, [("normalize", str(e))]) from e
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    saved_images = _SavedImages(out)
 
     # The page gets the full ladder, and a rung that serves a client-rendered
     # shell is climbed for one that names the real assets. Assets below stay
@@ -1061,17 +1127,15 @@ def grab(page_url: str, out_dir: str, *,
             sub = out / kind
             sub.mkdir(exist_ok=True)
             if u.lower().startswith("data:"):
-                dest = _unique_path(sub / _data_url_filename(u, content_type))
+                candidate = sub / _data_url_filename(u, content_type)
             else:
-                dest = _unique_path(sub / guess_filename(final_url, content_type))
-            dest.write_bytes(content)
+                candidate = sub / guess_filename(final_url, content_type)
+            dest, reused = saved_images.place(kind, content, candidate)
             total += len(content)
             count += 1
-            written = len(content)
-            records.append({"source_url": u, "kind": kind, "ok": True,
-                            "local_path": str(dest.relative_to(out)).replace("\\", "/"),
-                            "bytes": len(content), "content_type": content_type,
-                            "backend": backend})
+            written = 0 if reused else len(content)
+            records.append(_saved_record(
+                out, dest, u, kind, content, content_type, backend, reused))
         except Exception as e:  # noqa: BLE001 - one bad asset never fails the grab
             records.append({"source_url": u, "kind": kind, "ok": False,
                             "error": f"{type(e).__name__}: {e}"})
@@ -1114,13 +1178,15 @@ def grab(page_url: str, out_dir: str, *,
                     continue
                 sub = out / rec["kind"]
                 sub.mkdir(exist_ok=True)
-                dest = _unique_path(sub / guess_filename(ar.final_url, ar.content_type))
-                dest.write_bytes(ar.content)
+                candidate = sub / guess_filename(ar.final_url, ar.content_type)
+                dest, reused = saved_images.place(rec["kind"], ar.content, candidate)
                 total += len(ar.content)
                 count += 1
-                rec.update({"ok": True, "local_path": str(dest.relative_to(out)).replace("\\", "/"),
-                            "bytes": len(ar.content), "content_type": ar.content_type,
-                            "backend": ar.backend, "error": None})
+                saved = _saved_record(
+                    out, dest, rec["source_url"], rec["kind"], ar.content,
+                    ar.content_type, ar.backend, reused)
+                rec.update(saved)
+                rec["error"] = None
 
     # The live row already ends on its own count; a log has no row, so give it
     # the one fact it would otherwise never see.
@@ -1161,6 +1227,7 @@ def grab(page_url: str, out_dir: str, *,
         "tokens_more": design.get("tokens_more"),
         "found": {k: len(assets.get(k, [])) for k in ASSET_KINDS},
         "downloaded": sum(1 for r in records if r.get("ok")),
+        "reused": sum(1 for r in records if r.get("reused")),
         "assets": public_records,
         "omitted": omitted_entries,
         "omitted_count": sum(e["count"] for e in omitted_entries),
