@@ -46,6 +46,17 @@ def _profile_for(browser: str) -> str:
     the user has, which is exactly what this path exists to avoid.
     """
     root = os.path.join(signin_root(), (browser or "chrome").strip().lower() or "chrome")
+    # A leftover profile restores its own tabs and the URL we pass never
+    # becomes the page. This directory is the sign-in window, not the store:
+    # wiping it does not delete a login the user asked to keep.
+    if os.path.isdir(root):
+        try:
+            shutil.rmtree(root)
+        except OSError as e:
+            raise CookieReadError(
+                f"could not clear the old sign-in profile ({type(e).__name__}). "
+                f"Close the {browser} window searchts opened and try again."
+            ) from None
     os.makedirs(root, exist_ok=True)
     if os.name != "nt":
         try:
@@ -135,7 +146,14 @@ def signin_window(
     launched: Optional[LaunchedBrowser] = None
     try:
         executable = browser_executable(browser)
-        launched = _launch_browser(executable, port, profile)
+        # --disable-sync keeps Edge's first-run "sign in to sync" page from
+        # replacing the site. Without the URL, the window opens on that page
+        # and a sign-in never starts, so nothing is saved for a later read.
+        launched = _launch_browser(
+            executable, port, profile,
+            open_url=host,
+            extra_args=["--disable-sync"],
+        )
         if not _wait_for_debugger(port, timeout_s):
             raise CookieReadError(
                 f"the sign-in browser did not start within {timeout_s:.0f}s. "

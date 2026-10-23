@@ -748,6 +748,72 @@ class TestRealHelpers:
         )
         assert cdp_profile.browser_executable("brave").endswith("brave")
 
+    def test_browser_executable_uses_the_windows_app_path(self, monkeypatch):
+        """Chrome Dev registers chrome.exe and does not sit in the Stable dir."""
+        target = r"C:\Program Files\Google\Chrome Dev\Application\chrome.exe"
+        monkeypatch.setattr(cdp_profile.shutil, "which", lambda name: None)
+        monkeypatch.setattr(
+            cdp_profile, "_windows_app_path",
+            lambda name: target if name == "chrome.exe" else "",
+        )
+        assert cdp_profile.browser_executable("chrome") == target
+
+    def test_browser_executable_finds_chrome_dev_on_disk(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(cdp_profile.shutil, "which", lambda name: None)
+        monkeypatch.setattr(cdp_profile, "_windows_app_path", lambda name: "")
+        root = tmp_path / "Local"
+        exe = root / "Google" / "Chrome Dev" / "Application" / "chrome.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"")
+        monkeypatch.setenv("LOCALAPPDATA", str(root))
+        for var in ("PROGRAMFILES", "PROGRAMFILES(X86)"):
+            monkeypatch.setenv(var, str(tmp_path / "missing"))
+        assert cdp_profile.browser_executable("chrome") == str(exe)
+
+    def test_a_sign_in_url_is_the_last_launch_argument(self, monkeypatch):
+        seen = {}
+
+        class Proc:
+            pid = 1
+
+            def poll(self):
+                return None
+
+        def popen(args, **kwargs):
+            seen["args"] = list(args)
+            return Proc()
+
+        monkeypatch.setattr(cdp_profile.subprocess, "Popen", popen)
+        monkeypatch.setattr(cdp_profile, "_wait_for_debugger", lambda *a, **k: True)
+        cdp_profile._launch_browser(
+            "chrome.exe", 9, "scratch",
+            open_url="https://example.com/login",
+            extra_args=["--disable-sync"],
+        )
+        args = seen["args"]
+        assert args[-1] == "https://example.com/login"
+        assert "--disable-sync" in args
+        assert args.index("--disable-sync") < len(args) - 1
+        assert "--remote-debugging-address=127.0.0.1" in args
+
+    def test_a_cookie_copy_launch_does_not_navigate(self, monkeypatch):
+        seen = {}
+
+        class Proc:
+            pid = 1
+
+            def poll(self):
+                return None
+
+        def popen(args, **kwargs):
+            seen["args"] = list(args)
+            return Proc()
+
+        monkeypatch.setattr(cdp_profile.subprocess, "Popen", popen)
+        monkeypatch.setattr(cdp_profile, "_wait_for_debugger", lambda *a, **k: True)
+        cdp_profile._launch_browser("chrome.exe", 9, "scratch")
+        assert not any(str(a).startswith("http") for a in seen["args"])
+
     def test_the_debugger_wait_gives_up_instead_of_hanging(self):
         """A closed port has to fail fast enough to be reported, not waited on."""
         ticks = iter([0.0, 0.5, 1.0, 99.0, 99.0, 99.0])

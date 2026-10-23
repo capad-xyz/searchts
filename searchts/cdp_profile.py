@@ -94,13 +94,20 @@ _EXE_NAMES = {
 }
 
 #: Windows install paths, for the browsers that are not on PATH.
+#: Chrome ships as Stable, Dev, Beta, and Canary (SxS). A machine with only
+#: Dev still has a chrome.exe; the Stable directory is just empty.
 _WINDOWS_EXE = {
-    "chrome": r"Google\Chrome\Application\chrome.exe",
-    "edge": r"Microsoft\Edge\Application\msedge.exe",
-    "brave": r"BraveSoftware\Brave-Browser\Application\brave.exe",
-    "vivaldi": r"Vivaldi\Application\vivaldi.exe",
-    "opera": r"Opera\Opera Stable\Launcher.exe",
-    "chromium": r"Chromium\Application\chrome.exe",
+    "chrome": (
+        r"Google\Chrome\Application\chrome.exe",
+        r"Google\Chrome Dev\Application\chrome.exe",
+        r"Google\Chrome Beta\Application\chrome.exe",
+        r"Google\Chrome SxS\Application\chrome.exe",
+    ),
+    "edge": (r"Microsoft\Edge\Application\msedge.exe",),
+    "brave": (r"BraveSoftware\Brave-Browser\Application\brave.exe",),
+    "vivaldi": (r"Vivaldi\Application\vivaldi.exe",),
+    "opera": (r"Opera\Opera Stable\Launcher.exe",),
+    "chromium": (r"Chromium\Application\chrome.exe",),
 }
 
 
@@ -157,6 +164,30 @@ def _need_chromium(browser: str) -> str:
     return b
 
 
+def _windows_app_path(exe_name: str) -> str:
+    """Where Windows says `exe_name` is installed, or "" when it does not.
+
+    Chrome Dev registers itself as ``chrome.exe`` under App Paths and does not
+    live in ``Google\\Chrome\\Application``. PATH lookup and that Stable
+    directory both miss it, and ``searchts login signin`` then reports that
+    Chrome is not installed on a machine that opens Chrome every day.
+    """
+    if os.name != "nt" or not exe_name:
+        return ""
+    import winreg
+
+    subkey = rf"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\{exe_name}"
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        try:
+            with winreg.OpenKey(hive, subkey) as key:
+                val, _ = winreg.QueryValueEx(key, "")
+        except OSError:
+            continue
+        if isinstance(val, str) and val and os.path.isfile(val):
+            return val
+    return ""
+
+
 def browser_executable(browser: str) -> str:
     """Path to `browser`, or a CookieReadError naming how to fix it."""
     b = _need_chromium(browser)
@@ -164,14 +195,19 @@ def browser_executable(browser: str) -> str:
         found = shutil.which(name)
         if found:
             return found
+    for name in _EXE_NAMES.get(b, ()):
+        exe = name if name.lower().endswith(".exe") else name + ".exe"
+        found = _windows_app_path(exe)
+        if found:
+            return found
     for root_var in ("LOCALAPPDATA", "PROGRAMFILES", "PROGRAMFILES(X86)"):
         root = os.environ.get(root_var) or os.environ.get(root_var.lower()) or ""
-        rel = _WINDOWS_EXE.get(b)
-        if not root or not rel:
+        if not root:
             continue
-        cand = os.path.join(root, rel)
-        if os.path.isfile(cand):
-            return cand
+        for rel in _WINDOWS_EXE.get(b, ()):
+            cand = os.path.join(root, rel)
+            if os.path.isfile(cand):
+                return cand
     mac_linux = {
         "chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
         "edge": "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
@@ -387,8 +423,17 @@ def _launch_browser(
     scratch: str,
     *,
     clock: Optional[Callable[[], float]] = None,
+    open_url: str = "",
+    extra_args: Optional[List[str]] = None,
 ) -> LaunchedBrowser:
-    """Start `executable` on a scratch profile with a debugger port open."""
+    """Start `executable` on a scratch profile with a debugger port open.
+
+    ``open_url`` is the page to show. Chromium treats a trailing argument as
+    that page, and treats anything after it as another URL, so flags stay in
+    front. A cookie-copy launch passes no URL: navigating would be a second
+    thing the copied profile did not ask for. The sign-in window does pass
+    one, because a window that opens on the new-tab page is not a sign-in.
+    """
     # The address is pinned rather than left to a Chromium default: this port
     # hands over every login in the copied profile, and a default that changed
     # to 0.0.0.0 would put it on the network.
@@ -400,6 +445,10 @@ def _launch_browser(
         "--no-first-run",
         "--no-default-browser-check",
     ]
+    if extra_args:
+        args.extend(extra_args)
+    if open_url:
+        args.append(open_url)
     try:
         process = subprocess.Popen(
             args,
