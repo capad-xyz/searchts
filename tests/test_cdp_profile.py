@@ -693,6 +693,27 @@ class TestNoCookieValueLeaks:
 class TestRealHelpers:
     """The parts that are not faked in the read path above."""
 
+    def test_purge_retries_a_transient_windows_file_lock(self, tmp_path, monkeypatch):
+        scratch = tmp_path / "scratch"
+        scratch.mkdir()
+        real_rmtree = cdp_profile.shutil.rmtree
+        calls = []
+        sleeps = []
+
+        def rmtree(path):
+            calls.append(path)
+            if len(calls) < 3:
+                raise PermissionError("browser has not released the file yet")
+            real_rmtree(path)
+
+        monkeypatch.setattr(cdp_profile.shutil, "rmtree", rmtree)
+        monkeypatch.setattr(cdp_profile.time, "sleep", sleeps.append)
+
+        assert cdp_profile._purge(str(scratch)) is None
+        assert calls == [str(scratch)] * 3
+        assert sleeps == [0.5, 1.0]
+        assert not scratch.exists()
+
     def test_copy_profile_skips_the_lock_files(self, tmp_path):
         """A copied SingletonLock makes the new instance load no profile at all."""
         src = tmp_path / "User Data"
@@ -706,6 +727,30 @@ class TestRealHelpers:
         assert not (dst / "SingletonLock").exists(), (
             "the lock belongs to the running browser, not to the copy"
         )
+
+    def test_copy_profile_skips_large_chromium_caches(self, tmp_path):
+        src = tmp_path / "User Data"
+        default = src / "Default"
+        (default / "Cache").mkdir(parents=True)
+        (default / "Code Cache").mkdir()
+        (default / "Service Worker" / "CacheStorage").mkdir(parents=True)
+        (default / "DawnWebGPUCache").mkdir()
+        (default / "Network").mkdir()
+        (default / "Network" / "Cookies").write_text("db", encoding="utf-8")
+        for path in (
+            default / "Cache" / "large.cache",
+            default / "Code Cache" / "large.cache",
+            default / "Service Worker" / "CacheStorage" / "large.cache",
+            default / "DawnWebGPUCache" / "large.cache",
+        ):
+            path.write_text("cache", encoding="utf-8")
+        dst = tmp_path / "scratch"
+
+        cdp_profile.copy_profile(str(src), str(dst))
+
+        assert (dst / "Default" / "Network" / "Cookies").is_file()
+        for cache in ("Cache", "Code Cache", "Service Worker", "DawnWebGPUCache"):
+            assert not (dst / "Default" / cache).exists(), cache
 
     def test_copy_profile_never_writes_to_the_source(self, tmp_path):
         src = tmp_path / "User Data"
@@ -769,6 +814,19 @@ class TestRealHelpers:
         for var in ("PROGRAMFILES", "PROGRAMFILES(X86)"):
             monkeypatch.setenv(var, str(tmp_path / "missing"))
         assert cdp_profile.browser_executable("chrome") == str(exe)
+
+    def test_vivaldi_uses_its_own_install_path_without_chrome(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(cdp_profile.shutil, "which", lambda name: None)
+        monkeypatch.setattr(cdp_profile, "_windows_app_path", lambda name: "")
+        root = tmp_path / "Local"
+        exe = root / "Vivaldi" / "Application" / "vivaldi.exe"
+        exe.parent.mkdir(parents=True)
+        exe.write_bytes(b"")
+        monkeypatch.setenv("LOCALAPPDATA", str(root))
+        for var in ("PROGRAMFILES", "PROGRAMFILES(X86)"):
+            monkeypatch.setenv(var, str(tmp_path / "missing"))
+
+        assert cdp_profile.browser_executable("vivaldi") == str(exe)
 
     def test_a_sign_in_url_is_the_last_launch_argument(self, monkeypatch):
         seen = {}
@@ -845,16 +903,30 @@ class TestRealHelpers:
 
 
 class TestReadSiteCookies:
-    def test_delegates_to_session_cookies(self, monkeypatch):
+    def test_named_firefox_browser_reads_its_own_profile(self, monkeypatch):
         seen = {}
 
-        def fake_for_site(site, browser=""):
+        def fake_read(browser, site):
             seen["args"] = (site, browser)
             return "sentinel"
 
-        monkeypatch.setattr(cdp_profile, "for_site", fake_for_site)
+        monkeypatch.setattr(cdp_profile, "read_firefox_family", fake_read)
         assert cdp_profile.read_site_cookies("https://a.example/", "zen") == "sentinel"
         assert seen["args"] == ("https://a.example/", "zen")
+
+    def test_named_chromium_browser_uses_cdp_and_forwards_consent(self, monkeypatch):
+        seen = {}
+
+        def fake_cdp(site, browser, *, confirm):
+            seen["args"] = (site, browser)
+            seen["approved"] = confirm("local debugger port")
+            return "sentinel"
+
+        monkeypatch.setattr(cdp_profile, "cdp_read_site", fake_cdp)
+        assert cdp_profile.read_site_cookies(
+            "https://a.example/", "vivaldi", confirm=lambda prompt: prompt == "local debugger port"
+        ) == "sentinel"
+        assert seen == {"args": ("https://a.example/", "vivaldi"), "approved": True}
 
     def test_defaults_to_no_browser(self, monkeypatch):
         seen = {}

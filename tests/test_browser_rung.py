@@ -472,43 +472,50 @@ def test_the_hydration_change_did_not_add_a_print():
     assert "print(" not in source, "the hydration wait grew a stdout print"
 
 
-def test_the_cookie_fence_still_holds_on_the_browser_rung(monkeypatch, cache):
-    """The stealth rung is still called with no cookie material of any kind.
+def test_login_cookies_reach_a_throwaway_host_scoped_browser_context(monkeypatch, cache):
+    """A real browser-context setup receives only cookies for the target host.
 
-    The browser rung gained a launch-failure path. A path added to a rung that
-    can see a live login has to be re-checked, not assumed.
+    The persistent profile is bypassed for this read, so the caller's explicitly
+    kept login exists only in the temporary context and is gone when it closes.
     """
-    from searchts.session_cookies import CookieRecord
+    from searchts.session_cookies import CookieRecord, filter_for_host
 
-    seen: List[Dict[str, Any]] = []
-
-    def _stealth(url, *args, **kwargs):
-        seen.append({"args": args, "kwargs": kwargs})
-        return 200, RENDERED, url, {}
-
-    # curl is left thin rather than refused: two identical 4xx answers stop the
-    # ladder before the browser runs (#338), and a rung that never runs proves
-    # nothing about what it was handed.
+    seen: Dict[str, Any] = {}
+    _install_double_browser(monkeypatch, seen=seen)
     monkeypatch.setattr(
         unlocker, "_fetch_curl_cffi", lambda url, **kw: (200, SHELL, url, {})
     )
     monkeypatch.setattr(
         unlocker, "_fetch_jina", lambda url, timeout=40: (403, "", url, {})
     )
-    monkeypatch.setattr(unlocker, "_fetch_stealth", _stealth)
 
-    unlocker.fetch(
-        "https://site.test/app",
+    login = CookieRecord(
+        name="sessionid", value="private-session-value", domain="site.test",
+        path="/account", secure=True, http_only=True,
+    )
+    other_site = CookieRecord(
+        name="bank", value="other-private-value", domain="bank.test",
+    )
+    result = unlocker.fetch(
+        "https://site.test/account/settings",
+        backends=["curl_cffi", "stealth-browser"],
         use_memory=False,
         min_chars=200,
-        cookies=[CookieRecord(name="sessionid", value="s3cr3t", domain="site.test")],
+        cookies=[login, other_site],
     )
-    assert seen, "the browser rung never ran, so nothing was proven"
-    haystack = repr(seen)
-    assert "s3cr3t" not in haystack, f"cookie material reached the rung: {haystack}"
-    assert "cookie" not in haystack.lower(), (
-        f"the browser rung was handed cookie material: {haystack}"
-    )
+
+    assert result.backend == "stealth-browser"
+    assert result.authenticated is True
+    assert seen["launch_mode"] == "temporary"
+    assert seen["cookies"] == [{
+        "name": "sessionid",
+        "value": "private-session-value",
+        "secure": True,
+        "httpOnly": True,
+        "url": "https://site.test/account/__searchts_cookie__",
+    }]
+    assert filter_for_host([login, other_site], "site.test") == [login]
+    assert "private-session-value" not in repr(result.__dict__)
 
 
 # ── doubles ──────────────────────────────────────────────────────────────────
@@ -516,6 +523,7 @@ def test_the_cookie_fence_still_holds_on_the_browser_rung(monkeypatch, cache):
 def _install_double_browser(
     monkeypatch, frames: Optional[List[Any]] = None,
     goto_status: int = 200, launch_error: Optional[BaseException] = None,
+    seen: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Put a double patchright in ``sys.modules`` and return its page.
 
@@ -523,6 +531,7 @@ def _install_double_browser(
     ``_await_hydration`` is handed by the caller.
     """
     reads = list(frames or [RENDERED])
+    calls = seen if seen is not None else {}
 
     class _Resp:
         status = goto_status
@@ -557,16 +566,30 @@ def _install_double_browser(
         def new_page(self):
             return _Page()
 
+        def new_context(self, **kwargs):
+            calls["context_options"] = kwargs
+
+            class _Context:
+                def add_cookies(self, cookies):
+                    calls["cookies"] = cookies
+
+                def new_page(self):
+                    return _Page()
+
+            return _Context()
+
         def close(self):
             pass
 
     class _Chromium:
         def launch_persistent_context(self, *a, **kw):
+            calls["launch_mode"] = "persistent"
             if launch_error is not None:
                 raise launch_error
             return _Browser()
 
         def launch(self, *a, **kw):
+            calls["launch_mode"] = "temporary"
             if launch_error is not None:
                 raise launch_error
             return _Browser()

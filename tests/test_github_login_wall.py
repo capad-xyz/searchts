@@ -322,17 +322,17 @@ def test_the_cli_refuses_loud_and_names_the_cookie_way_past(
     assert "login-wall" in out.err
     assert f"searchts login signin {LOGIN_URL}" in out.err
     assert f"searchts read {LOGIN_URL} --cookies-from-browser" in out.err
-    # The fence, said out loud: a logged-in browser is not the fix.
-    assert "the browser tier is sent none of them" in out.err
+    # The third-party relay stays cookie-free; the local browser can use them.
+    assert "Jina relay never receives them" in out.err
 
 
-def test_a_cookie_read_of_the_same_page_names_the_fence_instead(
+def test_a_cookie_read_of_the_same_page_names_the_failed_local_browser_attempt(
     gh_login_ladder, monkeypatch
 ):
     """The 0.15.0 logged-in read: cookies sent, still a login page.
 
-    One sentence, and it is a different one, because the cause is different: the
-    session expired, or the browser tier cannot carry the login at all.
+    One sentence explains that the site did not accept the login even after the
+    temporary local browser context received its host-scoped cookies.
     """
     with pytest.raises(unlocker.UnlockerError) as raised:
         unlocker.fetch(
@@ -341,7 +341,8 @@ def test_a_cookie_read_of_the_same_page_names_the_fence_instead(
             cookies=[CookieRecord(name="user_session", value="x", domain="github.com")],
         )
     hint = raised.value.hint
-    assert "browser tier is sent no cookies at all" in hint
+    assert "temporary local browser context" in hint
+    assert "Jina relay never receives cookies" in hint
     assert "expired" in hint
 
 

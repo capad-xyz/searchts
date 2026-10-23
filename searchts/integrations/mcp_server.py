@@ -588,8 +588,8 @@ def read_url(
     ``cookies`` / ``cookies_from_browser`` / ``cdp_port`` / ``proxy`` are the
     same opt-ins the CLI's flags are, resolved through the same
     ``session_cookies.resolve_cookies`` and the same host fence: the jar is
-    narrowed to this URL's own host and attached to the direct request only,
-    never to a relay, never to a redirect on another host, and never printed.
+    narrowed to this URL's own host and attached to the direct request or a
+    temporary local browser context, never to the Jina relay, and never printed.
     ``cdp_port`` reaches a debugger port the USER already opened on localhost
     (start the browser with ``--remote-debugging-port=9222``), which is how a
     Chromium login is read; ``cookies_from_browser`` reads a Firefox-family

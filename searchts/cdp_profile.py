@@ -60,8 +60,10 @@ from searchts.session_cookies import (
     CookieReadError,
     CookieRecord,
     CookieSource,
+    family_of,
     filter_for_host,
     for_site,
+    read_firefox_family,
 )
 
 #: Where the CDP read gives up waiting for the debugger port to answer.
@@ -80,6 +82,23 @@ _PROFILE_NOISE = (
     "SingletonSocket",
     "lockfile",
     "lockfiles",
+    # These Chromium caches can dwarf the cookies and Local State the CDP
+    # reader needs. Copying multi-gigabyte caches just to read one host's
+    # cookies made an otherwise narrow operation look stuck.
+    "Cache",
+    "CacheStorage",
+    "Code Cache",
+    "Crashpad",
+    "DawnCache",
+    "DawnWebGPUCache",
+    "GPUCache",
+    "GraphiteDawnCache",
+    "GrShaderCache",
+    "ShaderCache",
+    "Service Worker",
+    "component_crx_cache",
+    "extensions_crx_cache",
+    "Webstore Downloads",
 )
 
 #: Executable names per browser, for PATH lookup.
@@ -303,7 +322,7 @@ def _purge(path: str) -> Optional[str]:
     jar of every login the user has.
     """
     last: Optional[str] = None
-    for attempt in range(5):
+    for attempt in range(10):
         try:
             shutil.rmtree(path)
             return None
@@ -311,8 +330,9 @@ def _purge(path: str) -> Optional[str]:
             return None
         except OSError as e:
             last = f"{type(e).__name__}: {e}"
-            # Windows releases a profile file a moment after the browser exits.
-            time.sleep(0.2 * (attempt + 1))
+            # Windows can hold a profile file for several seconds after the
+            # browser process exits. Give it a bounded, growing retry window.
+            time.sleep(0.5 * (attempt + 1))
     return last
 
 
@@ -815,11 +835,22 @@ def _disconnect_quietly(browser_obj: Any) -> None:
 # ── public: everything that is not Chromium ──────────────────────────────────
 
 
-def read_site_cookies(site: str, browser: str = "") -> CookieSource:
-    """Best local source for `site`, delegating to ``session_cookies``.
+def read_site_cookies(
+    site: str,
+    browser: str = "",
+    *,
+    confirm: Optional[Callable[[str], bool]] = None,
+) -> CookieSource:
+    """Read `site` from the named browser, or use the owned store by default.
 
-    The owned store and the Firefox-derived browsers are read straight off
-    disk by ``session_cookies.for_site``; a Chromium browser named here is
-    refused there with the reason, pointing at the debugger port.
+    Firefox-family profiles, including Zen, are read-only SQLite databases.
+    Chromium profiles, including Vivaldi, are copied to a throwaway profile
+    and read through CDP after ``confirm`` approves opening the local port.
+    Naming a browser means that profile is the requested source; with no
+    browser name, ``for_site`` gives the searchts-owned store precedence.
     """
-    return for_site(site, browser)
+    if not browser:
+        return for_site(site)
+    if family_of(browser) == "chromium":
+        return cdp_read_site(site, browser, confirm=confirm)
+    return read_firefox_family(browser, site)

@@ -361,7 +361,12 @@ def _run():
     p_login_keep.add_argument("url", help="The site whose login to keep")
     p_login_keep.add_argument(
         "--cookies-from-browser", default="", metavar="BROWSER",
-        help="Copy from this Firefox-family browser, then keep the site (opt-in)",
+        choices=_BROWSER_CHOICES,
+        help="Copy from this browser, then keep the site (opt-in)",
+    )
+    p_login_keep.add_argument(
+        "--yes", action="store_true",
+        help="Approve copying this site's cookies and keep them in the searchts store",
     )
 
     p_login_kill = login_sub.add_parser(
@@ -1757,7 +1762,8 @@ def _cmd_configure(args):
                 "youtube-cookies",
                 "not wired and not stored in YAML. yt-dlp does not read a searchts key. "
                 "Opt in at transcribe time: searchts transcribe <url> "
-                "--cookies-from-browser chrome. Never used by `searchts read`.",
+                "--cookies-from-browser chrome. `searchts read` has separate, "
+                "host-scoped cookie options.",
             )],
             status=progress.ROW_WARN,
             subject="not stored",
@@ -2215,7 +2221,7 @@ def _cmd_read(args):
         # behind a login. Naming the commands here is what turns a wall into
         # something an agent can act on, and it costs one row on a path
         # that has already failed.
-        if any("login-wall" in why for _, why in e.attempts):
+        if not cookies and any("login-wall" in why for _, why in e.attempts):
             rows.append(
                 receipts.Row(progress.ROW_WARN, "login", _login_wall_hint_text(args.url))
             )
@@ -2467,7 +2473,7 @@ def _read_command_cookies(args):
     label = getattr(source, "via", "") or "login"
     print(f"cookies: {label} -> {source.count} cookies for {args.url}", file=sys.stderr)
     if source.via == "owned store":
-        print(f"{host} was already kept; no browser opened.", file=sys.stderr)
+        print(f"{host} was already kept; the source browser was not consulted.", file=sys.stderr)
     else:
         print(
             "copied for this session only, not kept. "
@@ -2498,12 +2504,14 @@ def _cmd_login(args):
     from searchts.login_store import (
         SessionConsentNeeded,
         audit,
+        grant_session_copy,
         host_of,
         keep,
         kill,
+        note_copied,
         purge_scratch,
     )
-    from searchts.session_cookies import CookieReadError, for_site
+    from searchts.session_cookies import CookieReadError
 
     action = getattr(args, "login_command", None) or "list"
 
@@ -2592,14 +2600,24 @@ def _cmd_login(args):
                 file=sys.stderr,
             )
             sys.exit(2)
+        if getattr(args, "yes", False):
+            grant_session_copy()
         try:
             # Copying is not keeping, so the session's one approval is still
             # required here. `login keep` does not become a way around it.
+            from searchts.cdp_profile import ConsentRequired, read_site_cookies
             from searchts.login_store import require_copy_consent
 
             require_copy_consent(args.url)
-            source = for_site(args.url, browser)
-        except SessionConsentNeeded as e:
+            def confirm_debugger(prompt: str) -> bool:
+                print(prompt, file=sys.stderr, flush=True)
+                return True
+
+            source = read_site_cookies(
+                args.url, browser, confirm=confirm_debugger
+            )
+            note_copied(args.url)
+        except (SessionConsentNeeded, ConsentRequired) as e:
             print(str(e), file=sys.stderr)
             sys.exit(3)
         except CookieReadError as e:
@@ -2665,10 +2683,8 @@ def _login_wall_hint_text(url: str) -> str:
     ``hint`` naming the real cause, and two competing explanations would be
     worse than one.
 
-    Both ways past the wall end the same way, and that is said out loud: the
-    cookies ride the direct request only. The browser tier is sent none of
-    them, which is the fence that stops a live login reaching a third party,
-    so nobody should expect a logged-in browser to make ``read`` work.
+    Cookies stay scoped to the requested host. The direct request and a
+    temporary local browser context can use them; the Jina relay never does.
     """
     from searchts.login_store import host_of, kept
 
@@ -2676,23 +2692,22 @@ def _login_wall_hint_text(url: str) -> str:
     if not host:
         return ""
     if kept(url):
-        # Already kept and still a wall: the saved login is stale, so keeping
-        # is not the fix and suggesting it would waste the user's time.
+        # Already kept and still a wall: the site did not accept the saved
+        # login, so a fresh copy from the signed-in profile is the next step.
         return (
             f"{host} is already in the searchts store and still returned a "
-            f"login page, so that saved login has expired. Sign in again: "
+            f"login page, so the saved login may be expired or incomplete. "
+            f"Sign in again: "
             f"searchts login kill {host}, then searchts login signin {url}.\n"
-            "Either way those cookies ride the direct request only. "
-            "That is why the browser tier is sent none of them, "
-            "so a logged-in browser is not what makes the next read work."
+            "The direct request and temporary local browser can use the "
+            "host-scoped cookies. The Jina relay never receives them."
         )
     return (
         f"{host} is behind a login. Two ways past it, your call:\n"
         f"searchts login signin {url}\n"
         f"searchts read {url} --cookies-from-browser firefox\n"
-        "Either way those cookies ride the direct request only. "
-        "That is why the browser tier is sent none of them, "
-        "so a logged-in browser is not what makes the next read work."
+        "The direct request and temporary local browser can use the "
+        "host-scoped cookies. The Jina relay never receives them."
     )
 
 
@@ -2711,7 +2726,8 @@ def _print_login_wall_hint(url: str) -> None:
     if kept(url):
         print(
             f"  {host} is already in the searchts store and still returned a "
-            f"login page, so that saved login has expired. Sign in again: "
+            f"login page, so the saved login may be expired or incomplete. "
+            f"Sign in again: "
             f"`searchts login kill {host}` then "
             f"`searchts login signin {url}`.",
             file=sys.stderr,
@@ -2724,9 +2740,8 @@ def _print_login_wall_hint(url: str) -> None:
             file=sys.stderr,
         )
     print(
-        "  Either way those cookies ride the direct request only: the browser "
-        "tier is sent none of them, so a logged-in browser is not what makes "
-        "the next read work.",
+        "  The direct request and temporary local browser can use the "
+        "host-scoped cookies. The Jina relay never receives them.",
         file=sys.stderr,
     )
 

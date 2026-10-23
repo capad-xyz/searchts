@@ -1805,6 +1805,7 @@ def _fetch_stealth(
     url: str, timeout: int = 60, progress: Optional[bool] = None,
     proxy: Optional[Dict[str, Any]] = None,
     expand: bool = False, expand_sink: Optional["_ExpandSink"] = None,
+    cookies: Optional[List["CookieRecord"]] = None,
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     """Tier-2: render with an undetected headless Chromium (patchright).
 
@@ -1829,7 +1830,7 @@ def _fetch_stealth(
 
     Safe under MCP/FastMCP: see ``_call_sync_browser``.
     """
-    if proxy or expand:
+    if proxy or expand or cookies:
         # Keyword-only through a closure. The impl's positional order is
         # (url, timeout, progress, proxy, expand, expand_sink), and packing
         # positionals here meant a read with a proxy but no expand handed
@@ -1837,7 +1838,8 @@ def _fetch_stealth(
         # wants a dict. One call site, one rule: never guess positions.
         return _call_sync_browser(
             lambda: _fetch_stealth_impl(
-                url, timeout, progress, proxy or None, expand, expand_sink
+                url, timeout, progress, proxy or None, expand, expand_sink,
+                **({"cookies": cookies} if cookies else {}),
             )
         )
     # No proxy: delegate exactly as before. An impl stub may take only the
@@ -1883,6 +1885,7 @@ def _fetch_stealth_impl(
     url: str, timeout: int = 60, progress: Optional[bool] = None,
     proxy: Optional[Dict[str, Any]] = None,
     expand: bool = False, expand_sink: Optional["_ExpandSink"] = None,
+    cookies: Optional[List["CookieRecord"]] = None,
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     try:
         from patchright.sync_api import sync_playwright
@@ -1902,7 +1905,10 @@ def _fetch_stealth_impl(
     want_tick = _progress_wanted(progress)
     _stderr_tick("launching the browser…", want_tick)
     with sync_playwright() as p:
-        persistent = _use_persistent_profile()
+        # A cookie-bearing read uses a throwaway context. The caller already
+        # persisted any login it wants to keep, so a second copy in the browser
+        # profile would be unnecessary and would outlive this one-site read.
+        persistent = _use_persistent_profile() and not cookies
         try:
             if persistent:
                 profile_dir = _profile_path()
@@ -1929,6 +1935,14 @@ def _fetch_stealth_impl(
                     user_agent=_UA_REAL, locale="en-US",
                     viewport={"width": 1280, "height": 800},
                 )
+                if cookies:
+                    try:
+                        ctx.add_cookies(_playwright_cookie_params(cookies, url))
+                    except Exception:  # noqa: BLE001 - never echo cookie data
+                        raise RuntimeError(
+                            "could not add the requested host-scoped cookies "
+                            "to the temporary browser context"
+                        ) from None
                 page = ctx.new_page()
             from searchts.ssrf import guard_browser_page
             guard_browser_page(page, url)
@@ -2022,6 +2036,46 @@ def _fetch_stealth_impl(
             return status, html, final, headers
         finally:
             browser.close()
+
+
+def _playwright_cookie_params(
+    cookies: List["CookieRecord"], url: str,
+) -> List[Dict[str, Any]]:
+    """Map host-scoped records to Playwright cookies without widening scope."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    netloc = host + (f":{parts.port}" if parts.port is not None else "")
+    out: List[Dict[str, Any]] = []
+    for cookie in cookies:
+        item: Dict[str, Any] = {
+            "name": cookie.name,
+            "value": cookie.value,
+            "secure": cookie.secure,
+            "httpOnly": cookie.http_only,
+        }
+        if cookie.domain.startswith("."):
+            item["domain"] = cookie.domain
+            item["path"] = cookie.path or "/"
+        else:
+            # A host-only cookie stays host-only in the browser context. Passing
+            # it as a domain cookie would silently extend it to subdomains.
+            cookie_path = cookie.path or "/"
+            if not cookie_path.startswith("/"):
+                cookie_path = "/" + cookie_path
+            # Playwright derives both host and path from `url`, and rejects a
+            # `path` field alongside it. Add a dummy last segment so Chromium's
+            # default-path rule derives the original cookie path exactly.
+            source_path = (
+                "/" if cookie_path == "/"
+                else cookie_path + "/__searchts_cookie__"
+            )
+            item["url"] = urlunsplit((parts.scheme, netloc, source_path, "", ""))
+        out.append(item)
+    return out
 
 
 def _host_wall_reason(url: str, html: str) -> str:
@@ -2394,12 +2448,11 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         host would really have been sent. ``.amazon.in`` rides along on
         ``www.amazon.in``; ``notamazon.in`` gets nothing.
 
-        THE FENCE: a Cookie header is attached to exactly one rung, the
-        direct-host ``curl_cffi`` fetch. It never goes to ``Jina Reader`` (a
-        cookie sent to r.jina.ai is a live login handed to a third party), and
-        this change does not wire cookies into ``stealth-browser`` either. The
-        value is never logged, printed, or put in an error message or on the
-        FetchResult.
+        THE FENCE: cookies are sent only to the requested host, either on the
+        direct-host ``curl_cffi`` request or in a temporary local
+        ``stealth-browser`` context. They never go to ``Jina Reader`` (a cookie
+        sent to r.jina.ai is a live login handed to a third party). The values
+        are never logged, printed, or put in an error message or FetchResult.
     proxy:
         ``scheme://[user:pass@]host:port`` to route the direct and browser rungs
         through. This is the lever for a block decided on our egress ADDRESS
@@ -2477,13 +2530,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         why = blocked[7:] if blocked.startswith("Error: ") else blocked
         raise UnlockerError(url, [("ssrf", why)])
 
-    # Host-scoped cookie material, resolved ONCE and used by ONE rung. Scoped
+    # Host-scoped cookie material, resolved ONCE and used only on local rungs. Scoped
     # here, against the normalized URL's host, because that is the only place
     # the target host is known: by the time the ladder runs, `final_url` may be
     # a redirect and `url` is the only host the caller actually asked about.
     # filter_for_host owns the suffix rule (.amazon.in yes, notamazon.in no), so
     # this does not re-implement it.
     cookie_header = ""
+    scoped_cookies: List["CookieRecord"] = []
     if cookies:
         from searchts.session_cookies import build_header, filter_for_host
         target_host = (urllib.parse.urlparse(url).hostname or "").lower().rstrip(".")
@@ -2533,13 +2587,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     # HTML extraction can't see (or sees only partially). A dedicated extractor
     # returns the COMPLETE conversation; any failure falls through to the ladder.
     #
-    # ── does this read answer "as the logged-in user" or "as anyone"? ────────
-    # Only the direct curl rung can carry the jar, so only a curl win is an
-    # authenticated answer. Reported so an agent can tell the two apart; a
-    # boolean, never a value. Measured: with `--cdp-port` on a real login the
-    # receipt was byte-identical to the anonymous one, so "I read your Drive"
-    # and "I read Drive's public page" looked the same to the caller.
-    cookie_rung = "curl_cffi"
+    # A receipt can say whether the winning target-host request carried the
+    # supplied login. It is a boolean, never a value.
+    cookie_backends = {"curl_cffi", "stealth-browser"}
 
     # F23d: what the expand pass did, collected across the rungs that ran and
     # printed once, on whichever result wins. A sink rather than a return value
@@ -2559,7 +2609,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     media_limit, media_clamp = _more_mod.resolve_media_limit(media)
 
     def _with_auth(result: FetchResult) -> FetchResult:
-        result.authenticated = bool(cookie_header) and result.backend == cookie_rung
+        result.authenticated = bool(scoped_cookies) and result.backend in cookie_backends
         note = expand_sink.note()
         if note:
             result.extra_notes = list(result.extra_notes or []) + [note]
@@ -2673,9 +2723,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     #: hides the only answer that names the wall.
     browser_would_differ = False
     #: A rung served markup with no text in it and the signs of a client app.
-    #: Only the browser can read such a page, and the browser is sent no
-    #: cookies, so the one sentence worth saying is about the rung and the
-    #: fence rather than about a thin article.
+    #: Only the browser can read such a page, so the one sentence worth saying
+    #: is about the rung rather than about a thin article.
     app_shell = False
     #: F23d: a clean curl win we stepped over to let the browser try to open the
     #: folds. If the browser cannot be run, or fails, this read is still good
@@ -2686,7 +2735,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
 
     for backend in order:
         if refusal_count >= _REFUSAL_REPEAT_LIMIT and not (
-            browser_would_differ and backend == "stealth-browser"
+            backend == "stealth-browser"
+            and (browser_would_differ or scoped_cookies)
         ):
             attempts.append((backend, "skipped-no-new-tls"))
             _tick(f"  {backend}: skipped, {refusal_status} already refused twice")
@@ -2696,11 +2746,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                 final_url = url
                 headers: Dict[str, str] = {}
                 if backend == "curl_cffi":
-                    # The one rung that talks to the target host, so the one rung
-                    # that may carry its cookies. Passed only when there is a header
-                    # to pass, so a cookie-free read calls the fetcher exactly as
-                    # before. Jina's and the browser's call sites below stay bare:
-                    # that is the fence, and it is a call-site fence, not a filter.
+                    # Direct requests use a Cookie header. The browser rung gets
+                    # structured cookies in a temporary local context; Jina stays
+                    # bare, which is the third-party fence.
                     if cookie_header or proxy_curl:
                         # Both kwargs are passed only when they carry something, so a
                         # plain read calls the fetcher with the identical argument
@@ -2722,9 +2770,18 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     # would be a live login handed to a third party.
                     status, body, final_url, headers = _fetch_jina(url)
                 elif backend == "stealth-browser":
-                    # No cookie header here, ever. The browser may carry the proxy,
-                    # because that changes the address the challenge is judged from.
-                    if proxy_browser or expand:
+                    # Cookies enter a temporary local browser context. Playwright
+                    # applies their normal domain and path rules, so redirects and
+                    # page subrequests cannot carry them to an unrelated host.
+                    # Jina never receives them. The browser may also carry the
+                    # proxy, because it changes the address the challenge sees.
+                    if scoped_cookies:
+                        status, body, final_url, headers = _fetch_stealth(
+                            url, progress=progress, proxy=proxy_browser,
+                            expand=expand, expand_sink=expand_sink,
+                            cookies=scoped_cookies,
+                        )
+                    elif proxy_browser or expand:
                         status, body, final_url, headers = _fetch_stealth(
                             url, progress=progress, proxy=proxy_browser,
                             expand=expand, expand_sink=expand_sink,
@@ -3196,7 +3253,7 @@ def _final_hint(
     if cookie:
         return cookie
     if app_shell:
-        return _app_shell_hint()
+        return _app_shell_hint(has_cookies=bool(cookie_header))
     from searchts.known_hosts import reddit as _reddit
 
     fallback = ""
@@ -3214,30 +3271,31 @@ def _final_hint(
     return fallback
 
 
-def _app_shell_hint() -> str:
+def _app_shell_hint(*, has_cookies: bool = False) -> str:
     """The one sentence for a page the address only ever sends to a browser.
 
-    Two facts, and both of them are needed. The markup carries no text, so no
-    rung that speaks HTTP can do better. And the browser rung is sent no
-    cookies, which is the fence that keeps a cookie from reaching a third
-    party, so "sign in and the browser will read it" is not a plan here. What
-    the browser can do is render the page, and the command to install it is
-    what is actually missing when it is not there.
+    The markup carries no text, so no rung that speaks HTTP can do better. The
+    browser rung can render it, using only cookies scoped to the requested
+    host when the caller opted in.
     """
     from searchts import scroll as _scroll
 
     if _scroll.browser_available():
         return (
             "this page is a JS app: the markup it served carries almost none "
-            "of its text, so only the browser tier can read it, and that tier "
-            "is sent no cookies. The browser rung did not manage this page "
-            "either."
+            "of its text, so only the browser tier can read it. The browser "
+            "rung did not manage this page either."
         )
+    cookie_note = (
+        " The saved login was not tried in a browser because the browser tier "
+        "is not installed."
+        if has_cookies else " no cookies were supplied for this host."
+    )
     return (
         "this page is a JS app: the markup it served carries almost none of "
-        "its text, so only the browser tier can read it, and that tier is sent "
-        "no cookies, so there is no rung left that can. Run: searchts install "
-        "--browser"
+        "its text, so only the browser tier can read it; that tier is not "
+        "installed, so there is no rung left that can." + cookie_note +
+        " Run: searchts install --browser"
     )
 
 
@@ -3246,13 +3304,10 @@ def _cookie_login_hint(
 ) -> str:
     """The one sentence a cookie read needs when it still lands on a login page.
 
-    Cookies were scoped to this host and attached to the direct request, and the
-    site answered with its login page anyway. Every rung then reports
-    "login-wall" and the caller is left guessing which of the three causes it
-    is: the session expired, the cookies went to the wrong profile, or the
-    browser rung simply cannot carry them (the fence). That last one is the
-    common case and it is invisible from the report, so it is named here
-    rather than left to be discovered from a third failed read.
+    Cookies were scoped to this host and the site answered with its login page
+    anyway. The session may be expired, incomplete, or from the wrong profile.
+    When the browser rung ran, it received the same host-scoped cookies in a
+    temporary local context. The Jina relay never receives them.
 
     Empty unless cookies were actually sent, so an anonymous read is unchanged.
     """
@@ -3260,12 +3315,21 @@ def _cookie_login_hint(
         return ""
     if not any("login-wall" in why for _, why in attempts):
         return ""
+    browser_tried = any(
+        backend == "stealth-browser" and why != "skipped-no-new-tls"
+        for backend, why in attempts
+    )
+    if browser_tried:
+        return (
+            "cookies were sent to this host by the direct request and a "
+            "temporary local browser context, but the site still returned a "
+            "login page. The saved session may be expired, incomplete, or "
+            "from a different profile. The Jina relay never receives cookies."
+        )
     return (
-        "cookies were sent for this host and the site still returned a login "
-        "page: the session is probably expired, or these cookies belong to a "
-        "different profile. They ride the direct request only - the browser "
-        "tier is sent no cookies at all - so a logged-in read cannot be fixed "
-        "by making the browser logged in."
+        "cookies were sent to this host by the direct request, but the local "
+        "browser rung was not run. Retry without forcing a backend, or check "
+        "that the saved session is current. The Jina relay never receives cookies."
     )
 
 

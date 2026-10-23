@@ -41,12 +41,12 @@ def rec(name="sid", value="v", domain="example.com", secure=True):
 # ── state 1: already kept ───────────────────────────────────────────────────
 
 
-def test_kept_site_opens_no_browser():
-    """The whole point of keeping: Chrome does not open."""
+def test_kept_site_uses_the_saved_login():
+    """A kept login takes precedence over any newly named source browser."""
     ls.keep("example.com", [rec()])
     d = ls.decide("example.com", browser="chrome")
     assert d.state == ls.KEPT
-    assert "no browser" in d.why.lower()
+    assert "source browser is not consulted" in d.why.lower()
 
 
 def test_kept_wins_even_when_a_browser_is_named():
@@ -292,42 +292,56 @@ def test_prepare_uses_the_store_without_asking():
     assert src.via == "owned store"
 
 
-def test_prepare_copy_needs_consent_first():
-    from searchts import session_cookies
+def test_prepare_copy_needs_consent_first(monkeypatch):
+    from searchts import cdp_profile
+    from searchts.session_cookies import CookieSource
 
     calls = []
 
-    def fake_for_site(site, browser=""):
-        calls.append((site, browser))
-        from searchts.session_cookies import CookieSource
-
+    def fake_read_site(site, browser="", *, confirm=None):
+        calls.append((site, browser, confirm is not None))
         return CookieSource(site=site, cookies=[rec()], count=1, via="test")
 
     ls.grant_session_copy()
-    original = session_cookies.for_site
-    session_cookies.for_site = fake_for_site
-    try:
-        src = ls.prepare("example.com", browser="firefox")
-    finally:
-        session_cookies.for_site = original
+    monkeypatch.setattr(cdp_profile, "read_site_cookies", fake_read_site)
+    src = ls.prepare("example.com", browser="zen")
     assert src.count == 1
-    assert calls == [("example.com", "firefox")]
+    assert calls == [("example.com", "zen", True)]
     # Copied, not kept.
     assert ls.list_kept() == {}
 
 
-def test_prepare_does_not_copy_when_consent_is_missing():
-    from searchts import session_cookies
+def test_prepare_does_not_copy_when_consent_is_missing(monkeypatch):
+    from searchts import cdp_profile
 
     called = []
-    original = session_cookies.for_site
-    session_cookies.for_site = lambda s, b="": called.append(s)
-    try:
-        with pytest.raises(ls.SessionConsentNeeded):
-            ls.prepare("example.com", browser="firefox")
-    finally:
-        session_cookies.for_site = original
+    monkeypatch.setattr(
+        cdp_profile, "read_site_cookies", lambda *a, **k: called.append(a)
+    )
+    with pytest.raises(ls.SessionConsentNeeded):
+        ls.prepare("example.com", browser="zen")
     assert called == []
+
+
+def test_prepare_vivaldi_opens_a_confirmed_cdp_copy(monkeypatch, capsys):
+    from searchts import cdp_profile
+    from searchts.session_cookies import CookieSource
+
+    calls = []
+
+    def fake_cdp(site, browser, *, confirm):
+        calls.append((site, browser, confirm("Vivaldi debugger")))
+        return CookieSource(site=site, cookies=[rec()], count=1, via="debugger port")
+
+    ls.grant_session_copy()
+    monkeypatch.setattr(cdp_profile, "cdp_read_site", fake_cdp)
+    src = ls.prepare("example.com", browser="vivaldi")
+    captured = capsys.readouterr()
+
+    assert src.via == "debugger port"
+    assert calls == [("example.com", "vivaldi", True)]
+    assert "Vivaldi debugger" in captured.err
+    assert ls.session_copied_sites() == ["example.com"]
 
 
 def test_unknown_browser_is_reported_not_crashed():

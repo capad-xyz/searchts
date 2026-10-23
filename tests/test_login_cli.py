@@ -79,11 +79,11 @@ def test_keep_without_a_source_refuses_rather_than_guessing(capsys, monkeypatch)
 
 def test_keep_without_consent_is_refused_and_stores_nothing(capsys, monkeypatch):
     """`login keep` must not become a way around the one approval."""
-    from searchts import session_cookies
+    from searchts import cdp_profile
 
     monkeypatch.setattr(
-        session_cookies, "for_site",
-        lambda s, b="": (_ for _ in ()).throw(AssertionError("must not copy")),
+        cdp_profile, "read_site_cookies",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not copy")),
     )
     rc, _, err = run(
         ["login", "keep", "example.com", "--cookies-from-browser", "firefox"],
@@ -95,12 +95,12 @@ def test_keep_without_consent_is_refused_and_stores_nothing(capsys, monkeypatch)
 
 
 def test_keep_with_consent_writes_one_site(capsys, monkeypatch):
-    from searchts import session_cookies
+    from searchts import cdp_profile
     from searchts.session_cookies import CookieSource
 
     monkeypatch.setattr(
-        session_cookies, "for_site",
-        lambda s, b="": CookieSource(site=s, cookies=[rec()], count=1, via="test"),
+        cdp_profile, "read_site_cookies",
+        lambda s, b="", **kw: CookieSource(site=s, cookies=[rec()], count=1, via="test"),
     )
     ls.grant_session_copy()
     rc, out, _ = run(
@@ -111,6 +111,42 @@ def test_keep_with_consent_writes_one_site(capsys, monkeypatch):
     assert "kept example.com" in out
     assert "SECRETVALUE" not in out
     assert sorted(ls.list_kept()) == ["example.com"]
+
+
+def test_keep_vivaldi_with_yes_reads_profile_then_persists_it(capsys, monkeypatch):
+    """The user's Vivaldi profile is the source, and only this host is kept."""
+    from searchts import cdp_profile
+    from searchts.session_cookies import CookieSource
+
+    seen = {}
+
+    def read_site(site, browser, *, confirm):
+        seen["site"] = site
+        seen["browser"] = browser
+        seen["approved"] = confirm("Vivaldi debugger approval")
+        return CookieSource(
+            site=site, cookies=[rec()], browser=browser, count=1,
+            via="debugger port",
+        )
+
+    monkeypatch.setattr(cdp_profile, "read_site_cookies", read_site)
+    rc, out, err = run(
+        ["login", "keep", "https://example.com/profile",
+         "--cookies-from-browser", "vivaldi", "--yes"],
+        capsys, monkeypatch,
+    )
+
+    assert rc == 0
+    assert seen == {
+        "site": "https://example.com/profile",
+        "browser": "vivaldi",
+        "approved": True,
+    }
+    assert "Vivaldi debugger approval" in err
+    assert "kept example.com" in out
+    assert "SECRETVALUE" not in out + err
+    assert ls.list_kept() == {"example.com": {"cookies": 1, "browser": "vivaldi"}}
+    assert ls.session_copied_sites() == ["example.com"]
 
 
 # ── kill ────────────────────────────────────────────────────────────────────

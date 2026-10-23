@@ -183,7 +183,8 @@ COMMANDS: Dict[str, dict] = {
         "lead": "Site logins searchts keeps, and what it copied this session.",
         "body": [
             "Nothing is copied out of your browser without --yes. A kept login",
-            "rides the direct request only; the browser rung is sent none of it.",
+            "stays on this machine: direct requests and a temporary local",
+            "browser context can use it; the Jina relay never receives it.",
         ],
         "examples": [
             "searchts login list",
