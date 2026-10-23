@@ -2,6 +2,15 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.21.0](https://github.com/capad-xyz/searchts/compare/v0.20.1...v0.21.0) (2026-10-23)
+
+
+### Added
+
+* **cli:** give an unknown command the receipt frame ([#421](https://github.com/capad-xyz/searchts/issues/421)) ([08afb7f](https://github.com/capad-xyz/searchts/commit/08afb7fda4b850950b5d39d9b3295446da67759c))
+* **cli:** list configure keys when none is given ([#424](https://github.com/capad-xyz/searchts/issues/424)) ([02c7242](https://github.com/capad-xyz/searchts/commit/02c7242f85c7f51d2f24a2368bd85fc516c0567a))
+* **grab:** reject a 1:1 copy of an image already saved ([#423](https://github.com/capad-xyz/searchts/issues/423)) ([50e66f4](https://github.com/capad-xyz/searchts/commit/50e66f493336c2a018e71f7c7fe3f4a899721be9))
+
 ## [0.20.1](https://github.com/capad-xyz/searchts/compare/v0.20.0...v0.20.1) (2026-10-23)
 
 
