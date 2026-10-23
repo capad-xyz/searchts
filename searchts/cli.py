@@ -82,14 +82,62 @@ def _first_command_token(argv):
     return None
 
 
-def _maybe_print_command_suggestion(argv, commands):
-    """Suggest the nearest known command before argparse prints its error."""
+def _unknown_command(argv, commands):
+    """The first positional token when it is not a command, plus its match."""
     command = _first_command_token(argv)
     if not command or command in commands:
-        return
+        return None
     matches = difflib.get_close_matches(command, commands, n=1, cutoff=0.6)
-    if matches:
-        print(f"did you mean '{matches[0]}'?", file=sys.stderr)
+    return command, (matches[0] if matches else None)
+
+
+def _maybe_print_command_suggestion(argv, commands):
+    """Suggest the nearest known command before argparse prints its error."""
+    found = _unknown_command(argv, commands)
+    if found and found[1]:
+        print(f"did you mean '{found[1]}'?", file=sys.stderr)
+
+
+def _wants_framed_usage():
+    """A terminal gets the receipt; a pipe keeps argparse's plain bytes."""
+    if os.environ.get("TERM", "").lower() == "dumb":
+        return False
+    from searchts import progress
+
+    return progress.live_available(sys.stderr)
+
+
+def _print_unknown_command(command, match, commands):
+    """The unknown-command screen: one receipt, no usage dump.
+
+    argparse's error names the bad token once and then prints the entire
+    command set as a single wrapped line. A person who typed ``config`` needs
+    two facts, what they typed and the command they meant, followed by the
+    list they can actually read.
+    """
+    from searchts import helptext, progress, receipts
+
+    style, unicode_ok = receipts.for_stream(sys.stderr)
+    rows: List[receipts.Item] = [
+        receipts.Row(progress.ROW_FAIL, "command", f"unknown command: {command}")
+    ]
+    if match:
+        rows.append(receipts.Row(progress.ROW_WARN, "did you mean", match))
+    rows.append(receipts.Section("commands"))
+    for name in commands:
+        lead = (helptext.COMMANDS.get(name) or {}).get("lead", "")
+        rows.append(receipts.Row(progress.ROW_SKIP, name, lead))
+    print(
+        receipts.block(
+            style,
+            "searchts",
+            rows,
+            subject=command,
+            status=progress.ROW_FAIL,
+            unicode_ok=unicode_ok,
+        ),
+        file=sys.stderr,
+    )
 
 
 #: The first-run screen is now drawn by ``searchts.helptext`` rather than by
@@ -476,8 +524,6 @@ def _run():
     # ── version ──
     sub.add_parser("version", parents=[_verbose], help="Show version")
 
-    _maybe_print_command_suggestion(sys.argv[1:], sub.choices)
-
     # Help is a document, not a syntax dump. Rendering it ourselves keeps the
     # flag list generated from the live parsers (so it cannot drift) while the
     # prose, the grouping and the width stay ours.
@@ -486,6 +532,13 @@ def _run():
     if helptext.wants_help(sys.argv[1:]) or len(sys.argv) == 1:
         helptext.render(parser, sys.argv[1:], __version__)
         sys.exit(0)
+
+    unknown = _unknown_command(sys.argv[1:], sub.choices)
+    if unknown and _wants_framed_usage():
+        _print_unknown_command(unknown[0], unknown[1], sub.choices)
+        sys.exit(2)
+
+    _maybe_print_command_suggestion(sys.argv[1:], sub.choices)
 
     args = parser.parse_args()
 
