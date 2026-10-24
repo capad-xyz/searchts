@@ -250,12 +250,14 @@ def create_server():
             "logins, which sites it has copied, and where the scratch folder "
             "is. Expired cookies are swept on every command, offline, with no "
             "daemon. Call this when a read_url error mentions a login. Returns "
-            "JSON; never contains a cookie value."
+            "JSON; never contains a cookie value. Pass url to also see which "
+            "stored host that URL resolves to (an exact host, or a parent "
+            "such as example.com for app.example.com)."
             + UPDATE_CHECK_DESCRIPTION
         ),
     )
-    def login_status_tool() -> str:
-        return login_status()
+    def login_status_tool(url: str = "") -> str:
+        return login_status(url)
 
     @mcp.tool(
         name="login_signin",
@@ -389,22 +391,27 @@ def create_server():
     return mcp
 
 
-def login_status() -> str:
+def login_status(url: str = "") -> str:
     """What searchts holds for logged-in reads. Provenance only, never a value."""
-    from searchts.login_store import audit
+    from searchts.login_store import audit, resolve_site
 
     a = audit()
-    return _with_update_info(json.dumps(
-        {
-            "kept": a.kept,
-            "session_copy_granted": a.session_copy_granted,
-            "session_copied_sites": a.session_copied_sites,
-            "scratch": a.scratch,
-            "store_dir": a.store_dir,
-        },
-        ensure_ascii=False,
-        indent=2,
-    ))
+    data: dict = {
+        "kept": a.kept,
+        "session_copy_granted": a.session_copy_granted,
+        "session_copied_sites": a.session_copied_sites,
+        "scratch": a.scratch,
+        "store_dir": a.store_dir,
+    }
+    if url:
+        resolved = resolve_site(url)
+        data["resolved"] = {
+            "url": url,
+            "host": resolved.host,
+            "stored_host": resolved.stored_host,
+            "exact": bool(resolved.stored_host and resolved.exact),
+        }
+    return _with_update_info(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 #: Bounds for login_signin's wait. Long enough to type a password and pass a
@@ -439,7 +446,10 @@ def login_signin(url: str, browser: str = "chrome",
         return f"Error: {e}"
     except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
         return _unexpected("login_signin", e)
-    out = keep(url, source.cookies, browser=browser, consent=False)
+    try:
+        out = keep(url, source.cookies, browser=browser, consent=False)
+    except CookieReadError as e:
+        return f"Error: {e}"
     return _with_update_info(json.dumps(
         {"host": host, "kept": True, "cookies": out.count, "why": out.why},
         ensure_ascii=False,

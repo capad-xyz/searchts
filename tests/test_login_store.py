@@ -64,6 +64,22 @@ def test_kept_returns_the_stores_cookies_host_scoped():
     assert all("example.com" in c.domain for c in src.cookies)
 
 
+def test_decide_uses_a_parent_login_for_a_subdomain():
+    ls.keep("example.com", [rec(domain=".example.com")])
+    d = ls.decide("app.example.com")
+    assert d.state == ls.KEPT
+    assert d.source is not None
+    assert d.source.stored_host == "example.com"
+    assert "resolved to the login kept for example.com" in d.why
+
+
+def test_decide_does_not_use_a_host_only_parent_cookie_for_a_subdomain():
+    ls.keep("example.com", [rec(domain="example.com")])
+    assert ls.kept("example.com") is True
+    assert ls.kept("app.example.com") is False
+    assert ls.decide("app.example.com").state != ls.KEPT
+
+
 def test_a_sibling_domain_is_not_the_same_site():
     """example.com must not pick up cookies scoped to a subdomain or a sibling.
 

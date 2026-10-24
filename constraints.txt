@@ -18,6 +18,8 @@ yt-dlp-ejs==0.8.0
 curl_cffi==0.16.0
 trafilatura==2.2.0
 ddgs==9.15.0
+# Real Public Suffix List for login reuse (co.uk, github.io, vercel.app).
+publicsuffixlist==1.1.2.20261023
 
 # Base since #442 (were the [mcp], [browser] and [cookies] extras).
 # P2.3: SDK 2.x (FastMCP -> MCPServer).

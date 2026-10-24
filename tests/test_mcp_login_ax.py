@@ -246,6 +246,20 @@ def test_login_status_reports_what_is_held_and_no_values():
     assert data["session_copy_granted"] is False
 
 
+def test_login_status_with_url_names_the_stored_host_it_resolved_to():
+    from searchts.login_store import keep
+    from searchts.session_cookies import CookieRecord
+
+    keep("example.com", [CookieRecord("sid", "S", ".example.com", secure=True)])
+    data = json.loads(mcp_server.login_status("https://app.example.com/x"))
+    assert data["resolved"] == {
+        "url": "https://app.example.com/x",
+        "host": "app.example.com",
+        "stored_host": "example.com",
+        "exact": False,
+    }
+
+
 def test_login_kill_removes_and_says_the_browser_was_left_alone():
     from searchts.login_store import keep
     from searchts.session_cookies import CookieRecord

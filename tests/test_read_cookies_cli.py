@@ -205,6 +205,26 @@ def test_kept_login_is_used_by_a_bare_read_with_no_flag(monkeypatch, capsys, tem
     assert "KEPT-VALUE" not in captured.out
 
 
+def test_a_parent_login_serves_a_subdomain_and_says_which_host(monkeypatch, capsys, temp_home):
+    """The read names the host it resolved to, not the child it was asked for."""
+    from searchts.login_store import keep
+
+    keep("example.com", [
+        CookieRecord(name="sid", value="KEPT-VALUE", domain=".example.com", secure=True),
+    ])
+    seen = {}
+    monkeypatch.setattr("searchts.unlocker.fetch", _fake_fetch(seen))
+
+    _run(monkeypatch, ["read", "https://app.example.com"])
+
+    assert seen["cookies"], "parent login was ignored by a child read"
+    captured = capsys.readouterr()
+    assert "app.example.com resolved to the login kept for example.com" in captured.err
+    assert "already kept" not in captured.err
+    assert "KEPT-VALUE" not in captured.err
+    assert "KEPT-VALUE" not in captured.out
+
+
 def test_chromium_cookie_copy_requires_explicit_approval(monkeypatch, capsys, tmp_home):
     called = []
     monkeypatch.setattr(

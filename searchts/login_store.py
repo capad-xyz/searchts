@@ -53,6 +53,7 @@ from searchts.session_cookies import (
     is_expired,
     read_owned_site,
     read_owned_store,
+    resolve_owned_host,
     save_owned_site,
 )
 
@@ -463,6 +464,44 @@ def kept(site: str) -> bool:
         return False
 
 
+@dataclass
+class Resolution:
+    """Which stored host one URL resolves to, and whether it was exact."""
+
+    site: str
+    host: str
+    stored_host: Optional[str] = None
+
+    @property
+    def kept(self) -> bool:
+        return bool(self.stored_host)
+
+    @property
+    def exact(self) -> bool:
+        return self.stored_host == self.host
+
+    def describe(self) -> str:
+        """One line naming the stored host, with no cookie value."""
+        if not self.host:
+            return f"{self.site!r} is not a site searchts can file a login under."
+        if not self.stored_host:
+            return f"no stored host for {self.host}."
+        if self.exact:
+            return f"{self.host} resolved to {self.stored_host} (exact host)."
+        return (
+            f"{self.host} resolved to {self.stored_host} (a parent host). "
+            f"Only cookies a browser would send to {self.host} are used."
+        )
+
+
+def resolve_site(site: str) -> Resolution:
+    """Which stored host a read of `site` uses, without reading any cookies."""
+    host = host_of(site)
+    if not host:
+        return Resolution(site, "")
+    return Resolution(site, host, resolve_owned_host(host))
+
+
 def decide(site: str, *, browser: str = "") -> Decision:
     """Which of the four states `site` is in, without performing any of them.
 
@@ -479,13 +518,20 @@ def decide(site: str, *, browser: str = "") -> Decision:
     try:
         source = read_owned_site(site)
         if source.count:
-            return Decision(
-                site, KEPT,
-                f"{host} is already kept in the searchts store "
-                f"({source.count} cookies). The source browser is not consulted "
-                f"and nothing is copied.",
-                source=source,
-            )
+            if source.stored_host and source.stored_host != host:
+                why = (
+                    f"{host} resolved to the login kept for "
+                    f"{source.stored_host} ({source.count} cookies). Only the "
+                    f"cookies a browser would send to {host} are used. The "
+                    f"source browser is not consulted and nothing is copied."
+                )
+            else:
+                why = (
+                    f"{host} is already kept in the searchts store "
+                    f"({source.count} cookies). The source browser is not "
+                    f"consulted and nothing is copied."
+                )
+            return Decision(site, KEPT, why, source=source)
     except CookieReadError:
         pass
 
