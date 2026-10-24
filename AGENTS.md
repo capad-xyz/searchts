@@ -70,6 +70,11 @@ The rules are short because the harness is a terminal.
 5. **Fail loud is a behaviour worth proving.** When a drive cannot reach the
    state, the proof is the non-zero exit, the empty stdout and the named reason,
    not a workaround that makes the check pass.
+6. **Help is generated.** `searchts help --json` is the stable machine-readable
+   catalog; `docs/cli.md`, the `llms.txt` command block and both SKILL files come
+   from `searchts/catalog.py` and the live parser. After changing a command, flag,
+   example or exit code, run `python -m searchts.helpgen --write`; CI runs
+   `--check`.
 
 `docs/hare-next.md` carries the same rule for Hare's notes: a claim about a test
 is only made from a run that happened.

@@ -13,9 +13,13 @@ Exposes these tools to an agent:
 - grab_site: save the set of files a read named.
 - get_status: report which channels/backends are installed and active (doctor).
 - transcribe: the audio, when a read says the player has no captions, or a local file.
+- login_status: list kept site logins, never a cookie value.
+- login_signin: sign in once for a site and keep that login.
+- login_check: read one signed-in-only page with the saved cookies.
+- login_kill: delete searchts's own saved login for one site.
 
-Backed by searchts.unlocker, searchts.search, searchts.assets, and
-searchts.transcribe.
+Backed by searchts.unlocker, searchts.search, searchts.assets,
+searchts.transcribe, and searchts.login_store.
 """
 
 import asyncio
@@ -160,7 +164,7 @@ class MCPNotInstalledError(RuntimeError):
 
 
 def create_server():
-    """Build an MCPServer over the six module-level tool functions.
+    """Build an MCPServer over the ten module-level tool functions.
 
     ``mcp>=2,<3`` (P2.3). Tool bodies keep returning ``Error: …`` strings
     instead of raising so hosts surface failures as normal tool results.
@@ -273,12 +277,14 @@ def create_server():
             "is 'unknown', never a guess. For reddit.com, linkedin.com, "
             "github.com and x.com a known account page is used; other sites "
             "need a signed-in-only URL, and a public page is reported as "
-            "'unknown' because it proves nothing about the account."
+            "'unknown' because it proves nothing about the account. "
+            "check_url checks a custom signed-in-only page instead of the "
+            "known one; the cookies still come from url's site."
             + UPDATE_CHECK_DESCRIPTION
         ),
     )
-    def login_check_tool(url: str) -> str:
-        return login_check(url)
+    def login_check_tool(url: str, check_url: str = "") -> str:
+        return login_check(url, check_url=check_url)
 
     @mcp.tool(
         name="login_kill",
@@ -404,7 +410,7 @@ def login_signin(url: str, browser: str = "chrome") -> str:
     ))
 
 
-def login_check(url: str) -> str:
+def login_check(url: str, check_url: str = "") -> str:
     """Settle whether a saved login is alive. Never carries a cookie value."""
     from searchts.login_store import check_login, host_of
 
@@ -412,7 +418,7 @@ def login_check(url: str) -> str:
     if not host:
         return f"Error: {url!r} is not a site searchts can file a login under."
     try:
-        out = check_login(url)
+        out = check_login(url, url=check_url)
     except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
         return _unexpected("login_check", e)
     return _with_update_info(json.dumps(

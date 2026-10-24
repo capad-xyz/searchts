@@ -65,6 +65,10 @@ rewrite most files.
   squash-merged, so the PR title must follow the same format — it becomes the
   commit on `main` and release tooling parses it.
 - Optional platform integrations go through their public CLI/API, never hack internals
+- Command metadata lives in `searchts/catalog.py`; the parser is in
+  `searchts.cli.build_parser`. Regenerate `docs/cli.md`, `llms.txt` and both
+  SKILL files with `python -m searchts.helpgen --write` after changing a
+  command. `searchts help --json` is the machine-readable catalog.
 
 ## Rules
 - NEVER modify upstream open source projects' source code

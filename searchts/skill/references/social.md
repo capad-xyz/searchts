@@ -17,6 +17,18 @@ keylessly. To find discussions in the first place, use `searchts search`, then
 read the URLs it returns. An X post that has a video comes back as the captions,
 or the failure names `searchts transcribe`. A post with no video is the page.
 
+When the read names a login wall:
+
+```bash
+searchts login check reddit.com          # 0 logged in, 1 logged out, 2 unknown
+searchts login signin https://reddit.com # the user signs in once
+searchts login keep https://reddit.com --cookies-from-browser firefox --yes
+searchts login list                      # what searchts already holds
+```
+
+Never copy a browser login without the user's yes. `login check` on a custom
+account page takes `--url <signed-in-page>`; a public page is never "logged in".
+
 ## Optional: platform CLIs
 
 These are optional enhancements, only useful if you have already installed and
