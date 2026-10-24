@@ -21,8 +21,9 @@ from __future__ import annotations
 import glob
 import os
 import sqlite3
+import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlparse
 
 # ── browsers ────────────────────────────────────────────────────────────────
@@ -89,9 +90,51 @@ def _firefox_profile_roots(browser: str) -> List[str]:
 # ── what we read ────────────────────────────────────────────────────────────
 
 
+#: A value above this is almost certainly milliseconds, not seconds. Firefox
+#: writes seconds, but a copied jar or a test double can carry millis, and
+#: interpreting those as seconds would make a cookie look alive for millennia.
+_MILLIS_THRESHOLD = 100_000_000_000
+
+
+def normalize_expiry(value: Any) -> Optional[int]:
+    """Unix seconds for a cookie expiry, or None for a session cookie.
+
+    ``None`` is the session-cookie marker. ``-1`` and ``0`` are what CDP and
+    Firefox use for "no expiry", so both collapse to ``None`` too. Values large
+    enough to be milliseconds are divided down once.
+    """
+    if value is None or value == "":
+        return None
+    try:
+        seconds = int(float(value))
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if seconds <= 0:
+        return None
+    if seconds > _MILLIS_THRESHOLD:
+        seconds //= 1000
+    return seconds
+
+
+def is_expired(record: "CookieRecord", now: Optional[int] = None) -> bool:
+    """True only when the cookie carries an expiry that is at or before now.
+
+    A session cookie (``expiry is None``) never expires here: it dies when the
+    browser closes, which is not something this store can observe.
+    """
+    if record.expiry is None:
+        return False
+    return record.expiry <= int(time.time() if now is None else now)
+
+
 @dataclass
 class CookieRecord:
-    """One cookie, scoped to the host that owns it."""
+    """One cookie, scoped to the host that owns it.
+
+    ``expiry`` is unix seconds, or ``None`` when the source called it a session
+    cookie. Legacy store entries have no expiry at all; they load as ``None``
+    and are never treated as dead on their own.
+    """
 
     name: str
     value: str
@@ -99,6 +142,10 @@ class CookieRecord:
     path: str = "/"
     secure: bool = False
     http_only: bool = False
+    expiry: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        self.expiry = normalize_expiry(self.expiry)
 
     @property
     def host(self) -> str:
@@ -120,6 +167,12 @@ class CookieSource:
     via: str = ""
     count: int = 0
     names: List[str] = field(default_factory=list)
+    #: Earliest expiry among the live cookies, or None when every cookie is a
+    #: session cookie. ``expiry_known`` is False for a legacy entry that never
+    #: recorded one, so a CLI can say "unknown" rather than lying "session".
+    expires_at: Optional[int] = None
+    expiry_known: bool = False
+    expired: bool = False
 
     def describe(self) -> str:
         """One safe line for a human. Contains no cookie values."""
@@ -167,8 +220,14 @@ def _domain_matches(cookie_domain: str, host: str) -> bool:
 
 
 def filter_for_host(records: List[CookieRecord], host: str) -> List[CookieRecord]:
-    """Keep only cookies this host would actually receive from a browser."""
-    return [c for c in records if _domain_matches(c.domain, host)]
+    """Keep only cookies this host would receive, and only live ones.
+
+    Expiry is checked here as well as in the sweep. A sweep that did not run,
+    or a browser database that has not been vacuumed, must not be able to make
+    a dead cookie reach a request.
+    """
+    now = int(time.time())
+    return [c for c in records if _domain_matches(c.domain, host) and not is_expired(c, now)]
 
 
 def build_header(records: List[CookieRecord]) -> str:
@@ -230,9 +289,14 @@ def _read_all_firefox_records(browser: str) -> List[CookieRecord]:
             errors.append(f"{os.path.basename(prof)}: {e}")
             continue
         try:
+            # Old test fixtures (and very old profiles) can predate the expiry
+            # column. Read it when it exists; otherwise every cookie is a
+            # session cookie, which is the same thing the absence means.
+            columns = {row[1] for row in con.execute("PRAGMA table_info(moz_cookies)")}
+            expiry_expr = "expiry" if "expiry" in columns else "0"
             rows = con.execute(
-                "SELECT name, value, host, path, isSecure, isHttpOnly "
-                "FROM moz_cookies"
+                "SELECT name, value, host, path, isSecure, isHttpOnly, "
+                f"{expiry_expr} FROM moz_cookies"
             ).fetchall()
         except sqlite3.Error as e:
             errors.append(f"{os.path.basename(prof)}: {e}")
@@ -241,8 +305,8 @@ def _read_all_firefox_records(browser: str) -> List[CookieRecord]:
             con.close()
 
         records = [
-            CookieRecord(n, v, h, p or "/", bool(s), bool(ho))
-            for (n, v, h, p, s, ho) in rows
+            CookieRecord(n, v, h, p or "/", bool(s), bool(ho), expiry)
+            for (n, v, h, p, s, ho, expiry) in rows
         ]
         # Prefer the richest profile rather than the first with any rows.
         if len(records) > len(best):
@@ -329,31 +393,11 @@ def read_owned_store() -> Dict[str, dict]:
         return {}
 
 
-def save_owned_site(site: str, records: List[CookieRecord], browser: str = "") -> int:
-    """Persist one site's cookies to the owned store. Returns the count saved.
-
-    Only the site asked for is written. Values live in this file and nowhere
-    else; the caller owns the decision to call it at all.
-    """
+def _write_owned_store(store: Dict[str, dict]) -> None:
+    """Write the whole owned store atomically, owner-readable only."""
     import json
 
-    host = (urlparse(site if "://" in site else "https://" + site).hostname or "").lower()
-    if not host or not records:
-        raise CookieReadError(f"nothing to save for {site!r}")
-    scoped = filter_for_host(records, host)
-    if not scoped:
-        raise CookieReadError(f"refusing to save: no cookies match {host}")
-
     _ensure_store_dir()
-    store = read_owned_store()
-    store[host] = {
-        "cookies": [
-            {"n": c.name, "v": c.value, "d": c.domain, "p": c.path,
-             "s": c.secure, "h": c.http_only}
-            for c in scoped
-        ],
-        "browser": browser,
-    }
     path = owned_store_path()
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -369,28 +413,211 @@ def save_owned_site(site: str, records: List[CookieRecord], browser: str = "") -
             os.chmod(path, 0o600)
         except OSError:
             pass
+
+
+def save_owned_site(
+    site: str,
+    records: List[CookieRecord],
+    browser: str = "",
+    *,
+    consent: Optional[bool] = None,
+) -> int:
+    """Persist one site's cookies to the owned store. Returns the count saved.
+
+    Only the site asked for is written. Values live in this file and nowhere
+    else; the caller owns the decision to call it at all.
+
+    ``consent`` records that the user or agent allowed this site's cookies to
+    be copied. It is what lets a later refresh or login-wall retry happen
+    without asking again. ``None`` keeps whatever the entry already said.
+    """
+    host = (urlparse(site if "://" in site else "https://" + site).hostname or "").lower()
+    if not host or not records:
+        raise CookieReadError(f"nothing to save for {site!r}")
+    scoped = filter_for_host(records, host)
+    if not scoped:
+        raise CookieReadError(f"refusing to save: no cookies match {host}")
+
+    store = read_owned_store()
+    existing = store.get(host)
+    allowed = (
+        bool(existing.get("consent"))
+        if consent is None and isinstance(existing, dict)
+        else bool(consent)
+    )
+    store[host] = {
+        "cookies": [
+            {"n": c.name, "v": c.value, "d": c.domain, "p": c.path,
+             "s": c.secure, "h": c.http_only, "expiry": c.expiry}
+            for c in scoped
+        ],
+        "browser": browser,
+        "expiry_known": True,
+        "consent": allowed,
+    }
+    _write_owned_store(store)
     return len(scoped)
 
 
+def entry_expiry(entry: dict, now: Optional[int] = None) -> Tuple[Optional[int], bool]:
+    """Earliest expiry in a store entry, and whether the entry recorded one.
+
+    ``(None, True)`` means every cookie is a session cookie; ``(None, False)``
+    means a legacy entry that has no expiry information at all. A marked
+    expired entry reports the moment it was marked so callers can still sort it.
+    """
+    if not isinstance(entry, dict):
+        return None, False
+    known = bool(entry.get("expiry_known"))
+    values: List[int] = []
+    for cookie in entry.get("cookies") or []:
+        if not isinstance(cookie, dict):
+            continue
+        if "expiry" in cookie:
+            known = True
+        expiry = normalize_expiry(cookie.get("expiry"))
+        if expiry is not None:
+            values.append(expiry)
+    if values:
+        return min(values), True
+    if entry.get("expired"):
+        return None, known
+    return None, known
+
+
+def describe_expiry(entry: dict, now: Optional[int] = None) -> str:
+    """One short human phrase: expired, expires in N days, session, unknown."""
+    if not isinstance(entry, dict):
+        return "unknown"
+    now = int(time.time() if now is None else now)
+    if entry.get("expired"):
+        return "expired"
+    at, known = entry_expiry(entry, now)
+    if at is None:
+        return "session" if known else "unknown"
+    if at <= now:
+        return "expired"
+    seconds = at - now
+    days = seconds // 86400
+    if days >= 1:
+        return f"expires in {days} day{'s' if days != 1 else ''}"
+    hours = max(1, seconds // 3600)
+    return f"expires in {hours} hour{'s' if hours != 1 else ''}"
+
+
+@dataclass
+class SweepResult:
+    """What one sweep did. Counts and safe action rows, never a value."""
+
+    removed: int = 0
+    expired_sites: int = 0
+    live_sites: int = 0
+    total_sites: int = 0
+    actions: List[dict] = field(default_factory=list)
+
+
+def sweep_owned_store(now: Optional[int] = None) -> SweepResult:
+    """Delete expired cookies from the store and mark sites left with none.
+
+    Cheap and offline: no browser, no network, no daemon. Best effort by
+    design: a store that cannot be read or written must not stop the command
+    the user actually ran. An expired site keeps its entry, with no live
+    cookies and an ``expired`` marker, so ``login list`` can say so and a read
+    sends nothing for it.
+    """
+    now = int(time.time() if now is None else now)
+    result = SweepResult()
+    try:
+        store = read_owned_store()
+    except Exception:  # noqa: BLE001 - a sweep is never allowed to break a command
+        return result
+    if not store:
+        return result
+
+    changed = False
+    for host, entry in list(store.items()):
+        if not isinstance(entry, dict):
+            continue
+        result.total_sites += 1
+        kept = []
+        dropped = 0
+        for cookie in entry.get("cookies") or []:
+            if not isinstance(cookie, dict):
+                continue
+            expiry = normalize_expiry(cookie.get("expiry"))
+            if expiry is not None and expiry <= now:
+                dropped += 1
+                continue
+            kept.append(cookie)
+        if dropped:
+            changed = True
+            result.removed += dropped
+            entry["cookies"] = kept
+            if not kept:
+                entry["expired"] = True
+                entry["expired_at"] = now
+            else:
+                entry.pop("expired", None)
+                entry.pop("expired_at", None)
+            result.actions.append({
+                "site": host,
+                "browser": entry.get("browser") or "signin",
+                "action": "deleted",
+                "count": dropped,
+                "reason": "expired",
+            })
+        if entry.get("expired") and not kept:
+            result.expired_sites += 1
+        elif kept:
+            entry.pop("expired", None)
+            entry.pop("expired_at", None)
+            result.live_sites += 1
+
+    if changed:
+        try:
+            _write_owned_store(store)
+        except Exception:  # noqa: BLE001 - see the docstring
+            return result
+    return result
+
+
 def read_owned_site(site: str) -> CookieSource:
-    """Return `site`'s cookies from the owned store."""
+    """Return `site`'s live cookies from the owned store.
+
+    Expired cookies are filtered here as well as by the startup sweep, so a
+    stale file cannot put a dead cookie on a request. An entry whose cookies
+    have all died (or that the sweep marked expired) raises a named error
+    instead of pretending the site was never kept.
+    """
     host = (urlparse(site if "://" in site else "https://" + site).hostname or "").lower()
     entry = read_owned_store().get(host)
     if not entry:
         raise CookieReadError(f"no saved login for {host} in the searchts store")
+    raw = [c for c in entry.get("cookies", []) if isinstance(c, dict)]
     records = [
-        CookieRecord(c["n"], c["v"], c["d"], c.get("p", "/"),
-                     bool(c.get("s")), bool(c.get("h")))
-        for c in entry.get("cookies", [])
+        CookieRecord(c.get("n", ""), c.get("v", ""), c.get("d", ""),
+                     c.get("p", "/"), bool(c.get("s")), bool(c.get("h")),
+                     c.get("expiry"))
+        for c in raw
     ]
     scoped = filter_for_host(records, host)
+    if not scoped and (entry.get("expired") or any(is_expired(c) for c in records)):
+        raise CookieReadError(
+            f"the saved login for {host} has expired; run "
+            f"`searchts login signin {host}` to sign in again"
+        )
+    at, known = entry_expiry(entry)
     return CookieSource(
         site=site,
         cookies=scoped,
+        browser=entry.get("browser", "") if isinstance(entry, dict) else "",
         family="owned",
         via="owned store",
         count=len(scoped),
         names=sorted({c.name for c in scoped}),
+        expires_at=at,
+        expiry_known=known,
+        expired=bool(entry.get("expired")),
     )
 
 
@@ -530,6 +757,7 @@ def read_cookie_file(path: str, site: str) -> CookieSource:
             str(name), str(value), str(domain), str(item.get("path", item.get("p", "/"))),
             bool(item.get("secure", item.get("s", False))),
             bool(item.get("http_only", item.get("h", False))),
+            item.get("expiry", item.get("expires", item.get("expirationDate"))),
         ))
     scoped = filter_for_host(records, host)
     if not scoped:

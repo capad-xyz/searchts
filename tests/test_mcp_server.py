@@ -249,12 +249,14 @@ def test_create_server_builds_against_the_installed_sdk():
         "fetch_asset",
         "grab_site",
         "transcribe",
-        # The three login verbs. read_url's login-wall error names them, so
+        # The four login verbs. read_url's login-wall error names them, so
         # without them that error asks the agent to do something it has no tool
-        # to do. login_status is read-only; login_signin and login_kill change
-        # what searchts holds and each says so in its own description.
+        # to do. login_status and login_check are read-only; login_signin and
+        # login_kill change what searchts holds and each says so in its own
+        # description.
         "login_status",
         "login_signin",
+        "login_check",
         "login_kill",
     }
 

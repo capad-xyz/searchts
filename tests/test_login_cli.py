@@ -145,7 +145,9 @@ def test_keep_vivaldi_with_yes_reads_profile_then_persists_it(capsys, monkeypatc
     assert "Vivaldi debugger approval" in err
     assert "kept example.com" in out
     assert "SECRETVALUE" not in out + err
-    assert ls.list_kept() == {"example.com": {"cookies": 1, "browser": "vivaldi"}}
+    kept = ls.list_kept()["example.com"]
+    assert kept["cookies"] == 1
+    assert kept["browser"] == "vivaldi"
     assert ls.session_copied_sites() == ["example.com"]
 
 

@@ -256,7 +256,9 @@ searchts doctor                            # see what is configured and working
 `read` flags: `--json`, `--backend <tier>`, `--human` (hand off a CAPTCHA or login wall to a real browser), `--scrub` (redact injection), `--pages <n>` (follow the next page, curl only, max 5), `--items <n>` (keep following until this many list rows, and scroll the feed when that is the only way it grows), `--expand` (open the folds: closed `<details>` and buttons labelled read/show/see more; never a link, a form or a sign-in, and a "continue reading" paywall is named rather than opened), `--proxy <url>` (route through a proxy; `--proxy-trusted` lets a remote proxy operator see the Cookie header). Logged-in reads, all opt-in and for the one site in the command: `--cookies-from-browser <browser>` with `--yes` (copy that site's cookies for this session), `--cookies <path>` (a searchts-owned cookie file), `--cdp-port <port>` (cookies from your localhost debugger port).
 
 Asking for more is capped by your ceilings, and searchts cannot ask past them: `SEARCHTS_MAX_PAGES` (default 5), `SEARCHTS_MAX_ITEMS` (default 300), `SEARCHTS_MAX_EXPAND_CLICKS` (default 8). Set them in the environment or in a `more:` block in `~/.searchts/config.yaml` (env wins). A request above the ceiling is clamped, not silently reduced, and the note lands on the text you read: `[items: asked for 900, the ceiling is 300]`. `--expand` stays a yes/no; how far it goes is your ceiling, not a flag. Lists that only grow by scrolling and folds that need JavaScript both need the browser: `searchts install --browser`. The scroll opens its own browser, which carries no proxy and no cookies, so a read that carries either does not scroll and says so. Those three ceilings are also every cap on a Reddit read: a post card, a comment and a search result are all rows, so `SEARCHTS_MAX_ITEMS` is the only number that decides how many come back, and anything left out is printed as a number rather than dropped.
-`login` verbs: `searchts login keep <url> --cookies-from-browser zen --yes` (or `vivaldi`) copies only that site's cookies into the searchts store; a later plain `searchts read <url>` uses the saved login. `searchts login signin <url>` opens a clean sign-in window; add `--yes` to keep its cookies. `login kill <url>` removes searchts's copy; your own browser is untouched unless you pass `--also-browser`. `login list` and `login purge-scratch` show or remove login state.
+`login` verbs: `searchts login keep <url> --cookies-from-browser zen --yes` (or `vivaldi`) copies only that site's cookies into the searchts store; a later plain `searchts read <url>` uses the saved login. `searchts login signin <url>` opens a clean sign-in window; add `--yes` to keep its cookies. `searchts login list` shows each kept site's live cookie count, its browser or `signin` source, and when it expires (an upper bound, not a promise). `searchts login sweep` deletes expired cookies offline now; searchts also sweeps on every command start and prints a receipt for what it removed. It never installs a cron, launchd or Task Scheduler entry. `searchts login check <site> [--url <signed-in-page>]` reads one signed-in-only page directly with the saved cookies and exits `0` logged in, `1` logged out, `2` unknown; a captcha or block is unknown, and a public page never counts as logged in. `login kill <url>` removes searchts's copy; your own browser is untouched unless you pass `--also-browser`. `login purge-scratch` removes scratch copies.
+
+A kept browser login can be re-copied when it is within 24 hours of expiry or a read hits a login wall. That happens only with your recorded yes for that site, or `--yes` in that run, or a terminal prompt; otherwise searchts says it skipped the copy and why. A login kept with `login signin` has no browser source to re-copy, so it only gets a hint to run `login signin` again. Every automatic action prints a receipt row (site, browser or `signin`, action, count, reason), and `searchts read --json` carries the same facts in `cookie_actions`. Cookie values are never printed or logged.
 `search` flags: `-n <count>`, `--json`, `--provider <name>`. Content goes to stdout (pipeable); status to stderr.
 `grab` flags: `--out <dir>`, `--kinds <images,icons,css,fonts,svg,inline_svg>`, `--scripts`, `--read` (also save page.md), `--max <n>`, `--tokens <n>` (radius, shadow, and spacing values; default 24, ceiling 200), `--json`.
 
@@ -271,7 +273,7 @@ Add searchts to your agent in one line - as an MCP server, or as a Claude Code s
 Two ways, both one command:
 
 ```bash
-# 1) MCP: always-on read_url + web_search + fetch_asset + grab_site + get_status + transcribe + login_status / login_signin / login_kill
+# 1) MCP: always-on read_url + web_search + fetch_asset + grab_site + get_status + transcribe + login_status / login_signin / login_check / login_kill
 # Try / no install / Claude cannot see PATH:
 claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 # Keep (after pipx install "searchts[mcp]"):
@@ -284,7 +286,7 @@ claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve
 searchts skill install        # ~/.claude/commands/searchts.md and the SKILL.md bundle
 ```
 
-See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/docs/mcp.md) for all nine tools (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_kill`), their inputs and outputs, and when to use each.
+See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/docs/mcp.md) for all ten tools (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_check`, `login_kill`), their inputs and outputs, and when to use each.
 
 ## Features
 
@@ -295,7 +297,7 @@ See the [MCP server reference](https://github.com/capad-xyz/searchts/blob/main/d
 - **Prompt-injection scrubbing**: strips invisible/bidi characters, flags injection indicators, optional redaction, so untrusted page content is safer to feed a model.
 - **Per-domain backend memory**: remembers which tier worked per domain and tries it first (`SEARCHTS_NO_MEMORY=1` to disable).
 - **Jina opt-out**: the JS-render relay is on by default; `SEARCHTS_NO_JINA=1` (or `jina: false` in `~/.searchts` config) skips it so URLs never hit `r.jina.ai`.
-- **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_kill`), and a Python library.
+- **Surfaces**: a CLI, an MCP server (`read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_check`, `login_kill`), and a Python library.
 
 ## Use as a library
 
