@@ -30,43 +30,16 @@ from __future__ import annotations
 import argparse
 from typing import Dict, List, Sequence, Tuple
 
+from searchts import catalog
 from searchts.progress import Style, human_time, link_url, use_color, use_links  # noqa: F401
 
 WIDTH = 78
 LABEL = 22
 COLUMN = 24
 
-#: Root groups: (heading, [(command, one line)]).
-#: Order is the order of the job, not the alphabet: read and search first,
-#: because the other twelve exist to support them.
-ROOT_GROUPS: List[Tuple[str, List[Tuple[str, str]]]] = [
-    ("READ THE WEB", [
-        ("read <url>", "Fetch a page as markdown, or fail and say why"),
-        ("search \"<query>\"", "Find URLs to read. A snippet is not the page"),
-        ("transcribe <url>", "A player page's words: captions, then Whisper"),
-        ("grab <url>", "Save the files a page uses: images, css, fonts"),
-        ("get <url>", "One file through the same unlocker"),
-    ]),
-    ("WIRE UP AN AGENT", [
-        ("mcp serve", "Run the MCP server (stdio; --http for loopback)"),
-        ("mcp install", "Wire the MCP server into the agents on this machine"),
-        ("skill install", "Slash command plus the shared SKILL.md"),
-        ("doctor", "Which channels are installed, configured, working"),
-    ]),
-    ("SET UP ONCE", [
-        ("install", "One-shot installer; --system-deps to change things"),
-        ("setup", "Interactive wizard"),
-        ("configure", "List the keys, set one, or copy cookies from a browser"),
-        ("login <verb>", "Site logins searchts keeps, and what it copied"),
-        ("uninstall", "Remove config, tokens and skill files"),
-    ]),
-    ("HOUSEKEEPING", [
-        ("upgrade", "Update to the latest release"),
-        ("check-update", "Is there a newer version?"),
-        ("watch", "Quick health check for a scheduled task"),
-        ("version", "Version"),
-    ]),
-]
+#: Root groups come from the same catalog every generated surface reads, so
+#: adding a command in `searchts/catalog.py` puts it on this screen too.
+ROOT_GROUPS: List[Tuple[str, List[Tuple[str, str]]]] = catalog.root_groups()
 
 BELIEF = [
     "The missing layer between AI and the web.",
@@ -88,163 +61,9 @@ EXAMPLES = [
     ("searchts grab https://stripe.com --out stripe", ""),
 ]
 
-EXIT_CODES = [
-    ("0", "content returned"),
-    ("1", "every rung failed; the reasons are on stderr"),
-    ("2", "bad usage, or a URL that cannot be read"),
-]
-
-#: Per-command prose. The flags themselves come from argparse; only the words
-#: around them live here, and a command without an entry still renders.
-COMMANDS: Dict[str, dict] = {
-    "read": {
-        "lead": "Fetch a page and print clean markdown.",
-        "body": [
-            "Climbs the same three rungs the MCP server uses: curl_cffi with a",
-            "browser TLS fingerprint, then the Jina reader relay, then a stealth",
-            "browser. It stops at the first rung that returns real text. A wall,",
-            "a login page, or a client-rendered shell is a failure, not a page.",
-        ],
-        "examples": [
-            "searchts read example.com",
-            "searchts read https://x.com/jack/status/20 --json",
-            "searchts read example.com --pages 3 --expand",
-        ],
-        "see": ["transcribe (a video with no captions)", "grab (the files it names)"],
-        "tip": "--pages 3 follows the next page on the same site; "
-               "--expand opens closed <details>.",
-    },
-    "search": {
-        "lead": "Find URLs to read, across several providers at once.",
-        "body": [
-            "Results are fused by rank across every provider that answers, so one",
-            "provider having a bad day does not empty the list. A snippet is a",
-            "pointer, not a page: read the URL before quoting it.",
-        ],
-        "examples": [
-            "searchts search \"python asyncio timeout\"",
-            "searchts search \"stripe pricing\" --provider duckduckgo -n 5",
-            "searchts search \"rust 2026\" --json",
-        ],
-        "tip": "-n 5 is usually enough; read the URL before quoting a snippet.",
-    },
-    "transcribe": {
-        "lead": "Read the audio when a player page has no captions.",
-        "body": [
-            "Captions come first and cost nothing. Audio goes to Groq, then OpenAI",
-            "if a key is set, else the keyless local Whisper. A local file works",
-            "the same way.",
-        ],
-        "examples": [
-            "searchts transcribe https://www.youtube.com/watch?v=...",
-            "searchts transcribe talk.mp4 --provider local",
-        ],
-    },
-    "grab": {
-        "lead": "Save the files a read named.",
-        "body": [
-            "Downloads images, icons, css, fonts and inline svg through the same",
-            "unlocker, then extracts the palette, the fonts and the radius/shadow/",
-            "spacing values the page actually uses. Every URL is either saved,",
-            "named as a failure, or listed as omitted with the reason, so a cap",
-            "never truncates silently.",
-        ],
-        "examples": [
-            "searchts grab https://stripe.com --out stripe",
-            "searchts grab https://linear.app --kinds images,fonts",
-        ],
-        "tip": "--tokens N (max 200) reads more radius, shadow and spacing "
-               "values; the manifest names what each cap left out.",
-    },
-    "get": {
-        "lead": "Download one file through the unlocker.",
-        "body": ["Prints the saved path on stdout, so it pipes into anything."],
-        "examples": ["searchts get https://example.com/logo.svg -o assets/"],
-    },
-    "mcp": {
-        "lead": "Run the MCP server, or print the wiring for an agent client.",
-        "body": [
-            "stdio by default. --http and --sse bind loopback only: there is no",
-            "public URL, and that is on purpose.",
-        ],
-        "examples": ["searchts mcp serve", "searchts mcp install --client claude"],
-        "tip": "--http and --sse bind loopback only; there is no public URL, "
-               "and that is on purpose.",
-    },
-    "doctor": {
-        "lead": "Which channels are installed, configured, and working.",
-        "body": [
-            "Probes each optional channel. A tier-0 probe is a capability the",
-            "reader can use; the CLIs are PATH checks, not a routing table.",
-        ],
-        "examples": ["searchts doctor", "searchts doctor --json"],
-    },
-    "login": {
-        "lead": "Site logins searchts keeps, and what it copied this session.",
-        "body": [
-            "Nothing is copied out of your browser without --yes. A kept login",
-            "stays on this machine: direct requests and a temporary local",
-            "browser context can use it; the Jina relay never receives it.",
-        ],
-        "examples": [
-            "searchts login list",
-            "searchts login signin https://example.com",
-            "searchts login kill example.com",
-        ],
-    },
-    "install": {
-        "lead": "One-shot installer.",
-        "body": ["Non-mutating by default: without --system-deps it prints commands."],
-        "examples": ["searchts install", "searchts install --browser"],
-    },
-    "uninstall": {
-        "lead": "Remove searchts config, tokens and skill files.",
-        "examples": ["searchts uninstall --dry-run", "searchts uninstall"],
-    },
-    "configure": {
-        "lead": "List every key, set one value, or copy cookies from a browser.",
-        "examples": [
-            "searchts configure",
-            "searchts configure --from-browser firefox",
-        ],
-    },
-    "watch": {
-        "lead": "Quick health check plus update check, for a scheduled task.",
-        "examples": ["searchts watch"],
-    },
-    "setup": {
-        "lead": "Walk through search, GitHub, Reddit, and Groq in one pass.",
-        "body": [
-            "Every prompt can be skipped with Enter. The summary says what was",
-            "saved and what is still optional; it never installs a system package.",
-        ],
-        "examples": ["searchts setup"],
-    },
-    "skill": {
-        "lead": "Write the Claude Code slash-command, or register the full skill bundle.",
-        "examples": [
-            "searchts skill install",
-            "searchts skill install --dir ~/.claude/commands",
-            "searchts skill --install",
-        ],
-    },
-    "version": {
-        "lead": "Print the installed version, one line on stdout.",
-        "examples": ["searchts version"],
-    },
-    "update": {
-        "lead": "Update this install to the latest release.",
-        "examples": ["searchts update", "searchts update --dry-run"],
-    },
-    "upgrade": {
-        "lead": "Update this install to the latest release.",
-        "examples": ["searchts upgrade"],
-    },
-    "check-update": {
-        "lead": "Check for a newer version and what changed.",
-        "examples": ["searchts check-update"],
-    },
-}
+#: What a command without its own footer falls back to. Per-command exit codes
+#: live beside the command in `searchts/catalog.py` (gap #6).
+EXIT_CODES = catalog.EXIT_PLAIN
 
 #: Which options belong under which heading, in reading order, per command.
 #: Anything not listed lands in OPTIONS automatically, so a new flag can never
@@ -384,7 +203,22 @@ def _wrap(text: str, width: int) -> List[str]:
 # ── root ───────────────────────────────────────────────────────────────────
 
 
-def render_root(version: str) -> None:
+def _global_flag_rows(parser: argparse.ArgumentParser | None) -> List[Tuple[str, str]]:
+    """Root flags from the live parser: -v/--verbose and --version (gap #11)."""
+    if parser is None:
+        return [("-v, --verbose", "Show debug logs"),
+                ("--version", "Print the version and exit")]
+    rows = []
+    for action in parser._actions:
+        if isinstance(action, argparse._HelpAction) or not action.option_strings:
+            continue
+        text = catalog.action_help(action)
+        if text:
+            rows.append((", ".join(action.option_strings), text))
+    return rows
+
+
+def render_root(version: str, parser: argparse.ArgumentParser | None = None) -> None:
     d = Doc()
     s = d.s
     d.lines.append("")
@@ -406,6 +240,10 @@ def render_root(version: str) -> None:
         for cmd, desc in rows:
             d.pair(cmd, desc, left_style=s.cyan)
 
+    d.heading("GLOBAL FLAGS")
+    for flag, meaning in _global_flag_rows(parser):
+        d.pair(flag, meaning, left_style=s.cyan)
+
     d.heading("EXAMPLES")
     for cmd, _ in EXAMPLES:
         d.example(cmd)
@@ -419,6 +257,8 @@ def render_root(version: str) -> None:
     d.blank()
     d.lines.append("  " + s.dim("Run ") + "searchts <command> --help"
                    + s.dim(" for one command, its flags and examples."))
+    d.lines.append("  " + s.dim("Run ") + "searchts help --json"
+                   + s.dim(" for the machine-readable catalog."))
     d.blank()
     for name, url in FOOTER_LINKS:
         label = (name + " " * 8)[:8]
@@ -438,118 +278,52 @@ def _short_url(url: str) -> str:
 # ── one command ────────────────────────────────────────────────────────────
 
 
-def _action_help(action: argparse.Action) -> str:
-    text = (action.help or "").strip()
-    if not text or text == argparse.SUPPRESS:
-        return ""
-    return " ".join(text.split())
-
-
-def _metavar(action: argparse.Action) -> str:
-    if action.metavar:
-        return str(action.metavar)
-    if action.choices:
-        return "{" + ",".join(str(c) for c in action.choices) + "}"
-    if action.nargs in ("?", "*", "+"):
-        return f"[{action.dest}]" if action.nargs == "?" else f"[{action.dest}...]"
-    return action.dest.upper()
-
-
-def _flag_name(action: argparse.Action) -> str:
-    """The name to show for a flag: the long form when there is one.
-
-    ``-v`` is shorter to type and worse to read in a table; ``--verbose`` says
-    what it does. A flag with only a short form (``-n``) keeps it.
-    """
-    for option in action.option_strings:
-        if option.startswith("--"):
-            return option
-    return action.option_strings[0] if action.option_strings else ""
-
-
-def _usage_tokens(parser: argparse.ArgumentParser, path: Sequence[str]) -> List[str]:
-    parts = ["searchts", *path]
-    seen = set()
+def _subparser_action(parser: argparse.ArgumentParser):
     for action in parser._actions:
-        if isinstance(action, argparse._HelpAction):
-            continue
         if isinstance(action, argparse._SubParsersAction):
-            names = "|".join(list(action.choices)[:4])
-            parts.append(f"{{{names}}}")
-            seen.add("sub")
-            continue
-        if not action.option_strings:
-            shown = _metavar(action).lower()
-            if len(shown) > 20:
-                # A seven-way choice list is a table, not a usage line.
-                shown = action.dest
-            # nargs="*" and "?" already come back bracketed.
-            parts.append(shown if shown[:1] in ("[", "(") else f"<{shown}>")
-            continue
-        if action.dest in seen:
-            continue
-        seen.add(action.dest)
-        flag = _flag_name(action)
-        if action.nargs == 0:
-            parts.append(f"[{flag}]")
-        else:
-            shown = _metavar(action)
-            if len(shown) > 18:
-                shown = action.dest.upper()
-            parts.append(f"[{flag} {shown}]")
-    return parts
+            return action
+    return None
 
 
-def render_command(parser: argparse.ArgumentParser, path: Sequence[str],
-                   version: str) -> None:
-    d = Doc()
+def _render_subcommands(d: Doc, parser: argparse.ArgumentParser,
+                        path: Sequence[str]) -> None:
+    """The parent screen's verb table, one line each (gaps #2, #7, #8, #9)."""
+    action = _subparser_action(parser)
+    if action is None:
+        return
     s = d.s
-    key = path[0] if path else ""
-    meta = COMMANDS.get(key, {})
+    rows: List[Tuple[str, str]] = []
+    seen = set()
+    for name, child in action.choices.items():
+        if id(child) in seen:
+            continue
+        seen.add(id(child))
+        meta = catalog.meta_for([*path, name])
+        lead = meta.lead if meta else (child.description or "")
+        if not lead:
+            lead = "Subcommand."
+        rows.append((name, lead))
+    if not rows:
+        return
+    d.heading("COMMANDS")
+    for name, lead in rows:
+        d.pair(name, lead, left_style=s.cyan)
 
-    d.lines.append("")
-    d.lines.append("  " + s.bold("searchts") + " " + s.cyan(" ".join(path))
-                   + "  " + s.dim(f"v{version}"))
-    d.blank()
-    lead = meta.get("lead") or (parser.description or "")
-    if lead:
-        d.lines.append("  " + lead)
-    for line in meta.get("body", []):
-        d.lines.append("  " + s.dim(line))
 
-    d.heading("USAGE")
-    usage_lines = _usage_lines(_usage_tokens(parser, path))
-    head = "searchts " + " ".join(path)
-    for i, line in enumerate(usage_lines):
-        if i == 0 and line.startswith(head):
-            d.lines.append("    " + s.cyan(head) + s.dim(line[len(head):]))
-        else:
-            d.lines.append("    " + line)
-
-    # Positionals first: a flag table that never explains <url> leaves the
-    # reader guessing what the command actually takes.
-    positionals = [a for a in parser._actions
-                   if not a.option_strings and not isinstance(a, argparse._HelpAction)
-                   and _action_help(a)]
-    if positionals:
-        d.heading("ARGUMENTS")
-        d.blank()
-        for action in positionals:
-            shown = _metavar(action).lower()
-            if len(shown) > 20:
-                shown = action.dest
-            _option_rows(d, action, shown if shown[:1] in ("[", "(") else f"<{shown}>",
-                         with_metavar=False)
-
-    # Options, grouped. Anything the group table does not name is appended to
-    # `ALSO`, so adding a flag can never make it invisible in --help.
+def _render_flags(d: Doc, parser: argparse.ArgumentParser,
+                  path: Sequence[str]) -> None:
+    key = " ".join(path)
+    groups = OPTION_GROUPS.get(key) or OPTION_GROUPS.get(path[0])
     by_flag = {}
     for action in parser._actions:
         if isinstance(action, argparse._HelpAction):
             continue
         for flag in action.option_strings:
             by_flag[flag] = action
-    groups = OPTION_GROUPS.get(key)
+    options = [a for a in parser._actions
+               if a.option_strings and not isinstance(a, argparse._HelpAction)]
+    if not options:
+        return
     if groups:
         rows: List[Tuple[str, List[argparse.Action]]] = []
         named = set()
@@ -562,12 +336,8 @@ def render_command(parser: argparse.ArgumentParser, path: Sequence[str],
                     present.append(found)
             if present:
                 rows.append((title, present))
-        leftover = [a for a in parser._actions
-                    if a.option_strings and not isinstance(a, argparse._HelpAction)
-                    and id(a) not in named]
+        leftover = [a for a in options if id(a) not in named]
         if leftover:
-            # Fold into a trailing ALSO rather than printing a second heading
-            # with the same name.
             if rows and rows[-1][0] == "ALSO":
                 rows[-1][1].extend(leftover)
             else:
@@ -577,54 +347,98 @@ def render_command(parser: argparse.ArgumentParser, path: Sequence[str],
         for i, (title, actions) in enumerate(rows):
             if i:
                 d.blank()
-            d.lines.append("  " + s.dim(title))
+            d.lines.append("  " + d.s.dim(title))
             for action in actions:
-                _option_rows(d, action, _flag_name(action))
-    else:
-        d.heading("FLAGS")
-        for action in parser._actions:
-            if isinstance(action, argparse._HelpAction) or not action.option_strings:
-                continue
-            _option_rows(d, action, _flag_name(action))
+                _option_rows(d, action, catalog.flag_name(action),
+                             command_name=" ".join(path))
+        return
+    d.heading("FLAGS")
+    for action in options:
+        _option_rows(d, action, catalog.flag_name(action),
+                     command_name=" ".join(path))
 
-    examples = meta.get("examples") or []
+
+def render_command(parser: argparse.ArgumentParser, path: Sequence[str],
+                   version: str) -> None:
+    d = Doc()
+    s = d.s
+    meta = catalog.meta_for(path)
+
+    d.lines.append("")
+    d.lines.append("  " + s.bold("searchts") + " " + s.cyan(" ".join(path))
+                   + "  " + s.dim(f"v{version}"))
+    d.blank()
+    lead = (meta.lead if meta else "") or (parser.description or "")
+    if lead:
+        d.lines.append("  " + lead)
+    if meta:
+        for line in meta.body:
+            d.lines.append("  " + s.dim(line))
+        if meta.aliases:
+            d.lines.append("  " + s.dim("Alias: ")
+                           + ", ".join("searchts " + a for a in meta.aliases))
+        for note in meta.notes:
+            d.lines.append("  " + s.dim(note))
+
+    d.heading("USAGE")
+    usage_lines = _usage_lines(catalog.usage_tokens(parser, path))
+    head = "searchts " + " ".join(path)
+    for i, line in enumerate(usage_lines):
+        if i == 0 and line.startswith(head):
+            d.lines.append("    " + s.cyan(head) + s.dim(line[len(head):]))
+        else:
+            d.lines.append("    " + line)
+
+    # Positionals first: a flag table that never explains <url> leaves the
+    # reader guessing what the command actually takes.
+    positionals = [a for a in parser._actions
+                   if not a.option_strings and not isinstance(a, argparse._HelpAction)
+                   and not isinstance(a, argparse._SubParsersAction)
+                   and catalog.action_help(a)]
+    if positionals:
+        d.heading("ARGUMENTS")
+        d.blank()
+        for action in positionals:
+            shown = catalog.metavar(action, lower=True)
+            if len(shown) > 20:
+                shown = action.dest
+            _option_rows(d, action,
+                         shown if shown[:1] in ("[", "(") else f"<{shown}>",
+                         with_metavar=False)
+
+    # A parent verb (`login`, `mcp`, `skill`) shows its verbs before its flags:
+    # a screen with a FLAGS heading and no way to discover `check` is the bug.
+    _render_subcommands(d, parser, path)
+    _render_flags(d, parser, path)
+
+    examples = list(meta.examples) if meta else []
     if examples:
         d.heading("EXAMPLES")
         for cmd in examples:
             d.example(cmd)
 
-    see = meta.get("see") or []
+    see = []
+    if path and path[0] in ("read", "transcribe"):
+        see = ["grab (the files it names)", "get (one file it named)"]
     if see:
         d.heading("SEE ALSO")
         for item in see:
             d.lines.append("  " + item)
 
-    tip = meta.get("tip")
-    if tip:
-        d.blank()
-        lead_tip = "[CONFIG] Tip: "
-        chunks = _wrap(tip, WIDTH - 4 - len(lead_tip))
-        d.lines.append("  " + s.cyan("[CONFIG]") + s.dim(" Tip: ") + chunks[0])
-        for chunk in chunks[1:]:
-            d.lines.append(" " * (2 + len(lead_tip)) + chunk)
-
+    exit_codes = meta.exit_codes if meta and meta.exit_codes else EXIT_CODES
     d.blank()
     d.rule()
     d.blank()
     sep = " · " if _unicode() else " | "
-    d.lines.append(
-        "  " + s.dim(f"Exit codes: 0 content{sep}1 every rung failed{sep}2 bad usage")
-    )
+    footer = "Exit codes: " + sep.join(f"{code} {meaning}" for code, meaning in exit_codes)
+    for line in _wrap(footer, WIDTH - 4):
+        d.lines.append("  " + s.dim(line))
     d.lines.append("")
     d.out()
 
 
 def _usage_lines(tokens: Sequence[str]) -> List[str]:
-    """Pack the usage into lines that never split a ``[flag VALUE]`` group.
-
-    A usage line broken as ``[--pages`` / ``PAGES]`` reads as two flags. Each
-    bracketed group is one token here, so the break always lands between them.
-    """
+    """Pack the usage into lines that never split a ``[flag VALUE]`` group."""
     lines: List[str] = []
     current = ""
     for token in tokens:
@@ -641,20 +455,23 @@ def _usage_lines(tokens: Sequence[str]) -> List[str]:
 
 
 def _option_rows(d: Doc, action: argparse.Action, flag: str,
-                 with_metavar: bool = True) -> None:
+                 with_metavar: bool = True, command_name: str = "") -> None:
     s = d.s
     label = flag
     if with_metavar and action.nargs != 0:
-        shown = _metavar(action)
+        shown = catalog.metavar(action)
         if len(shown) > 14:
             shown = action.dest.upper()
         label = f"{flag} {shown}"
-    help_text = _action_help(action)
+    help_text = catalog.action_help(action)
     if not help_text:
         return
+    marker = catalog.FLAG_MARKERS.get((command_name, flag), "")
+    if marker == "deprecated" or (action.help or "").startswith("Deprecated"):
+        label = label + " (deprecated)"
+    elif marker == "legacy":
+        label = label + " (legacy)"
     if len(label) > COLUMN - 2:
-        # A long flag (--cookies-from-browser BROWSER) does not fit the column.
-        # Never cut it: the flag name is the thing someone came here to copy.
         d.lines.append("  " + s.cyan(label))
         d.para(help_text, indent=COLUMN + 4, style=s.dim,
                width=d.width - COLUMN - 6)
@@ -677,14 +494,12 @@ def find_subparser(parser: argparse.ArgumentParser,
     for token in argv:
         if token.startswith("-"):
             continue
-        subs = [a for a in current._actions
-                if isinstance(a, argparse._SubParsersAction)]
-        if not subs:
+        subs = _subparser_action(current)
+        if subs is None:
             break
-        choices = subs[0].choices
-        if token in choices:
+        if token in subs.choices:
             path.append(token)
-            current = choices[token]
+            current = subs.choices[token]
         else:
             break
     return path, current
@@ -694,6 +509,6 @@ def render(parser: argparse.ArgumentParser, argv: Sequence[str],
            version: str) -> None:
     path, target = find_subparser(parser, argv)
     if not path:
-        render_root(version)
+        render_root(version, parser)
     else:
         render_command(target, path, version)

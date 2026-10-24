@@ -187,7 +187,7 @@ class TestCLI:
         assert "configure" in err
         # The list is rows a person can read, not argparse's one wrapped line.
         assert "COMMANDS" in err
-        assert "Fetch a page and print clean markdown." in err
+        assert "Fetch a page as markdown, or fail and say why." in err
         assert "usage:" not in err
         assert "invalid choice" not in err
 

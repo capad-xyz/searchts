@@ -16,6 +16,18 @@ searchts read "https://www.linkedin.com/jobs/view/123456"
 keylessly. To find people, companies, or jobs, use `searchts search` and read
 the URLs it returns.
 
+When LinkedIn shows a login wall:
+
+```bash
+searchts login check linkedin.com
+searchts login check linkedin.com --url https://www.linkedin.com/feed/
+searchts login signin https://www.linkedin.com
+searchts login keep https://www.linkedin.com --cookies-from-browser firefox --yes
+```
+
+Never copy a browser login without the user's yes. `login check` proves no login
+wall, not which account is signed in.
+
 ## Optional: LinkedIn scraper (MCP)
 
 If you have a LinkedIn scraper MCP configured (and a logged-in session), it can

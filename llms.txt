@@ -10,7 +10,7 @@ PyPI: https://pypi.org/project/searchts/ · Repo: https://github.com/capad-xyz/s
 - **Try / Claude MCP (no PATH):** `claude mcp add searchts -- uvx --from "searchts[mcp]" searchts mcp serve`
 - **venv only:** `pip install "searchts[mcp]"` — not the recommended CLI path
 
-Do **not** `pip install searchts` onto Homebrew/PEP 668 Python. Do **not** invent `searchts search-twitter` or `searchts install --env=auto` as the product.
+Do **not** `pip install searchts` onto Homebrew/PEP 668 Python. Do **not** invent `searchts search-twitter`. `searchts install --env {local,server,auto}` is real and documented below.
 
 ## Demo
 
@@ -20,18 +20,37 @@ uvx --from "searchts[mcp]" searchts -v read https://en.wikipedia.org/wiki/Ada_Lo
 
 `example.com` reads as one short paragraph: that is the whole page. Reddit/LinkedIn often **fail loud** — that is success of honesty, not a broken install.
 
+<!-- BEGIN GENERATED COMMANDS (python -m searchts.helpgen --write) -->
 ## Commands
 
-- `searchts read <url>` — the page, or a plain failure. Share links are reads whose HTML is empty. A player page comes back as its captions, or the failure names `transcribe`
-- `searchts search "<query>"` — URLs to read. A snippet is not the page
-- `searchts transcribe <url>` — the audio, when a read found no captions, or a local file
-- `searchts login signin <url>` — sign in once for a site that is behind a login (also `login keep`, `kill`, `list`)
-- `searchts get <url>` — one file a read named. `searchts grab` saves the set when the files are the deliverable
-- `searchts update` — latest release for the copy that is running (`searchts upgrade` is the same command). Does not kill `searchts.exe`
-- `searchts doctor` — **read-only** health (does not install skills)
-- `searchts mcp serve` / `searchts skill install`
+| Command | What it does |
+|---|---|
+| `searchts read` | Fetch a page as markdown, or fail and say why. |
+| `searchts search` | Find URLs to read. A snippet is not the page. |
+| `searchts transcribe` | A player page's words: captions, then Whisper. |
+| `searchts grab` | Save the files a page uses: images, css, fonts. |
+| `searchts get` | One file through the same unlocker. |
+| `searchts mcp serve` | Run the MCP server (stdio default; --http for loopback). |
+| `searchts mcp install` | Wire the MCP server into the agents on this machine. |
+| `searchts skill install` | Write the slash command and the shared SKILL.md bundle. |
+| `searchts doctor` | Which channels are installed, configured, working. |
+| `searchts install` | One-shot installer; --system-deps to change things. |
+| `searchts setup` | Walk through search, GitHub, Reddit, and Groq in one pass. |
+| `searchts configure` | List the keys, set one, or copy cookies from a browser. |
+| `searchts login` | Site logins: list, keep, kill, signin, purge-scratch, sweep, check. |
+| `searchts uninstall` | Remove config, tokens and skill files. |
+| `searchts update` | Update to the latest release (`upgrade` is the same command). |
+| `searchts check-update` | Is there a newer version? |
+| `searchts watch` | Quick health check for a scheduled task. |
+| `searchts version` | Version. |
+| `searchts help` | The command index, one command, or the machine-readable catalog. |
 
-MCP tools: `read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_check`, `login_kill`.
+Every login verb: `searchts login list`, `searchts login keep`, `searchts login kill`, `searchts login signin`, `searchts login purge-scratch`, `searchts login sweep`, `searchts login check`.
+
+MCP tools: `read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_check`, `login_kill`. `read_url` has no `next_url`; use the signed `next_cursor`. MCP results and `--json` output carry `update_available`.
+
+Machine-readable catalog: `searchts help --json` (`searchts.help.v1`). Full flags, defaults and examples: [docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md).
+<!-- END GENERATED COMMANDS -->
 
 ## Not this product
 

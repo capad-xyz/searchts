@@ -127,7 +127,7 @@ def _print_unknown_command(command, match, commands):
     two facts, what they typed and the command they meant, followed by the
     list they can actually read.
     """
-    from searchts import helptext, progress, receipts
+    from searchts import catalog, progress, receipts
 
     style, unicode_ok = receipts.for_stream(sys.stderr)
     rows: List[receipts.Item] = [
@@ -136,9 +136,11 @@ def _print_unknown_command(command, match, commands):
     if match:
         rows.append(receipts.Row(progress.ROW_WARN, "did you mean", match))
     rows.append(receipts.Section("commands"))
+    leads = catalog.top_level_leads()
     for name in commands:
-        lead = (helptext.COMMANDS.get(name) or {}).get("lead", "")
-        rows.append(receipts.Row(progress.ROW_SKIP, name, lead))
+        if catalog.canonical_name(name) != name:
+            continue
+        rows.append(receipts.Row(progress.ROW_SKIP, name, leads.get(name, "")))
     print(
         receipts.block(
             style,
@@ -157,28 +159,20 @@ def _print_unknown_command(command, match, commands):
 #: it opens with the belief rather than with ``positional arguments:``.
 
 
-def _run():
-    """Parse argv and dispatch to a command handler.
+def build_parser() -> argparse.ArgumentParser:
+    """Build the whole argparse tree without running a command.
 
-    Kept separate from main() so the entry point can translate the two
-    interpreter-level failures every piped/interactive CLI hits into clean
-    exits instead of tracebacks.
+    Tooling (``searchts help --json``, ``searchts.helpgen``) and the drift
+    tests walk this parser, so every command, subcommand and flag must be
+    declared here rather than in a hand-written list somewhere else.
     """
-    _ensure_utf8_console()
-    from searchts.config import load_dotenv_if_available
-    load_dotenv_if_available()
-    try:
-        from searchts.integrations.memory_rule import refresh_known_rules
-        refresh_known_rules()
-    except OSError:
-        pass
-
     parser = argparse.ArgumentParser(
         prog="searchts",
         description="Give your AI Agent eyes to see the entire internet",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Show debug logs")
-    parser.add_argument("--version", action="version", version=f"searchts v{__version__}")
+    parser.add_argument("--version", action="version", version=f"searchts v{__version__}",
+                        help="Print the version and exit")
     sub = parser.add_subparsers(dest="command", help="Available commands")
 
     # `-v` is accepted both before and after the subcommand. SUPPRESS on the
@@ -205,7 +199,7 @@ def _run():
                            help="Network proxy saved for agents to export as HTTP(S)_PROXY "
                                 "in restricted networks (http://user:pass@ip:port)")
     p_install.add_argument("--system-deps", "--apply", dest="system_deps", action="store_true",
-                           help="Opt in to mutating the system: install gh/Node.js, npm -g packages, "
+                           help="Opt in to mutating the system (alias: --apply): install gh/Node.js, npm -g packages, "
                                 "apt sources, and yt-dlp config. Off by default (the keyless core "
                                 "needs none of this) — without it, install only prints the manual commands.")
     p_install.add_argument("--safe", action="store_true",
@@ -515,8 +509,11 @@ def _run():
         "--cookies-from-browser",
         default=None,
         metavar="BROWSER",
-        help="Opt-in: pass this browser's cookies to yt-dlp (chrome, firefox, edge, …). "
-             "Transcribe only. Never used by searchts read.",
+        help="Opt-in: pass this browser's cookies to yt-dlp. Accepts the "
+             "browser names yt-dlp knows (chrome, chromium, firefox, edge, "
+             "brave, opera, safari, vivaldi, whale); unlike read, the name is "
+             "not checked against searchts's browser registry. Transcribe only. "
+             "Never used by searchts read.",
     )
 
     # ── get / grab (files a read named) ──
@@ -575,6 +572,48 @@ def _run():
     # ── version ──
     sub.add_parser("version", parents=[_verbose], help="Show version")
 
+    # ── help ──
+    p_help = sub.add_parser(
+        "help",
+        parents=[_verbose],
+        help="Show the command index, one command, or the machine-readable catalog",
+    )
+    p_help.add_argument(
+        "help_path",
+        nargs="*",
+        metavar="command",
+        help="Command path to show, e.g. login check. Omit for the index.",
+    )
+    p_help.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the stable machine-readable catalog instead of the human screen",
+    )
+
+    return parser
+
+
+def _run():
+    """Parse argv and dispatch to a command handler.
+
+    Kept separate from main() so the entry point can translate the two
+    interpreter-level failures every piped/interactive CLI hits into clean
+    exits instead of tracebacks.
+    """
+    _ensure_utf8_console()
+    from searchts.config import load_dotenv_if_available
+    load_dotenv_if_available()
+    try:
+        from searchts.integrations.memory_rule import refresh_known_rules
+        refresh_known_rules()
+    except OSError:
+        pass
+
+    parser = build_parser()
+    sub_actions = [a for a in parser._actions
+                   if isinstance(a, argparse._SubParsersAction)]
+    commands = sub_actions[0].choices if sub_actions else {}
+
     # Help is a document, not a syntax dump. Rendering it ourselves keeps the
     # flag list generated from the live parsers (so it cannot drift) while the
     # prose, the grouping and the width stay ours.
@@ -584,20 +623,27 @@ def _run():
         helptext.render(parser, sys.argv[1:], __version__)
         sys.exit(0)
 
-    unknown = _unknown_command(sys.argv[1:], sub.choices)
+    unknown = _unknown_command(sys.argv[1:], commands)
     if unknown and _wants_framed_usage():
-        _print_unknown_command(unknown[0], unknown[1], sub.choices)
+        _print_unknown_command(unknown[0], unknown[1], commands)
         sys.exit(2)
 
-    _maybe_print_command_suggestion(sys.argv[1:], sub.choices)
+    _maybe_print_command_suggestion(sys.argv[1:], commands)
 
     args = parser.parse_args()
+    # Handlers that print a bare-command usage string read it from the live
+    # parser instead of a hand-written client list (gaps #8 and #14).
+    setattr(args, "_parser", parser)
 
     # Suppress loguru noise unless --verbose
     _configure_logging(getattr(args, "verbose", False))
 
     if not args.command:
-        helptext.render_root(__version__)
+        helptext.render_root(__version__, parser)
+        sys.exit(0)
+
+    if args.command == "help":
+        _cmd_help(args, parser)
         sys.exit(0)
 
     _startup_cookie_sweep(args)
@@ -651,6 +697,46 @@ def _run():
         command=args.command,
         mcp_subcommand=getattr(args, "mcp_command", None),
     )
+
+
+def _cmd_help(args, parser) -> None:
+    """`searchts help [<cmd>] [--json]`, from the same catalog as every surface."""
+    from searchts import catalog, helptext
+
+    path = list(getattr(args, "help_path", []) or [])
+    if getattr(args, "json", False):
+        payload = catalog.build_catalog(parser, __version__)
+        if path:
+            record = catalog.find_command(payload, path)
+            if record is None:
+                print(
+                    f"searchts help: unknown command {' '.join(path)!r}. "
+                    f"Run `searchts help` for the index.",
+                    file=sys.stderr,
+                )
+                sys.exit(2)
+            name = record["name"]
+            payload["commands"] = [
+                item for item in payload["commands"]
+                if item["name"] == name or item["name"].startswith(name + " ")
+            ]
+            payload["query"] = name
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+
+    if not path:
+        helptext.render_root(__version__, parser)
+        return
+    found, target = helptext.find_subparser(parser, path)
+    wanted = catalog.canonical_name(path)
+    if not found or catalog.canonical_name(found) != wanted:
+        print(
+            f"searchts help: unknown command {' '.join(path)!r}. "
+            f"Run `searchts help` for the index.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    helptext.render_command(target, found, __version__)
 
 
 def _cookie_actions_list(args) -> list:
@@ -1132,8 +1218,13 @@ def _cmd_skill(args):
     elif getattr(args, "legacy_uninstall", False):
         _uninstall_skill()
     else:
-        print("Usage: searchts skill install [--dir DIR]")
-        print("   or: searchts skill --install | --uninstall")
+        from searchts import catalog
+
+        parser = getattr(args, "_parser", None) or build_parser()
+        print(f"Usage: {catalog.usage_text(parser, ['skill'])}")
+        print(f"   or: {catalog.usage_text(parser, ['skill', 'install'])}")
+        print("   legacy: searchts skill --install | --uninstall")
+        print("   Run `searchts skill --help` for every verb and flag.")
         sys.exit(2)
 
 
@@ -1158,6 +1249,14 @@ Decide which subcommand to run based on what `$ARGUMENTS` looks like:
   Whisper transcript. (`searchts read` is fine for the page text itself.)
 - **Anything else (a search query, a question, a topic)**:
   run `searchts search "$ARGUMENTS"` for fusion-merged multi-source web results.
+- **A login wall, or a site the user already keeps a login for**:
+  run `searchts login check <site>` first. If it is logged out, use
+  `searchts login signin <site>` (the user signs in) or
+  `searchts login keep <site> --cookies-from-browser <browser> --yes`.
+  Never copy a browser login without the user's yes.
+- **The files themselves are the deliverable** (images, fonts, CSS, a palette):
+  run `searchts grab "$ARGUMENTS"` for the set, or `searchts get <asset-url>`
+  for one file. A page whose words answer the question is still a read.
 
 Rules:
 
@@ -1394,8 +1493,13 @@ def _cmd_mcp(args):
                     style, row, unicode_ok=unicode_ok, label_w=label_w,
                 )))
     else:
-        print("Usage: searchts mcp serve [--http|--sse] [--host 127.0.0.1] [--port 8765]")
-        print("   or: searchts mcp install [--client claude|cursor|codex|vscode|gemini|opencode|json]")
+        from searchts import catalog
+
+        parser = getattr(args, "_parser", None) or build_parser()
+        print(f"Usage: {catalog.usage_text(parser, ['mcp'])}")
+        print(f"   or: {catalog.usage_text(parser, ['mcp', 'serve'])}")
+        print(f"   or: {catalog.usage_text(parser, ['mcp', 'install'])}")
+        print("   Run `searchts mcp --help` for every verb and flag.")
         sys.exit(2)
 
 
