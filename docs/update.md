@@ -8,6 +8,31 @@ Update searchts: run `searchts update`
 
 ---
 
+## Update checks and the agent note
+
+searchts checks for a newer release **at most once per 24 hours**. The check is
+one `GET https://api.github.com/repos/capad-xyz/searchts/releases/latest` with a
+`searchts/<version>` User-Agent. Nothing about the user or the machine is sent.
+The answer is cached in `~/.searchts/update-check.json`; a network or cache
+failure is silent.
+
+When the latest release is newer:
+
+- `searchts read --json` and `searchts grab --json` include a top-level
+  `update_available` object (`current`, `latest`, `command`) only on that run.
+  `searchts search --json` and `searchts doctor --json` are top-level lists, so
+  their shape does not change.
+- MCP tool results include the same object. At most once per 24 hours they also
+  include one line telling the agent a newer version exists; the stamp is in
+  `~/.searchts/update-notice.json`.
+- A terminal still gets the stderr nudge.
+
+Nothing is installed automatically. The command is always `searchts update`, run
+by the user or by you after they agree. `SEARCHTS_NO_UPDATE_CHECK=1` turns the
+check, the agent note and the stderr nudge off.
+
+---
+
 ## For AI agents
 
 **Do not** `pip install` onto system Python. **Do not** unzip `main.zip` as the default. **Do not** uninstall the user's tools. **Do not** kill `searchts.exe`.
