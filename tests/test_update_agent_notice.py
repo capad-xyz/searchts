@@ -77,7 +77,27 @@ def test_update_available_offline_is_silent(monkeypatch, tmp_path):
     monkeypatch.setattr(un, "_fetch_latest", lambda timeout=2.0: None)
     path = tmp_path / "c.json"
     assert un.update_available(path=path, now=1000) is None
-    assert not path.exists()
+    import json
+
+    assert json.loads(path.read_text(encoding="utf-8"))["failed_at"] == 1000
+
+
+def test_offline_failure_backs_off_for_an_hour(monkeypatch, tmp_path):
+    monkeypatch.delenv("SEARCHTS_NO_UPDATE_CHECK", raising=False)
+    monkeypatch.setattr(un, "__version__", "1.0.0")
+    calls = {"n": 0}
+
+    def fetch(timeout=2.0):
+        calls["n"] += 1
+        return None
+
+    monkeypatch.setattr(un, "_fetch_latest", fetch)
+    path = tmp_path / "c.json"
+    assert un.update_available(path=path, now=1000) is None
+    assert un.update_available(path=path, now=1000 + 60) is None
+    assert calls["n"] == 1
+    assert un.update_available(path=path, now=1000 + un.FAILURE_TTL_SECONDS + 1) is None
+    assert calls["n"] == 2
 
 
 def test_update_available_opt_out(monkeypatch, tmp_path):
@@ -133,6 +153,21 @@ def test_update_note_is_once_per_24h(monkeypatch, tmp_path):
     assert "searchts update" in first
     assert second is None
     assert third == first
+
+
+def test_update_note_new_release_gets_its_own_note(monkeypatch, tmp_path):
+    monkeypatch.delenv("SEARCHTS_NO_UPDATE_CHECK", raising=False)
+    path = tmp_path / "update-check.json"
+    old = {"current": "1.0.0", "latest": "1.1.0", "command": "searchts update"}
+    new = {"current": "1.0.0", "latest": "1.2.0", "command": "searchts update"}
+    first = un.update_note(old, path=path, now=1000)
+    repeated = un.update_note(old, path=path, now=1060)
+    newer = un.update_note(new, path=path, now=1120)
+    repeated_newer = un.update_note(new, path=path, now=1180)
+    assert first and "v1.1.0" in first
+    assert repeated is None
+    assert newer and "v1.2.0" in newer
+    assert repeated_newer is None
 
 
 def test_update_note_opt_out(monkeypatch, tmp_path):

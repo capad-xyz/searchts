@@ -206,10 +206,14 @@ def create_server():
         # on a running asyncio loop. ``asyncio.to_thread`` runs it in a worker
         # thread and yields control back to the loop, so other MCP tasks keep
         # making progress while a slow browser render is pending (P3.10).
+        # The update lookup can make one blocking GitHub GET on a cache miss,
+        # so it goes through a worker thread too; the read itself then reuses
+        # the answer instead of checking again.
+        info = await asyncio.to_thread(_update_lookup)
         return await asyncio.to_thread(
             read_url, url, max_pages, max_items, cursor, page_items,
             expand, cookies, cookies_from_browser, cdp_port, proxy,
-            proxy_trusted, max_media,
+            proxy_trusted, max_media, update_info=info,
         )
 
     @mcp.tool(name="web_search", description=WEB_SEARCH_DESCRIPTION)
@@ -321,13 +325,16 @@ def create_server():
         prefer_subtitles: bool = True,
         cookies_from_browser: str = "",
     ) -> str:
-        # yt-dlp / Whisper is blocking; keep the MCP loop free (same as read_url).
+        # yt-dlp / Whisper is blocking; keep the MCP loop free (same as
+        # read_url), including the update lookup's possible GitHub GET.
+        info = await asyncio.to_thread(_update_lookup)
         return await asyncio.to_thread(
             transcribe_source,
             source,
             provider,
             prefer_subtitles,
             cookies_from_browser or None,
+            update_info=info,
         )
 
     return mcp
@@ -439,17 +446,31 @@ def _unexpected(tool: str, exc: BaseException) -> str:
     return f"Error: {tool} failed unexpectedly ({type(exc).__name__}: {exc})."
 
 
-def _with_update_info(result: str) -> str:
+_UPDATE_UNSET = object()
+
+
+def _update_lookup() -> Optional[dict]:
+    """The blocking part of the update check, separated so async tools can thread it."""
+    from searchts.update_nudge import update_available_for_agent
+
+    return update_available_for_agent()
+
+
+def _with_update_info(result: str, info: Any = _UPDATE_UNSET) -> str:
     """Add the cached release info to a normal tool result, never the protocol.
 
-    JSON objects get ``update_available`` and, when this install has not been
-    told in the last 24 hours, ``update_note``. Text results get the same
+    JSON objects get ``update_available`` and, when this release has not been
+    noted in the last 24 hours, ``update_note``. Text results get the same
     information as trailing lines. ``get_status`` and every other tool go
     through here; failures stay silent, so a JSON tool result stays parseable.
-    """
-    from searchts.update_nudge import update_available_for_agent, update_note
 
-    info = update_available_for_agent()
+    ``info`` lets an async caller pass a lookup already done in a worker thread;
+    the sentinel means "do the lookup here", which is what sync tools use.
+    """
+    from searchts.update_nudge import update_note
+
+    if info is _UPDATE_UNSET:
+        info = _update_lookup()
     if not info:
         return result
     note = update_note(info)
@@ -613,6 +634,8 @@ def read_url(
     proxy: str = "",
     proxy_trusted: bool = False,
     max_media: int = 0,
+    *,
+    update_info: Any = _UPDATE_UNSET,
 ) -> str:
     """Fetch `url` via the unlocker and return a JSON source-receipt + markdown.
 
@@ -807,7 +830,7 @@ def read_url(
                 "items": page["items"],
             },
             ensure_ascii=False,
-        ))
+        ), update_info)
 
     return _with_update_info(json.dumps(
         {
@@ -846,7 +869,7 @@ def read_url(
             ],
         },
         ensure_ascii=False,
-    ))
+    ), update_info)
 
 
 def web_search(query: str, max_results: int = 5) -> str:
@@ -975,6 +998,8 @@ def transcribe_source(
     provider: str = "auto",
     prefer_subtitles: bool = True,
     cookies_from_browser: str | None = None,
+    *,
+    update_info: Any = _UPDATE_UNSET,
 ) -> str:
     """Transcribe a URL or local file. Error-string contract, like read_url.
 
@@ -1000,7 +1025,7 @@ def transcribe_source(
             prefer_subtitles=prefer_subtitles,
             cookies_from_browser=cookies,
             progress=False,
-        ))
+        ), update_info)
     except TranscribeError as e:
         return f"Error: {e}"
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise

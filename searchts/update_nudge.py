@@ -21,6 +21,9 @@ from typing import Optional, Sequence
 from searchts import __version__
 
 TTL_SECONDS = 24 * 60 * 60
+#: After a failed GitHub check, do not retry for an hour. Offline agents then
+#: pay one 2s timeout, not one per tool call.
+FAILURE_TTL_SECONDS = 60 * 60
 CACHE_NAME = "update-check.json"
 #: The MCP "tell the agent once a day" stamp. A sibling file, so the release
 #: cache keeps its old shape and older readers never see or rewrite this.
@@ -88,6 +91,40 @@ def _write_cache(path: Path, latest: str, now: float) -> None:
         pass
 
 
+def _failure_recent(path: Path, now: float) -> bool:
+    """True when a failed check was stamped less than an hour ago.
+
+    ``failed_at`` is an extra key in the same file old readers already parse,
+    so a file from an older searchts still works and keeps its release.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return False
+    try:
+        failed = float(data.get("failed_at") or 0)
+    except (TypeError, ValueError):
+        return False
+    return failed > 0 and now - failed <= FAILURE_TTL_SECONDS
+
+
+def _write_failure(path: Path, now: float) -> None:
+    """Stamp a failed check, preserving any release already in the cache."""
+    data = {}
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            data = loaded
+    except (OSError, json.JSONDecodeError, TypeError):
+        pass
+    data["failed_at"] = now
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(data), encoding="utf-8")
+    except OSError:
+        pass
+
+
 def update_available(
     *, now: Optional[float] = None, path: Optional[Path] = None
 ) -> Optional[dict]:
@@ -104,8 +141,11 @@ def update_available(
     cache = cache_path() if path is None else path
     latest = _read_cache(cache, stamp)
     if latest is None:
+        if _failure_recent(cache, stamp):
+            return None
         latest = _fetch_latest()
         if not latest:
+            _write_failure(cache, stamp)
             return None
         _write_cache(cache, latest, stamp)
     if not is_newer_version(latest, __version__):
@@ -134,16 +174,18 @@ def _notice_path(cache: Path) -> Path:
     return cache.with_name(NOTICE_NAME)
 
 
-def _notice_recent(path: Path, now: float) -> bool:
+def _notice_recent(path: Path, now: float, latest: str) -> bool:
+    """True when this exact release was already noted within the TTL."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, TypeError):
         return False
     try:
         notified = float(data.get("notified_at") or 0)
+        noted_latest = str(data.get("latest") or "").lstrip("v")
     except (TypeError, ValueError):
         return False
-    return now - notified <= TTL_SECONDS
+    return noted_latest == latest and now - notified <= TTL_SECONDS
 
 
 def _write_notice(path: Path, latest: str, now: float) -> bool:
@@ -161,20 +203,22 @@ def _write_notice(path: Path, latest: str, now: float) -> bool:
 def update_note(
     info: dict, *, now: Optional[float] = None, path: Optional[Path] = None
 ) -> Optional[str]:
-    """The one-line agent note, at most once per 24h per install.
+    """The one-line agent note, at most once per 24h per release.
 
     ``path`` is the update-check cache path; the stamp lives beside it in
-    ``update-notice.json``. Returns ``None`` when the opt-out is set, when this
-    install was already told within the TTL, or when writing the stamp fails.
+    ``update-notice.json``. A newer release gets its own note even inside the
+    TTL. Returns ``None`` when the opt-out is set, when this release was already
+    noted within the TTL, or when writing the stamp fails.
     """
     if os.environ.get("SEARCHTS_NO_UPDATE_CHECK"):
         return None
     stamp = time.time() if now is None else now
     cache = cache_path() if path is None else path
     notice = _notice_path(cache)
-    if _notice_recent(notice, stamp):
+    latest = str(info.get("latest") or "").lstrip("v")
+    if _notice_recent(notice, stamp, latest):
         return None
-    if not _write_notice(notice, str(info.get("latest") or ""), stamp):
+    if not _write_notice(notice, latest, stamp):
         return None
     return (
         f"Note for the agent: searchts v{info.get('latest')} is available "
@@ -302,8 +346,11 @@ def maybe_nudge(
     path = cache_path()
     latest = _read_cache(path, stamp)
     if latest is None:
+        if _failure_recent(path, stamp):
+            return
         latest = _fetch_latest()
         if not latest:
+            _write_failure(path, stamp)
             return
         _write_cache(path, latest, stamp)
 
