@@ -261,6 +261,9 @@ class TestCLI:
             "next_url": None,
             "more": [],
             "pages": [{"url": "https://x.test/final", "text": "markdown text", "next_url": None}],
+            # #430: every automatic cookie action, or skip and why. Empty here:
+            # this read asked for no cookies.
+            "cookie_actions": [],
         }
 
     def test_read_command_forwards_flags(self, capsys):

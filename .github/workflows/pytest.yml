@@ -256,7 +256,7 @@ jobs:
           # The login verbs exist because read_url's login-wall error names
           # them: without a tool to call, that error asks the agent to do
           # something it cannot do.
-          expected = {"fetch_asset", "get_status", "grab_site", "read_url", "transcribe", "web_search", "login_status", "login_signin", "login_kill"}
+          expected = {"fetch_asset", "get_status", "grab_site", "read_url", "transcribe", "web_search", "login_status", "login_signin", "login_check", "login_kill"}
           assert set(names) == expected, f"tool mismatch: {names} != {expected}"
           print("mcp2 compatibility: OK")
           PY

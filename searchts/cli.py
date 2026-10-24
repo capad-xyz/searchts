@@ -462,6 +462,40 @@ def _run():
              "read anyway; this is for cleaning up after a killed process",
     )
 
+    login_sub.add_parser(
+        "sweep",
+        parents=[_verbose],
+        help="Delete expired cookies now. Runs offline, no browser and no "
+        "network. searchts never installs a cron, launchd or Task "
+        "Scheduler entry; schedule it yourself if you want to",
+    )
+
+    p_login_check = login_sub.add_parser(
+        "check",
+        parents=[_verbose],
+        help="Read one signed-in-only page with the saved cookies: logged in "
+        "(exit 0), logged out (exit 1), or unknown (exit 2)",
+        description=(
+            "Read one signed-in-only page with the saved cookies. Exit codes: "
+            "0 logged in, 1 logged out, 2 unknown. Expiry is only an upper "
+            "bound (a server can end a session early), and this proves no "
+            "login wall, not which account is signed in. A captcha or block "
+            "is unknown, never a guess. Only direct requests carry the "
+            "cookies; the Jina relay never receives them."
+        ),
+    )
+    p_login_check.add_argument("site", help="The site whose saved login to check")
+    p_login_check.add_argument(
+        "--url",
+        dest="check_url",
+        default="",
+        help="A page only signed-in users see. Without it, a known account "
+        "page is used for reddit.com, linkedin.com, github.com and x.com. "
+        "For any other site (or a custom page) a no-wall result is "
+        "reported as unknown, because a public page proves nothing about "
+        "your account.",
+    )
+
     # ── check-update ──
     # ── transcribe ──
     p_tr = sub.add_parser("transcribe", parents=[_verbose],
@@ -566,6 +600,8 @@ def _run():
         helptext.render_root(__version__)
         sys.exit(0)
 
+    _startup_cookie_sweep(args)
+
     if args.command == "version":
         print(f"searchts v{__version__}")
         sys.exit(0)
@@ -615,6 +651,55 @@ def _run():
         command=args.command,
         mcp_subcommand=getattr(args, "mcp_command", None),
     )
+
+
+def _cookie_actions_list(args) -> list:
+    """The per-run cookie action receipts, created once and shared."""
+    actions = getattr(args, "_cookie_actions", None)
+    if not isinstance(actions, list):
+        actions = []
+        setattr(args, "_cookie_actions", actions)
+    return actions
+
+
+def _report_cookie_action(args, action: dict) -> None:
+    """Record one automatic cookie action for JSON and print its receipt row.
+
+    The fields are fixed: site, browser (or signin), action, count, reason.
+    Never a value. A caller can therefore read the same facts from stderr on a
+    terminal or from ``cookie_actions`` in ``--json``.
+    """
+    _cookie_actions_list(args).append(action)
+    if getattr(args, "json", False):
+        return
+    browser = action.get("browser") or "signin"
+    count = action.get("count", 0)
+    site = action.get("site", "")
+    verb = action.get("action", "skipped")
+    reason = action.get("reason", "")
+    print(
+        f"cookie: {verb} {count} {browser} cookie(s) for {site} ({reason})",
+        file=sys.stderr,
+    )
+
+
+def _startup_cookie_sweep(args) -> None:
+    """Drop dead cookies on every command start, and say what it did.
+
+    Offline and cheap: no browser, no network, no daemon. Errors are silent so
+    a broken store cannot stop the command the user actually ran. ``login
+    sweep`` opts out because it runs the sweep itself and reports the counts.
+    """
+    if getattr(args, "command", "") == "login" and getattr(args, "login_command", "") == "sweep":
+        return
+    try:
+        from searchts.session_cookies import sweep_owned_store
+
+        result = sweep_owned_store()
+    except Exception:  # noqa: BLE001 - a sweep must never break a command
+        return
+    for action in result.actions:
+        _report_cookie_action(args, action)
 
 
 def main():
@@ -2351,77 +2436,86 @@ def _cmd_read(args):
     tracker = progress.live(
         "read", _short_subject(args.url), enabled=False if args.json else None
     )
-    try:
-        with tracker:
-            if getattr(args, "items", 0):
-                if getattr(args, "pages", 1) > 1:
-                    # --items counts rows and --pages counts hops; together the
-                    # first silently won. Say it rather than drop one.
-                    print("--items and --pages are mutually exclusive; using --items.",
-                          file=sys.stderr)
-                pages = unlocker.read_items(
-                    args.url, args.items, backends=backends, allow_human=args.human,
-                    scrub=args.scrub, progress=tracker.wants(), cookies=cookies,
-                    expand=expand,
-                    proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
-                    **_media_kw(args),
-                )
-            elif getattr(args, "pages", 1) > 1:
-                pages = unlocker.read_pages(
-                    args.url, args.pages, backends=backends, allow_human=args.human,
-                    scrub=getattr(args, "scrub", False), progress=tracker.wants(),
-                    cookies=cookies, expand=expand,
-                    proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
-                    **_media_kw(args),
-                )
-            else:
-                pages = [unlocker.fetch(
-                    args.url, backends=backends, allow_human=args.human,
-                    scrub=getattr(args, "scrub", False), progress=tracker.wants(),
-                    cookies=cookies, expand=expand,
-                    proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
-                    **_media_kw(args),
-                )]
-            result = pages[0]
-            if tracker.wants():
-                tracker.summary(_read_receipt(tracker, result, len(pages)))
-    except unlocker.UnlockerError as e:
-        # The live block is already down. The ending is the same ladder the
-        # user watched, with the failed rungs red and their reasons in the
-        # detail column -- not a separate prose block that repeats the header.
-        from searchts import receipts
+    retried_after_wall = False
+    while True:
+        try:
+            with tracker:
+                if getattr(args, "items", 0):
+                    if getattr(args, "pages", 1) > 1:
+                        # --items counts rows and --pages counts hops; together the
+                        # first silently won. Say it rather than drop one.
+                        print("--items and --pages are mutually exclusive; using --items.",
+                              file=sys.stderr)
+                    pages = unlocker.read_items(
+                        args.url, args.items, backends=backends, allow_human=args.human,
+                        scrub=args.scrub, progress=tracker.wants(), cookies=cookies,
+                        expand=expand,
+                        proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                        **_media_kw(args),
+                    )
+                elif getattr(args, "pages", 1) > 1:
+                    pages = unlocker.read_pages(
+                        args.url, args.pages, backends=backends, allow_human=args.human,
+                        scrub=getattr(args, "scrub", False), progress=tracker.wants(),
+                        cookies=cookies, expand=expand,
+                        proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                        **_media_kw(args),
+                    )
+                else:
+                    pages = [unlocker.fetch(
+                        args.url, backends=backends, allow_human=args.human,
+                        scrub=getattr(args, "scrub", False), progress=tracker.wants(),
+                        cookies=cookies, expand=expand,
+                        proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                        **_media_kw(args),
+                    )]
+                result = pages[0]
+                if tracker.wants():
+                    tracker.summary(_read_receipt(tracker, result, len(pages)))
+            break
+        except unlocker.UnlockerError as e:
+            wall = any("login-wall" in why for _, why in e.attempts)
+            if wall and cookies and not retried_after_wall:
+                fresh = _retry_after_login_wall(args)
+                if fresh is not None:
+                    retried_after_wall = True
+                    cookies = fresh
+                    continue
+            # The live block is already down. The ending is the same ladder the
+            # user watched, with the failed rungs red and their reasons in the
+            # detail column -- not a separate prose block that repeats the header.
+            from searchts import receipts
 
-        rows = [
-            receipts.Row(progress.ROW_FAIL, backend, ux.tidy_reason(why))
-            for backend, why in e.attempts
-        ]
-        # One extra row, only when fetch had something useful to add. The
-        # per-backend reasons above are each true; none of them says what to do
-        # next, and a read that carried cookies is exactly the case where that
-        # is the whole question.
-        if e.hint:
-            rows.append(receipts.Row(progress.ROW_WARN, "hint", e.hint))
-        # A login wall on an anonymous read is the one failure where the
-        # reason is not the whole answer: the page exists, it is just
-        # behind a login. Naming the commands here is what turns a wall into
-        # something an agent can act on, and it costs one row on a path
-        # that has already failed.
-        if not cookies and any("login-wall" in why for _, why in e.attempts):
-            rows.append(
-                receipts.Row(progress.ROW_WARN, "login", _login_wall_hint_text(args.url))
+            rows = [
+                receipts.Row(progress.ROW_FAIL, backend, ux.tidy_reason(why))
+                for backend, why in e.attempts
+            ]
+            # One extra row, only when fetch had something useful to add. The
+            # per-backend reasons above are each true; none of them says what to
+            # do next, and a read that carried cookies is exactly the case where
+            # that is the whole question.
+            if e.hint:
+                rows.append(receipts.Row(progress.ROW_WARN, "hint", e.hint))
+            # A login wall is the one failure where the reason is not the whole
+            # answer: the page exists, it is just behind a login. Naming the
+            # commands here is what turns a wall into something an agent can
+            # act on, and it costs one row on a path that has already failed.
+            if wall:
+                rows.append(
+                    receipts.Row(progress.ROW_WARN, "login", _login_wall_hint_text(args.url))
+                )
+            text = receipts.block(
+                tracker.color,
+                "read",
+                rows,
+                subject=tracker.subject,
+                elapsed=tracker.elapsed(),
+                status=progress.ROW_FAIL,
+                unicode_ok=tracker.unicode_ok,
+                width=78,
             )
-        text = receipts.block(
-            tracker.color,
-            "read",
-            rows,
-            subject=tracker.subject,
-            elapsed=tracker.elapsed(),
-            status=progress.ROW_FAIL,
-            unicode_ok=tracker.unicode_ok,
-            width=78,
-        )
-        print(text, file=sys.stderr)
-        sys.exit(1)
+            print(text, file=sys.stderr)
+            sys.exit(1)
 
     # Surface prompt-injection findings to stderr so stdout stays clean content.
     if result.warnings:
@@ -2448,6 +2542,10 @@ def _cmd_read(args):
                 {"url": p.final_url or args.url, "text": p.text, "next_url": p.next_url}
                 for p in pages
             ],
+            # Every automatic cookie action this run took, or skipped and why.
+            # Fields are fixed and contain no values: site, browser, action,
+            # count, reason.
+            "cookie_actions": _cookie_actions_list(args),
         }
         print(json.dumps(payload, ensure_ascii=False))
     else:
@@ -2625,40 +2723,53 @@ def _read_command_cookies(args):
     # cannot outlive the run that the user approved, and there is no ambient
     # "always allow" that would survive the next terminal. The grant happens
     # here, inside this process, because that is what the PID scoping means.
-    if browser and getattr(args, "yes", False):
+    yes = bool(getattr(args, "yes", False))
+    if browser and yes:
         grant_session_copy()
 
-    try:
-        if browser:
-            # Whether this browser *can* be read is settled before the consent
-            # question, not after. A Chromium cookie file is locked, so asking
-            # the user to approve a copy that cannot happen is a question whose
-            # answer does not matter, and it burns the one approval the session
-            # was going to get for a site that could have used it.
-            source = prepare(args.url, browser=browser)
-        else:
-            source = prepare(args.url)
-    except SessionConsentNeeded as e:
-        print(str(e), file=sys.stderr)
-        sys.exit(3)
-    except CookieReadError as e:
-        # A site that is not kept and has nothing to copy is not an error
-        # here. An anonymous read is still a valid read; only a login wall
-        # will make the user care, and that names the command to run.
-        if not browser:
-            return None
-        print(str(e), file=sys.stderr)
-        sys.exit(1)
-    except Exception as e:
-        print(f"could not read cookies: {e}", file=sys.stderr)
-        sys.exit(1)
+    source = None
+    if not browser:
+        source = _refresh_saved_login(args, host, yes=yes)
+
+    if source is None:
+        try:
+            if browser:
+                # Whether this browser *can* be read is settled before the
+                # consent question, not after. A Chromium cookie file is
+                # locked, so asking the user to approve a copy that cannot
+                # happen is a question whose answer does not matter, and it
+                # burns the one approval the session was going to get for a
+                # site that could have used it.
+                source = prepare(args.url, browser=browser)
+            else:
+                source = prepare(args.url)
+        except SessionConsentNeeded as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(3)
+        except CookieReadError as e:
+            # A site that is not kept and has nothing to copy is not an error
+            # here. An anonymous read is still a valid read; only a login wall
+            # will make the user care, and that names the command to run.
+            if not browser:
+                return None
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"could not read cookies: {e}", file=sys.stderr)
+            sys.exit(1)
 
     if not source or not getattr(source, "count", 0):
         return None
+    setattr(args, "_cookie_source", source)
     label = getattr(source, "via", "") or "login"
     print(f"cookies: {label} -> {source.count} cookies for {args.url}", file=sys.stderr)
     if source.via == "owned store":
         print(f"{host} was already kept; the source browser was not consulted.", file=sys.stderr)
+    elif getattr(args, "_cookie_refreshed", False):
+        print(
+            f"{host}'s saved login was refreshed from {source.browser or 'its browser'}.",
+            file=sys.stderr,
+        )
     else:
         print(
             "copied for this session only, not kept. "
@@ -2666,6 +2777,165 @@ def _read_command_cookies(args):
             file=sys.stderr,
         )
     return source.cookies
+
+
+def _refresh_saved_login(args, host: str, *, yes: bool):
+    """Re-copy a near-expiry browser login, or explain why it did not.
+
+    Consent is the gate. Recorded per-site consent, then ``--yes``, then a
+    terminal prompt; otherwise nothing is copied, a receipt row says it was
+    skipped, and the read continues with whatever is still alive. A login kept
+    from `login signin` has no browser to copy from, so it only gets the hint.
+    """
+    from searchts.login_store import (
+        consent_for_auto,
+        refresh_kept,
+        refresh_reason,
+        signin_reason,
+    )
+    from searchts.session_cookies import read_owned_store
+
+    host = host or ""
+    reason = refresh_reason(args.url) if host else None
+    if reason:
+        entry = read_owned_store().get(host) or {}
+        browser = (entry.get("browser") or "").strip() if isinstance(entry, dict) else ""
+        allowed, how = consent_for_auto(
+            args.url, browser, yes=yes, reason=f"the saved login is {reason}"
+        )
+        if allowed:
+            try:
+                source = refresh_kept(args.url, browser=browser)
+            except Exception as e:  # noqa: BLE001 - a refresh must not break the read
+                _report_cookie_action(
+                    args,
+                    {
+                        "site": host,
+                        "browser": browser,
+                        "action": "skipped",
+                        "count": 0,
+                        "reason": f"{reason}; refresh failed ({type(e).__name__})",
+                    },
+                )
+            else:
+                _report_cookie_action(
+                    args,
+                    {
+                        "site": host,
+                        "browser": browser,
+                        "action": "refreshed",
+                        "count": source.count,
+                        "reason": reason,
+                    },
+                )
+                setattr(args, "_cookie_refreshed", True)
+                return source
+        else:
+            _report_cookie_action(
+                args,
+                {
+                    "site": host,
+                    "browser": browser,
+                    "action": "skipped",
+                    "count": 0,
+                    "reason": f"{reason}; {how}",
+                },
+            )
+            print(
+                f"  {reason}: not refreshed. {how}",
+                file=sys.stderr,
+            )
+
+    need = signin_reason(args.url) if host else None
+    if need:
+        _report_cookie_action(
+            args,
+            {
+                "site": host,
+                "browser": "signin",
+                "action": "skipped",
+                "count": 0,
+                "reason": need,
+            },
+        )
+        print(
+            f"  the saved login for {host} is {need} and cannot be refreshed "
+            f"from a browser. Run `searchts login signin {args.url}`.",
+            file=sys.stderr,
+        )
+    return None
+
+
+def _retry_after_login_wall(args):
+    """One re-copy after a login wall, then one retry. Never a loop.
+
+    Only a login kept from a browser can be re-copied. The same consent gate
+    as the near-expiry pre-flight applies: recorded per-site consent, then
+    ``--yes``, then a terminal prompt. A sign-in-kept login, a file, a debugger
+    port, or no consent returns ``None`` and the read fails with the wall's
+    honest reason.
+    """
+    from searchts.login_store import consent_for_auto, host_of, refresh_kept
+    from searchts.session_cookies import read_owned_store
+
+    source = getattr(args, "_cookie_source", None)
+    if source is None or not getattr(source, "browser", ""):
+        return None
+    host = host_of(args.url) or ""
+    entry = read_owned_store().get(host) or {}
+    browser = (entry.get("browser") or "") if isinstance(entry, dict) else ""
+    if not browser:
+        return None
+    allowed, how = consent_for_auto(
+        args.url,
+        browser,
+        yes=bool(getattr(args, "yes", False)),
+        reason="the saved login hit a login wall",
+    )
+    if not allowed:
+        _report_cookie_action(
+            args,
+            {
+                "site": host,
+                "browser": browser,
+                "action": "skipped",
+                "count": 0,
+                "reason": f"login wall; {how}",
+            },
+        )
+        print(f"  the saved login hit a login wall. {how}", file=sys.stderr)
+        return None
+    try:
+        fresh = refresh_kept(args.url, browser=browser)
+    except Exception as e:  # noqa: BLE001 - the read still fails, with its reason
+        _report_cookie_action(
+            args,
+            {
+                "site": host,
+                "browser": browser,
+                "action": "skipped",
+                "count": 0,
+                "reason": f"login wall; refresh failed ({type(e).__name__})",
+            },
+        )
+        return None
+    _report_cookie_action(
+        args,
+        {
+            "site": host,
+            "browser": browser,
+            "action": "recopied",
+            "count": fresh.count,
+            "reason": "login wall",
+        },
+    )
+    setattr(args, "_cookie_source", fresh)
+    print(
+        f"cookies: refreshed from {browser} -> {fresh.count} cookies "
+        f"for {args.url} (retrying once)",
+        file=sys.stderr,
+    )
+    return fresh.cookies
 
 
 def _cookie_provenance(args, count):
@@ -2689,6 +2959,7 @@ def _cmd_login(args):
     from searchts.login_store import (
         SessionConsentNeeded,
         audit,
+        check_login,
         grant_session_copy,
         host_of,
         keep,
@@ -2696,7 +2967,7 @@ def _cmd_login(args):
         note_copied,
         purge_scratch,
     )
-    from searchts.session_cookies import CookieReadError
+    from searchts.session_cookies import CookieReadError, sweep_owned_store
 
     action = getattr(args, "login_command", None) or "list"
 
@@ -2714,6 +2985,52 @@ def _cmd_login(args):
             unicode_ok=unicode_ok,
         ))
 
+    if action == "sweep":
+        result = sweep_owned_store()
+        rows = []
+        for item in result.actions:
+            rows.append(
+                receipts.Row(
+                    progress.ROW_OK,
+                    "expired",
+                    f"{item['site']}: removed {item['count']} cookie(s)",
+                )
+            )
+        if not rows:
+            rows.append(
+                receipts.Row(
+                    progress.ROW_SKIP,
+                    "kept",
+                    "no expired cookies to remove",
+                )
+            )
+        rows.append(
+            receipts.Row(
+                progress.ROW_SKIP,
+                "offline",
+                "no browser, no network, no daemon",
+            )
+        )
+        for item in result.actions:
+            _report_cookie_action(args, item)
+        receipt(rows)
+        sys.exit(0)
+
+    if action == "check":
+        site = args.site
+        checked = check_login(site, url=getattr(args, "check_url", ""))
+        status_row = {
+            "logged in": progress.ROW_OK,
+            "logged out": progress.ROW_FAIL,
+        }.get(checked.status, progress.ROW_WARN)
+        rows = [
+            receipts.Row(status_row, "status", checked.status),
+            receipts.Row(progress.ROW_SKIP, "why", checked.why),
+            receipts.Row(progress.ROW_SKIP, "page", checked.url or "not chosen"),
+        ]
+        receipt(rows, subject=checked.site)
+        sys.exit(checked.exit_code)
+
     if action == "list":
         a = audit()
         kept_sites = a.kept
@@ -2727,10 +3044,11 @@ def _cmd_login(args):
         else:
             for host, info in kept_sites.items():
                 extra = f" (from {info['browser']})" if info.get("browser") else ""
+                when = info.get("expiry") or "unknown"
                 rows.append(receipts.Row(
-                    progress.ROW_OK,
+                    progress.ROW_WARN if info.get("expired") else progress.ROW_OK,
                     host,
-                    f"{info['cookies']} cookies{extra}",
+                    f"{info['cookies']} cookies{extra}; {when}",
                 ))
         if a.session_copy_granted:
             copied = a.session_copied_sites
@@ -2843,7 +3161,7 @@ def _cmd_login(args):
             f"and only a later read of {host} can tell the difference.",
         )]
         if args.yes:
-            kept_login = keep(args.url, source.cookies, browser=args.browser)
+            kept_login = keep(args.url, source.cookies, browser=args.browser, consent=False)
             rows.append(receipts.Row(progress.ROW_OK, "kept", kept_login.why))
         else:
             rows.append(receipts.Row(

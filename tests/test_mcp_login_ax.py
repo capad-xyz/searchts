@@ -234,8 +234,8 @@ def _tool_names():
     return {t.name for t in asyncio.run(mcp_server.create_server().list_tools())}
 
 
-def test_the_three_login_tools_are_registered():
-    assert {"login_status", "login_signin", "login_kill"} <= _tool_names()
+def test_the_four_login_tools_are_registered():
+    assert {"login_status", "login_signin", "login_check", "login_kill"} <= _tool_names()
 
 
 def test_the_login_wall_error_names_a_registered_tool():
