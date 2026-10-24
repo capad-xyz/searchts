@@ -21,7 +21,7 @@ Climbs the same three rungs the MCP server uses: curl_cffi with a browser TLS fi
 - A share link whose HTML is empty is still a read.
 
 ```bash
-searchts read <url> [--verbose] [--backend backend] [--json] [--human] [--pages pages] [--items items] [--media media] [--expand] [--scrub] [--cookies-from-browser BROWSER] [--yes] [--cookies PATH] [--cdp-port PORT] [--proxy URL] [--proxy-trusted]
+searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages PAGES] [--items ITEMS] [--media MEDIA] [--expand] [--scrub] [--cookies-from-browser BROWSER] [--yes] [--cookies PATH] [--cdp-port PORT] [--proxy URL] [--proxy-trusted]
 ```
 
 | Argument | Description |
@@ -31,12 +31,12 @@ searchts read <url> [--verbose] [--backend backend] [--json] [--human] [--pages 
 | Flag | Description |
 |---|---|
 | `-v`, `--verbose` | Show debug logs |
-| `--backend` backend | Force a single backend (e.g. curl_cffi, 'Jina Reader', stealth-browser) |
+| `--backend` BACKEND | Force a single backend (e.g. curl_cffi, 'Jina Reader', stealth-browser) |
 | `--json` | Print the result as JSON instead of raw text: url, final_url, fetched_at, backend, status, chars, text, next_url and more |
 | `--human` | If no tier gets clean content, open a headful browser to clear it by hand |
-| `--pages` pages | Follow the next page on the same site, curl only, up to this many (max 5) Default: `1`. |
-| `--items` items | Keep following next pages, then scroll if the list only grows that way, until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300) |
-| `--media` media | How many image and video addresses the media note lists (default 4, ceiling 40). Does not download them; searchts grab saves the files. SEARCHTS_MAX_MEDIA or more.media in the config changes the default. |
+| `--pages` PAGES | Follow the next page on the same site, curl only, up to this many (max 5) Default: `1`. |
+| `--items` ITEMS | Keep following next pages, then scroll if the list only grows that way, until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300) |
+| `--media` MEDIA | How many image and video addresses the media note lists (default 4, ceiling 40). Does not download them; searchts grab saves the files. SEARCHTS_MAX_MEDIA or more.media in the config changes the default. |
 | `--expand` | Open the text the page is holding back: closed <details> and buttons labelled read/show/see more, and a known host's own controls (a Reddit thread's 'more replies'). Off by default. Never follows a link, a form or a sign-in; a 'continue reading' paywall is named, not opened (ceiling SEARCHTS_MAX_EXPAND_CLICKS) |
 | `--scrub` | Redact prompt-injection spans from the content (invisible-char stripping + indicator scanning always run regardless) |
 | `--cookies-from-browser` BROWSER | Read YOUR browser's cookies for this site only (opt-in) Choices: zen, firefox, librewolf, waterfox, floorp, mullvad, vivaldi, chrome, edge, brave, opera, arc, chromium. |
@@ -111,7 +111,7 @@ A player page's words: captions, then Whisper.
 Captions come first and cost nothing. Audio goes to Groq, then OpenAI if a key is set, else the keyless local Whisper. A local file works the same way.
 
 ```bash
-searchts transcribe <source> [--verbose] [--provider {auto,groq,openai,local}] [--no-subtitles] [--output output] [--cookies-from-browser BROWSER]
+searchts transcribe <source> [--verbose] [--provider {auto,groq,openai,local}] [--no-subtitles] [--output OUTPUT] [--cookies-from-browser BROWSER]
 ```
 
 | Argument | Description |
@@ -123,7 +123,7 @@ searchts transcribe <source> [--verbose] [--provider {auto,groq,openai,local}] [
 | `-v`, `--verbose` | Show debug logs |
 | `--provider` {auto,groq,openai,local} | Audio transcription provider used when there are no subtitles (default: auto = hosted key if set, else keyless local faster-whisper; `local` forces local, no API key) Choices: auto, groq, openai, local. Default: `auto`. |
 | `--no-subtitles` | Skip the video's existing captions and force audio transcription (captions otherwise come first and need no API key) Default: `True`. |
-| `-o`, `--output` output | Write transcript to a file instead of stdout |
+| `-o`, `--output` OUTPUT | Write transcript to a file instead of stdout |
 | `--cookies-from-browser` BROWSER | Opt-in: pass this browser's cookies to yt-dlp. Accepts the browser names yt-dlp knows (chrome, chromium, firefox, edge, brave, opera, safari, vivaldi, whale); unlike read, the name is not checked against searchts's browser registry. Transcribe only. Never used by searchts read. |
 
 Examples:
@@ -151,7 +151,7 @@ Save the files a page uses: images, css, fonts.
 Downloads images, icons, css, fonts and inline svg through the same unlocker, then extracts the palette, the fonts and the radius/shadow/ spacing values the page actually uses. Every URL is either saved, named as a failure, or listed as omitted with the reason, so a cap never truncates silently.
 
 ```bash
-searchts grab <url> [--verbose] [--out out] [--kinds kinds] [--scripts] [--read] [--max max_assets] [--tokens max_tokens] [--json]
+searchts grab <url> [--verbose] [--out OUT] [--kinds KINDS] [--scripts] [--read] [--max MAX_ASSETS] [--tokens MAX_TOKENS] [--json]
 ```
 
 | Argument | Description |
@@ -161,12 +161,12 @@ searchts grab <url> [--verbose] [--out out] [--kinds kinds] [--scripts] [--read]
 | Flag | Description |
 |---|---|
 | `-v`, `--verbose` | Show debug logs |
-| `--out` out | Output directory (default: ./searchts-grab-<host>) |
-| `--kinds` kinds | Comma list of asset kinds to download (images,icons,css,fonts,svg,inline_svg,scripts) Default: `images,icons,css,fonts,svg,inline_svg`. |
+| `--out` OUT | Output directory (default: ./searchts-grab-<host>) |
+| `--kinds` KINDS | Comma list of asset kinds to download (images,icons,css,fonts,svg,inline_svg,scripts) Default: `images,icons,css,fonts,svg,inline_svg`. |
 | `--scripts` | Also download <script src> files |
 | `--read` | Also save the page text as page.md |
-| `--max` max_assets | Maximum assets to download (default 120) Default: `120`. |
-| `--tokens` max_tokens | Radius, shadow, and spacing values to keep (default 24, ceiling 200). The note names how many more a higher number returns. Default: `24`. |
+| `--max` MAX_ASSETS | Maximum assets to download (default 120) Default: `120`. |
+| `--tokens` MAX_TOKENS | Radius, shadow, and spacing values to keep (default 24, ceiling 200). The note names how many more a higher number returns. Default: `24`. |
 | `--json` | Print the manifest JSON to stdout |
 
 Examples:
@@ -194,7 +194,7 @@ One file through the same unlocker.
 Prints the saved path on stdout, so it pipes into anything.
 
 ```bash
-searchts get <url> [--verbose] [--output output]
+searchts get <url> [--verbose] [--output OUTPUT]
 ```
 
 | Argument | Description |
@@ -204,7 +204,7 @@ searchts get <url> [--verbose] [--output output]
 | Flag | Description |
 |---|---|
 | `-v`, `--verbose` | Show debug logs |
-| `-o`, `--output` output | Output file or directory (default: filename from the URL, in the cwd) |
+| `-o`, `--output` OUTPUT | Output file or directory (default: filename from the URL, in the cwd) |
 
 Examples:
 
@@ -258,7 +258,7 @@ Run the MCP server (stdio default; --http for loopback).
 The server exposes the same read/search/download code as the CLI. stdio is what an agent host spawns; --http and --sse are for a custom connector on loopback only.
 
 ```bash
-searchts mcp serve [--verbose] [--http] [--sse] [--host host] [--port port]
+searchts mcp serve [--verbose] [--http] [--sse] [--host HOST] [--port PORT]
 ```
 
 | Flag | Description |
@@ -266,8 +266,8 @@ searchts mcp serve [--verbose] [--http] [--sse] [--host host] [--port port]
 | `-v`, `--verbose` | Show debug logs |
 | `--http` | Streamable HTTP on loopback (http://127.0.0.1:PORT/mcp). Not a public URL. |
 | `--sse` | Legacy SSE on loopback (http://127.0.0.1:PORT/sse). Prefer --http. |
-| `--host` host | Bind address for --http/--sse (loopback only; default 127.0.0.1) Default: `127.0.0.1`. |
-| `--port` port | Port for --http/--sse (default 8765) Default: `8765`. |
+| `--host` HOST | Bind address for --http/--sse (loopback only; default 127.0.0.1) Default: `127.0.0.1`. |
+| `--port` PORT | Port for --http/--sse (default 8765) Default: `8765`. |
 
 Examples:
 
@@ -354,13 +354,13 @@ Write the slash command and the shared SKILL.md bundle.
 Writes `searchts.md` into the commands directory (default ~/.claude/commands) and the SKILL.md bundle into the agent skill homes that exist. The slash command routes read, search, transcribe, login, grab and get.
 
 ```bash
-searchts skill install [--verbose] [--dir dir]
+searchts skill install [--verbose] [--dir DIR]
 ```
 
 | Flag | Description |
 |---|---|
 | `-v`, `--verbose` | Show debug logs |
-| `--dir` dir | Target commands directory (default: ~/.claude/commands) |
+| `--dir` DIR | Target commands directory (default: ~/.claude/commands) |
 
 Examples:
 
@@ -413,18 +413,18 @@ Non-mutating by default: without --system-deps it prints the commands and touche
 - --safe is a deprecated no-op; non-mutating is now the default.
 
 ```bash
-searchts install [--verbose] [--env {local,server,auto}] [--proxy proxy] [--system-deps] [--safe] [--dry-run] [--channels channels] [--browser]
+searchts install [--verbose] [--env {local,server,auto}] [--proxy PROXY] [--system-deps] [--safe] [--dry-run] [--channels CHANNELS] [--browser]
 ```
 
 | Flag | Description |
 |---|---|
 | `-v`, `--verbose` | Show debug logs |
 | `--env` {local,server,auto} | Environment: local, server, or auto-detect Choices: local, server, auto. Default: `auto`. |
-| `--proxy` proxy | Network proxy saved for agents to export as HTTP(S)_PROXY in restricted networks (http://user:pass@ip:port) |
+| `--proxy` PROXY | Network proxy saved for agents to export as HTTP(S)_PROXY in restricted networks (http://user:pass@ip:port) |
 | `--system-deps`, `--apply` | Opt in to mutating the system (alias: --apply): install gh/Node.js, npm -g packages, apt sources, and yt-dlp config. Off by default (the keyless core needs none of this) — without it, install only prints the manual commands. |
 | `--safe` (deprecated) | Deprecated no-op: safe (non-mutating) is now the default. Use --system-deps to opt in to system changes. |
 | `--dry-run` | Show what would be done without making any changes |
-| `--channels` channels | Comma-separated optional channels to install (twitter,reddit,opencli,linkedin,all) |
+| `--channels` CHANNELS | Comma-separated optional channels to install (twitter,reddit,opencli,linkedin,all) |
 | `--browser` | Install searchts[browser] + Chromium into this CLI's environment (same interpreter as the running searchts). Refuses ephemeral uvx. |
 
 Examples:
@@ -509,7 +509,6 @@ No MCP tool: keys are the user's; MCP reads only what is already configured.
 
 Site logins: list, keep, kill, signin, purge-scratch, sweep, check.
 Nothing is copied out of your browser without --yes. A kept login stays on this machine: direct requests and a temporary local browser context can use it; the Jina relay never receives it. A bare `searchts login` is the same as `searchts login list`.
-- Verbs: list, keep, kill, signin, purge-scratch, sweep, check.
 
 ```bash
 searchts login {list|keep|kill|signin|purge-scratch|sweep|check} [--verbose]
@@ -638,7 +637,7 @@ Sign in once for a site in a browser searchts opens.
 The browser is searchts's own, not a copy of your profile. Signing in serves this one read and keeps nothing unless --yes is passed. The command reports what it observed; only a later read proves the login.
 
 ```bash
-searchts login signin <url> [--verbose] [--browser browser] [--yes]
+searchts login signin <url> [--verbose] [--browser BROWSER] [--yes]
 ```
 
 | Argument | Description |
@@ -648,7 +647,7 @@ searchts login signin <url> [--verbose] [--browser browser] [--yes]
 | Flag | Description |
 |---|---|
 | `-v`, `--verbose` | Show debug logs |
-| `--browser` browser | Which browser searchts opens (default: chrome) Default: `chrome`. |
+| `--browser` BROWSER | Which browser searchts opens (default: chrome) Default: `chrome`. |
 | `--yes` | Keep the login after signing in. Without this, signing in only serves this one read and nothing is kept. |
 
 Examples:
@@ -726,7 +725,7 @@ Read one signed-in-only page with the saved cookies.
 Exit 0 means logged in, 1 logged out, 2 unknown. Expiry is only an upper bound (a server can end a session early), and this proves no login wall, not which account is signed in. A captcha or block is unknown, never a guess. Only direct requests carry the cookies; the Jina relay never receives them.
 
 ```bash
-searchts login check <site> [--verbose] [--url check_url]
+searchts login check <site> [--verbose] [--url CHECK_URL]
 ```
 
 | Argument | Description |
@@ -736,7 +735,7 @@ searchts login check <site> [--verbose] [--url check_url]
 | Flag | Description |
 |---|---|
 | `-v`, `--verbose` | Show debug logs |
-| `--url` check_url | A page only signed-in users see. Without it, a known account page is used for reddit.com, linkedin.com, github.com and x.com. For any other site (or a custom page) a no-wall result is reported as unknown, because a public page proves nothing about your account. |
+| `--url` CHECK_URL | A page only signed-in users see. Without it, a known account page is used for reddit.com, linkedin.com, github.com and x.com. For any other site (or a custom page) a no-wall result is reported as unknown, because a public page proves nothing about your account. |
 
 Examples:
 

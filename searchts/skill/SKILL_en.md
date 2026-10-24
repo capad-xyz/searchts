@@ -84,7 +84,7 @@ covers the need.
 | `login_check` | `searchts login check` |
 | `login_kill` | `searchts login kill` |
 
-MCP-only parameters and the deliberate CLI differences are listed in `docs/cli.md`. `web_search` defaults to 5 results; CLI `-n` defaults to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; use the signed `next_cursor`. MCP results and `--json` output carry `update_available`.
+MCP-only parameters and the deliberate CLI differences are listed in [docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md). `web_search` defaults to 5 results; CLI `-n` defaults to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; use the signed `next_cursor`. MCP results and `--json` output carry `update_available`.
 
 ### Exit codes
 
@@ -108,7 +108,7 @@ MCP-only parameters and the deliberate CLI differences are listed in `docs/cli.m
 | `version` | `0` the version was printed; `2` bad usage |
 | `help` | `0` the help was printed; `2` unknown command path |
 
-Run `searchts help --json` for the stable machine-readable catalog. Full flags, defaults and examples: `docs/cli.md`.
+Run `searchts help --json` for the stable machine-readable catalog. Full flags, defaults and examples: [docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md).
 <!-- END GENERATED COMMANDS -->
 
 ## Standing rules (apply for the whole session)
@@ -170,13 +170,12 @@ where those CLIs help the agent, not searchts.
 
 ## Workspace rules
 
-**Never create files in the agent workspace.** Use `/tmp/` for temporary
+**Do not create files in the agent workspace.** Use `/tmp/` for temporary
 output and `~/.searchts/` for persistent data.
 
 ## Detailed references
 
-Read the matching file when you need specifics (the three commands above cover
-the common cases; references hold per-platform notes and optional fallbacks):
+Based on the user's need, read the matching reference file:
 
 - [Search](references/search.md) — `searchts search`, optional providers
 - [Web](references/web.md) — `searchts read`, RSS

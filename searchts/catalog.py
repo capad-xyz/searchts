@@ -62,6 +62,11 @@ EXIT_PLAIN = (
     ("1", "the command failed; the reason is on stderr"),
     ("2", "bad usage"),
 )
+EXIT_ROOT = (
+    ("0", "content returned"),
+    ("1", "every rung failed; the reasons are on stderr"),
+    ("2", "bad usage, or a URL that cannot be read"),
+)
 
 
 @dataclass(frozen=True)
@@ -320,7 +325,6 @@ _add(Command(
         ("2", "bad usage"),
         ("3", "consent is needed for a cookie copy"),
     ),
-    notes=("Verbs: list, keep, kill, signin, purge-scratch, sweep, check.",),
 ))
 _add(Command(
     name="login list", group=_LOGIN,
@@ -749,7 +753,7 @@ def metavar(action: argparse.Action, *, lower: bool = False) -> str:
     elif action.choices:
         base = "{" + ",".join(str(c) for c in action.choices) + "}"
     else:
-        base = action.dest
+        base = action.dest.upper()
     if lower:
         base = base.lower()
     if action.nargs == "?":

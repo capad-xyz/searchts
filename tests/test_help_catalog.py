@@ -8,14 +8,16 @@ SKILL files and ``docs/cli.md`` are checked against each other.
 
 from __future__ import annotations
 
+import contextlib
 import inspect
+import io
 import json
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-from searchts import catalog, helpgen
+from searchts import catalog, helpgen, helptext
 from searchts.cli import build_parser
 from searchts.integrations import mcp_server
 
@@ -130,6 +132,47 @@ def test_root_help_lists_the_global_flags_and_update():
     assert "help" in stdout
 
 
+def test_root_help_keeps_reads_exit_codes():
+    stdout = ANSI.sub("", _run("--help").stdout)
+    assert "0       content returned" in stdout
+    assert "1       every rung failed; the reasons are on stderr" in stdout
+    assert "2       bad usage, or a URL that cannot be read" in stdout
+    assert "Other commands: searchts <command> --help or searchts help --json" in stdout
+
+
+def test_no_help_screen_has_an_empty_heading():
+    parser = build_parser()
+    headings = {"GLOBAL FLAGS", "USAGE", "ARGUMENTS", "COMMANDS", "FLAGS",
+                "EXAMPLES", "SEE ALSO", "EXIT CODES"}
+    problems = []
+
+    def inspect_screen(name, text):
+        lines = ANSI.sub("", text).splitlines()
+        for index, line in enumerate(lines):
+            if line.strip() not in headings:
+                continue
+            next_index = index + 1
+            while next_index < len(lines) and not lines[next_index].strip():
+                next_index += 1
+            following = lines[next_index].strip() if next_index < len(lines) else ""
+            if not following or following in headings or following == "ALSO":
+                problems.append(f"{name}: empty {line.strip()} heading")
+
+    def render(name, target, path):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            if path:
+                helptext.render_command(target, path, "0.22.0")
+            else:
+                helptext.render_root("0.22.0", parser)
+        inspect_screen(name, buffer.getvalue())
+
+    render("root", parser, ())
+    for path, target in catalog.walk_parsers(parser):
+        render(" ".join(path), target, path)
+    assert not problems, "\n".join(problems)
+
+
 def test_login_help_lists_all_seven_verbs_with_descriptions():
     stdout = ANSI.sub("", _run("login", "--help").stdout)
     for verb in ("list", "keep", "kill", "signin", "purge-scratch", "sweep", "check"):
@@ -200,6 +243,12 @@ def test_llms_names_every_root_command_and_the_machine_catalog():
     assert "docs/cli.md" in text
 
 
+def test_skill_files_are_byte_identical():
+    one = (ROOT / "searchts" / "skill" / "SKILL.md").read_bytes()
+    two = (ROOT / "searchts" / "skill" / "SKILL_en.md").read_bytes()
+    assert one == two
+
+
 def test_both_skill_files_carry_the_same_generated_block():
     one = (ROOT / "searchts" / "skill" / "SKILL.md").read_text(encoding="utf-8")
     two = (ROOT / "searchts" / "skill" / "SKILL_en.md").read_text(encoding="utf-8")
@@ -214,7 +263,7 @@ def test_both_skill_files_carry_the_same_generated_block():
         assert "searchts login check" in text
         assert "searchts check-update" in text
         assert "update_available" in text
-        assert "docs/cli.md" in text
+        assert "https://github.com/capad-xyz/searchts/blob/main/docs/cli.md" in text
 
 
 def test_slash_command_routes_login_and_asset_requests():

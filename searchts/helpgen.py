@@ -33,6 +33,7 @@ MARKED_FILES = (
     ("searchts/skill/SKILL_en.md", "skill"),
 )
 CLI_DOC = "docs/cli.md"
+CLI_DOC_URL = "https://github.com/capad-xyz/searchts/blob/main/docs/cli.md"
 
 
 def _table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> List[str]:
@@ -210,7 +211,7 @@ def render_llms_block(payload: dict) -> str:
         "",
         "Machine-readable catalog: `searchts help --json` (`searchts.help.v1`). "
         "Full flags, defaults and examples: "
-        "[docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md).",
+        f"[docs/cli.md]({CLI_DOC_URL}).",
     ]
     return "\n".join(lines)
 
@@ -250,7 +251,7 @@ def render_skill_block(payload: dict) -> str:
     lines += [
         "",
         "MCP-only parameters and the deliberate CLI differences are listed in "
-        "`docs/cli.md`. `web_search` defaults to 5 results; CLI `-n` defaults "
+        f"[docs/cli.md]({CLI_DOC_URL}). `web_search` defaults to 5 results; CLI `-n` defaults "
         "to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; "
         "use the signed `next_cursor`. MCP results and `--json` output carry "
         "`update_available`.",
@@ -275,7 +276,7 @@ def render_skill_block(payload: dict) -> str:
     lines += [
         "",
         "Run `searchts help --json` for the stable machine-readable catalog. "
-        "Full flags, defaults and examples: `docs/cli.md`.",
+        f"Full flags, defaults and examples: [docs/cli.md]({CLI_DOC_URL}).",
     ]
     return "\n".join(lines)
 

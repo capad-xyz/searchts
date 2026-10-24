@@ -64,6 +64,7 @@ EXAMPLES = [
 #: What a command without its own footer falls back to. Per-command exit codes
 #: live beside the command in `searchts/catalog.py` (gap #6).
 EXIT_CODES = catalog.EXIT_PLAIN
+ROOT_EXIT_CODES = catalog.EXIT_ROOT
 
 #: Which options belong under which heading, in reading order, per command.
 #: Anything not listed lands in OPTIONS automatically, so a new flag can never
@@ -249,8 +250,11 @@ def render_root(version: str, parser: argparse.ArgumentParser | None = None) -> 
         d.example(cmd)
 
     d.heading("EXIT CODES")
-    for code, meaning in EXIT_CODES:
+    for code, meaning in ROOT_EXIT_CODES:
         d.pair(code, meaning, label=6, left_style=s.dim)
+    d.blank()
+    d.lines.append("  " + s.dim(
+        "Other commands: searchts <command> --help or searchts help --json"))
 
     d.blank()
     d.rule()
@@ -342,6 +346,14 @@ def _render_flags(d: Doc, parser: argparse.ArgumentParser,
                 rows[-1][1].extend(leftover)
             else:
                 rows.append(("ALSO", leftover))
+        if not any(title != "ALSO" for title, _ in rows):
+            # A screen with only --verbose has no groups to label. Printing
+            # `FLAGS` then an `ALSO` subheading is an empty heading (gap #8).
+            d.heading("FLAGS")
+            for action in options:
+                _option_rows(d, action, catalog.flag_name(action),
+                             command_name=" ".join(path))
+            return
         d.heading("FLAGS")
         d.blank()
         for i, (title, actions) in enumerate(rows):
