@@ -550,6 +550,9 @@ class TestLocalBackend:
         fake = _FakeWhisperModel("base")
         monkeypatch.setattr(tr, "local_available", lambda: True)
         monkeypatch.setattr(tr, "_load_local_model", lambda size: fake)
+        # The mocked subprocess stands in for ffmpeg, so do not require a
+        # binary on PATH (the PR CI runners do not install one).
+        monkeypatch.setattr(tr, "_require", lambda binary: None)
 
         def failing_run(cmd, capture_output, timeout):
             return subprocess.CompletedProcess(
@@ -570,6 +573,7 @@ class TestLocalBackend:
         fake = _FakeWhisperModel("base")
         monkeypatch.setattr(tr, "local_available", lambda: True)
         monkeypatch.setattr(tr, "_load_local_model", lambda size: fake)
+        monkeypatch.setattr(tr, "_require", lambda binary: None)
 
         def empty_run(cmd, capture_output, timeout):
             return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
