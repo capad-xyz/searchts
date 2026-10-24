@@ -2,6 +2,14 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.22.0](https://github.com/capad-xyz/searchts/compare/v0.21.1...v0.22.0) (2026-10-24)
+
+
+### Added
+
+* **login:** track cookie expiry, sweep dead cookies, add login check ([#433](https://github.com/capad-xyz/searchts/issues/433)) ([f440f0f](https://github.com/capad-xyz/searchts/commit/f440f0fa0cf0003252e4c1c4d7269f7f51089cb5))
+* **update:** tell agents when a newer release exists ([#432](https://github.com/capad-xyz/searchts/issues/432)) ([046a910](https://github.com/capad-xyz/searchts/commit/046a91061f5560985eb52c1ac5127cf38c409f93))
+
 ## [0.21.1](https://github.com/capad-xyz/searchts/compare/v0.21.0...v0.21.1) (2026-10-23)
 
 
