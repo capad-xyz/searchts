@@ -8,7 +8,9 @@ Whisper pipeline: download audio (yt-dlp), compress + chunk (ffmpeg), then turn
 each chunk into text. With a hosted key that posts to a Whisper-compatible API
 (Groq's free `whisper-large-v3`, falling back to OpenAI's `whisper-1`). With no
 key at all it can run `faster-whisper` locally on the CPU — an optional
-dependency installed via ``pip install "searchts[local-transcribe]"``.
+dependency installed via ``pip install "searchts[local-transcribe]"``. The
+local path decodes each chunk with ffmpeg and passes the model samples, so it
+never calls PyAV's decoder and works with newer PyAV releases.
 
 Public entry point:
     transcribe(source, *, provider="auto", out_dir=None, config=None,
@@ -94,25 +96,42 @@ def _local_model_size(config: Optional[Config]) -> str:
     ) or DEFAULT_LOCAL_MODEL
 
 
+def _local_import_error_message(error: ImportError) -> str:
+    """Name the interpreter that lacks faster-whisper, plus the import error."""
+    return (
+        "local transcription needs faster-whisper, but importing it failed in "
+        f"the Python running searchts ({sys.executable}): {error}\n"
+        "Install the extra into that interpreter with:\n"
+        f'  "{sys.executable}" -m pip install "searchts[local-transcribe]"'
+    )
+
+
 def _import_faster_whisper():
     """Import faster-whisper, raising an actionable error when it is absent."""
     try:
         from faster_whisper import WhisperModel
     except ImportError as e:
-        raise MissingDependency(
-            "local transcription needs faster-whisper. Install it with:\n"
-            '  pip install "searchts[local-transcribe]"'
-        ) from e
+        raise MissingDependency(_local_import_error_message(e)) from e
     return WhisperModel
+
+
+def local_unavailable_reason() -> str:
+    """Why faster-whisper cannot be imported here, or "" when it can.
+
+    ``local_available`` stays a bool for callers that only route; a failure
+    that reaches the user needs the ImportError and the interpreter path so a
+    machine with several installs can tell which one lacks the extra.
+    """
+    try:
+        _import_faster_whisper()
+    except MissingDependency as e:
+        return str(e)
+    return ""
 
 
 def local_available() -> bool:
     """Return whether the keyless local backend (faster-whisper) is importable."""
-    try:
-        _import_faster_whisper()
-    except MissingDependency:
-        return False
-    return True
+    return not local_unavailable_reason()
 
 
 def _load_local_model(model_size: str):
@@ -125,6 +144,68 @@ def _load_local_model(model_size: str):
     return _LOCAL_MODEL_CACHE[model_size]
 
 
+#: Seconds ffmpeg may spend decoding one chunk before we call it stuck.
+LOCAL_DECODE_TIMEOUT = 600
+
+
+def _decode_chunk_ffmpeg(
+    chunk: Path,
+    *,
+    timeout: int = LOCAL_DECODE_TIMEOUT,
+):
+    """Decode a chunk to 16 kHz mono float32 PCM for faster-whisper.
+
+    faster-whisper decodes a path itself with PyAV, and PyAV 15 removed the
+    ``metadata_errors`` keyword its decoder still passes, so ``open()`` fails
+    before any audio is read. Samples keep PyAV out of the local path and work
+    with every PyAV version. numpy is imported here, not at module import, so
+    the core install does not need it.
+    """
+    _require("ffmpeg")
+    cmd = [
+        "ffmpeg",
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(chunk),
+        "-f",
+        "f32le",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-",
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise TranscribeError(
+            f"ffmpeg timed out after {timeout}s decoding {chunk.name} "
+            "for local transcription"
+        )
+    stderr = (proc.stderr or b"").decode("utf-8", "replace")
+    if proc.returncode != 0:
+        detail = stderr.strip()[:300]
+        err = TranscribeError(
+            f"ffmpeg failed (exit {proc.returncode}) decoding {chunk.name} "
+            "for local transcription" + (f": {detail}" if detail else "")
+        )
+        err.output = stderr
+        raise err
+    if not proc.stdout:
+        detail = stderr.strip()[:300]
+        raise TranscribeError(
+            f"ffmpeg produced no audio decoding {chunk.name} for local "
+            "transcription" + (f": {detail}" if detail else "")
+        )
+
+    numpy = importlib.import_module("numpy")
+
+    return numpy.frombuffer(proc.stdout, dtype=numpy.float32)
+
+
 def transcribe_chunk_local(
     chunk: Path,
     *,
@@ -132,12 +213,15 @@ def transcribe_chunk_local(
 ) -> str:
     """Transcribe one chunk locally with faster-whisper. No API key needed.
 
-    Raises MissingDependency (a TranscribeError) if faster-whisper is absent.
+    The audio is decoded with ffmpeg first; the model gets samples, never a
+    path, so faster-whisper does not touch PyAV's decoder. Raises
+    MissingDependency (a TranscribeError) if faster-whisper or ffmpeg is absent.
     """
     model_size = _local_model_size(config)
     model = _load_local_model(model_size)
+    samples = _decode_chunk_ffmpeg(chunk)
     try:
-        segments, _info = model.transcribe(str(chunk))
+        segments, _info = model.transcribe(samples)
         return "".join(seg.text for seg in segments)
     except Exception as e:  # surface model/runtime failures as TranscribeError
         raise TranscribeError(f"local: faster-whisper failed: {e}") from e
@@ -726,15 +810,17 @@ def _validate_backend(order: List[str], cfg: Config) -> None:
     when subtitles already satisfied the request.
     """
     usable = any(
-        (p == LOCAL_PROVIDER and local_available()) or _provider_key(p, cfg)
+        local_available() if p == LOCAL_PROVIDER else bool(_provider_key(p, cfg))
         for p in order
     )
     if not usable:
         hosted = ", ".join(PROVIDERS[p]["key_field"] for p in order if p in PROVIDERS)
+        local_hint = local_unavailable_reason() or (
+            'install it with `pip install "searchts[local-transcribe]"`'
+        )
         raise NoProviderConfigured(
             f"no transcription backend available: configure a hosted key "
-            f"(one of: {hosted}), or `pip install \"searchts[local-transcribe]\"` "
-            "for keyless local transcription"
+            f"(one of: {hosted}), or use keyless local transcription. {local_hint}"
         )
 
 

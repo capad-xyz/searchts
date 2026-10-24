@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """Tests for searchts.transcribe — provider routing, fallback, and errors."""
 
+import shutil
+import subprocess
 import sys
+import types
 from typing import List
 
 import pytest
@@ -345,8 +348,8 @@ class _FakeWhisperModel:
         self._segments = segments or [_FakeSegment("local "), _FakeSegment("transcript")]
         self.transcribe_calls = []
 
-    def transcribe(self, path):
-        self.transcribe_calls.append(path)
+    def transcribe(self, audio):
+        self.transcribe_calls.append(audio)
         return iter(self._segments), {"language": "en"}
 
 
@@ -358,20 +361,94 @@ def _clear_local_model_cache():
     tr._LOCAL_MODEL_CACHE.clear()
 
 
-def _patch_local(monkeypatch, model=None):
-    """Make the local backend importable and return canned segments."""
+def _patch_local(monkeypatch, model=None, samples=None):
+    """Make the local backend importable, stub ffmpeg, and return the model."""
     fake = model or _FakeWhisperModel("base")
+    decoded = samples if samples is not None else object()
     monkeypatch.setattr(tr, "local_available", lambda: True)
     monkeypatch.setattr(tr, "_load_local_model", lambda size: fake)
+    monkeypatch.setattr(tr, "_decode_chunk_ffmpeg", lambda chunk, **kw: decoded)
     return fake
+
+
+@pytest.fixture
+def generated_audio(tmp_path):
+    """A real half-second mono clip for the real ffmpeg decode path."""
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg not on PATH")
+    path = tmp_path / "tone.wav"
+    subprocess.run(
+        [
+            "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=0.5",
+            "-ar", "16000", "-ac", "1", str(path),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    return path
+
+
+def _install_fake_faster_whisper(monkeypatch, model_cls):
+    """Install a fake faster_whisper whose PyAV decoder trips if it is used."""
+    fake_audio = types.ModuleType("faster_whisper.audio")
+
+    def decode_audio(*args, **kwargs):
+        raise AssertionError("faster_whisper.audio.decode_audio must not be called")
+
+    fake_audio.decode_audio = decode_audio  # type: ignore[attr-defined]
+    fake_module = types.ModuleType("faster_whisper")
+    fake_module.WhisperModel = model_cls  # type: ignore[attr-defined]
+    fake_module.audio = fake_audio  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "faster_whisper", fake_module)
+    monkeypatch.setitem(sys.modules, "faster_whisper.audio", fake_audio)
+
+
+def _numpy_for_local_test(monkeypatch):
+    """Real numpy when installed; otherwise a spy with the same tiny surface.
+
+    The PR CI installs only `.[dev,mcp]`, so numpy (a ctranslate2/onnxruntime
+    dependency of the optional local extra) can be absent. The spy records the
+    buffer and dtype the production code asked for so this test still runs.
+    """
+    try:
+        import numpy
+    except ImportError:
+        calls = {}
+
+        class _Array:
+            dtype = "float32"
+            ndim = 1
+
+            def __init__(self, data):
+                self.data = data
+                self.size = len(data) // 4
+
+        def frombuffer(data, dtype):
+            calls["data"] = data
+            calls["dtype"] = dtype
+            return _Array(data)
+
+        fake = types.SimpleNamespace(
+            float32="float32", ndarray=_Array, frombuffer=frombuffer, calls=calls
+        )
+        real_import = tr.importlib.import_module
+
+        def fake_import(name):
+            return fake if name == "numpy" else real_import(name)
+
+        monkeypatch.setattr(tr.importlib, "import_module", fake_import)
+        return fake
+    return numpy
 
 
 class TestLocalBackend:
     def test_transcribe_chunk_local_joins_segments(self, monkeypatch, fake_config, chunk_file):
-        fake = _patch_local(monkeypatch)
+        samples = object()
+        fake = _patch_local(monkeypatch, samples=samples)
         text = tr.transcribe_chunk_local(chunk_file, config=fake_config)
         assert text == "local transcript"
-        assert fake.transcribe_calls == [str(chunk_file)]
+        assert fake.transcribe_calls == [samples]
 
     def test_transcribe_chunk_routes_local(self, monkeypatch, fake_config, chunk_file):
         _patch_local(monkeypatch)
@@ -439,6 +516,124 @@ class TestLocalBackend:
         monkeypatch.setattr(tr, "local_available", lambda: False)
         with pytest.raises(tr.NoProviderConfigured, match="local-transcribe"):
             tr.transcribe(str(chunk_file), provider="auto", config=fake_config)
+
+    def test_local_decodes_ffmpeg_samples_without_touching_pyav(
+        self, monkeypatch, fake_config, generated_audio
+    ):
+        np = _numpy_for_local_test(monkeypatch)
+        created = []
+
+        class _CapturingModel(_FakeWhisperModel):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                created.append(self)
+
+        _install_fake_faster_whisper(monkeypatch, _CapturingModel)
+        # The fake module is what local_available and _load_local_model see.
+        assert tr.local_available() is True
+
+        text = tr.transcribe_chunk_local(generated_audio, config=fake_config)
+
+        assert text == "local transcript"
+        model = created[0]
+        samples = model.transcribe_calls[0]
+        assert isinstance(samples, np.ndarray)
+        assert samples.dtype == np.float32
+        assert samples.ndim == 1
+        # 0.5 s at 16 kHz, allowing ffmpeg/encoder padding either side.
+        assert 7000 <= samples.size <= 9000
+        if hasattr(np, "calls"):
+            assert np.calls["dtype"] == "float32"
+            assert len(np.calls["data"]) == samples.size * 4
+
+    def test_ffmpeg_decode_failure_keeps_stderr(self, monkeypatch, fake_config, chunk_file):
+        fake = _FakeWhisperModel("base")
+        monkeypatch.setattr(tr, "local_available", lambda: True)
+        monkeypatch.setattr(tr, "_load_local_model", lambda size: fake)
+        # The mocked subprocess stands in for ffmpeg, so do not require a
+        # binary on PATH (the PR CI runners do not install one).
+        monkeypatch.setattr(tr, "_require", lambda binary: None)
+
+        def failing_run(cmd, capture_output, timeout):
+            return subprocess.CompletedProcess(
+                cmd, 1, stdout=b"", stderr=b"Invalid data found when processing input\n"
+            )
+
+        monkeypatch.setattr(tr.subprocess, "run", failing_run)
+        with pytest.raises(tr.TranscribeError) as ei:
+            tr.transcribe_chunk_local(chunk_file, config=fake_config)
+
+        message = str(ei.value)
+        assert "ffmpeg failed" in message
+        assert "Invalid data found when processing input" in message
+        assert "Invalid data found when processing input" in ei.value.output
+        assert fake.transcribe_calls == []
+
+    def test_ffmpeg_empty_decode_is_an_error(self, monkeypatch, fake_config, chunk_file):
+        fake = _FakeWhisperModel("base")
+        monkeypatch.setattr(tr, "local_available", lambda: True)
+        monkeypatch.setattr(tr, "_load_local_model", lambda size: fake)
+        monkeypatch.setattr(tr, "_require", lambda binary: None)
+
+        def empty_run(cmd, capture_output, timeout):
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"", stderr=b"")
+
+        monkeypatch.setattr(tr.subprocess, "run", empty_run)
+        with pytest.raises(tr.TranscribeError, match="ffmpeg produced no audio"):
+            tr.transcribe_chunk_local(chunk_file, config=fake_config)
+        assert fake.transcribe_calls == []
+
+    def test_model_failure_keeps_underlying_error(self, monkeypatch, fake_config, chunk_file):
+        class _BoomModel(_FakeWhisperModel):
+            def transcribe(self, audio):
+                raise RuntimeError("decoder exploded")
+
+        _patch_local(monkeypatch, model=_BoomModel("base"))
+        with pytest.raises(
+            tr.TranscribeError,
+            match="local: faster-whisper failed: decoder exploded",
+        ):
+            tr.transcribe_chunk_local(chunk_file, config=fake_config)
+
+        # The receipt the CLI prints is this outer message; it must not drop
+        # the model's own text.
+        with pytest.raises(
+            tr.TranscribeError,
+            match=(
+                "all providers failed for chunk.m4a: "
+                "local: faster-whisper failed: decoder exploded"
+            ),
+        ):
+            tr._transcribe_with_fallback(chunk_file, ["local"], fake_config)
+
+    def test_import_error_names_interpreter_and_error(self, monkeypatch):
+        # None in sys.modules makes `from faster_whisper import WhisperModel`
+        # fail even when the real package is installed in the test venv.
+        monkeypatch.setitem(sys.modules, "faster_whisper", None)
+        with pytest.raises(tr.MissingDependency) as ei:
+            tr._import_faster_whisper()
+
+        message = str(ei.value)
+        assert sys.executable in message
+        assert "faster_whisper" in message or "faster-whisper" in message
+        assert "local-transcribe" in message
+        assert "None in sys.modules" in message or "No module named" in message
+        assert tr.local_available() is False
+        assert sys.executable in tr.local_unavailable_reason()
+
+    def test_explicit_local_without_import_uses_no_backend_message(
+        self, monkeypatch, fake_config
+    ):
+        monkeypatch.setitem(sys.modules, "faster_whisper", None)
+        with pytest.raises(tr.NoProviderConfigured) as ei:
+            tr._validate_backend(["local"], fake_config)
+
+        message = str(ei.value)
+        assert "no transcription backend available" in message
+        assert sys.executable in message
+        assert "faster-whisper" in message
+        assert "local-transcribe" in message
+        assert "None in sys.modules" in message or "No module named" in message
 
     def test_model_size_from_config(self, monkeypatch, fake_config):
         fake_config.set("whisper_model", "small")
