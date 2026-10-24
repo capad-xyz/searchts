@@ -535,6 +535,7 @@ def _records_from(cookies: Any) -> List[CookieRecord]:
                     path=str(c.get("path") or "/"),
                     secure=bool(c.get("secure")),
                     http_only=bool(c.get("httpOnly", c.get("http_only"))),
+                    expiry=c.get("expires", c.get("expiry")),
                 )
             )
         except AttributeError:

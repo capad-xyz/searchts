@@ -231,11 +231,14 @@ def create_server():
         name="login_status",
         description=(
             "What searchts holds for logged-in reads: which sites are kept, "
-            "whether this session may copy logins, which sites it has copied, "
-            "and where the scratch folder is. Call this when a read_url error "
-            "mentions a login, to tell the user what searchts already has "
-            "before asking for anything. Returns JSON; never contains a cookie "
-            "value."
+            "how many live cookies each has and when they expire (an expiry is "
+            "an upper bound, not a promise), whether each site was kept from a "
+            "browser or from login_signin, whether the per-site consent for an "
+            "automatic re-copy is recorded, whether this session may copy "
+            "logins, which sites it has copied, and where the scratch folder "
+            "is. Expired cookies are swept on every command, offline, with no "
+            "daemon. Call this when a read_url error mentions a login. Returns "
+            "JSON; never contains a cookie value."
             + UPDATE_CHECK_DESCRIPTION
         ),
     )
@@ -248,13 +251,34 @@ def create_server():
             "Sign in once for a site, in a browser searchts opens, and keep "
             "that login. Nothing is copied from the user's own browser. This "
             "is the way past a login wall when the user has no browser session "
-            "worth copying, or refuses to have one read. Requires the user to "
-            "be at the machine to sign in. Returns 'Error: ...' on failure."
+            "worth copying, or refuses to have one read. A login kept this way "
+            "is not refreshed automatically, because there is no browser "
+            "source to re-copy; when it nears expiry the user is told to run "
+            "login_signin again. Requires the user to be at the machine to "
+            "sign in. Returns 'Error: ...' on failure."
             + UPDATE_CHECK_DESCRIPTION
         ),
     )
     def login_signin_tool(url: str, browser: str = "chrome") -> str:
         return login_signin(url, browser=browser)
+
+    @mcp.tool(
+        name="login_check",
+        description=(
+            "Read one signed-in-only page with the saved cookies, once, and "
+            "say 'logged in', 'logged out' or 'unknown'. Direct requests only: "
+            "the cookies and URL are never sent to the Jina relay. It proves a "
+            "login wall is absent, not which account is signed in, and an "
+            "expiry is only an upper bound. A captcha, block or network error "
+            "is 'unknown', never a guess. For reddit.com, linkedin.com, "
+            "github.com and x.com a known account page is used; other sites "
+            "need a signed-in-only URL, and a public page is reported as "
+            "'unknown' because it proves nothing about the account."
+            + UPDATE_CHECK_DESCRIPTION
+        ),
+    )
+    def login_check_tool(url: str) -> str:
+        return login_check(url)
 
     @mcp.tool(
         name="login_kill",
@@ -373,9 +397,32 @@ def login_signin(url: str, browser: str = "chrome") -> str:
         return f"Error: {e}"
     except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
         return _unexpected("login_signin", e)
-    out = keep(url, source.cookies, browser=browser)
+    out = keep(url, source.cookies, browser=browser, consent=False)
     return _with_update_info(json.dumps(
         {"host": host, "kept": True, "cookies": out.count, "why": out.why},
+        ensure_ascii=False,
+    ))
+
+
+def login_check(url: str) -> str:
+    """Settle whether a saved login is alive. Never carries a cookie value."""
+    from searchts.login_store import check_login, host_of
+
+    host = host_of(url)
+    if not host:
+        return f"Error: {url!r} is not a site searchts can file a login under."
+    try:
+        out = check_login(url)
+    except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
+        return _unexpected("login_check", e)
+    return _with_update_info(json.dumps(
+        {
+            "host": host,
+            "status": out.status,
+            "why": out.why,
+            "page": out.url,
+            "exit_code": out.exit_code,
+        },
         ensure_ascii=False,
     ))
 

@@ -41,14 +41,18 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from searchts.session_cookies import (
     CookieReadError,
     CookieRecord,
     CookieSource,
+    describe_expiry,
+    entry_expiry,
+    is_expired,
     read_owned_site,
+    read_owned_store,
     save_owned_site,
 )
 
@@ -242,6 +246,165 @@ def _note_copied_site(host: str) -> None:
         pass
 
 
+#: A kept browser login is refreshed once it is this close to dying. A day is
+#: enough to notice on a normal working day without copying on every read.
+NEAR_EXPIRY_SECONDS = 24 * 60 * 60
+
+#: Pages that only a signed-in account sees. `login check` reads one of these
+#: unless the caller names its own with --url.
+KNOWN_ACCOUNT_PAGES: Dict[str, str] = {
+    "reddit.com": "https://www.reddit.com/settings",
+    "linkedin.com": "https://www.linkedin.com/feed/",
+    "github.com": "https://github.com/settings/profile",
+    "x.com": "https://x.com/home",
+    "twitter.com": "https://x.com/home",
+}
+
+
+def account_page_for(host: str) -> str:
+    """The known signed-in-only page for `host`, or "" when there is none."""
+    h = (host or "").lower().strip(".")
+    for site, url in KNOWN_ACCOUNT_PAGES.items():
+        if h == site or h.endswith("." + site):
+            return url
+    return ""
+
+
+def site_consent(site: str) -> bool:
+    """True when copying this site's cookies was already approved and recorded.
+
+    Recording happens when a browser login is kept, because that copy was the
+    approval. A legacy entry without the field is treated as no consent, never
+    as a silent yes.
+    """
+    host = host_of(site)
+    entry = read_owned_store().get(host)
+    return bool(isinstance(entry, dict) and entry.get("consent"))
+
+
+def ask_site_consent(site: str, browser: str, reason: str) -> bool:
+    """Ask in a terminal, once, for one automatic cookie action.
+
+    Same shape as every other copy question in this module: it names the host,
+    the browser and why, and a blank line or EOF is a no.
+    """
+    host = host_of(site) or site
+    print(f"{host}: {reason}.", file=sys.stderr, flush=True)
+    try:
+        answer = input(f"Copy this site's cookies from {browser}? [y/N]: ")
+    except EOFError:
+        return False
+    return answer.strip().lower() in ("y", "yes")
+
+
+def consent_for_auto(
+    site: str,
+    browser: str,
+    *,
+    yes: bool = False,
+    reason: str = "",
+    interactive: Optional[bool] = None,
+) -> Tuple[bool, str]:
+    """Can an automatic refresh or re-copy run now, and on what authority?
+
+    Order: recorded per-site consent, then an explicit ``--yes``, then a
+    terminal prompt. Anything else is a no with the exact command that would
+    grant it. There is deliberately no ambient "always" here.
+    """
+    host = host_of(site)
+    if not host:
+        return False, f"{site!r} is not a site searchts can file a login under."
+    if site_consent(site):
+        return True, "recorded consent"
+    if yes:
+        return True, "--yes"
+    if interactive is None:
+        try:
+            interactive = bool(sys.stdin.isatty() and sys.stderr.isatty())
+        except Exception:  # noqa: BLE001 - a stream without isatty is not a tty
+            interactive = False
+    if interactive:
+        if ask_site_consent(site, browser, reason or "the saved login needs refreshing"):
+            return True, "approved just now"
+        return False, "declined"
+    return False, (
+        f"no consent for {host}; run `searchts login keep {site} "
+        f"--cookies-from-browser {browser} --yes` or pass --yes"
+    )
+
+
+def refresh_reason(site: str, now: Optional[int] = None) -> Optional[str]:
+    """Why a kept browser login should be re-copied, or None when it can wait.
+
+    Only browser-sourced entries qualify. A sign-in login has no browser to
+    copy from, so it is handled by :func:`signin_reason` instead.
+    """
+    host = host_of(site)
+    entry = read_owned_store().get(host)
+    if not isinstance(entry, dict) or not entry.get("browser"):
+        return None
+    now = int(time.time() if now is None else now)
+    if entry.get("expired"):
+        return "expired"
+    at, _known = entry_expiry(entry, now)
+    if at is None:
+        return None
+    if at <= now:
+        return "expired"
+    if at <= now + NEAR_EXPIRY_SECONDS:
+        hours = max(1, (at - now) // 3600)
+        return f"expiring in {hours} hour{'s' if hours != 1 else ''}"
+    return None
+
+
+def signin_reason(site: str, now: Optional[int] = None) -> Optional[str]:
+    """Why a sign-in-sourced kept login needs the user again, or None."""
+    host = host_of(site)
+    entry = read_owned_store().get(host)
+    if not isinstance(entry, dict) or entry.get("browser"):
+        return None
+    now = int(time.time() if now is None else now)
+    if entry.get("expired"):
+        return "expired"
+    at, _known = entry_expiry(entry, now)
+    if at is None:
+        return None
+    if at <= now:
+        return "expired"
+    if at <= now + NEAR_EXPIRY_SECONDS:
+        hours = max(1, (at - now) // 3600)
+        return f"expiring in {hours} hour{'s' if hours != 1 else ''}"
+    return None
+
+
+def refresh_kept(site: str, *, browser: str = "", force: bool = False) -> CookieSource:
+    """Re-copy one site's cookies from the browser that supplied its login.
+
+    Callers must have settled consent first (see :func:`consent_for_auto`).
+    The refreshed cookies replace the store entry, keeping its consent, so the
+    next read uses the newer session without a second prompt.
+    """
+    host = host_of(site)
+    if not host:
+        raise CookieReadError(f"{site!r} is not a site searchts can file a login under.")
+    entry = read_owned_store().get(host)
+    if not isinstance(entry, dict):
+        raise CookieReadError(f"no saved login for {host} in the searchts store")
+    source_browser = (browser or entry.get("browser") or "").strip()
+    if not source_browser:
+        raise CookieReadError(
+            f"{host} was kept from a sign-in, not a browser, so it cannot be "
+            f"refreshed. Run `searchts login signin {site}`."
+        )
+    from searchts.cdp_profile import read_site_cookies
+
+    source = read_site_cookies(site, source_browser, confirm=lambda _prompt: True)
+    if not source.cookies:
+        raise CookieReadError(f"re-copying {host} from {source_browser} returned no cookies")
+    save_owned_site(site, source.cookies, browser=source_browser, consent=None)
+    return source
+
+
 # ── the decision ────────────────────────────────────────────────────────────
 
 
@@ -370,14 +533,26 @@ class Kept:
     also_kill_browser: bool = False
 
 
-def keep(site: str, records: List[CookieRecord], *, browser: str = "") -> Kept:
+def keep(
+    site: str,
+    records: List[CookieRecord],
+    *,
+    browser: str = "",
+    consent: Optional[bool] = None,
+) -> Kept:
     """Save exactly one site's login into the store. A yes to the keep question.
 
     Only the requested site is written. The scratch copy the read just used is
     not promoted and not referenced: keeping copies the values out of the
     records in hand, so the two files can never be the same file.
+
+    A login kept from a browser records per-site consent, because that copy was
+    the approval. A sign-in passes ``consent=False``: it has no browser source
+    to re-copy later.
     """
-    count = save_owned_site(site, records, browser=browser)
+    if consent is None:
+        consent = bool(browser)
+    count = save_owned_site(site, records, browser=browser, consent=consent)
     return Kept(
         site=site,
         kept=True,
@@ -586,19 +761,47 @@ def purge_scratch() -> List[str]:
 
 
 def list_kept() -> Dict[str, dict]:
-    """Which sites are kept, so a user can see what they have agreed to keep."""
-    from searchts.session_cookies import read_owned_store
+    """Which sites are kept, how many live cookies, and when they expire.
 
+    Existing keys are unchanged. The newer ``expiry``/``expires_at``/
+    ``expiry_known`` fields are additive so an agent reading the MCP JSON keeps
+    working, and a legacy entry still loads (as ``unknown``).
+    """
     store = read_owned_store()
-    return {
-        host: {
-            "cookies": len(entry.get("cookies", []))
-            if isinstance(entry, dict)
-            else 0,
-            "browser": entry.get("browser", "") if isinstance(entry, dict) else "",
+    now = int(time.time())
+    out: Dict[str, dict] = {}
+    for host, entry in sorted(store.items()):
+        if not isinstance(entry, dict):
+            out[host] = {
+                "cookies": 0,
+                "browser": "",
+                "expiry": "unknown",
+                "expires_at": None,
+                "expiry_known": False,
+                "expired": False,
+            }
+            continue
+        cookies = [c for c in entry.get("cookies", []) if isinstance(c, dict)]
+        live = [
+            c for c in cookies
+            if not is_expired(
+                CookieRecord(
+                    c.get("n", ""), c.get("v", ""), c.get("d", ""),
+                    c.get("p", "/"), False, False, c.get("expiry"),
+                ),
+                now,
+            )
+        ]
+        at, known = entry_expiry(entry, now)
+        out[host] = {
+            "cookies": len(live),
+            "browser": entry.get("browser", ""),
+            "expiry": describe_expiry(entry, now),
+            "expires_at": at,
+            "expiry_known": known,
+            "expired": bool(entry.get("expired")) or bool(at is not None and at <= now),
         }
-        for host, entry in sorted(store.items())
-    }
+    return out
 
 
 @dataclass
@@ -642,6 +845,158 @@ def audit() -> Audit:
         session_copied_sites=session_copied_sites(),
         store_dir=store_dir(),
         scratch_dir=scratch_root(),
+    )
+
+
+# ── check: one read that settles "is this login alive?" ─────────────────────
+
+
+@dataclass
+class LoginCheck:
+    """The honest answer to `login check`, and why it is that answer."""
+
+    site: str
+    url: str
+    status: str
+    why: str
+    account_page: bool
+    exit_code: int
+
+
+def check_login(
+    site: str,
+    *,
+    url: str = "",
+    fetch_fn=None,
+) -> LoginCheck:
+    """Read one signed-in-only page with the saved cookies, once, directly.
+
+    ``logged in`` means the page did not show a login wall. It does not prove
+    which account is signed in, and a cookie's expiry is only an upper bound.
+    A captcha, block or network failure is ``unknown``, never a guess.
+
+    Only the direct rungs run. The Jina relay is never asked, so cookies and
+    the URL cannot be handed to a third party.
+    """
+    host = host_of(site)
+    if not host:
+        return LoginCheck(
+            site=site,
+            url=url,
+            status="unknown",
+            account_page=False,
+            exit_code=2,
+            why=f"{site!r} is not a site searchts can file a login under.",
+        )
+    known_page = account_page_for(host)
+    explicit = bool(url.strip())
+    target = (url.strip() or known_page).rstrip()
+    if not target:
+        return LoginCheck(
+            site=site,
+            url="",
+            status="unknown",
+            account_page=False,
+            exit_code=2,
+            why=(
+                f"no known signed-in-only page for {host}. Pass --url with a "
+                f"page only a signed-in account sees."
+            ),
+        )
+    try:
+        source = read_owned_site(site)
+    except CookieReadError as e:
+        return LoginCheck(
+            site=site,
+            url=target,
+            status="logged out",
+            account_page=False,
+            exit_code=1,
+            why=str(e),
+        )
+    if not source.cookies:
+        return LoginCheck(
+            site=site,
+            url=target,
+            status="logged out",
+            account_page=False,
+            exit_code=1,
+            why=f"no live saved cookies for {host}.",
+        )
+
+    from searchts import unlocker
+
+    fetch = fetch_fn or unlocker.fetch
+    try:
+        # Direct rungs only: no relay, no remembered backend. The request
+        # carries only this host's cookies, filtered by read_owned_site.
+        fetch(
+            target,
+            backends=["curl_cffi", "stealth-browser"],
+            cookies=source.cookies,
+            use_memory=False,
+            echo_attempts=False,
+            progress=False,
+        )
+    except unlocker.UnlockerError as e:
+        attempts = list(getattr(e, "attempts", None) or [])
+        if any("login-wall" in why for _backend, why in attempts):
+            return LoginCheck(
+                site=site,
+                url=target,
+                status="logged out",
+                account_page=False,
+                exit_code=1,
+                why=(
+                    f"{target} returned a login page to the saved cookies, so "
+                    f"the saved login is logged out or expired."
+                ),
+            )
+        reasons = ", ".join(f"{b}: {why}" for b, why in attempts) or "no response"
+        return LoginCheck(
+            site=site,
+            url=target,
+            status="unknown",
+            account_page=False,
+            exit_code=2,
+            why=(
+                f"could not tell from {target} ({reasons}). A captcha, block or "
+                f"network error is unknown, not a guess."
+            ),
+        )
+    except Exception as e:  # noqa: BLE001 - a check never raises, it reports
+        return LoginCheck(
+            site=site,
+            url=target,
+            status="unknown",
+            account_page=False,
+            exit_code=2,
+            why=f"could not check {target} ({type(e).__name__}).",
+        )
+
+    if explicit and not (url.strip() == known_page):
+        return LoginCheck(
+            site=site,
+            url=target,
+            status="unknown",
+            account_page=False,
+            exit_code=2,
+            why=(
+                f"no login wall on {target}. That only means the page did not "
+                f"ask for a login, not that you are signed in or which account "
+                f"is yours. Pass a known account page for logged in/logged out."
+            ),
+        )
+    return LoginCheck(
+        site=site,
+        url=target,
+        status="logged in",
+        account_page=True,
+        exit_code=0,
+        why=(
+            f"{target} did not show a login wall to the saved cookies. This "
+            f"proves a login is present, not which account."
+        ),
     )
 
 
