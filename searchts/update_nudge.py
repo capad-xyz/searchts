@@ -22,6 +22,9 @@ from searchts import __version__
 
 TTL_SECONDS = 24 * 60 * 60
 CACHE_NAME = "update-check.json"
+#: The MCP "tell the agent once a day" stamp. A sibling file, so the release
+#: cache keeps its old shape and older readers never see or rewrite this.
+NOTICE_NAME = "update-notice.json"
 RELEASES_URL = "https://api.github.com/repos/capad-xyz/searchts/releases/latest"
 UPDATE_DOC = (
     "https://raw.githubusercontent.com/capad-xyz/searchts/main/docs/update.md"
@@ -30,6 +33,7 @@ SKIP_COMMANDS = frozenset({"check-update", "watch", "version", "update", "upgrad
 
 #: One command. ``searchts update`` picks the installer for this copy.
 _UPDATE_COMMAND = "searchts update"
+UPDATE_COMMAND = _UPDATE_COMMAND
 INSTALL_COMMANDS = {
     "pipx": _UPDATE_COMMAND,
     "uv_tool": _UPDATE_COMMAND,
@@ -82,6 +86,101 @@ def _write_cache(path: Path, latest: str, now: float) -> None:
         )
     except OSError:
         pass
+
+
+def update_available(
+    *, now: Optional[float] = None, path: Optional[Path] = None
+) -> Optional[dict]:
+    """Structured update info for machines, or ``None``.
+
+    Same cache, TTL and single GitHub GET as :func:`maybe_nudge`, without the
+    TTY/pytest gates: callers that need the test-run guard use
+    :func:`update_available_for_agent`. Never installs anything. Any cache or
+    network failure is silent.
+    """
+    if os.environ.get("SEARCHTS_NO_UPDATE_CHECK"):
+        return None
+    stamp = time.time() if now is None else now
+    cache = cache_path() if path is None else path
+    latest = _read_cache(cache, stamp)
+    if latest is None:
+        latest = _fetch_latest()
+        if not latest:
+            return None
+        _write_cache(cache, latest, stamp)
+    if not is_newer_version(latest, __version__):
+        return None
+    return {
+        "current": __version__,
+        "latest": latest,
+        "command": UPDATE_COMMAND,
+    }
+
+
+def update_available_for_agent(
+    *, now: Optional[float] = None, path: Optional[Path] = None
+) -> Optional[dict]:
+    """``update_available`` for a CLI/MCP surface, quiet under pytest.
+
+    The helper itself stays testable; this is the harness guard the stderr
+    nudge already applies, so the existing suite never reaches GitHub.
+    """
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return None
+    return update_available(now=now, path=path)
+
+
+def _notice_path(cache: Path) -> Path:
+    return cache.with_name(NOTICE_NAME)
+
+
+def _notice_recent(path: Path, now: float) -> bool:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return False
+    try:
+        notified = float(data.get("notified_at") or 0)
+    except (TypeError, ValueError):
+        return False
+    return now - notified <= TTL_SECONDS
+
+
+def _write_notice(path: Path, latest: str, now: float) -> bool:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({"notified_at": now, "latest": latest}),
+            encoding="utf-8",
+        )
+        return True
+    except OSError:
+        return False
+
+
+def update_note(
+    info: dict, *, now: Optional[float] = None, path: Optional[Path] = None
+) -> Optional[str]:
+    """The one-line agent note, at most once per 24h per install.
+
+    ``path`` is the update-check cache path; the stamp lives beside it in
+    ``update-notice.json``. Returns ``None`` when the opt-out is set, when this
+    install was already told within the TTL, or when writing the stamp fails.
+    """
+    if os.environ.get("SEARCHTS_NO_UPDATE_CHECK"):
+        return None
+    stamp = time.time() if now is None else now
+    cache = cache_path() if path is None else path
+    notice = _notice_path(cache)
+    if _notice_recent(notice, stamp):
+        return None
+    if not _write_notice(notice, str(info.get("latest") or ""), stamp):
+        return None
+    return (
+        f"Note for the agent: searchts v{info.get('latest')} is available "
+        f"(you have v{info.get('current')}). Tell the user; they can run "
+        f"`{info.get('command') or UPDATE_COMMAND}`. Nothing was installed."
+    )
 
 
 def _fetch_latest(timeout: float = 2.0) -> Optional[str]:

@@ -240,6 +240,31 @@ Update the copy that is running (`searchts upgrade` is the same command):
 searchts update
 ```
 
+### Update checks, and the agent note
+
+At most once every 24 hours, searchts asks GitHub for the latest release of
+[capad-xyz/searchts](https://github.com/capad-xyz/searchts/releases/latest)
+(`GET https://api.github.com/repos/capad-xyz/searchts/releases/latest`). The one
+request carries a `searchts/<version>` User-Agent and nothing about you or your
+machine. The answer is cached in `~/.searchts/update-check.json` for 24 hours;
+a failed check is silent.
+
+When that release is newer:
+
+- `searchts read --json` and `searchts grab --json` add a top-level
+  `update_available` object, `{"current": "...", "latest": "...", "command":
+  "searchts update"}`. It is absent when there is nothing newer, so existing
+  parsers see no new key. `searchts search --json` and `searchts doctor --json`
+  return top-level lists and keep their shape.
+- MCP tool results carry the same object, plus at most once per 24 hours one
+  line telling the agent to tell you. The stamp lives in
+  `~/.searchts/update-notice.json`.
+- A terminal run still gets the existing stderr nudge.
+
+**Nothing is installed, downloaded, or changed automatically.** Run
+`searchts update` yourself. `SEARCHTS_NO_UPDATE_CHECK=1` turns off the check,
+the note and the stderr nudge.
+
 ## Quickstart
 
 `read` is the command. `search` finds URLs to read. `transcribe` and `get` are what a read names when the page's words are spoken or its files were not in the text.

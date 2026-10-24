@@ -43,6 +43,18 @@ MCP_MISSING_MESSAGE = (
     '  pip install "searchts[mcp]"'
 )
 
+#: One sentence every tool description carries, so the check is never a
+#: surprise: what is read, how often, what travels, and that it never installs.
+UPDATE_CHECK_DESCRIPTION = (
+    " Update check: when a newer release exists, the result also carries "
+    "'update_available' plus, at most once per 24 hours, one line telling the "
+    "agent. The check is one GET to the GitHub latest release of "
+    "capad-xyz/searchts, at most once per 24 hours, cached in "
+    "~/.searchts/update-check.json, with a searchts User-Agent and nothing "
+    "about the user. Nothing is installed or changed. "
+    "SEARCHTS_NO_UPDATE_CHECK=1 turns the check and the note off."
+)
+
 #: Sent on initialize. Hosts that show server instructions put this in front
 #: of the model. Hosts that ignore the field never see it. Same words as the
 #: Claude / Cursor reach block, without the file markers.
@@ -111,6 +123,7 @@ READ_URL_DESCRIPTION = (
     "in the config changes the default for a read that does not pass max_media. "
     "Returns an 'Error: ...' "
     "string (not an exception) when every tier fails."
+    + UPDATE_CHECK_DESCRIPTION
 )
 
 WEB_SEARCH_DESCRIPTION = (
@@ -122,6 +135,7 @@ WEB_SEARCH_DESCRIPTION = (
     "challenge, or thin. Do not answer from the snippet. Returns a "
     "formatted text block that starts with that warning, or an 'Error: ...' "
     "string when every provider fails."
+    + UPDATE_CHECK_DESCRIPTION
 )
 
 TRANSCRIBE_DESCRIPTION = (
@@ -137,6 +151,7 @@ TRANSCRIBE_DESCRIPTION = (
     "(chrome/firefox/…) and uses THIS machine's browser cookies; read_url "
     "does not copy them. Returns the transcript text, or an 'Error: ...' "
     "string on failure."
+    + UPDATE_CHECK_DESCRIPTION
 )
 
 
@@ -163,8 +178,10 @@ def create_server():
             "configured, and working. Use this first when another searchts tool "
             "fails or before relying on an optional capability (e.g. keyed search "
             "providers, transcription). Takes no arguments and performs no web "
-            "requests; returns a human-readable text report, one line per channel "
-            "with an ok/warn/error status and a fix hint."
+            "requests of its own beyond the cached update check; returns a "
+            "human-readable text report, one line per channel with an ok/warn/error "
+            "status and a fix hint."
+            + UPDATE_CHECK_DESCRIPTION
         ),
     )
     def get_status_tool() -> str:
@@ -215,6 +232,7 @@ def create_server():
             "mentions a login, to tell the user what searchts already has "
             "before asking for anything. Returns JSON; never contains a cookie "
             "value."
+            + UPDATE_CHECK_DESCRIPTION
         ),
     )
     def login_status_tool() -> str:
@@ -228,6 +246,7 @@ def create_server():
             "is the way past a login wall when the user has no browser session "
             "worth copying, or refuses to have one read. Requires the user to "
             "be at the machine to sign in. Returns 'Error: ...' on failure."
+            + UPDATE_CHECK_DESCRIPTION
         ),
     )
     def login_signin_tool(url: str, browser: str = "chrome") -> str:
@@ -241,6 +260,7 @@ def create_server():
             "has expired. Does NOT delete the cookies in the user's own "
             "Firefox or Chrome unless also_browser is true, because those are "
             "the user's and they did not ask for them to be removed."
+            + UPDATE_CHECK_DESCRIPTION
         ),
     )
     def login_kill_tool(url: str, also_browser: bool = False) -> str:
@@ -258,6 +278,7 @@ def create_server():
             "it) when given, otherwise that folder itself, and never overwrites an "
             "existing file. Returns an "
             "'Error: ...' string on failure."
+            + UPDATE_CHECK_DESCRIPTION
         ),
     )
     def fetch_asset_tool(url: str, out_dir: str = "") -> str:
@@ -285,6 +306,7 @@ def create_server():
             "that a higher max_tokens returns them. 'page_rungs' names the "
             "fetch tiers tried and what each found. Returns an 'Error: ...' string "
             "on failure."
+            + UPDATE_CHECK_DESCRIPTION
         ),
     )
     def grab_site_tool(url: str, out_dir: str = "", read: bool = False,
@@ -316,7 +338,7 @@ def login_status() -> str:
     from searchts.login_store import audit
 
     a = audit()
-    return json.dumps(
+    return _with_update_info(json.dumps(
         {
             "kept": a.kept,
             "session_copy_granted": a.session_copy_granted,
@@ -326,7 +348,7 @@ def login_status() -> str:
         },
         ensure_ascii=False,
         indent=2,
-    )
+    ))
 
 
 def login_signin(url: str, browser: str = "chrome") -> str:
@@ -345,10 +367,10 @@ def login_signin(url: str, browser: str = "chrome") -> str:
     except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
         return _unexpected("login_signin", e)
     out = keep(url, source.cookies, browser=browser)
-    return json.dumps(
+    return _with_update_info(json.dumps(
         {"host": host, "kept": True, "cookies": out.count, "why": out.why},
         ensure_ascii=False,
-    )
+    ))
 
 
 def login_kill(url: str, also_browser: bool = False) -> str:
@@ -362,7 +384,7 @@ def login_kill(url: str, also_browser: bool = False) -> str:
         out = kill(url, browser_copies=bool(also_browser))
     except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
         return _unexpected("login_kill", e)
-    return json.dumps(
+    return _with_update_info(json.dumps(
         {
             "host": host,
             "removed_from_store": out.removed_from_store,
@@ -371,7 +393,7 @@ def login_kill(url: str, also_browser: bool = False) -> str:
             "why": out.why,
         },
         ensure_ascii=False,
-    )
+    ))
 
 
 def _login_wall_error(url: str, exc: BaseException, *, had_cookies: bool) -> str:
@@ -415,6 +437,35 @@ def _unexpected(tool: str, exc: BaseException) -> str:
     as a crashed tool instead of a readable result.
     """
     return f"Error: {tool} failed unexpectedly ({type(exc).__name__}: {exc})."
+
+
+def _with_update_info(result: str) -> str:
+    """Add the cached release info to a normal tool result, never the protocol.
+
+    JSON objects get ``update_available`` and, when this install has not been
+    told in the last 24 hours, ``update_note``. Text results get the same
+    information as trailing lines. ``get_status`` and every other tool go
+    through here; failures stay silent, so a JSON tool result stays parseable.
+    """
+    from searchts.update_nudge import update_available_for_agent, update_note
+
+    info = update_available_for_agent()
+    if not info:
+        return result
+    note = update_note(info)
+    try:
+        data = json.loads(result)
+    except (TypeError, ValueError):
+        data = None
+    if isinstance(data, dict):
+        data["update_available"] = info
+        if note:
+            data["update_note"] = note
+        return json.dumps(data, ensure_ascii=False)
+    lines = [f"update_available: {json.dumps(info, ensure_ascii=False)}"]
+    if note:
+        lines.append(note)
+    return result.rstrip() + "\n\n" + "\n".join(lines)
 
 
 #: Folder names that run what lands in them (login items, autostart).
@@ -509,7 +560,7 @@ def get_status() -> str:
     """
     from searchts.core import Searchts
 
-    return Searchts().doctor_report()
+    return _with_update_info(Searchts().doctor_report())
 
 
 #: A URL that appears in the model-visible text may not appear anywhere else in
@@ -740,7 +791,7 @@ def read_url(
             page = paging.paginate(url, blocks, cursor or None, page_items)
         except paging.CursorError as e:
             return f"Error: {e}"
-        return json.dumps(
+        return _with_update_info(json.dumps(
             {
                 "url": url,
                 "final_url": result.final_url or url,
@@ -756,9 +807,9 @@ def read_url(
                 "items": page["items"],
             },
             ensure_ascii=False,
-        )
+        ))
 
-    return json.dumps(
+    return _with_update_info(json.dumps(
         {
             "url": url,
             "final_url": result.final_url or url,
@@ -795,7 +846,7 @@ def read_url(
             ],
         },
         ensure_ascii=False,
-    )
+    ))
 
 
 def web_search(query: str, max_results: int = 5) -> str:
@@ -822,7 +873,7 @@ def web_search(query: str, max_results: int = 5) -> str:
         if r.snippet:
             lines.append(f"   {r.snippet}")
         blocks.append("\n".join(lines))
-    return "\n\n".join(blocks)
+    return _with_update_info("\n\n".join(blocks))
 
 
 def fetch_asset(url: str, out_dir: str = "") -> str:
@@ -860,7 +911,10 @@ def fetch_asset(url: str, out_dir: str = "") -> str:
     except OSError:
         size = 0
     ct = mimetypes.guess_type(str(path))[0] or ""
-    return json.dumps({"path": str(path), "content_type": ct, "bytes": size}, ensure_ascii=False)
+    return _with_update_info(
+        json.dumps({"path": str(path), "content_type": ct, "bytes": size},
+                   ensure_ascii=False)
+    )
 
 
 def grab_site(url: str, out_dir: str = "", read: bool = False,
@@ -910,7 +964,10 @@ def grab_site(url: str, out_dir: str = "", read: bool = False,
         return f"Error: could not save the grab ({e})."
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
         return _unexpected("grab_site", e)
-    return json.dumps({**manifest, "out_dir": str(folder)}, ensure_ascii=False, indent=2)
+    return _with_update_info(
+        json.dumps({**manifest, "out_dir": str(folder)},
+                   ensure_ascii=False, indent=2)
+    )
 
 
 def transcribe_source(
@@ -937,13 +994,13 @@ def transcribe_source(
             return blocked
     cookies = (cookies_from_browser or "").strip() or None
     try:
-        return transcribe(
+        return _with_update_info(transcribe(
             source,
             provider=provider or "auto",
             prefer_subtitles=prefer_subtitles,
             cookies_from_browser=cookies,
             progress=False,
-        )
+        ))
     except TranscribeError as e:
         return f"Error: {e}"
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise

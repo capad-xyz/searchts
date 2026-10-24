@@ -2449,6 +2449,14 @@ def _cmd_read(args):
                 for p in pages
             ],
         }
+        # Structured output is where an agent can see a newer release; plain
+        # stdout stays byte-identical. Absent when the cached release is not
+        # newer, so existing consumers see no new key at all.
+        from searchts.update_nudge import update_available_for_agent
+
+        update = update_available_for_agent()
+        if update:
+            payload["update_available"] = update
         print(json.dumps(payload, ensure_ascii=False))
     else:
         # Status to stderr so stdout stays a clean, pipeable content stream.
@@ -3110,7 +3118,15 @@ def _cmd_grab(args):
         note = _grab_page_md_note(manifest)
         if note:
             print(note, file=sys.stderr)
-        print(json.dumps(manifest, ensure_ascii=False))
+        # The printed manifest is an object, so the key is additive; the
+        # manifest.json on disk keeps its existing shape.
+        from searchts.update_nudge import update_available_for_agent
+
+        payload = {**manifest}
+        update = update_available_for_agent()
+        if update:
+            payload["update_available"] = update
+        print(json.dumps(payload, ensure_ascii=False))
         return
 
     manifest_path = os.path.join(out, "manifest.json")

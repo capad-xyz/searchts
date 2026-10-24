@@ -72,13 +72,27 @@ Custom connectors that require HTTPS cannot use `http://127.0.0.1`. You run that
 | `web_search(query, max_results=5)` | You need URLs to read. Keyless (DuckDuckGo) by default; SearXNG/Exa/Brave/Tavily merge in when configured. A snippet is not the page: call `read_url` on the URL. | A ranked, de-duplicated `title + URL + snippet` block, led by a line that says the snippet is not the page. `max_results` is clamped to 1–25. |
 | `fetch_asset(url, out_dir="")` | You want one specific file (image, PDF, font, CSS) by its direct URL. | JSON `{path, content_type, bytes}`. Saves into `out_dir` (a relative folder inside the server's working directory, or inside `SEARCHTS_MCP_OUT_DIR` when you set it: no absolute paths, `..`, dot folders or autostart folders), else that folder itself. Never overwrites: a clash gets a `-1`, `-2` … suffix. |
 | `grab_site(url, out_dir="", read=false, max_tokens=24)` | The files a read named are the deliverable: images, icons, css, fonts, and the palette those files use. For one URL, use `fetch_asset`. | JSON manifest with local paths, plus `out_dir` (the folder used). Saves into `out_dir` (same rules as `fetch_asset`), else `searchts-grab-<host>` inside it. Never writes into a folder that already has files: it uses `<folder>-2`, `-3` … instead. Set `read=true` to also save the page text as `page.md`. `max_tokens` is how many radius, shadow, and spacing values to keep (ceiling 200). `tokens_more` names how many more a higher number returns. |
-| `get_status()` | A call fails, or you want to see what's configured before relying on an optional capability. | A human-readable health report (unlocker tiers, search providers, optional integrations). |
+| `get_status()` | A call fails, or you want to see what's configured before relying on an optional capability. | A human-readable health report (unlocker tiers, search providers, optional integrations), plus the cached update check when a newer release exists. |
 | `login_status()` | A `read_url` error mentions a login, and you want to know what searchts already holds before asking the user for anything. | JSON: kept sites, whether this session may copy logins, the sites it copied, and the scratch folder. Never a cookie value. |
 | `login_signin(url, browser="chrome")` | A page is behind a login and the user has no browser session worth copying, or refuses a copy. The user must be at the machine to sign in. | JSON `{host, kept, cookies, why}`. Signs in once in a browser searchts opens and keeps that login (unlike the CLI, which keeps only with `--yes`). The user's own browser is not read. |
 | `login_kill(url, also_browser=false)` | A `read_url` error says a saved login has expired. | JSON of what was removed. Deletes searchts's own copy for one site. The user's own Firefox or Chrome cookies are untouched unless `also_browser` is true. |
 | `transcribe(source, provider="auto", prefer_subtitles=true, cookies_from_browser="")` | `read_url` said a player page has no captions, or the source is a local audio file. Subtitles-first (no key); Whisper only if there are no captions. | Transcript text, or an `Error:` string. `cookies_from_browser` is opt-in (this machine; `read_url` does not copy those cookies). |
 
 Every tool returns an `Error: …` **string** instead of raising, so failures stay readable to the agent.
+
+### Update check in tool results
+
+The server checks the GitHub latest release of
+[capad-xyz/searchts](https://github.com/capad-xyz/searchts/releases/latest) at
+most once per 24 hours: one `GET` with a `searchts/<version>` User-Agent and
+nothing about the user, cached in `~/.searchts/update-check.json`. A failed check
+is silent. When the release is newer, a tool result carries an
+`update_available` object (`current`, `latest`, `command`) and, at most once per
+24 hours per install, one line telling the agent to tell the user. The
+once-a-day stamp is kept in `~/.searchts/update-notice.json`. **Nothing is
+installed or changed automatically**; the user runs `searchts update`.
+`SEARCHTS_NO_UPDATE_CHECK=1` turns the check, the note and the CLI's stderr
+nudge off.
 
 ## MCP vs. the CLI and slash command
 
