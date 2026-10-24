@@ -20,6 +20,10 @@ def _enable_agent_checks(monkeypatch, tmp_path, latest="9.9.9"):
     """Point the cache at tmp_path and let the agent surfaces run under pytest."""
     monkeypatch.delenv("SEARCHTS_NO_UPDATE_CHECK", raising=False)
     monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    # Clearing PYTEST_CURRENT_TEST also wakes the CLI's Windows console setup,
+    # which replaces sys.stdout with a new TextIOWrapper around the captured
+    # buffer. Keep capsys as the stream under test, as test_cli.py does.
+    monkeypatch.setattr("searchts.cli._ensure_utf8_console", lambda: None)
     cache = tmp_path / "update-check.json"
     monkeypatch.setattr(un, "cache_path", lambda: cache)
     calls = {"n": 0}
