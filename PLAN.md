@@ -74,6 +74,7 @@ Not scheduled. The line is the trigger. No trigger, no build.
 ## Hosted
 
 - [ ] **F18** The paid product is a hosted `read`: a URL we run and a key. That is what a Cloudflare or Hermes-style connector points at. The local CLI does not grow an account to keep working. Bought proxy pools stay **N1**. Price is not set in this file.
+- [ ] **F21** Logged-in reads on hosted (**F18**). Cookies stay on the user's machine. Two routes, both opt-in per site: (a) a small local companion (`uvx searchts login`, or a browser extension) checks consent and sends only that site's live cookies with one request; the server uses them in the remote browser and keeps nothing; (b) the user signs in once inside the remote browser, streamed to them, and that session is kept server-side only if they say so, encrypted, per user, deletable. Every step prints the same receipt as the CLI. The update notice is off in hosted mode. Datacenter IPs get walled more; a paid browser or proxy (Solari is one candidate, not a decision) stays opt-in (**F14**, **N1**).
 
 Not this product:
 
