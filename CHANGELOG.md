@@ -2,6 +2,18 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.22.2](https://github.com/capad-xyz/searchts/compare/v0.22.1...v0.22.2) (2026-10-25)
+
+
+### Fixed
+
+* **help:** correct the help.v1 MCP mapping and check it against the tools ([#456](https://github.com/capad-xyz/searchts/issues/456)) ([da5c83c](https://github.com/capad-xyz/searchts/commit/da5c83cacf97e90fae82baf7c672ad27c6f509e1))
+* **install:** list the agent skill and rule files up front and in --dry-run ([#454](https://github.com/capad-xyz/searchts/issues/454)) ([3b46163](https://github.com/capad-xyz/searchts/commit/3b46163cbd7f5e59553c0d355538b4dfbdd71f06))
+* **mcp:** add approve_cookie_copy so read_url can copy browser cookies ([#462](https://github.com/capad-xyz/searchts/issues/462)) ([bf03539](https://github.com/capad-xyz/searchts/commit/bf035398c00c02b1905bd0d79934e52339758739))
+* **mcp:** carry update_available in search/doctor --json and unwrap get_status ([#457](https://github.com/capad-xyz/searchts/issues/457)) ([14fa62c](https://github.com/capad-xyz/searchts/commit/14fa62c6e1edd5c323a9f58572f448da570bf498))
+* **read,mcp:** JSON errors for failed read --json, and login_signin over MCP ([#461](https://github.com/capad-xyz/searchts/issues/461)) ([6ed59e8](https://github.com/capad-xyz/searchts/commit/6ed59e8238f4864a7ddd28e44309b064815d484b))
+* **transcribe:** name the hosted keys when --provider local has no backend ([#455](https://github.com/capad-xyz/searchts/issues/455)) ([3208886](https://github.com/capad-xyz/searchts/commit/3208886e04701b2ab1057d258ad3721699b5e3e0))
+
 ## [0.22.1](https://github.com/capad-xyz/searchts/compare/v0.22.0...v0.22.1) (2026-10-25)
 
 
