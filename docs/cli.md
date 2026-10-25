@@ -409,7 +409,7 @@ MCP: `get_status`.
 ### `install`
 
 One-shot installer; --system-deps to change things.
-Non-mutating by default: without --system-deps it prints the commands and touches nothing outside searchts's own config. --browser installs the stealth-browser extra into this interpreter.
+Non-mutating by default: without --system-deps it prints the system commands instead of running them. It does write the agent skill files (~/.agents/skills/searchts, or each OpenClaw/Claude Code skills dir that exists) and the user-scope memory rule; both are listed up front, and --dry-run lists them and writes nothing. --browser installs the stealth-browser extra into this interpreter.
 - --safe is a deprecated no-op; non-mutating is now the default.
 
 ```bash

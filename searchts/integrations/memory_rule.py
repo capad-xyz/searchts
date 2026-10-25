@@ -125,6 +125,16 @@ def apply_one(
     return "wrote"
 
 
+def rule_targets(home: Path) -> list[Path]:
+    """The user-scope rule files install would write for this home."""
+    targets: list[Path] = []
+    if claude_detected(home):
+        targets.append(home / ".claude" / "CLAUDE.md")
+    if cursor_detected(home):
+        targets.append(home / ".cursor" / "rules" / "searchts.mdc")
+    return targets
+
+
 def install_memory_rules(
     home: Optional[Path] = None,
     *,
@@ -144,11 +154,7 @@ def install_memory_rules(
         interactive = bool(sys.stdin.isatty() and sys.stdout.isatty())
 
     actions: list[str] = []
-    targets: list[Path] = []
-    if claude_detected(home):
-        targets.append(home / ".claude" / "CLAUDE.md")
-    if cursor_detected(home):
-        targets.append(home / ".cursor" / "rules" / "searchts.mdc")
+    targets = rule_targets(home)
     if not targets:
         log("  -- no Claude Code or Cursor user dir; skipped memory rule")
         return actions
