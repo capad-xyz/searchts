@@ -47,7 +47,7 @@ uvx --from "searchts[mcp]" searchts -v read https://en.wikipedia.org/wiki/Ada_Lo
 
 Every login verb: `searchts login list`, `searchts login keep`, `searchts login kill`, `searchts login signin`, `searchts login purge-scratch`, `searchts login sweep`, `searchts login check`.
 
-MCP tools: `read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_check`, `login_kill`. `read_url` has no `next_url`; use the signed `next_cursor`. MCP results and `--json` output carry `update_available`.
+MCP tools: `read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_check`, `login_kill`. `read_url` has no `next_url`; use the signed `next_cursor`. MCP results and `--json` output carry `update_available` (`search --json`: one JSON line on stderr).
 
 Machine-readable catalog: `searchts help --json` (`searchts.help.v1`). Full flags, defaults and examples: [docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md).
 <!-- END GENERATED COMMANDS -->

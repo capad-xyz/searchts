@@ -994,3 +994,39 @@ def test_the_receipts_key_set_is_pinned(monkeypatch):
         "login_via",
         "offset", "total_items", "has_more", "next_cursor", "items",
     }
+
+
+def test_get_status_report_is_unwrapped_and_starts_rows_with_a_status(monkeypatch):
+    """#446: a long fix command stays on one line; rows start ok/warn/error."""
+    from searchts import doctor
+
+    fix = "mkdir -p '/a/very/long/path/that/goes/on/and/on/for/many/columns' && " * 3
+    results = {
+        "web": {"status": "ok", "name": "Any web page", "message": "ok here",
+                "tier": 0, "backends": ["Jina Reader", "curl_cffi"], "active_backend": "Jina Reader"},
+        "youtube": {"status": "warn", "name": "YouTube", "tier": 0, "backends": [],
+                    "active_backend": None,
+                    "message": f"JS runtime not configured. Run:\n  {fix.strip()}"},
+        "bad": {"status": "error", "name": "Broken", "message": "no", "tier": 0,
+                "backends": [], "active_backend": None},
+    }
+    monkeypatch.setattr(doctor, "check_all", lambda *_a, **_k: results)
+    monkeypatch.setenv("SEARCHTS_NO_UPDATE_CHECK", "1")
+    out = get_status()
+    lines = out.splitlines()
+    assert lines[0] == "searchts doctor: 1/3 probes passed"
+    assert "ok    Any web page: ok here (backend: Jina Reader)" in lines
+    assert "warn  YouTube: JS runtime not configured. Run:" in lines
+    assert "      " + fix.strip() in lines
+    assert "error Broken: no" in lines
+    assert "\x1b[" not in out and "✓" not in out
+
+
+def test_ytdlp_fix_command_is_one_line():
+    import sys as _sys
+
+    from searchts.utils.paths import render_ytdlp_fix_command
+
+    if _sys.platform == "win32":
+        pytest.skip("the PowerShell fix is multi-line by design")
+    assert "\n" not in render_ytdlp_fix_command()

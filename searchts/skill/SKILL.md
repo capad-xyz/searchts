@@ -84,7 +84,7 @@ covers the need.
 | `login_check` | `searchts login check` |
 | `login_kill` | `searchts login kill` |
 
-MCP-only parameters and the deliberate CLI differences are listed in [docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md). `web_search` defaults to 5 results; CLI `-n` defaults to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; use the signed `next_cursor`. MCP results and `--json` output carry `update_available`.
+MCP-only parameters and the deliberate CLI differences are listed in [docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md). `web_search` defaults to 5 results; CLI `-n` defaults to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; use the signed `next_cursor`. MCP results and `--json` output carry `update_available` (`search --json`: one JSON line on stderr, so stdout stays the array).
 
 ### Exit codes
 

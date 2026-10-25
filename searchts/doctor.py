@@ -146,6 +146,57 @@ def _report_row(lines: list, style, status: str, name: str, message: str,
         lines.append("     " + style.dim(f"current backend: {active}"))
 
 
+def format_plain(results: Dict[str, dict]) -> str:
+    """The doctor report for an agent: one line per channel, never wrapped.
+
+    MCP ``get_status`` returns this. Each row starts with ``ok``, ``warn`` or
+    ``error``, then the name and message. A message's own line breaks (a fix
+    command on its own line) are kept, indented under the row, but no line is
+    folded at a width, so every fix command stays copy-pasteable. No colour,
+    no glyphs.
+    """
+    ok_count = sum(1 for r in results.values() if r["status"] == "ok")
+    lines = [f"searchts doctor: {ok_count}/{len(results)} probes passed"]
+
+    def word(status: str) -> str:
+        return status if status in ("ok", "warn") else "error"
+
+    def add(status: str, name: str, message: str, active=None) -> None:
+        parts = [p.strip() for p in str(message).splitlines() if p.strip()]
+        head = f"{word(status):<5} {name}"
+        if parts:
+            head += f": {parts[0]}"
+        if active:
+            head += f" (backend: {active})"
+        lines.append(head)
+        lines.extend("      " + p for p in parts[1:])
+
+    probes = [r for r in results.values() if r["tier"] == 0]
+    optional = [r for r in results.values() if r["tier"] in (1, 2)]
+    for r in probes + [r for r in optional if r["status"] == "ok"]:
+        add(r["status"], r["name"], r["message"], _active(r))
+    missing = [r["name"] for r in optional if r["status"] != "ok"]
+    if missing:
+        lines.append(
+            f"off   not present: {', '.join(missing)} (PATH checks, not "
+            "searchts platform readers)"
+        )
+
+    import stat
+
+    config_path = Config.CONFIG_DIR / "config.yaml"
+    if config_path.exists() and sys.platform != "win32":
+        try:
+            if config_path.stat().st_mode & (stat.S_IRGRP | stat.S_IROTH):
+                lines.append(
+                    "warn  config.yaml is readable by other users: "
+                    "chmod 600 ~/.searchts/config.yaml"
+                )
+        except OSError:
+            pass
+    return "\n".join(lines)
+
+
 def _windows_parent_map() -> Dict[int, int]:
     """PID -> parent PID for every process (one Toolhelp snapshot). Empty off Windows or on error."""
     if sys.platform != "win32":

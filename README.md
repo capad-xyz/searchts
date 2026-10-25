@@ -251,11 +251,12 @@ a failed check is silent.
 
 When that release is newer:
 
-- `searchts read --json` and `searchts grab --json` add a top-level
-  `update_available` object, `{"current": "...", "latest": "...", "command":
-  "searchts update"}`. It is absent when there is nothing newer, so existing
-  parsers see no new key. `searchts search --json` and `searchts doctor --json`
-  return top-level lists and keep their shape.
+- `searchts read --json`, `searchts grab --json` and `searchts doctor --json`
+  add a top-level `update_available` object, `{"current": "...", "latest":
+  "...", "command": "searchts update"}`. It is absent when there is nothing
+  newer, so existing parsers see no new key. `searchts search --json` keeps
+  stdout a bare array and prints `{"update_available": {...}}` as one JSON line
+  on stderr.
 - MCP tool results carry the same object, plus at most once per 24 hours one
   line telling the agent to tell you. The stamp lives in
   `~/.searchts/update-notice.json`.

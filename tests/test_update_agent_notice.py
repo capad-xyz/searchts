@@ -275,11 +275,38 @@ def test_search_json_stays_a_list(monkeypatch, tmp_path, capsys):
             main()
     import json
 
-    payload = json.loads(capsys.readouterr().out)
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
     assert isinstance(payload, list)
     assert payload == [
         {"title": "T", "url": "https://x.test/1", "snippet": "snip", "source": "duckduckgo"}
     ]
+    # #445: the notice rides on stderr as one JSON line, stdout stays the array.
+    notes = [json.loads(line) for line in captured.err.splitlines()
+             if line.startswith("{")]
+    assert notes == [{"update_available": {
+        "current": un.__version__, "latest": "9.9.9", "command": "searchts update",
+    }}]
+
+
+def test_doctor_json_has_update_available_only_when_newer(monkeypatch, tmp_path, capsys):
+    import json
+
+    results = {"web": {"status": "ok", "name": "Any web page", "message": "ok",
+                       "tier": 0, "backends": [], "active_backend": None}}
+    monkeypatch.setattr("searchts.doctor.check_all", lambda *a, **k: results)
+    _enable_agent_checks(monkeypatch, tmp_path)
+    with patch("sys.argv", ["searchts", "doctor", "--json"]):
+        main()
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["update_available"]["latest"] == "9.9.9"
+    assert payload["web"]["status"] == "ok"
+
+    _enable_agent_checks(monkeypatch, tmp_path, latest=un.__version__)
+    (tmp_path / "update-check.json").unlink()
+    with patch("sys.argv", ["searchts", "doctor", "--json"]):
+        main()
+    assert "update_available" not in json.loads(capsys.readouterr().out)
 
 
 def test_grab_json_manifest_has_update_available(monkeypatch, tmp_path, capsys):

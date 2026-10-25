@@ -472,7 +472,9 @@ _add(Command(
     body=(
         "One GitHub API call. Since 0.22.0 a newer release is also reported in",
         "`--json` output and in every MCP result as `update_available`, so an",
-        "agent does not need a separate call after each task.",
+        "agent does not need a separate call after each task. `search --json`",
+        "keeps stdout a bare array, so it prints `{\"update_available\": ...}`",
+        "as one JSON line on stderr instead.",
     ),
     examples=("searchts check-update",),
     exit_codes=(("0", "the check finished (newer or current)"), ("2", "bad usage")),

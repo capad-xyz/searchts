@@ -183,8 +183,9 @@ def create_server():
             "fails or before relying on an optional capability (e.g. keyed search "
             "providers, transcription). Takes no arguments and performs no web "
             "requests of its own beyond the cached update check; returns a "
-            "human-readable text report, one line per channel with an ok/warn/error "
-            "status and a fix hint."
+            "plain-text report, one line per channel starting with ok, warn or "
+            "error, never wrapped, so a fix command on its own indented line "
+            "can be copied as-is."
             + UPDATE_CHECK_DESCRIPTION
         ),
     )
