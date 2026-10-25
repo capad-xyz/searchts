@@ -2,6 +2,23 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.23.0](https://github.com/capad-xyz/searchts/compare/v0.22.2...v0.23.0) (2026-10-25)
+
+
+### Added
+
+* **install:** first-pass setup with one up-front consent ([#463](https://github.com/capad-xyz/searchts/issues/463)) ([8c6fe5f](https://github.com/capad-xyz/searchts/commit/8c6fe5f9e540dcbe3df664a79e417bfe7aa7a9a4))
+
+
+### Fixed
+
+* **mcp:** clamp web_search max_results=0 to 1, scope update_available docs ([#470](https://github.com/capad-xyz/searchts/issues/470)) ([1bc92f6](https://github.com/capad-xyz/searchts/commit/1bc92f6fde263f1d6dc259042dab8703d9ac69d6))
+* **mcp:** describe the one-call cookie-copy grant in read_url's refusal ([#467](https://github.com/capad-xyz/searchts/issues/467)) ([1dae4b4](https://github.com/capad-xyz/searchts/commit/1dae4b44fa4e209f10c717f98bce587bba3f9f76))
+* **mcp:** fence every copy of page text in read_url ([#458](https://github.com/capad-xyz/searchts/issues/458)) ([49f8a00](https://github.com/capad-xyz/searchts/commit/49f8a0006b93071046ad5b275a9e9f2603b4d228))
+* **mcp:** name MCP params, not CLI flags, in login_check and transcribe advice ([#468](https://github.com/capad-xyz/searchts/issues/468)) ([e10e2b9](https://github.com/capad-xyz/searchts/commit/e10e2b9bd8134e76f469006ec785701ae261946c))
+* **read:** leave the site navigation out of the recall fallback ([#460](https://github.com/capad-xyz/searchts/issues/460)) ([143a23b](https://github.com/capad-xyz/searchts/commit/143a23b289482bb4b12b4dc9f8211ad756c71d43))
+* **read:** say when a JS shell's widget is all the read has ([#459](https://github.com/capad-xyz/searchts/issues/459)) ([e660232](https://github.com/capad-xyz/searchts/commit/e660232b180fb573204a5113be52305b9ad65dd0))
+
 ## [0.22.2](https://github.com/capad-xyz/searchts/compare/v0.22.1...v0.22.2) (2026-10-25)
 
 
