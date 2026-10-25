@@ -41,6 +41,12 @@ _RDT_BROKEN_HINT = (
 )
 
 
+def _setup_hint() -> str:
+    from searchts.setup_plan import missing_tool_hint
+
+    return missing_tool_hint("reddit").strip().replace("\n  ", " ")
+
+
 class RedditChannel(Channel):
     name = "reddit"
     description = "Reddit posts and comments"
@@ -79,7 +85,9 @@ class RedditChannel(Channel):
             "(searchts install --browser) and a profile Reddit recognises.\n"
             "  Desktop: searchts install --channels opencli\n"
             "       (reuses your Chrome login session; works once you have logged into reddit.com)\n"
-            f"  Server/existing: pipx install '{_RDT_GIT_SOURCE}'\n"
+            "  Server/existing: rdt-cli through the first-pass setup:\n"
+            f"  {_setup_hint()}\n"
+            f"       or by hand: pipx install '{_RDT_GIT_SOURCE}'\n"
             "       then `rdt login` or write the cookie manually (see the doctor hints)\n"
             "Accessing Reddit from mainland China requires a proxy"
         )

@@ -1909,6 +1909,7 @@ def _fetch_stealth_impl(
         # persisted any login it wants to keep, so a second copy in the browser
         # profile would be unnecessary and would outlive this one-site read.
         persistent = _use_persistent_profile() and not cookies
+        browser: Any  # a persistent context or a browser; see the headful read
         try:
             if persistent:
                 profile_dir = _profile_path()
@@ -2194,6 +2195,10 @@ def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str,
     pin_args = chromium_pin_args(url)
     with sync_playwright() as p:
         persistent = _use_persistent_profile()
+        # A persistent context and a launched browser are different types; both
+        # branches below only call what the one they hold has (#442 made the
+        # real patchright types visible to mypy).
+        browser: Any
         if persistent:
             profile_dir = _profile_path()
             browser = p.chromium.launch_persistent_context(

@@ -36,7 +36,7 @@ covers the need.
 | `searchts mcp install` | Wire the MCP server into the agents on this machine. |
 | `searchts skill install` | Write the slash command and the shared SKILL.md bundle. |
 | `searchts doctor` | Which channels are installed, configured, working. |
-| `searchts install` | One-shot installer; --system-deps to change things. |
+| `searchts install` | First-pass setup: one list, one approval; --system-deps for system packages. |
 | `searchts setup` | Walk through search, GitHub, Reddit, and Groq in one pass. |
 | `searchts configure` | List the keys, set one, or copy cookies from a browser. |
 | `searchts login` | Site logins: list, keep, kill, signin, purge-scratch, sweep, check. |

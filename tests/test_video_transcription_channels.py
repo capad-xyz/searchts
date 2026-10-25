@@ -131,8 +131,10 @@ class TestCheckStatuses:
 
     def test_ok_notes_missing_ffmpeg(self, channel_cls, monkeypatch, fake_config):
         fake_config.set("groq_api_key", "gsk_test")
-        # yt-dlp present but ffmpeg absent.
+        # yt-dlp present but ffmpeg absent: not on PATH and no bundled
+        # imageio-ffmpeg binary (#442).
         monkeypatch.setattr(shutil, "which", _which_factory({"yt-dlp"}))
+        monkeypatch.setattr("searchts.utils.ffmpeg.bundled_ffmpeg", lambda: None)
         monkeypatch.setattr(subprocess, "run", _fake_run_version)
         ch = channel_cls()
         status, msg = ch.check(fake_config)
@@ -153,6 +155,7 @@ class TestTranscriptionReadiness:
         monkeypatch.setattr(tr, "local_available", lambda: True)
         # No ffmpeg present, no hosted key configured.
         monkeypatch.setattr(tr.shutil, "which", lambda cmd: None)
+        monkeypatch.setattr("searchts.utils.ffmpeg.bundled_ffmpeg", lambda: None)
         msg = tr.transcription_readiness(fake_config)
         assert "captions work" in msg
         assert "requires ffmpeg" in msg

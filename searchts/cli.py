@@ -216,6 +216,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Install searchts[browser] + Chromium into this CLI's environment "
              "(same interpreter as the running searchts). Refuses ephemeral uvx.",
     )
+    p_install.add_argument(
+        "--yes", "-y", action="store_true",
+        help="Approve the first-pass list without a prompt: Chromium and the site "
+             "tools (X, Reddit, LinkedIn, mcporter, GitHub), minus any --skip. "
+             "Without it and without a terminal, nothing on the list is installed",
+    )
+    p_install.add_argument(
+        "--skip", default="", metavar="IDS",
+        help="Uncheck first-pass items, comma-separated: "
+             "chromium,twitter,reddit,linkedin,mcporter,gh",
+    )
+    p_install.add_argument(
+        "--json", action="store_true",
+        help="With --dry-run: print the first-pass list as searchts.setup.v1 JSON "
+             "(sizes, installed state, approve command) and change nothing",
+    )
 
     # ── configure ──
     p_conf = sub.add_parser("configure", parents=[_verbose],
@@ -820,6 +836,48 @@ def main():
 # ── Command handlers ────────────────────────────────
 
 
+def _first_pass(args, *, dry_run: bool) -> None:
+    """#442: show the one up-front list and install what was approved.
+
+    Human at a terminal: one prompt, everything pre-checked, uncheck by id.
+    No terminal: nothing is installed without --yes; the list and the exact
+    approve command are printed instead. Logins are never part of this.
+    """
+    from searchts import setup_plan
+
+    skip = list(getattr(args, "skip_ids", []) or [])
+    print()
+    print("First-pass setup (one approval; uncheck anything with --skip):")
+    for line in setup_plan.render(skip):
+        print(line)
+    doc = setup_plan.plan(skip)
+    pending = doc["pending"]
+    if not pending:
+        print("  Everything checked is already installed.")
+        return
+    size = setup_plan.human_size(doc["pending_size_bytes"], estimate=True)
+    print(f"  To install now: {', '.join(pending)} ({size}). "
+          "Site logins are asked later, per site, when a read needs one.")
+    if dry_run:
+        print(f"  Dry run: nothing installed. Approve with: {doc['approve_command']}")
+        return
+    if not getattr(args, "yes", False):
+        if not (sys.stdin.isatty() and sys.stdout.isatty()):
+            print(f"  Not installed: no terminal to ask. Approve with: {doc['approve_command']}")
+            return
+        chosen = setup_plan.interactive_choice(skip)
+        if chosen is None:
+            print("  Declined: nothing on the list was installed.")
+            return
+        skip = chosen
+    print()
+    results = setup_plan.run_install(skip)
+    failed = [k for k, ok in results.items() if not ok]
+    if failed:
+        print(f"  Not installed: {', '.join(failed)}. Re-run `searchts install --yes` "
+              "to retry, or --skip them.")
+
+
 def _cmd_install(args):
     """One-shot deterministic installer."""
     import os
@@ -831,10 +889,26 @@ def _cmd_install(args):
         code = install_browser(dry_run=bool(getattr(args, "dry_run", False)))
         raise SystemExit(code)
 
+    from searchts import setup_plan
     from searchts.config import Config
     from searchts.doctor import check_all, format_report
 
     dry_run = args.dry_run
+    try:
+        skip = setup_plan.parse_skip(getattr(args, "skip", "") or "")
+    except ValueError as e:
+        print(f"searchts install: {e}", file=sys.stderr)
+        raise SystemExit(2)
+    args.skip_ids = skip
+    if getattr(args, "json", False):
+        if not dry_run:
+            print("searchts install: --json needs --dry-run (it only describes the list)",
+                  file=sys.stderr)
+            raise SystemExit(2)
+        import json
+
+        print(json.dumps(setup_plan.plan(skip), ensure_ascii=False, indent=2))
+        return
     # Non-invasive by default: the keyless core (read/search/transcribe) needs no
     # system mutation. Only --system-deps/--apply opts in to apt/npm/NodeSource/
     # yt-dlp-config changes. --safe is now a no-op kept for backward compatibility.
@@ -917,6 +991,8 @@ def _cmd_install(args):
         print()
         for item in writes:
             row(item, label_w=6)
+
+    _first_pass(args, dry_run=dry_run)
 
     # Apply explicit flags
     if args.proxy:

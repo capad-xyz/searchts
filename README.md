@@ -228,11 +228,17 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install "searchts[mcp]"
 ```
 
-Stealth browser (installs into the same env as the running CLI). With uvx or uv tool, put `browser` in the spec itself, for example `uvx --from "searchts[mcp,browser]"`, in every command you use, the MCP one included. Only Chromium is shared between environments:
+A plain install already includes the stealth browser library (patchright), browser cookies, the MCP server, a bundled ffmpeg and the JavaScript runtime YouTube needs (deno, through `yt-dlp[deno]`). Nothing needs a system install. The `[mcp]`, `[browser]` and `[cookies]` extras still resolve, as empty aliases, so existing specs keep working.
+
+First-pass setup. One list with sizes, one approval, and every item checked by default: Chromium for the stealth browser (~170 MB), twitter-cli for X (~39 MB), rdt-cli for Reddit (~15 MB), linkedin-scraper-mcp (~214 MB), mcporter (~77 MB, needs Node.js) and gh for GitHub (~13 MB). The local Whisper model is listed with its size and asked for the first time you transcribe locally. Site logins aren't part of this approval; each site asks when a read needs one.
 
 ```bash
-searchts install --browser
+searchts install                                 # a terminal asks once; type ids to uncheck
+searchts install --yes --skip linkedin,mcporter  # agents: no prompt, nothing outside the list
+searchts install --dry-run --json                # the list as searchts.setup.v1, changes nothing
 ```
+
+Without a terminal and without `--yes`, nothing on the list is installed; the list and the exact approve command are printed instead. Only the stealth browser: `searchts install --browser`.
 
 Update the copy that is running (`searchts upgrade` is the same command):
 
@@ -351,7 +357,7 @@ for hit in search("open source vector db", max_results=5):
 Search works with no keys (DuckDuckGo). Everything else is optional, via `searchts configure` or a `.env` (see `.env.example`):
 
 - **Search providers**: Exa, Brave, Tavily API keys, or a self-hosted `SEARXNG_URL`, for more and better results.
-- **Transcription**: a Groq or OpenAI (Whisper) key, plus `ffmpeg` and `yt-dlp`. Login-gated video: `searchts transcribe URL --cookies-from-browser chrome` (opt-in; `read` has its own opt-ins, see the `read` flags above).
+- **Transcription**: a Groq or OpenAI (Whisper) key. `ffmpeg` and `yt-dlp` ship with searchts (an `ffmpeg` on PATH is used first). Login-gated video: `searchts transcribe URL --cookies-from-browser chrome` (opt-in; `read` has its own opt-ins, see the `read` flags above).
 - **GitHub token** for higher rate limits.
 
 Run `searchts doctor` to check what is configured and working.
