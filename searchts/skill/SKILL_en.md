@@ -84,7 +84,7 @@ covers the need.
 | `login_check` | `searchts login check` |
 | `login_kill` | `searchts login kill` |
 
-MCP-only parameters and the deliberate CLI differences are listed in [docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md). `web_search` defaults to 5 results; CLI `-n` defaults to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; use the signed `next_cursor`. MCP results and `--json` output carry `update_available` (`search --json`: one JSON line on stderr, so stdout stays the array).
+MCP-only parameters and the deliberate CLI differences are listed in [docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md). `web_search` defaults to 5 results; CLI `-n` defaults to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; use the signed `next_cursor`. Successful MCP results and `--json` output carry `update_available` (`search --json`: one JSON line on stderr, so stdout stays the array); an MCP `Error: ...` result does not.
 
 ### Exit codes
 
@@ -135,8 +135,9 @@ Run `searchts help --json` for the stable machine-readable catalog. Full flags, 
 4. **On failure, read the matching reference file** under `references/` for
    platform notes and fallbacks — never guess commands.
 5. **Watch versions for the user**: since 0.22.0 every `--json` result and
-   every MCP result carries `update_available` when a newer release exists, so
-   read it instead of making a separate call. `searchts check-update` is still
+   every successful MCP result carries `update_available` when a newer release
+   exists (an `Error: ...` result does not), so read it instead of making a
+   separate call. `searchts check-update` is still
    there for a script. If a new version exists, append one line to your
    wrap-up: "searchts vX.Y.Z is available — `searchts update` installs it
    (`searchts upgrade` is the same command)." Never interrupt the current task

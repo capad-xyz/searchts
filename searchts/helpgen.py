@@ -210,8 +210,9 @@ def render_llms_block(payload: dict) -> str:
         "MCP tools: "
         + ", ".join(f"`{tool}`" for tool in catalog.mcp_tool_names())
         + ". `read_url` has no `next_url`; use the signed `next_cursor`. "
-        "MCP results and `--json` output carry `update_available` "
-        "(`search --json`: one JSON line on stderr).",
+        "Successful MCP results and `--json` output carry `update_available` "
+        "(`search --json`: one JSON line on stderr; an MCP `Error: ...` result "
+        "does not carry it).",
         "",
         "Machine-readable catalog: `searchts help --json` (`searchts.help.v1`). "
         "Full flags, defaults and examples: "
@@ -257,9 +258,9 @@ def render_skill_block(payload: dict) -> str:
         "MCP-only parameters and the deliberate CLI differences are listed in "
         f"[docs/cli.md]({CLI_DOC_URL}). `web_search` defaults to 5 results; CLI `-n` defaults "
         "to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; "
-        "use the signed `next_cursor`. MCP results and `--json` output carry "
-        "`update_available` (`search --json`: one JSON line on stderr, so stdout "
-        "stays the array).",
+        "use the signed `next_cursor`. Successful MCP results and `--json` "
+        "output carry `update_available` (`search --json`: one JSON line on "
+        "stderr, so stdout stays the array); an MCP `Error: ...` result does not.",
         "",
         "### Exit codes",
         "",

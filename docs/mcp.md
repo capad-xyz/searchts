@@ -87,7 +87,8 @@ The server checks the GitHub latest release of
 [capad-xyz/searchts](https://github.com/capad-xyz/searchts/releases/latest) at
 most once per 24 hours: one `GET` with a `searchts/<version>` User-Agent and
 nothing about the user, cached in `~/.searchts/update-check.json`. A failed check
-is silent. When the release is newer, a tool result carries an
+is silent. When the release is newer, a successful tool result (not an
+`Error: ...` string) carries an
 `update_available` object (`current`, `latest`, `command`) and, at most once per
 24 hours per install, one line telling the agent to tell the user. The
 once-a-day stamp is kept in `~/.searchts/update-notice.json`. **Nothing is

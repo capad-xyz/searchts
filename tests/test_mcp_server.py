@@ -1032,3 +1032,20 @@ def test_ytdlp_fix_command_is_one_line():
     if _sys.platform == "win32":
         pytest.skip("the PowerShell fix is multi-line by design")
     assert "\n" not in render_ytdlp_fix_command()
+
+
+def test_web_search_max_results_clamps_to_its_documented_range():
+    """docs/mcp.md: max_results is clamped to 1-25; 0 used to give 5."""
+    from searchts.integrations.mcp_server import clamp_max_results
+
+    assert clamp_max_results(0) == 1
+    assert clamp_max_results(-3) == 1
+    assert clamp_max_results(None) == 5
+    assert clamp_max_results(7) == 7
+    assert clamp_max_results(99) == 25
+
+
+def test_update_check_description_promises_successful_results_only():
+    from searchts.integrations.mcp_server import UPDATE_CHECK_DESCRIPTION
+
+    assert "a successful result also carries" in UPDATE_CHECK_DESCRIPTION
