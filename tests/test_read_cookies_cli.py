@@ -152,10 +152,15 @@ def test_yes_without_a_browser_still_copies_nothing(monkeypatch, temp_home):
         "searchts.cdp_profile.read_site_cookies",
         lambda site, browser, **kwargs: called.append(site),
     )
+    # The read itself is not under test; a live example.com answered 503 on
+    # one main run and made this red for a reason outside the code.
+    seen = {}
+    monkeypatch.setattr("searchts.unlocker.fetch", _fake_fetch(seen))
 
     _run(monkeypatch, ["read", "https://example.com", "--yes"])
 
     assert called == [], "--yes reached a copy with no browser named"
+    assert seen["cookies"] is None, "--yes sent cookies on a read that named no browser"
     assert not session_granted(), "--yes granted consent for a read that named no browser"
 
 

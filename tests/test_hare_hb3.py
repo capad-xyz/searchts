@@ -13,6 +13,18 @@ sys.path.insert(0, "scripts")
 hare_r1 = pytest.importorskip("hare_r1")
 
 
+@pytest.fixture(autouse=True)
+def no_live_github(monkeypatch):
+    """The head tree comes from api.github.com; a test never fetches it.
+
+    Unstubbed, `_hare_once` asked GitHub for a tarball with a fake token, got a
+    401 (or nothing, offline) and fell back to "not run". Same path, no network.
+    The reasoning catalog is a live /models call too; {} is its own fallback.
+    """
+    monkeypatch.setattr(hare_r1, "fetch_head_tree", lambda *a, **k: "")
+    monkeypatch.setattr(hare_r1, "fetch_reasoning_catalog", lambda base, timeout=20: {})
+
+
 def _when_does_a_slow_hop_get_skipped(budget, reserve, floor, spent):
     """The same comparison the ladder makes, extracted so it can be tested."""
     left = budget - spent - reserve

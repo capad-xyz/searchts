@@ -25,7 +25,7 @@ def test_channel_registry_contract():
         assert ch.tier in {0, 1, 2}
 
 
-def test_channel_check_contract_with_minimal_runtime(monkeypatch, tmp_path):
+def test_channel_check_contract_with_minimal_runtime(monkeypatch, tmp_path, offline_jina_probe):
     # Keep contract tests deterministic by simulating "deps mostly absent".
     monkeypatch.setattr("shutil.which", lambda _cmd: None)
     config = Config(config_path=tmp_path / "config.yaml")
