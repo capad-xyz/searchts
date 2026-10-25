@@ -14,10 +14,10 @@ import io
 import json
 import re
 import subprocess
-
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 from searchts import catalog, helpgen, helptext
 from searchts.cli import build_parser
