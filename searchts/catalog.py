@@ -559,6 +559,10 @@ class McpTool:
     mcp_only_params: Tuple[str, ...] = ()
     cli_only_flags: Tuple[str, ...] = ()
     mcp_only: bool = False
+    #: MCP param -> CLI flag (or positional) where the names differ. A param
+    #: whose name is a flag's dest or a positional needs no entry. The help
+    #: catalog test checks that every param and every flag is accounted for.
+    param_flags: Tuple[Tuple[str, str], ...] = ()
 
 
 #: Every registered MCP tool -> the CLI command an agent would otherwise run.
@@ -571,9 +575,10 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "request. Use the signed `next_cursor`, or `searchts read --json` "
             "when a human wants the URL.",
         ),
-        mcp_only_params=("cursor", "page_items", "max_media"),
-        cli_only_flags=("--human", "--scrub", "--backend", "--pages", "--items",
-                        "--media", "--expand", "--json"),
+        mcp_only_params=("cursor", "page_items"),
+        cli_only_flags=("--human", "--scrub", "--backend", "--json", "--yes"),
+        param_flags=(("max_pages", "--pages"), ("max_items", "--items"),
+                     ("max_media", "--media")),
     ),
     "web_search": McpTool(
         "web_search", "search",
@@ -581,7 +586,8 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "MCP default is max_results=5 (CLI `-n` default is 10).",
             "MCP has no `provider` parameter; the CLI does.",
         ),
-        cli_only_flags=("-n", "--provider", "--json"),
+        cli_only_flags=("--provider", "--json"),
+        param_flags=(("max_results", "-n"),),
     ),
     "fetch_asset": McpTool(
         "fetch_asset", "get",
@@ -589,7 +595,7 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "MCP saves only inside the server working directory or "
             "$SEARCHTS_MCP_OUT_DIR, never to an absolute path.",
         ),
-        cli_only_flags=("-o", "--output"),
+        param_flags=(("out_dir", "-o"),),
     ),
     "grab_site": McpTool(
         "grab_site", "grab",
@@ -598,11 +604,14 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "MCP saves only inside the server working directory or "
             "$SEARCHTS_MCP_OUT_DIR.",
         ),
-        cli_only_flags=("--out", "--kinds", "--scripts", "--read", "--json"),
+        cli_only_flags=("--kinds", "--scripts", "--json"),
+        param_flags=(("out_dir", "--out"), ("max_assets", "--max"),
+                     ("max_tokens", "--tokens")),
     ),
     "get_status": McpTool(
         "get_status", "doctor",
         notes=("The same health report `searchts doctor` prints.",),
+        cli_only_flags=("--json",),
     ),
     "transcribe": McpTool(
         "transcribe", "transcribe",
@@ -610,7 +619,8 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "`prefer_subtitles` mirrors CLI `--no-subtitles`.",
             "`cookies_from_browser` is passed to yt-dlp, same as the CLI flag.",
         ),
-        cli_only_flags=("-o", "--output", "--provider", "--no-subtitles"),
+        cli_only_flags=("-o",),
+        param_flags=(("prefer_subtitles", "--no-subtitles"),),
     ),
     "login_status": McpTool(
         "login_status", "login list",
@@ -630,6 +640,7 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "Without it, the known account pages for reddit.com, linkedin.com, "
             "github.com and x.com are used.",
         ),
+        param_flags=(("url", "site"), ("check_url", "--url")),
     ),
     "login_kill": McpTool(
         "login_kill", "login kill",
@@ -676,6 +687,7 @@ def mcp_record(name: str) -> dict:
             "notes": [n for t in tools for n in t.notes],
             "mcp_only_params": [p for t in tools for p in t.mcp_only_params],
             "cli_only_flags": [f for t in tools for f in t.cli_only_flags],
+            "param_flags": {p: f for t in tools for p, f in t.param_flags},
             "cli_only": False,
             "reason": "",
         }
@@ -685,6 +697,7 @@ def mcp_record(name: str) -> dict:
         "notes": [],
         "mcp_only_params": [],
         "cli_only_flags": [],
+        "param_flags": {},
         "cli_only": bool(reason),
         "reason": reason or "not part of the MCP tool surface",
     }
