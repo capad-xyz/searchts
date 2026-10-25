@@ -814,10 +814,20 @@ def _validate_backend(order: List[str], cfg: Config) -> None:
         for p in order
     )
     if not usable:
-        hosted = ", ".join(PROVIDERS[p]["key_field"] for p in order if p in PROVIDERS)
         local_hint = local_unavailable_reason() or (
             'install it with `pip install "searchts[local-transcribe]"`'
         )
+        hosted_order = [p for p in order if p in PROVIDERS]
+        if not hosted_order:
+            # --provider local: there is no hosted key to name, so say how to
+            # get local working, then how to switch to a hosted provider.
+            keys = ", ".join(PROVIDERS[p]["key_field"] for p in PROVIDERS)
+            raise NoProviderConfigured(
+                f"no transcription backend available for --provider local: "
+                f"{local_hint}\nOr configure a hosted key "
+                f"(one of: {keys}) and use --provider auto."
+            )
+        hosted = ", ".join(PROVIDERS[p]["key_field"] for p in hosted_order)
         raise NoProviderConfigured(
             f"no transcription backend available: configure a hosted key "
             f"(one of: {hosted}), or use keyless local transcription. {local_hint}"

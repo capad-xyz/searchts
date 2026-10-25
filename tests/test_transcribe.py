@@ -634,6 +634,10 @@ class TestLocalBackend:
         assert "faster-whisper" in message
         assert "local-transcribe" in message
         assert "None in sys.modules" in message or "No module named" in message
+        # #447: never an empty "(one of: )" list.
+        assert "one of: )" not in message
+        assert "groq_api_key, openai_api_key" in message
+        assert "--provider auto" in message
 
     def test_model_size_from_config(self, monkeypatch, fake_config):
         fake_config.set("whisper_model", "small")
