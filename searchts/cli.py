@@ -862,8 +862,8 @@ def _cmd_install(args):
     ))
 
     # Ensure tools directory exists (for upstream tool repos)
-    tools_dir = os.path.expanduser("~/.searchts/tools")
-    os.makedirs(tools_dir, exist_ok=True)
+    if not dry_run:
+        os.makedirs(os.path.expanduser("~/.searchts/tools"), exist_ok=True)
 
     if dry_run:
         mode = "dry run, no changes"
@@ -909,6 +909,14 @@ def _cmd_install(args):
         "env",
         "server/VPS (auto-detected)" if env == "server" else "local computer (auto-detected)",
     ), label_w=6)
+
+    # Everything install writes outside searchts's own config, listed before
+    # anything runs. --dry-run prints the same list and writes none of it.
+    writes = _install_writes(dry_run)
+    if writes:
+        print()
+        for item in writes:
+            row(item, label_w=6)
 
     # Apply explicit flags
     if args.proxy:
@@ -1132,36 +1140,85 @@ def _install_skill():
             print(f"  Warning: Could not install skill: {e}")
             return False
 
-    # Determine skill install path (priority: .agents > openclaw > claude)
-    skill_dirs = [
-        os.path.expanduser("~/.agents/skills"),      # Generic agents (priority)
-        os.path.expanduser("~/.openclaw/skills"),    # OpenClaw
-        os.path.expanduser("~/.claude/skills"),      # Claude Code (if exists)
-    ]
-
-    # Insert OPENCLAW_HOME path at the beginning if environment variable is set
-    openclaw_home = os.environ.get("OPENCLAW_HOME")
-    if openclaw_home:
-        skill_dirs.insert(0, os.path.join(openclaw_home, ".openclaw", "skills"))
-
-    installed = False
-    for skill_dir in skill_dirs:
-        if os.path.isdir(skill_dir):
-            target = os.path.join(skill_dir, "searchts")
-            if _copy_skill_dir(target):
-                platform_name = "Agent" if ".agents" in skill_dir else "OpenClaw" if "openclaw" in skill_dir else "Claude Code"
-                print(f"Skill installed for {platform_name}: {target}")
-                installed = True
-
-    if not installed:
-        # No known skill directory found — create for .agents by default
-        target = os.path.expanduser("~/.agents/skills/searchts")
-        os.makedirs(os.path.dirname(target), exist_ok=True)
+    targets = _skill_targets()
+    for target in targets:
+        skill_dir = os.path.dirname(target)
+        os.makedirs(skill_dir, exist_ok=True)
         if _copy_skill_dir(target):
-            print(f"Skill installed: {target}")
+            platform_name = "Agent" if ".agents" in skill_dir else "OpenClaw" if "openclaw" in skill_dir else "Claude Code"
+            print(f"Skill installed for {platform_name}: {target}")
         else:
             print("  · Could not install agent skill (optional)")
             print("  · Tip: install OpenClaw, Claude Code, or create ~/.agents/skills/ manually")
+
+
+def _skill_targets() -> list:
+    """Where ``_install_skill`` writes: every known skill dir that exists.
+
+    Priority .agents > OpenClaw > Claude Code; with none present the default
+    is ``~/.agents/skills/searchts``. Pure: creates nothing, so install can
+    list it up front and in --dry-run.
+    """
+    import os
+
+    skill_dirs = [
+        os.path.expanduser("~/.agents/skills"),
+        os.path.expanduser("~/.openclaw/skills"),
+        os.path.expanduser("~/.claude/skills"),
+    ]
+    openclaw_home = os.environ.get("OPENCLAW_HOME")
+    if openclaw_home:
+        skill_dirs.insert(0, os.path.join(openclaw_home, ".openclaw", "skills"))
+    found = [os.path.join(d, "searchts") for d in skill_dirs if os.path.isdir(d)]
+    return found or [os.path.expanduser("~/.agents/skills/searchts")]
+
+
+def _skill_file_names() -> list:
+    """Relative paths of the files the skill install writes into one target."""
+    import importlib.resources
+    from pathlib import Path
+
+    try:
+        refs = importlib.resources.files("searchts").joinpath("skill", "references")
+        names = [r.name for r in refs.iterdir()]
+    except Exception:
+        refs = Path(__file__).resolve().parent / "skill" / "references"
+        names = [r.name for r in refs.iterdir()] if refs.exists() else []
+    return ["SKILL.md"] + sorted(f"references/{n}" for n in names if n.endswith(".md"))
+
+
+def _install_writes(dry_run: bool) -> list:
+    """The up-front list of files install writes outside searchts's config.
+
+    Shown before anything runs, and as the whole answer in --dry-run, so the
+    agent skill and the memory rule are never a surprise.
+    """
+    from pathlib import Path
+
+    from searchts import progress, receipts
+    from searchts.integrations.memory_rule import rule_targets
+
+    verb = "would write" if dry_run else "writes"
+    rows = []
+    count = len(_skill_file_names())
+    for target in _skill_targets():
+        rows.append(receipts.Row(
+            progress.ROW_SKIP, "skill",
+            f"{verb} {count} agent skill files to {_home_path(target)}",
+        ))
+    for path in rule_targets(Path.home()):
+        rows.append(receipts.Row(
+            progress.ROW_SKIP, "rule",
+            f"{verb} the searchts block in {_home_path(str(path))}",
+        ))
+    return rows
+
+
+def _home_path(path: str) -> str:
+    import os
+
+    home = os.path.expanduser("~")
+    return "~" + path[len(home):] if path == home or path.startswith(home + os.sep) else path
 
 
 def _uninstall_skill():

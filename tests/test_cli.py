@@ -509,6 +509,44 @@ class TestInstallNonInvasive:
         assert "mcporter_real" not in calls
         assert "system_dry" in calls
 
+    def test_dry_run_lists_the_skill_and_rule_files_and_writes_none(
+        self, capsys, monkeypatch, tmp_path
+    ):
+        """#448: the agent skill and memory rule are on the up-front list."""
+        (tmp_path / ".claude").mkdir()
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        monkeypatch.delenv("OPENCLAW_HOME", raising=False)
+        self._stub_install(monkeypatch)
+        with patch("sys.argv", ["searchts", "install", "--dry-run"]):
+            main()
+        out = capsys.readouterr().out
+        files = len(cli._skill_file_names())
+        assert files >= 2
+        assert f"would write {files} agent skill files to ~/.agents/skills/searchts" in out
+        assert "would write the searchts block in ~/.claude/CLAUDE.md" in out
+        assert not (tmp_path / ".agents").exists()
+        assert not (tmp_path / ".claude" / "CLAUDE.md").exists()
+
+    def test_real_run_lists_the_skill_before_writing_it(self, capsys, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        monkeypatch.delenv("OPENCLAW_HOME", raising=False)
+        self._stub_install(monkeypatch)
+        with patch("sys.argv", ["searchts", "install"]):
+            main()
+        out = capsys.readouterr().out
+        files = len(cli._skill_file_names())
+        assert f"writes {files} agent skill files to ~/.agents/skills/searchts" in out
+
+    def test_skill_targets_follow_existing_dirs(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setenv("USERPROFILE", str(tmp_path))
+        monkeypatch.delenv("OPENCLAW_HOME", raising=False)
+        assert cli._skill_targets() == [str(tmp_path / ".agents" / "skills" / "searchts")]
+        (tmp_path / ".claude" / "skills").mkdir(parents=True)
+        assert cli._skill_targets() == [str(tmp_path / ".claude" / "skills" / "searchts")]
+
 
 class TestSetupRecommendsFirstPartySearch:
     """`searchts setup` recommends the keyless first-party search, not mcporter/Exa."""
