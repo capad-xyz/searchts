@@ -196,37 +196,6 @@ def test_login_kill_rejects_a_malformed_site():
     assert out.startswith("Error:")
 
 
-def test_login_signin_keeps_only_after_a_successful_signin(monkeypatch):
-    from searchts import signin_browser
-    from searchts.session_cookies import CookieSource
-
-    monkeypatch.setattr(
-        signin_browser, "signin",
-        lambda s, **kw: CookieSource(site=s, cookies=[
-            __import__("searchts.session_cookies", fromlist=["CookieRecord"])
-            .CookieRecord("sid", "S", "example.com", secure=True),
-        ], count=1, via="test"),
-    )
-    data = json.loads(mcp_server.login_signin("https://example.com"))
-    assert data["kept"] is True
-    assert data["host"] == "example.com"
-    assert json.loads(mcp_server.login_status())["kept"]
-
-
-def test_login_signin_reports_a_failure_without_raising(monkeypatch):
-    from searchts import signin_browser
-    from searchts.session_cookies import CookieReadError
-
-    monkeypatch.setattr(
-        signin_browser, "signin",
-        lambda s, **kw: (_ for _ in ()).throw(CookieReadError("chrome not installed")),
-    )
-    out = mcp_server.login_signin("https://example.com")
-    assert out.startswith("Error:")
-    assert "chrome not installed" in out
-    assert json.loads(mcp_server.login_status())["kept"] == {}
-
-
 def _tool_names():
     """The live tool list. ``list_tools`` is a coroutine on this SDK."""
     import asyncio
@@ -238,11 +207,43 @@ def test_the_four_login_tools_are_registered():
     assert {"login_status", "login_signin", "login_check", "login_kill"} <= _tool_names()
 
 
-def test_the_login_wall_error_names_a_registered_tool():
-    """An error naming a tool that does not exist is worse than no advice."""
+def test_login_signin_description_explains_the_stdio_refusal():
+    import asyncio
+
+    tools = asyncio.run(mcp_server.create_server().list_tools())
+    description = next(tool.description for tool in tools if tool.name == "login_signin")
+    assert "refuses before opening a browser" in description
+    assert "searchts login signin <url>" in description
+
+
+def test_the_login_wall_error_explains_the_terminal_route():
+    """The MCP tool name is explicitly described as unusable over stdio."""
     names = _tool_names()
     msg = mcp_server._login_wall_error("https://example.com", login_wall(), had_cookies=False)
-    assert "login_signin" in names and "login_signin" in msg
+    assert "login_signin" in names and "searchts login signin" in msg
+    assert "call `login_signin`" not in msg
+    assert "cannot finish over stdio" in msg
     # cookies_from_browser is a read_url argument, not a tool, so it is checked
     # separately: naming a flag is fine, naming a missing tool is not.
     assert "cookies_from_browser" in msg
+
+
+def test_mcp_signin_refuses_before_it_can_open_a_browser(monkeypatch):
+    """Stdio's stdin is the protocol, so refusal must precede browser launch."""
+    from searchts import signin_browser
+
+    class _Tty:
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(sys, "stdin", _Tty())
+    launched = []
+    monkeypatch.setattr(signin_browser, "signin", lambda *a, **k: launched.append(True))
+
+    out = mcp_server.login_signin("https://example.com")
+
+    assert out.startswith("Error:")
+    assert "No browser window was opened" in out
+    assert "nothing was kept" in out
+    assert "searchts login signin" in out
+    assert launched == []

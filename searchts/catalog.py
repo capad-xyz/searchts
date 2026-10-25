@@ -619,7 +619,7 @@ MCP_TOOLS: Dict[str, McpTool] = {
     "login_signin": McpTool(
         "login_signin", "login signin",
         notes=(
-            "MCP keeps the login; CLI `login signin` keeps only with `--yes`.",
+            "Cannot complete sign-in over MCP stdio; it refuses before opening a browser. Use `searchts login signin <url>` in a terminal.",
         ),
         cli_only_flags=("--yes",),
     ),
@@ -656,7 +656,7 @@ CLI_ONLY: Dict[str, str] = {
     "mcp serve": "this is the server itself; a tool for it would be the server",
     "mcp install": "writes client configs; the host does this once",
     "login": "parent verb for the login tools and the CLI-only login verbs",
-    "login keep": "MCP reaches the same login through `login_signin` or `read_url` + `cookies_from_browser`",
+    "login keep": "Use `searchts login signin <url>` in a terminal, or use `read_url` + `cookies_from_browser` for a Firefox-family browser; Chromium uses `cdp_port`",
     "login purge-scratch": "scratch copies are deleted at the end of every read",
     "login sweep": "expired cookies are swept on every MCP result; a tool would duplicate it",
     "update": "installing software is the user's act; MCP reports `update_available` instead",

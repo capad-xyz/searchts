@@ -207,7 +207,7 @@ def test_a_non_terminal_refuses_instead_of_reading_anyway(monkeypatch):
 
     assert read == []
     assert "terminal" in str(exc.value)
-    assert "cookies-from-browser" in str(exc.value)
+    assert "searchts login signin" in str(exc.value)
 
 
 def test_a_terminal_waits_for_the_person(monkeypatch):

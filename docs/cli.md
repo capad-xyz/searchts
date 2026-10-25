@@ -596,7 +596,7 @@ searchts login keep https://reddit.com --cookies-from-browser firefox
 | `2` | bad usage, or no browser was named |
 | `3` | consent is needed for the cookie copy |
 
-No MCP tool: MCP reaches the same login through `login_signin` or `read_url` + `cookies_from_browser`.
+No MCP tool: Use `searchts login signin <url>` in a terminal, or use `read_url` + `cookies_from_browser` for a Firefox-family browser; Chromium uses `cdp_port`.
 
 ### `login kill`
 
@@ -665,7 +665,7 @@ searchts login signin https://example.com --browser firefox --yes
 
 MCP: `login_signin`.
 CLI-only flags: `--yes`.
-- MCP keeps the login; CLI `login signin` keeps only with `--yes`.
+- Cannot complete sign-in over MCP stdio; it refuses before opening a browser. Use `searchts login signin <url>` in a terminal.
 
 ### `login purge-scratch`
 

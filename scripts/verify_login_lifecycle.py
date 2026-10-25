@@ -249,11 +249,11 @@ def main() -> int:
 
         # ── 5. COPY granted: used for this read, kept for nothing ─────────
         rule("5. Same read, after the session approves. Copied, not kept.")
-        import searchts.session_cookies as sc
         from searchts.login_store import grant_session_copy
         from searchts.session_cookies import CookieRecord, CookieSource
 
-        sc.for_site = lambda site, browser: CookieSource(
+        import searchts.cdp_profile as cdp
+        cdp.read_site_cookies = lambda site, browser, **kw: CookieSource(
             site=site, cookies=[CookieRecord("sid", "COPIED", site, secure=True)],
             count=1, via="browser (firefox)",
         )
@@ -287,26 +287,21 @@ def main() -> int:
         c.ok("and names both ways past it",
              "login_signin" in wall and "cookies_from_browser" in wall)
 
-        print("\n  the user signs in once:")
-        from searchts import signin_browser
+        print("\n  the MCP tool refuses before opening a window:")
+        refused = call_login("signin", "https://www.linkedin.com/feed")
+        show("login_signin('https://www.linkedin.com/feed')", "", refused, 0)
+        c.ok("MCP names the terminal sign-in command",
+             "searchts login signin" in refused)
+        from searchts.login_store import list_kept
+        c.ok("MCP keeps nothing without sign-in",
+             "nothing was kept" in refused and "www.linkedin.com" not in list_kept())
+        signin_root = Path(home) / ".searchts" / "cookies" / "signin"
+        c.ok("MCP refuses before opening a browser",
+             not signin_root.exists() and "No browser window was opened" in refused)
 
-        signin_browser.signin = lambda s, **kw: CookieSource(
-            site=s, cookies=[CookieRecord("li", "SIGNEDIN", "www.linkedin.com",
-                                          secure=True)],
-            count=1, via="sign-in browser (chrome)",
-        )
-        signed = json.loads(call_login("signin", "https://www.linkedin.com/feed"))
-        print(f"    {signed['why']}")
-
-        stub_ladder(authenticated=True)
-        after = json.loads(call_read("https://www.linkedin.com/feed"))
-        print("\n  the same read again, with no arguments:")
-        print(f"    authenticated : {after['authenticated']}")
-        print(f"    login_via     : {after['login_via']}")
-        c.ok("after sign-in the bare read is logged in",
-             after["authenticated"] is True)
-        c.ok("and came from the store, not the browser",
-             after["login_via"] == "owned store")
+        # Seed a known kept login so the next section can verify expired-login
+        # advice without pretending MCP sign-in worked.
+        seed("www.linkedin.com", "li", "SEEDED")
 
         # ── 7. an expired login gets different advice ─────────────────────
         rule("7. A kept login that has expired gets its own advice")

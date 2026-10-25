@@ -241,9 +241,7 @@ def wait_for_the_person(site: str, *, browser: str) -> None:
         raise CookieReadError(
             f"signing in to {site} has to wait for you, and there is no terminal "
             f"here to wait in. Run it from a terminal "
-            f"(`searchts login signin {site}`), or read the site with "
-            f"`--cookies-from-browser {browser}` instead, which copies a login you "
-            f"already have."
+            f"(`searchts login signin {site}`)."
         )
     print()
     print(f"Sign in to {site} in the {browser} window above.")

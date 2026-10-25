@@ -1909,6 +1909,7 @@ def _fetch_stealth_impl(
         # persisted any login it wants to keep, so a second copy in the browser
         # profile would be unnecessary and would outlive this one-site read.
         persistent = _use_persistent_profile() and not cookies
+        browser: Any
         try:
             if persistent:
                 profile_dir = _profile_path()
@@ -2194,6 +2195,7 @@ def _fetch_human_impl(url: str, timeout: int = 180) -> Tuple[Optional[int], str,
     pin_args = chromium_pin_args(url)
     with sync_playwright() as p:
         persistent = _use_persistent_profile()
+        browser: Any
         if persistent:
             profile_dir = _profile_path()
             browser = p.chromium.launch_persistent_context(

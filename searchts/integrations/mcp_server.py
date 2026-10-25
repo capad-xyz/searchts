@@ -14,7 +14,7 @@ Exposes these tools to an agent:
 - get_status: report which channels/backends are installed and active (doctor).
 - transcribe: the audio, when a read says the player has no captions, or a local file.
 - login_status: list kept site logins, never a cookie value.
-- login_signin: sign in once for a site and keep that login.
+- login_signin: MCP stdio cannot confirm sign-in; refuses before opening a window.
 - login_check: read one signed-in-only page with the saved cookies.
 - login_kill: delete searchts's own saved login for one site.
 
@@ -252,19 +252,16 @@ def create_server():
     @mcp.tool(
         name="login_signin",
         description=(
-            "Sign in once for a site, in a browser searchts opens, and keep "
-            "that login. Nothing is copied from the user's own browser. This "
-            "is the way past a login wall when the user has no browser session "
-            "worth copying, or refuses to have one read. A login kept this way "
-            "is not refreshed automatically, because there is no browser "
-            "source to re-copy; when it nears expiry the user is told to run "
-            "login_signin again. Requires the user to be at the machine to "
-            "sign in. Returns 'Error: ...' on failure."
+            "Cannot complete a sign-in over MCP stdio: there is no interactive "
+            "terminal to confirm it, so this tool refuses before opening a "
+            "browser. Have the user run `searchts login signin <url>` in a "
+            "terminal instead. Nothing is copied from the user's own browser. "
+            "Returns 'Error: ...' on failure."
             + UPDATE_CHECK_DESCRIPTION
         ),
     )
-    def login_signin_tool(url: str, browser: str = "chrome") -> str:
-        return login_signin(url, browser=browser)
+    def login_signin_tool(url: str) -> str:
+        return login_signin(url)
 
     @mcp.tool(
         name="login_check",
@@ -388,26 +385,21 @@ def login_status() -> str:
     ))
 
 
-def login_signin(url: str, browser: str = "chrome") -> str:
-    """Sign in once and keep it. The user's own browser is never read."""
-    from searchts.login_store import host_of, keep
-    from searchts.session_cookies import CookieReadError
-    from searchts.signin_browser import signin
+def login_signin(url: str) -> str:
+    """Refuse MCP stdio sign-in before opening a browser window."""
+    from searchts.login_store import host_of
 
     host = host_of(url)
     if not host:
         return f"Error: {url!r} is not a site searchts can file a login under."
-    try:
-        source = signin(url, browser=browser)
-    except CookieReadError as e:
-        return f"Error: {e}"
-    except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
-        return _unexpected("login_signin", e)
-    out = keep(url, source.cookies, browser=browser, consent=False)
-    return _with_update_info(json.dumps(
-        {"host": host, "kept": True, "cookies": out.count, "why": out.why},
-        ensure_ascii=False,
-    ))
+    # MCP stdio owns stdin for JSON-RPC, so it cannot ask the person to confirm
+    # that sign-in completed. Refuse before signin() creates a profile or opens
+    # a browser window. The CLI keeps its existing terminal interaction.
+    return (
+        "Error: login_signin over MCP stdio cannot confirm that sign-in "
+        "completed. No browser window was opened and nothing was kept. Run "
+        f"`searchts login signin {url}` in a terminal instead."
+    )
 
 
 def login_check(url: str, check_url: str = "") -> str:
@@ -478,15 +470,16 @@ def _login_wall_error(url: str, exc: BaseException, *, had_cookies: bool) -> str
             f"  {host} had a login sent and the site still returned its login "
             f"page, so that saved login has expired. Ask the user to "
             f"re-authenticate: call `login_kill` with host {host!r}, then "
-            f"`login_signin` for {url}."
+            f"run `searchts login signin {url}` in a terminal and try again. "
+            f"MCP `login_signin` cannot finish over stdio."
         )
     return base + (
         f"  {host} is behind a login and this read had none. Two ways forward:\n"
         f"    1. Ask the user to approve one copy for this session, then "
         f"re-call read_url with cookies_from_browser set to a Firefox-family "
         f"browser (firefox, zen, librewolf).\n"
-        f"    2. Ask the user to sign in once: call `login_signin` with url "
-        f"{url}. Then re-call read_url."
+        f"    2. MCP `login_signin` cannot finish over stdio. Ask the user to "
+        f"run `searchts login signin {url}` in a terminal, then re-call read_url."
     )
 
 
@@ -789,8 +782,9 @@ def read_url(
             return (
                 f"Error: this read needs a login and did not have one.\n{e}\n"
                 f"Either ask the user to approve one copy for this session, or "
-                f"have them sign in once with the `login_signin` tool, then "
-                f"call read_url again.{chromium_hint}"
+                f"have them run `searchts login signin {url}` in a terminal "
+                f"(MCP `login_signin` cannot finish over stdio), then call "
+                f"read_url again.{chromium_hint}"
             )
         except CookieReadError as e:
             if not cookies_from_browser:
