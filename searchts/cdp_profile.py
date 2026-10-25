@@ -546,6 +546,14 @@ def _records_from(cookies: Any) -> List[CookieRecord]:
     return out
 
 
+class NoSiteCookies(CookieReadError):
+    """The browser answered and holds no cookie for the site (yet).
+
+    A sign-in window polled before the person signs in is in exactly this
+    state, so that wait treats it as an empty read rather than a failure.
+    """
+
+
 def _read_one_site(browser_obj: Any, site: str, host: str, source: CookieSource) -> CookieSource:
     """Ask the connected browser for `host`'s cookies, and nothing else.
 
@@ -568,7 +576,7 @@ def _read_one_site(browser_obj: Any, site: str, host: str, source: CookieSource)
         ) from None
     scoped = filter_for_host(_records_from(raw), host)
     if not scoped:
-        raise CookieReadError(
+        raise NoSiteCookies(
             f"no cookies for {host} in that browser. Log in to the site there "
             f"first, then read again."
         )

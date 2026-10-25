@@ -90,7 +90,8 @@ MCP-only parameters and the deliberate CLI differences are listed in [docs/cli.m
 
 | Commands | Exit codes |
 |---|---|
-| `read`, `search`, `transcribe`, `grab`, `get` | `0` content or the requested output was returned; `1` the command failed; the reasons are on stderr; `2` bad usage, or a URL that cannot be read |
+| `read` | `0` the page was read; `1` every rung failed (a wall, a login page, a network error); `2` bad usage, a malformed URL, or the SSRF guard refused the URL |
+| `search`, `transcribe`, `grab`, `get` | `0` content or the requested output was returned; `1` the command failed; the reasons are on stderr; `2` bad usage, or a URL that cannot be read |
 | `mcp`, `mcp install`, `skill`, `skill install`, `install`, `setup`, `configure`, `uninstall` | `0` the command finished; `1` the command failed; the reason is on stderr; `2` bad usage |
 | `mcp serve` | `0` the server stopped normally; `1` the optional `mcp` extra is missing; `2` bad usage, or a non-loopback bind was refused |
 | `doctor` | `0` the health report was printed; `2` bad usage |

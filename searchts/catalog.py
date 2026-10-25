@@ -115,10 +115,16 @@ _add(Command(
         "searchts read https://x.com/jack/status/20 --json",
         "searchts read example.com --pages 3 --expand",
     ),
-    exit_codes=EXIT_CONTENT,
+    exit_codes=(
+        ("0", "the page was read"),
+        ("1", "every rung failed (a wall, a login page, a network error)"),
+        ("2", "bad usage, a malformed URL, or the SSRF guard refused the URL"),
+    ),
     notes=(
         "A player page comes back as its captions, or the failure names transcribe.",
         "A share link whose HTML is empty is still a read.",
+        "On failure `--json` prints `{\"url\", \"error\": {kind, message, exit_code, "
+        "attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.",
     ),
 ))
 _add(Command(
@@ -635,7 +641,10 @@ MCP_TOOLS: Dict[str, McpTool] = {
         "login_signin", "login signin",
         notes=(
             "MCP keeps the login; CLI `login signin` keeps only with `--yes`.",
+            "MCP has no terminal: the user closes the window to finish, and the "
+            "call waits up to `wait_seconds` (default 180, 30 to 900).",
         ),
+        mcp_only_params=("wait_seconds",),
         cli_only_flags=("--yes",),
     ),
     "login_check": McpTool(

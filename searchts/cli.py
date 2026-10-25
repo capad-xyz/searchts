@@ -2572,6 +2572,27 @@ def _human_chars(n: int) -> str:
     return f"{n / 1024:.1f} KB"
 
 
+def _print_read_json_error(url, kind, message, exit_code, *, attempts=(), hint="",
+                           login=""):
+    """One JSON object on stdout for a failed ``read --json``.
+
+    The human receipt still goes to stderr; this is what an agent parses.
+    ``kind`` is ``bad_url``, ``ssrf_refused``, ``login_wall`` or
+    ``read_failed``, and ``exit_code`` is the process exit code.
+    """
+    error = {
+        "kind": kind,
+        "message": message,
+        "exit_code": exit_code,
+        "attempts": [{"backend": b, "reason": why} for b, why in attempts],
+    }
+    if hint:
+        error["hint"] = hint
+    if login:
+        error["login"] = login
+    print(json.dumps({"url": url, "error": error}, ensure_ascii=False))
+
+
 def _cmd_read(args):
     """Fetch a URL through the unlocker and print clean markdown.
 
@@ -2588,6 +2609,8 @@ def _cmd_read(args):
     problem = ux.check_url(args.url)
     if problem:
         print(f"searchts read: {problem}", file=sys.stderr)
+        if args.json:
+            _print_read_json_error(args.url, "bad_url", problem, 2)
         sys.exit(2)
 
     cookies = _read_command_cookies(args)
@@ -2681,7 +2704,18 @@ def _cmd_read(args):
                 width=78,
             )
             print(text, file=sys.stderr)
-            sys.exit(1)
+            # The SSRF guard refusing is "a URL that cannot be read" (exit 2 in
+            # the catalog); a page that failed on every rung is exit 1.
+            code = 2 if unlocker._is_refusal(e) else 1
+            if args.json:
+                kind = "ssrf_refused" if code == 2 else (
+                    "login_wall" if wall else "read_failed"
+                )
+                _print_read_json_error(
+                    args.url, kind, str(e), code, attempts=e.attempts, hint=e.hint,
+                    login=_login_wall_hint_text(args.url) if wall else "",
+                )
+            sys.exit(code)
 
     # Surface prompt-injection findings to stderr so stdout stays clean content.
     if result.warnings:

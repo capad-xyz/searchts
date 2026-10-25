@@ -259,13 +259,24 @@ def create_server():
             "worth copying, or refuses to have one read. A login kept this way "
             "is not refreshed automatically, because there is no browser "
             "source to re-copy; when it nears expiry the user is told to run "
-            "login_signin again. Requires the user to be at the machine to "
-            "sign in. Returns 'Error: ...' on failure."
+            "login_signin again. Requires the user to be at the machine: tell "
+            "them a window will open, they sign in there and then CLOSE the "
+            "window to finish. Opening that window is the approval; nothing "
+            "else is asked. The call waits up to wait_seconds (default 180, "
+            "30 to 900) and keeps nothing if the time runs out or the window "
+            "is closed without a sign-in. Raise wait_seconds only if the host "
+            "allows tool calls that long. Returns JSON {host, kept, cookies, "
+            "why}, or 'Error: ...' on failure."
             + UPDATE_CHECK_DESCRIPTION
         ),
     )
-    def login_signin_tool(url: str, browser: str = "chrome") -> str:
-        return login_signin(url, browser=browser)
+    async def login_signin_tool(
+        url: str, browser: str = "chrome", wait_seconds: int = 180,
+    ) -> str:
+        # Minutes of waiting for a person; keep the MCP loop free meanwhile.
+        return await asyncio.to_thread(
+            login_signin, url, browser=browser, wait_seconds=wait_seconds,
+        )
 
     @mcp.tool(
         name="login_check",
@@ -389,8 +400,20 @@ def login_status() -> str:
     ))
 
 
-def login_signin(url: str, browser: str = "chrome") -> str:
-    """Sign in once and keep it. The user's own browser is never read."""
+#: Bounds for login_signin's wait. Long enough to type a password and pass a
+#: 2FA prompt; short enough that a forgotten window does not hang the host.
+SIGNIN_WAIT_DEFAULT = 180
+SIGNIN_WAIT_MIN = 30
+SIGNIN_WAIT_MAX = 900
+
+
+def login_signin(url: str, browser: str = "chrome",
+                 wait_seconds: int = SIGNIN_WAIT_DEFAULT) -> str:
+    """Sign in once and keep it. The user's own browser is never read.
+
+    There is no terminal under MCP, so the person finishes by closing the
+    window; see :func:`searchts.signin_browser.wait_for_window_close`.
+    """
     from searchts.login_store import host_of, keep
     from searchts.session_cookies import CookieReadError
     from searchts.signin_browser import signin
@@ -399,7 +422,12 @@ def login_signin(url: str, browser: str = "chrome") -> str:
     if not host:
         return f"Error: {url!r} is not a site searchts can file a login under."
     try:
-        source = signin(url, browser=browser)
+        wait = int(wait_seconds or SIGNIN_WAIT_DEFAULT)
+    except (TypeError, ValueError):
+        wait = SIGNIN_WAIT_DEFAULT
+    wait = max(SIGNIN_WAIT_MIN, min(wait, SIGNIN_WAIT_MAX))
+    try:
+        source = signin(url, browser=browser, wait_s=wait)
     except CookieReadError as e:
         return f"Error: {e}"
     except Exception as e:  # noqa: BLE001 - MCP contract: Error string, never a raise
