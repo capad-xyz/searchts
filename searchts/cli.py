@@ -1179,7 +1179,7 @@ def _skill_file_names() -> list:
     from pathlib import Path
 
     try:
-        refs = importlib.resources.files("searchts").joinpath("skill", "references")
+        refs = importlib.resources.files("searchts").joinpath("skill").joinpath("references")
         names = [r.name for r in refs.iterdir()]
     except Exception:
         refs = Path(__file__).resolve().parent / "skill" / "references"
