@@ -103,7 +103,7 @@ _LIST_MAX_KEPT = 0.3
 class More:
     """One finding: what kind, the note text, and a URL when there is one."""
 
-    kind: str  # next-page | feed | fold | list | count | index | region
+    kind: str  # next-page | feed | fold | list | count | index | region | app-shell
     note: str
     url: Optional[str] = None
 
@@ -1501,6 +1501,11 @@ def detect(
         source = data_source_note(html, text)
         if source:
             found.append(source)
+        # #346: independent of the source note. The data can supply a little
+        # of the page and still leave most of it unrendered.
+        shell = app_shell_note(html, text)
+        if shell:
+            found.append(shell)
         base = _base_url(doc, url)
         best_list = _best_list(doc)
         listed = _list_kept_items(best_list, text)
@@ -1823,7 +1828,7 @@ def annotate(text: str, found: List[More]) -> str:
 def summary(found: List[More]) -> str:
     """Short stderr tick, e.g. ``more: next page, folded``."""
     names = {"next-page": "next page", "paginated": "paginated", "feed": "feed", "fold": "folded", "list": "partial list", "count": "page count", "index": "list index", "region": "left out", "share": "short read", "context": "context",
-           "media": "media", "source": "page data"}
+           "media": "media", "source": "page data", "app-shell": "app shell"}
     seen: List[str] = []
     for m in found:
         name = names.get(m.kind, m.kind)
@@ -2685,6 +2690,66 @@ def data_source_note(
         "source",
         f"[source: {', '.join(name for name, _ in blocks)}, the page's own data; "
         f"{added:,} characters the markup did not show]",
+    )
+
+
+#: #346: an app shell is reported only when its state holds at least this much
+#: text the read does not, and at least as much as the read itself has. Below
+#: either, the extract is most of the page and a note would be noise.
+_SHELL_MIN_MISSING = 3_000
+_SHELL_LETTERS = re.compile(r"[^\W\d_]{2,}")
+#: A field that is code, markup or an address, not words a reader sees.
+_SHELL_NOT_PROSE = re.compile(r"[{};<>]|=>|^(?:https?:|/|#|data:)")
+
+
+def app_shell_note(html: str, text: str) -> Optional[More]:
+    """#346: the served HTML is a JavaScript shell and the read is not the page.
+
+    A front page that renders its articles in JavaScript can still serve a fat
+    widget (a markets ticker, deks without headlines) that clears every length
+    gate. The words the page is really made of are in its app state, not in
+    the markup. This counts the prose the state holds that the read does not
+    contain and says so, rather than gating on it: the read is real, it is
+    only not the whole page, and the agent decides whether to render it.
+
+    Counts only, never the text: a paywalled page's state is the copy the
+    paywall is charging for, and this note does not read it out.
+    """
+    if not html or not text or len(html) > _NOTE_MAX_HTML:
+        return None
+    read = _plain(text)
+    seen: set = set()
+    missing = 0
+    pieces = 0
+    for _name, data in _state_blobs(html):
+        stack: List[Any] = [data]
+        nodes = 0
+        while stack and nodes < _STATE_MAX_NODES * 5:
+            node = stack.pop()
+            nodes += 1
+            if isinstance(node, dict):
+                stack.extend(node.values())
+            elif isinstance(node, list):
+                stack.extend(node)
+            elif isinstance(node, str):
+                value = node.strip()
+                if len(_SHELL_LETTERS.findall(value)) < 4 or _SHELL_NOT_PROSE.search(value):
+                    continue
+                key = _plain(value)
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                if key not in read:
+                    missing += len(value)
+                    pieces += 1
+    if missing < _SHELL_MIN_MISSING or missing < plain_len(text):
+        return None
+    return More(
+        "app-shell",
+        f"[app shell: this page renders most of its text in JavaScript; its app "
+        f"data holds {missing:,} characters in {pieces:,} fields that this read "
+        f"does not include, so the read may be a widget or the page's chrome "
+        f"rather than its articles; a browser read (CLI --backend stealth-browser) renders it]",
     )
 
 
