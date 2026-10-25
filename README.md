@@ -139,6 +139,22 @@ searchts get https://example.com/logo.svg -o logo.svg        # one file a read n
 searchts grab https://stripe.com --kinds images,fonts,svg --read --out ./stripe-kit
 ```
 
+Local transcription ships with whisper.cpp. The default quantized small model
+is about 190 MB and downloads only when a transcription reaches audio and you
+approve it: a terminal asks once, while an agent gets a structured consent
+result with the model size, source, cache path and exact --yes retry. Cached
+models work offline. Select small, turbo or base with --model, the
+whisper_model config key, or SEARCHTS_WHISPER_MODEL; --hint supplies names or
+other words to the decoder, and --translate opts into English output (not
+supported by turbo). Use searchts transcribe --list-models to inspect the
+cache and searchts transcribe --remove-model small --yes to remove a cached
+model after approval. faster-whisper remains an explicit migration fallback
+with --provider local-fw while it is installed. The published pywhispercpp
+wheels are CPU-only: CPython 3.10-3.14 wheels cover Linux x64/arm64, Windows
+x64 and macOS arm64; Windows arm64 and macOS x64 have no wheel. Metal, Vulkan
+and CUDA wheels are not yet shipped, so supported wheel installs report CPU.
+Building GPU wheels and filling the two wheel gaps are a follow-up.
+
 `grab` saves the set of files when the files are the deliverable. It uses the same unlocker, so a fingerprint-gated CDN is the same ladder as a read.
 
 ## Why the package is free

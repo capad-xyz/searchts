@@ -90,7 +90,8 @@ def test_empty_whisper_is_error(monkeypatch, tmp_path):
     monkeypatch.setattr("searchts.transcribe.Path.is_file", lambda self: True)
     monkeypatch.setattr("searchts.transcribe._provider_order", lambda *a, **k: ["local"])
     monkeypatch.setattr("searchts.transcribe._validate_backend", lambda *a, **k: None)
-    monkeypatch.setattr("searchts.transcribe.compress_audio", lambda p, d: audio)
+    monkeypatch.setattr("searchts.transcribe._preflight_local", lambda *a, **k: None)
+    monkeypatch.setattr("searchts.transcribe.chunk_audio", lambda p, d: [audio])
     monkeypatch.setattr(
         "searchts.transcribe._transcribe_with_fallback", lambda *a, **k: "  "
     )

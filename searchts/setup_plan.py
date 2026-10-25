@@ -246,9 +246,9 @@ def items() -> List[SetupItem]:
         ),
         SetupItem(
             id="whisper-model",
-            title="Local Whisper model (small)",
+            title="Local Whisper model (small q5_1)",
             what_it_unlocks="keyless local transcription",
-            size_bytes=466 * _MB, size_is_estimate=True,
+            size_bytes=190 * _MB, size_is_estimate=True,
             needs_login=False, needs_system_change=False, default_selected=False,
             when="first_use", installed=lambda: False,
             note="asked for, with its size, the first time you transcribe locally",

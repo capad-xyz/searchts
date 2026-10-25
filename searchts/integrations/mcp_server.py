@@ -156,11 +156,20 @@ TRANSCRIBE_DESCRIPTION = (
     "error that names this tool for the audio. Subtitles-first: existing "
     "captions via "
     "yt-dlp need no API key; otherwise Whisper (Groq/OpenAI if configured, "
-    "else keyless local faster-whisper). prefer_subtitles defaults true; "
-    "set false to force audio. cookies_from_browser is opt-in "
-    "(chrome/firefox/…) and uses THIS machine's browser cookies; read_url "
-    "does not copy them. Returns the transcript text, or an 'Error: ...' "
-    "string on failure."
+    "else keyless local whisper.cpp, bundled; provider=local-fw forces the "
+    "temporary faster-whisper fallback. The PyPI wheel is CPU-only "
+    "today; GPU-enabled wheels are a follow-up. prefer_subtitles defaults "
+    "true; set false to force audio. Local options: model (small default, "
+    "turbo, base), hint (names or words the audio contains, e.g. from the "
+    "page title), translate (to English; not with turbo). The local model is "
+    "downloaded once: without yes=true the call returns an Error naming its "
+    "size and source; ask the user, then call again with yes=true. "
+    "cookies_from_browser is opt-in (chrome/firefox/…) and uses THIS "
+    "machine's browser cookies; read_url does not copy them. Returns the "
+    "transcript text, then a `transcribed_by:` JSON line (source, engine, "
+    "model, device, detected language). Missing-model consent is returned as "
+    "structured JSON with the exact yes=true approval; other failures use an "
+    "'Error: ...' string."
     + UPDATE_CHECK_DESCRIPTION
 )
 
@@ -373,6 +382,10 @@ def create_server():
         provider: str = "auto",
         prefer_subtitles: bool = True,
         cookies_from_browser: str = "",
+        model: str = "",
+        hint: str = "",
+        translate: bool = False,
+        yes: bool = False,
     ) -> str:
         # yt-dlp / Whisper is blocking; keep the MCP loop free (same as
         # read_url), including the update lookup's possible GitHub GET.
@@ -383,6 +396,10 @@ def create_server():
             provider,
             prefer_subtitles,
             cookies_from_browser or None,
+            model=model or None,
+            hint=hint or None,
+            translate=translate,
+            yes=yes,
             update_info=info,
         )
 
@@ -588,6 +605,7 @@ def _with_update_info(result: str, info: Any = _UPDATE_UNSET) -> str:
 
     if info is _UPDATE_UNSET:
         info = _update_lookup()
+    result = _with_fw_migration_note(result)
     if not info:
         return result
     note = update_note(info)
@@ -598,12 +616,44 @@ def _with_update_info(result: str, info: Any = _UPDATE_UNSET) -> str:
     if isinstance(data, dict):
         data["update_available"] = info
         if note:
-            data["update_note"] = note
+            current = data.get("update_note")
+            data["update_note"] = "\n\n".join(
+                value for value in (current, note) if value
+            )
         return json.dumps(data, ensure_ascii=False)
     lines = [f"update_available: {json.dumps(info, ensure_ascii=False)}"]
     if note:
         lines.append(note)
     return result.rstrip() + "\n\n" + "\n".join(lines)
+
+
+# TODO(remove-after-window): remove with searchts/fw_migration.py.
+def _with_fw_migration_note(result: str) -> str:
+    """TEMPORARY (#439): the faster-whisper removal note, once a day, while it
+    is installed. A JSON result uses the existing ``update_note`` channel."""
+    try:
+        from searchts.fw_migration import maybe_agent_note
+
+        note = maybe_agent_note()
+    except Exception:  # noqa: BLE001 - a notice must never break a tool result
+        return result
+    if not note:
+        return result
+    try:
+        data = json.loads(result)
+    except (TypeError, ValueError):
+        data = None
+    if isinstance(data, dict):
+        current = data.get("update_note")
+        data["update_note"] = "\n\n".join(
+            value for value in (current, note["note"]) if value
+        )
+        data["fw_migration_report"] = note["report"]
+        return json.dumps(data, ensure_ascii=False)
+    return (
+        result.rstrip() + "\n\nupdate_note: " + note["note"]
+        + "\nfw_migration_report: " + json.dumps(note["report"], ensure_ascii=False)
+    )
 
 
 #: Folder names that run what lands in them (login items, autostart).
@@ -1157,6 +1207,10 @@ def transcribe_source(
     prefer_subtitles: bool = True,
     cookies_from_browser: str | None = None,
     *,
+    model: str | None = None,
+    hint: str | None = None,
+    translate: bool = False,
+    yes: bool = False,
     update_info: Any = _UPDATE_UNSET,
 ) -> str:
     """Transcribe a URL or local file. Error-string contract, like read_url.
@@ -1166,7 +1220,7 @@ def transcribe_source(
     ``cookies_from_browser``. Progress ticks stay off (MCP protocol).
     """
     from searchts import ssrf
-    from searchts.transcribe import TranscribeError, transcribe
+    from searchts.transcribe import ModelDownloadNeeded, TranscribeError, transcribe_result
 
     if not source or not str(source).strip():
         return "Error: transcribe requires a 'source' argument."
@@ -1177,13 +1231,35 @@ def transcribe_source(
             return blocked
     cookies = (cookies_from_browser or "").strip() or None
     try:
-        return _with_update_info(transcribe(
+        result = transcribe_result(
             source,
             provider=provider or "auto",
             prefer_subtitles=prefer_subtitles,
             cookies_from_browser=cookies,
             progress=False,
-        ), update_info)
+            model=(model or "").strip() or None,
+            hint=(hint or "").strip() or None,
+            translate=bool(translate),
+            yes=bool(yes),
+        )
+        text = result.text
+        if result.engine:
+            text = (
+                text.rstrip() + "\n\ntranscribed_by: "
+                + json.dumps(result.receipt(), ensure_ascii=False)
+            )
+        return _with_update_info(text, update_info)
+    except ModelDownloadNeeded as e:
+        return _with_update_info(json.dumps({
+            "schema": "searchts.transcribe.v1",
+            "ok": False,
+            "consent_needed": True,
+            "error": str(e),
+            "model_download": {
+                **e.model,
+                "approve": "Call transcribe again with yes=true after user approval.",
+            },
+        }, ensure_ascii=False), update_info)
     except TranscribeError as e:
         return _as_mcp_params(f"Error: {e}")
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise

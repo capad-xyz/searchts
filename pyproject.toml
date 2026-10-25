@@ -51,6 +51,11 @@ dependencies = [
     # A bundled ffmpeg binary (no ffprobe; nothing searchts runs needs it).
     # Used when ffmpeg is not on PATH, so transcription needs no system install.
     "imageio-ffmpeg>=0.5",
+    # #439: keyless local transcription runs on whisper.cpp. PyPI ships CPU
+    # wheels for CPython 3.10-3.14 on Windows x64, macOS arm64, and Linux
+    # x64/arm64. Windows arm64/macOS x64 may build from source. GPU wheels are
+    # not published; Metal/Vulkan wheels are a separately approved follow-up.
+    "pywhispercpp>=1.5,<2",
 ]
 
 [project.optional-dependencies]
@@ -60,7 +65,10 @@ dependencies = [
 browser = []
 cookies = []
 mcp = []
-local-transcribe = ["faster-whisper>=1.0"]  # keyless local Whisper (searchts transcribe --provider local)
+# #439: whisper.cpp (pywhispercpp) is the local engine, in the base install.
+# faster-whisper stays installable as the fallback during the migration window
+# (30 days and 2 releases after the release that ships this), then goes.
+local-transcribe = ["faster-whisper>=1.0"]  # fallback local engine (searchts transcribe --provider local-fw)
 all = ["faster-whisper>=1.0"]
 dev = [
     "pytest>=8.0",
@@ -111,4 +119,4 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 check_untyped_defs = true
 ignore_missing_imports = true
-exclude = ["^tests/"]
+exclude = ["^tests/", "^.venv/"]

@@ -330,7 +330,9 @@ class TestOrchestrator:
             tr.transcribe(str(chunk_file), provider="azure", config=fake_config)
 
 
-# --- local backend (faster-whisper) ----------------------------------- #
+# --- local backend: the faster-whisper fallback (#439) ----------------- #
+# whisper.cpp has its own tests in test_whispercpp.py. Here it is made
+# unavailable so `local` falls back to faster-whisper.
 
 
 class _FakeSegment:
@@ -362,7 +364,8 @@ def _clear_local_model_cache():
 
 
 def _patch_local(monkeypatch, model=None, samples=None):
-    """Make the local backend importable, stub ffmpeg, and return the model."""
+    """Make the faster-whisper fallback importable, stub ffmpeg, return the model."""
+    monkeypatch.setattr(tr, "whispercpp_available", lambda: False)
     fake = model or _FakeWhisperModel("base")
     decoded = samples if samples is not None else object()
     monkeypatch.setattr(tr, "local_available", lambda: True)
@@ -443,10 +446,14 @@ def _numpy_for_local_test(monkeypatch):
 
 
 class TestLocalBackend:
-    def test_transcribe_chunk_local_joins_segments(self, monkeypatch, fake_config, chunk_file):
+    @pytest.fixture(autouse=True)
+    def _no_whispercpp(self, monkeypatch):
+        monkeypatch.setattr(tr, "whispercpp_available", lambda: False)
+
+    def test_transcribe_chunk_faster_whisper_joins_segments(self, monkeypatch, fake_config, chunk_file):
         samples = object()
         fake = _patch_local(monkeypatch, samples=samples)
-        text = tr.transcribe_chunk_local(chunk_file, config=fake_config)
+        text = tr.transcribe_chunk_faster_whisper(chunk_file, config=fake_config)
         assert text == "local transcript"
         assert fake.transcribe_calls == [samples]
 
@@ -459,9 +466,10 @@ class TestLocalBackend:
     def test_provider_local_end_to_end(self, monkeypatch, fake_config, tmp_path, chunk_file):
         # No hosted key at all; provider="local" should still produce text.
         _patch_local(monkeypatch)
-        compressed = tmp_path / "compressed.m4a"
-        compressed.write_bytes(b"x" * 1024)
-        monkeypatch.setattr(tr, "compress_audio", lambda src, out_dir: compressed)
+        seen = []
+        monkeypatch.setattr(
+            tr, "chunk_audio", lambda src, out_dir: seen.append(src) or [src]
+        )
 
         def boom_post(*a, **k):
             raise Tripwire("local must not make HTTP calls")
@@ -471,9 +479,10 @@ class TestLocalBackend:
             str(chunk_file), provider="local", out_dir=tmp_path / "work", config=fake_config
         )
         assert text == "local transcript"
+        assert seen == [chunk_file]
 
     def test_auto_falls_back_to_local_when_no_key(self, monkeypatch, fake_config):
-        # No hosted key configured, faster-whisper present -> auto picks local.
+        # No hosted key configured, a local engine present -> auto picks local.
         _patch_local(monkeypatch)
         assert tr._provider_order("auto", fake_config) == ["local"]
 
@@ -485,9 +494,7 @@ class TestLocalBackend:
 
     def test_auto_end_to_end_uses_local(self, monkeypatch, fake_config, tmp_path, chunk_file):
         _patch_local(monkeypatch)
-        compressed = tmp_path / "compressed.m4a"
-        compressed.write_bytes(b"x" * 1024)
-        monkeypatch.setattr(tr, "compress_audio", lambda src, out_dir: compressed)
+        monkeypatch.setattr(tr, "chunk_audio", lambda src, out_dir: [src])
         monkeypatch.setattr(
             tr.requests, "post",
             lambda *a, **k: (_ for _ in ()).throw(AssertionError("no HTTP for local")),
@@ -509,7 +516,7 @@ class TestLocalBackend:
 
         monkeypatch.setattr(tr, "_import_faster_whisper", no_import)
         with pytest.raises(tr.MissingDependency, match="searchts\\[local-transcribe\\]"):
-            tr.transcribe_chunk_local(chunk_file, config=fake_config)
+            tr.transcribe_chunk_faster_whisper(chunk_file, config=fake_config)
 
     def test_no_backend_at_all_actionable_error(self, monkeypatch, fake_config, chunk_file):
         # Neither a hosted key nor faster-whisper -> NoProviderConfigured mentioning both.
@@ -532,7 +539,7 @@ class TestLocalBackend:
         # The fake module is what local_available and _load_local_model see.
         assert tr.local_available() is True
 
-        text = tr.transcribe_chunk_local(generated_audio, config=fake_config)
+        text = tr.transcribe_chunk_faster_whisper(generated_audio, config=fake_config)
 
         assert text == "local transcript"
         model = created[0]
@@ -561,13 +568,30 @@ class TestLocalBackend:
 
         monkeypatch.setattr(tr.subprocess, "run", failing_run)
         with pytest.raises(tr.TranscribeError) as ei:
-            tr.transcribe_chunk_local(chunk_file, config=fake_config)
+            tr.transcribe_chunk_faster_whisper(chunk_file, config=fake_config)
 
         message = str(ei.value)
         assert "ffmpeg failed" in message
         assert "Invalid data found when processing input" in message
         assert "Invalid data found when processing input" in ei.value.output
         assert fake.transcribe_calls == []
+
+    def test_ffmpeg_decode_is_capped_and_refuses_truncated_pcm(
+        self, monkeypatch, fake_config, chunk_file
+    ):
+        monkeypatch.setattr(tr, "LOCAL_PCM_OUTPUT_LIMIT_BYTES", 64)
+        monkeypatch.setattr(tr, "LOCAL_PCM_OUTPUT_HEADROOM_BYTES", 8)
+        monkeypatch.setattr(tr, "_require", lambda binary: None)
+        seen = {}
+
+        def limited_run(cmd, capture_output, timeout):
+            seen["cmd"] = cmd
+            return subprocess.CompletedProcess(cmd, 0, stdout=b"x" * 56, stderr=b"")
+
+        monkeypatch.setattr(tr.subprocess, "run", limited_run)
+        with pytest.raises(tr.TranscribeError, match="decoded too much audio"):
+            tr._decode_chunk_ffmpeg(chunk_file)
+        assert seen["cmd"][seen["cmd"].index("-fs") + 1] == "56"
 
     def test_ffmpeg_empty_decode_is_an_error(self, monkeypatch, fake_config, chunk_file):
         fake = _FakeWhisperModel("base")
@@ -580,7 +604,7 @@ class TestLocalBackend:
 
         monkeypatch.setattr(tr.subprocess, "run", empty_run)
         with pytest.raises(tr.TranscribeError, match="ffmpeg produced no audio"):
-            tr.transcribe_chunk_local(chunk_file, config=fake_config)
+            tr.transcribe_chunk_faster_whisper(chunk_file, config=fake_config)
         assert fake.transcribe_calls == []
 
     def test_model_failure_keeps_underlying_error(self, monkeypatch, fake_config, chunk_file):
@@ -593,7 +617,7 @@ class TestLocalBackend:
             tr.TranscribeError,
             match="local: faster-whisper failed: decoder exploded",
         ):
-            tr.transcribe_chunk_local(chunk_file, config=fake_config)
+            tr.transcribe_chunk_faster_whisper(chunk_file, config=fake_config)
 
         # The receipt the CLI prints is this outer message; it must not drop
         # the model's own text.

@@ -147,13 +147,26 @@ _add(Command(
     lead="A player page's words: captions, then Whisper.",
     body=(
         "Captions come first and cost nothing. Audio goes to Groq, then OpenAI",
-        "if a key is set, else the keyless local Whisper. A local file works",
-        "the same way.",
+        "if a key is set, else whisper.cpp, which ships with searchts and runs",
+        "locally with no key. PyPI wheels are CPU-only today; GPU wheels are",
+        "a follow-up. A local file works the same way. The quantized small",
+        "model (about 190 MB; --model turbo or base) downloads after approval:",
+        "a terminal is asked, an agent",
+        "passes --yes only after the user agreed. --json names the engine,",
+        "model, device and detected language. --cleanup (temporary) removes",
+        "the old faster-whisper fallback after showing what else uses it.",
+        "Use --list-models to inspect the cache or --remove-model NAME --yes",
+        "to remove one. --hint supplies names; --translate opts into English",
+        "output (not supported by turbo).",
+        "Use --provider local-fw to force the temporary faster-whisper fallback.",
     ),
     examples=(
         "searchts transcribe https://www.youtube.com/watch?v=...",
-        "searchts transcribe talk.mp4 --provider local",
-        "searchts transcribe https://www.instagram.com/reel/... --cookies-from-browser chrome",
+        "searchts transcribe talk.mp4 --provider local --model turbo",
+        "searchts transcribe https://www.instagram.com/reel/... --hint \"Laurentius, Dark Souls\"",
+        "searchts transcribe --list-models",
+        "searchts transcribe --remove-model small --yes",
+        "searchts transcribe --cleanup --dry-run",
     ),
     exit_codes=EXIT_CONTENT,
 ))
@@ -639,8 +652,18 @@ MCP_TOOLS: Dict[str, McpTool] = {
         notes=(
             "`prefer_subtitles` mirrors CLI `--no-subtitles`.",
             "`cookies_from_browser` is passed to yt-dlp, same as the CLI flag.",
+            "`yes` is CLI `--yes`: the user's approval to download the local model.",
+            "A missing-model response is structured and names its size, source, "
+            "cache path, and yes=true approval.",
+            "The text ends with a `transcribed_by:` JSON line, the receipt "
+            "CLI `--json` puts under `receipt`.",
+            "Use provider=local-fw to force the temporary faster-whisper fallback.",
+            "`--cleanup` (temporary faster-whisper removal) is CLI only.",
         ),
-        cli_only_flags=("-o",),
+        cli_only_flags=(
+            "-o", "--json", "--cleanup", "--dry-run", "--list-models",
+            "--remove-model",
+        ),
         param_flags=(("prefer_subtitles", "--no-subtitles"),),
     ),
     "login_status": McpTool(
