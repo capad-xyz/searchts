@@ -105,15 +105,15 @@ All three surfaces call the same core — pick by how your agent works:
 
 | MCP tool | CLI command | Deliberate difference |
 |---|---|---|
-| `read_url` | `searchts read` | MCP-only `cursor`, `page_items`, `max_media`; CLI-only `--human`, `--scrub`, `--backend`, `--pages`, `--items`, `--media`, `--expand`, `--json`. |
-| `web_search` | `searchts search` | MCP default `max_results=5`, CLI `-n` default 10. MCP has no `provider`; the CLI does. |
-| `fetch_asset` | `searchts get` | MCP saves only under the server working directory or `SEARCHTS_MCP_OUT_DIR`; CLI `-o` takes a path. |
-| `grab_site` | `searchts grab` | MCP-only `max_assets` (CLI `--max`); MCP-only `max_tokens` (CLI `--tokens`); MCP saves under the same safe folder. |
-| `get_status` | `searchts doctor` | Same report. |
-| `transcribe` | `searchts transcribe` | `prefer_subtitles` mirrors CLI `--no-subtitles`; `cookies_from_browser` is the same opt-in. |
+| `read_url` | `searchts read` | `max_pages`, `max_items`, `max_media` are CLI `--pages`, `--items`, `--media`; `expand`, `cookies`, `cookies_from_browser`, `cdp_port`, `proxy`, `proxy_trusted` match their flags. MCP-only `cursor`, `page_items`; CLI-only `--human`, `--scrub`, `--backend`, `--json`, `--yes`. |
+| `web_search` | `searchts search` | `max_results` is CLI `-n`: MCP default 5, CLI default 10. MCP has no `provider`; the CLI does. |
+| `fetch_asset` | `searchts get` | `out_dir` is CLI `-o`, but MCP saves only under the server working directory or `SEARCHTS_MCP_OUT_DIR`; CLI `-o` takes any path. |
+| `grab_site` | `searchts grab` | `out_dir`, `max_assets`, `max_tokens` are CLI `--out`, `--max`, `--tokens`; `read` matches `--read`. MCP saves under the same safe folder. CLI-only `--kinds`, `--scripts`, `--json`. |
+| `get_status` | `searchts doctor` | Same report. CLI-only `--json`. |
+| `transcribe` | `searchts transcribe` | `provider` matches `--provider`; `prefer_subtitles` mirrors CLI `--no-subtitles`; `cookies_from_browser` is the same opt-in. CLI-only `-o`. |
 | `login_status` | `searchts login list` | Same audit, never a cookie value. |
 | `login_signin` | `searchts login signin` | MCP keeps the login; the CLI keeps only with `--yes`. |
-| `login_check` | `searchts login check` | `check_url` mirrors CLI `--url`. |
+| `login_check` | `searchts login check` | `url` is the CLI's `site` positional; `check_url` mirrors CLI `--url`. |
 | `login_kill` | `searchts login kill` | `also_browser` mirrors CLI `--also-browser`. |
 
 CLI-only by design (no tool): `setup`, `install`, `configure`, `uninstall`, `skill install`, `mcp serve`, `mcp install`, `login keep`, `login purge-scratch`, `login sweep`, `update`, `check-update`, `watch`, `version`, `help`. `searchts help --json` lists the same mapping (`mcp.tools`, `mcp.cli_only`, `mcp.reason`).

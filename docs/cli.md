@@ -61,8 +61,8 @@ searchts read example.com --pages 3 --expand
 | `2` | bad usage, or a URL that cannot be read |
 
 MCP: `read_url`.
-MCP-only parameters: `cursor`, `page_items`, `max_media`.
-CLI-only flags: `--human`, `--scrub`, `--backend`, `--pages`, `--items`, `--media`, `--expand`, `--json`.
+MCP-only parameters: `cursor`, `page_items`.
+CLI-only flags: `--human`, `--scrub`, `--backend`, `--json`, `--yes`.
 - Same unlocker path as `searchts read`.
 - The JSON has no `next_url`: a page-authored URL is not a safe next request. Use the signed `next_cursor`, or `searchts read --json` when a human wants the URL.
 
@@ -101,7 +101,7 @@ searchts search "rust 2026" --json
 | `2` | bad usage, or a URL that cannot be read |
 
 MCP: `web_search`.
-CLI-only flags: `-n`, `--provider`, `--json`.
+CLI-only flags: `--provider`, `--json`.
 - MCP default is max_results=5 (CLI `-n` default is 10).
 - MCP has no `provider` parameter; the CLI does.
 
@@ -141,7 +141,7 @@ searchts transcribe https://www.instagram.com/reel/... --cookies-from-browser ch
 | `2` | bad usage, or a URL that cannot be read |
 
 MCP: `transcribe`.
-CLI-only flags: `-o`, `--output`, `--provider`, `--no-subtitles`.
+CLI-only flags: `-o`.
 - `prefer_subtitles` mirrors CLI `--no-subtitles`.
 - `cookies_from_browser` is passed to yt-dlp, same as the CLI flag.
 
@@ -184,7 +184,7 @@ searchts grab https://example.com --tokens 60 --json
 | `2` | bad usage, or a URL that cannot be read |
 
 MCP: `grab_site`.
-CLI-only flags: `--out`, `--kinds`, `--scripts`, `--read`, `--json`.
+CLI-only flags: `--kinds`, `--scripts`, `--json`.
 - `max_assets` mirrors CLI `--max`; `max_tokens` mirrors `--tokens`.
 - MCP saves only inside the server working directory or $SEARCHTS_MCP_OUT_DIR.
 
@@ -219,7 +219,6 @@ searchts get https://example.com/logo.svg -o assets/
 | `2` | bad usage, or a URL that cannot be read |
 
 MCP: `fetch_asset`.
-CLI-only flags: `-o`, `--output`.
 - MCP saves only inside the server working directory or $SEARCHTS_MCP_OUT_DIR, never to an absolute path.
 
 ### `mcp`
@@ -404,6 +403,7 @@ searchts doctor --json
 | `2` | bad usage |
 
 MCP: `get_status`.
+CLI-only flags: `--json`.
 - The same health report `searchts doctor` prints.
 
 ### `install`

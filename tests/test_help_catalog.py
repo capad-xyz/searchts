@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from searchts import catalog, helpgen, helptext
 from searchts.cli import build_parser
 from searchts.integrations import mcp_server
@@ -97,7 +99,8 @@ def test_json_catalog_has_the_documented_shape():
     for record in data["commands"]:
         assert required <= set(record), record["name"]
         assert set(record["mcp"]) >= {
-            "tools", "notes", "mcp_only_params", "cli_only_flags", "cli_only", "reason",
+            "tools", "notes", "mcp_only_params", "cli_only_flags", "param_flags",
+            "cli_only", "reason",
         }
 
 
@@ -294,3 +297,53 @@ def test_mcp_server_docstring_and_signature_match_the_catalog():
     params = inspect.signature(mcp_server.login_check).parameters
     assert "check_url" in params
     assert params["check_url"].default == ""
+
+
+def test_mcp_mapping_accounts_for_every_param_and_flag():
+    """#444: each MCP param maps to a CLI flag or is MCP-only, and each CLI flag
+    maps to an MCP param or is CLI-only. Checked against the live tool schemas
+    and the parser, so a renamed flag cannot leave help.v1 wrong."""
+    from searchts.integrations import mcp_server
+
+    if not mcp_server.HAS_MCP:
+        pytest.skip("mcp extra not installed")
+    import asyncio
+
+    schemas = {
+        t.name: set((getattr(t, "input_schema", None) or getattr(t, "inputSchema", None) or {}).get("properties", {}))
+        for t in asyncio.run(mcp_server.create_server().list_tools())
+    }
+    data = json.loads(_run("help", "--json").stdout)
+    for record in data["commands"]:
+        mcp = record["mcp"]
+        if not mcp["tools"]:
+            continue
+        (tool,) = mcp["tools"]
+        params = schemas[tool]
+        mapped = mcp["param_flags"]
+        positionals = {p["name"] for p in record["positionals"]}
+        flags = {}  # option string -> dest
+        for flag in record["flags"]:
+            if flag["dest"] == "verbose":
+                continue
+            for opt in flag["option_strings"]:
+                flags[opt] = flag["dest"]
+        dest_of = {opt: dest for opt, dest in flags.items()}
+        covered_dests = set()
+        for param in params:
+            if param in mapped:
+                target = mapped[param]
+                assert target in flags or target in positionals, (tool, param, target)
+                covered_dests.add(dest_of.get(target, target))
+                assert param not in mcp["mcp_only_params"], (tool, param)
+            elif param in set(flags.values()) or param in positionals:
+                covered_dests.add(param)
+                assert param not in mcp["mcp_only_params"], (tool, param)
+            else:
+                assert param in mcp["mcp_only_params"], (tool, param)
+        for opt in mcp["cli_only_flags"]:
+            assert opt in flags, (tool, opt)
+            assert flags[opt] not in covered_dests, (tool, opt)
+        cli_only_dests = {flags[o] for o in mcp["cli_only_flags"]}
+        for dest in set(flags.values()):
+            assert dest in covered_dests or dest in cli_only_dests, (record["name"], dest)
