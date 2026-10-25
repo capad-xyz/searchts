@@ -1170,7 +1170,8 @@ def _skill_targets() -> list:
     if openclaw_home:
         skill_dirs.insert(0, os.path.join(openclaw_home, ".openclaw", "skills"))
     found = [os.path.join(d, "searchts") for d in skill_dirs if os.path.isdir(d)]
-    return found or [os.path.expanduser("~/.agents/skills/searchts")]
+    targets = found or [os.path.expanduser("~/.agents/skills/searchts")]
+    return [os.path.normpath(t) for t in targets]
 
 
 def _skill_file_names() -> list:
@@ -1217,8 +1218,12 @@ def _install_writes(dry_run: bool) -> list:
 def _home_path(path: str) -> str:
     import os
 
-    home = os.path.expanduser("~")
-    return "~" + path[len(home):] if path == home or path.startswith(home + os.sep) else path
+    home = os.path.normpath(os.path.expanduser("~"))
+    path = os.path.normpath(path)
+    if path != home and not path.startswith(home + os.sep):
+        return path
+    # One spelling on every OS, so the list reads the same in docs and tests.
+    return "~" + path[len(home):].replace(os.sep, "/")
 
 
 def _uninstall_skill():
