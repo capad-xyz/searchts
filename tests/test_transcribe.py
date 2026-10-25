@@ -630,6 +630,7 @@ class TestLocalBackend:
 
         message = str(ei.value)
         assert "no transcription backend available" in message
+        assert "one of: )" not in message
         assert sys.executable in message
         assert "faster-whisper" in message
         assert "local-transcribe" in message

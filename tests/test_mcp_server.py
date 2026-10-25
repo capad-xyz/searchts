@@ -19,6 +19,7 @@ from searchts.integrations.mcp_server import (
     SERVER_INSTRUCTIONS,
     TRANSCRIBE_DESCRIPTION,
     WEB_SEARCH_DESCRIPTION,
+    create_server,
     fetch_asset,
     get_status,
     grab_site,
@@ -160,22 +161,34 @@ def test_web_search_requires_query():
 
 def test_get_status_returns_doctor_report(monkeypatch):
     class FakeSearchts:
-        def doctor_report(self):
-            return "unlocker: ok\nsearch (duckduckgo): ok"
+        def doctor(self):
+            return {
+                "unlocker": {"status": "ok", "message": "ready"},
+                "youtube": {
+                    "status": "warn",
+                    "message": "Install yt-dlp with this long command: yt-dlp --js-runtimes node --check",
+                },
+            }
 
     monkeypatch.setattr("searchts.core.Searchts", FakeSearchts)
-    out = get_status()
-    assert "unlocker: ok" in out
-    assert "duckduckgo" in out
+    data = json.loads(get_status())
+    assert data["unlocker"]["status"] == "ok"
+    assert "yt-dlp --js-runtimes node --check" in data["youtube"]["message"]
 
 
 def test_get_status_is_string(monkeypatch):
     class FakeSearchts:
-        def doctor_report(self):
-            return "ok"
+        def doctor(self):
+            return {"channel": {"status": "ok", "message": "ready"}}
 
     monkeypatch.setattr("searchts.core.Searchts", FakeSearchts)
     assert isinstance(get_status(), str)
+
+
+def test_get_status_description_promises_unwrapped_structured_json():
+    tool = create_server()._tool_manager.get_tool("get_status")
+    assert "JSON object keyed by channel" in tool.description
+    assert "without terminal-width wrapping" in tool.description
 
 
 # ── serve() entrypoint ──────────────────────────────────────────────────────

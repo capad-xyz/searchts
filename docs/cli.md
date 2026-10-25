@@ -56,13 +56,13 @@ searchts read example.com --pages 3 --expand
 
 | Exit | Meaning |
 |---|---|
-| `0` | content or the requested output was returned |
-| `1` | the command failed; the reasons are on stderr |
-| `2` | bad usage, or a URL that cannot be read |
+| `0` | page content returned |
+| `1` | the URL could not be read; with --json the error object is on stdout and attempts on stderr |
+| `2` | bad usage or an invalid URL |
 
 MCP: `read_url`.
-MCP-only parameters: `cursor`, `page_items`, `max_media`.
-CLI-only flags: `--human`, `--scrub`, `--backend`, `--pages`, `--items`, `--media`, `--expand`, `--json`.
+MCP-only parameters: `cursor`, `page_items`.
+CLI-only flags: `--human`, `--scrub`, `--backend`, `--json`.
 - Same unlocker path as `searchts read`.
 - The JSON has no `next_url`: a page-authored URL is not a safe next request. Use the signed `next_cursor`, or `searchts read --json` when a human wants the URL.
 
@@ -98,10 +98,10 @@ searchts search "rust 2026" --json
 |---|---|
 | `0` | content or the requested output was returned |
 | `1` | the command failed; the reasons are on stderr |
-| `2` | bad usage, or a URL that cannot be read |
+| `2` | bad usage or an invalid URL |
 
 MCP: `web_search`.
-CLI-only flags: `-n`, `--provider`, `--json`.
+CLI-only flags: `--provider`, `--json`.
 - MCP default is max_results=5 (CLI `-n` default is 10).
 - MCP has no `provider` parameter; the CLI does.
 
@@ -138,10 +138,10 @@ searchts transcribe https://www.instagram.com/reel/... --cookies-from-browser ch
 |---|---|
 | `0` | content or the requested output was returned |
 | `1` | the command failed; the reasons are on stderr |
-| `2` | bad usage, or a URL that cannot be read |
+| `2` | bad usage or an invalid URL |
 
 MCP: `transcribe`.
-CLI-only flags: `-o`, `--output`, `--provider`, `--no-subtitles`.
+CLI-only flags: `-o`, `--output`.
 - `prefer_subtitles` mirrors CLI `--no-subtitles`.
 - `cookies_from_browser` is passed to yt-dlp, same as the CLI flag.
 
@@ -181,10 +181,10 @@ searchts grab https://example.com --tokens 60 --json
 |---|---|
 | `0` | content or the requested output was returned |
 | `1` | the command failed; the reasons are on stderr |
-| `2` | bad usage, or a URL that cannot be read |
+| `2` | bad usage or an invalid URL |
 
 MCP: `grab_site`.
-CLI-only flags: `--out`, `--kinds`, `--scripts`, `--read`, `--json`.
+CLI-only flags: `--out`, `--kinds`, `--scripts`, `--json`.
 - `max_assets` mirrors CLI `--max`; `max_tokens` mirrors `--tokens`.
 - MCP saves only inside the server working directory or $SEARCHTS_MCP_OUT_DIR.
 
@@ -216,7 +216,7 @@ searchts get https://example.com/logo.svg -o assets/
 |---|---|
 | `0` | content or the requested output was returned |
 | `1` | the command failed; the reasons are on stderr |
-| `2` | bad usage, or a URL that cannot be read |
+| `2` | bad usage or an invalid URL |
 
 MCP: `fetch_asset`.
 CLI-only flags: `-o`, `--output`.
@@ -408,9 +408,9 @@ MCP: `get_status`.
 
 ### `install`
 
-One-shot installer; --system-deps to change things.
-Non-mutating by default: without --system-deps it prints the commands and touches nothing outside searchts's own config. --browser installs the stealth-browser extra into this interpreter.
-- --safe is a deprecated no-op; non-mutating is now the default.
+One-shot installer; --system-deps to install optional system packages.
+Without --system-deps it does not install optional system packages. A successful run creates searchts's tools directory and installs the agent skill bundle; when Claude Code or Cursor is detected it also writes the user-scope reach rule. --dry-run lists these destinations. --browser installs the stealth-browser extra into this interpreter.
+- --safe is a deprecated no-op; optional system package installs require --system-deps.
 
 ```bash
 searchts install [--verbose] [--env {local,server,auto}] [--proxy PROXY] [--system-deps] [--safe] [--dry-run] [--channels CHANNELS] [--browser]
@@ -421,8 +421,8 @@ searchts install [--verbose] [--env {local,server,auto}] [--proxy PROXY] [--syst
 | `-v`, `--verbose` | Show debug logs |
 | `--env` {local,server,auto} | Environment: local, server, or auto-detect Choices: local, server, auto. Default: `auto`. |
 | `--proxy` PROXY | Network proxy saved for agents to export as HTTP(S)_PROXY in restricted networks (http://user:pass@ip:port) |
-| `--system-deps`, `--apply` | Opt in to mutating the system (alias: --apply): install gh/Node.js, npm -g packages, apt sources, and yt-dlp config. Off by default (the keyless core needs none of this) — without it, install only prints the manual commands. |
-| `--safe` (deprecated) | Deprecated no-op: safe (non-mutating) is now the default. Use --system-deps to opt in to system changes. |
+| `--system-deps`, `--apply` | Opt in to mutating the system (alias: --apply): install gh/Node.js, npm -g packages, apt sources, and yt-dlp config. Off by default (the keyless core needs none of this) — without it, install prints manual commands and writes the agent skill and any detected user-scope reach rule. |
+| `--safe` (deprecated) | Deprecated no-op: optional system package installs are already off unless --system-deps is used. |
 | `--dry-run` | Show what would be done without making any changes |
 | `--channels` CHANNELS | Comma-separated optional channels to install (twitter,reddit,opencli,linkedin,all) |
 | `--browser` | Install searchts[browser] + Chromium into this CLI's environment (same interpreter as the running searchts). Refuses ephemeral uvx. |
@@ -822,7 +822,7 @@ No MCP tool: installing software is the user's act; MCP reports `update_availabl
 ### `check-update`
 
 Is there a newer version?
-One GitHub API call. Since 0.22.0 a newer release is also reported in `--json` output and in every MCP result as `update_available`, so an agent does not need a separate call after each task.
+One GitHub API call. When a newer release exists, object-shaped successful `--json` payloads from `read` and `grab`, and JSON object MCP results, include `update_available`. The bare-list `search --json` and `doctor --json` shapes do not; this command reports the check directly.
 
 ```bash
 searchts check-update [--verbose]
@@ -843,7 +843,7 @@ searchts check-update
 | `0` | the check finished (newer or current) |
 | `2` | bad usage |
 
-No MCP tool: MCP results already carry `update_available`; the CLI verb is for scripts.
+No MCP tool: object-shaped read/grab JSON and MCP results carry `update_available`; the CLI verb checks directly.
 
 ### `watch`
 

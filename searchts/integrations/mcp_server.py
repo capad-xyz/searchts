@@ -182,9 +182,10 @@ def create_server():
             "configured, and working. Use this first when another searchts tool "
             "fails or before relying on an optional capability (e.g. keyed search "
             "providers, transcription). Takes no arguments and performs no web "
-            "requests of its own beyond the cached update check; returns a "
-            "human-readable text report, one line per channel with an ok/warn/error "
-            "status and a fix hint."
+            "requests of its own beyond the cached update check; returns a JSON "
+            "object keyed by channel. Each channel entry includes its status, "
+            "message, backend details, and any actionable fix command without "
+            "terminal-width wrapping."
             + UPDATE_CHECK_DESCRIPTION
         ),
     )
@@ -627,14 +628,14 @@ def _mcp_out_dir(out_dir: str, default: str) -> Tuple[Optional[Path], Optional[s
 
 
 def get_status() -> str:
-    """Return the searchts environment health report (doctor) as text.
+    """Return the searchts environment health report (doctor) as JSON text.
 
     Module-level (like read_url) so it is testable without the optional `mcp`
     package.
     """
     from searchts.core import Searchts
 
-    return _with_update_info(Searchts().doctor_report())
+    return _with_update_info(json.dumps(Searchts().doctor(), ensure_ascii=False))
 
 
 #: A URL that appears in the model-visible text may not appear anywhere else in

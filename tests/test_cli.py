@@ -319,6 +319,35 @@ class TestCLI:
         assert "\u2717 read" in captured.err
         assert captured.out == ""  # nothing on stdout on failure
 
+    def test_read_json_failure_returns_machine_error_and_keeps_receipt_on_stderr(self, capsys):
+        import json
+
+        from searchts.unlocker import UnlockerError
+
+        err = UnlockerError("https://x.test", [("curl_cffi", "ssrf: private address")])
+        with patch("searchts.unlocker.fetch", side_effect=err):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch("sys.argv", ["searchts", "read", "https://x.test", "--json"]):
+                    main()
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 1
+        payload = json.loads(captured.out)
+        assert payload["error"] == "URL could not be read"
+        assert payload["url"] == "https://x.test"
+        assert payload["attempts"] == [{"backend": "curl_cffi", "reason": "ssrf: private address"}]
+        assert "curl_cffi" in captured.err
+
+    def test_read_json_invalid_url_returns_machine_error_and_exit_two(self, capsys):
+        import json
+
+        with pytest.raises(SystemExit) as exc_info:
+            with patch("sys.argv", ["searchts", "read", "not a url", "--json"]):
+                main()
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 2
+        assert json.loads(captured.out)["error"]
+        assert "searchts read:" in captured.err
+
     def test_search_command_prints_numbered_list(self, capsys):
         from searchts.search import SearchResult
         results = [
@@ -475,7 +504,8 @@ class TestInstallNonInvasive:
         assert "system_safe" in calls
         assert "mcporter_safe" in calls
         out = capsys.readouterr().out
-        assert "Non-invasive install" in out
+        assert "Install (default)" in out
+        assert "user-scope agent files may be written" in out
         assert "--system-deps" in out
 
     def test_system_deps_flag_opts_in(self, capsys, monkeypatch):
@@ -501,13 +531,24 @@ class TestInstallNonInvasive:
         assert "system_real" not in calls
         assert "mcporter_real" not in calls
 
-    def test_dry_run_makes_no_changes(self, capsys, monkeypatch):
+    def test_dry_run_lists_real_run_destinations_without_writing(
+        self, capsys, monkeypatch, tmp_path
+    ):
         calls = self._stub_install(monkeypatch)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.setattr(
+            "searchts.config.Config.CONFIG_FILE", tmp_path / ".searchts" / "config.yaml"
+        )
         with patch("sys.argv", ["searchts", "install", "--dry-run"]):
             main()
         assert "system_real" not in calls
         assert "mcporter_real" not in calls
         assert "system_dry" in calls
+        output = capsys.readouterr().out
+        assert "Install destinations" in output
+        assert ".searchts/tools" in output
+        assert ".agents/skills/searchts" in output
+        assert not (tmp_path / ".searchts").exists()
 
 
 class TestSetupRecommendsFirstPartySearch:

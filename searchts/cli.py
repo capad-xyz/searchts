@@ -201,10 +201,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_install.add_argument("--system-deps", "--apply", dest="system_deps", action="store_true",
                            help="Opt in to mutating the system (alias: --apply): install gh/Node.js, npm -g packages, "
                                 "apt sources, and yt-dlp config. Off by default (the keyless core "
-                                "needs none of this) — without it, install only prints the manual commands.")
+                                "needs none of this) — without it, install prints manual commands and "
+                                "writes the agent skill and any detected user-scope reach rule.")
     p_install.add_argument("--safe", action="store_true",
-                           help="Deprecated no-op: safe (non-mutating) is now the default. "
-                                "Use --system-deps to opt in to system changes.")
+                           help="Deprecated no-op: optional system package installs are already off "
+                                "unless --system-deps is used.")
     p_install.add_argument("--dry-run", action="store_true",
                            help="Show what would be done without making any changes")
     p_install.add_argument("--channels", default="",
@@ -843,7 +844,7 @@ def _cmd_install(args):
 
     from searchts import progress, receipts
 
-    config = Config()
+    config = Config(create=not dry_run)
     style, unicode_ok = receipts.for_stream(sys.stdout)
 
     def row(item, label_w=9):
@@ -863,7 +864,8 @@ def _cmd_install(args):
 
     # Ensure tools directory exists (for upstream tool repos)
     tools_dir = os.path.expanduser("~/.searchts/tools")
-    os.makedirs(tools_dir, exist_ok=True)
+    if not dry_run:
+        os.makedirs(tools_dir, exist_ok=True)
 
     if dry_run:
         mode = "dry run, no changes"
@@ -873,11 +875,38 @@ def _cmd_install(args):
         mode = "non-invasive, no system changes"
     row(receipts.Row(progress.ROW_SKIP, "mode", mode), label_w=6)
     print()
+    if dry_run:
+        home = os.path.expanduser("~")
+        print("Install destinations (including writes made by a normal run):")
+        print(f"  {config.config_dir} (configuration directory, created if missing)")
+        print(f"  {config.config_path} (only when --proxy saves a value)")
+        print(f"  {tools_dir} (directory)")
+        skill_dirs = [
+            os.path.join(home, ".agents", "skills"),
+            os.path.join(home, ".openclaw", "skills"),
+            os.path.join(home, ".claude", "skills"),
+        ]
+        openclaw_home = os.environ.get("OPENCLAW_HOME")
+        if openclaw_home:
+            skill_dirs.insert(0, os.path.join(openclaw_home, ".openclaw", "skills"))
+        existing_skill_dirs = [path for path in skill_dirs if os.path.isdir(path)]
+        if existing_skill_dirs:
+            for path in existing_skill_dirs:
+                print(f"  {os.path.join(path, 'searchts')} (agent skill bundle)")
+        else:
+            print(f"  {os.path.join(home, '.agents', 'skills', 'searchts')} (agent skill bundle)")
+        if os.path.isdir(os.path.join(home, ".claude")) or os.path.exists(os.path.join(home, ".claude.json")):
+            print(f"  {os.path.join(home, '.claude', 'CLAUDE.md')} (reach rule, if needed)")
+        if os.path.isdir(os.path.join(home, ".cursor")):
+            print(f"  {os.path.join(home, '.cursor', 'rules', 'searchts.mdc')} (reach rule, if needed)")
+        if args.proxy:
+            print("  proxy value in the searchts config")
+        print()
     if apply_system:
         print("SYSTEM-DEPS MODE — will install optional system packages (gh, Node.js, npm globals)")
         print()
     elif not dry_run:
-        print("Non-invasive install (default) — no system changes will be made.")
+        print("Install (default) — no optional system packages; user-scope agent files may be written.")
         print("The keyless core (searchts read/search/transcribe) needs none of these.")
         print("Re-run with --system-deps to actually install the optional system packages below.")
         print()
@@ -2526,6 +2555,8 @@ def _cmd_read(args):
     problem = ux.check_url(args.url)
     if problem:
         print(f"searchts read: {problem}", file=sys.stderr)
+        if args.json:
+            print(json.dumps({"error": problem, "url": args.url}, ensure_ascii=False))
         sys.exit(2)
 
     cookies = _read_command_cookies(args)
@@ -2608,6 +2639,16 @@ def _cmd_read(args):
                 rows.append(
                     receipts.Row(progress.ROW_WARN, "login", _login_wall_hint_text(args.url))
                 )
+            if args.json:
+                print(json.dumps({
+                    "error": "URL could not be read",
+                    "url": args.url,
+                    "attempts": [
+                        {"backend": backend, "reason": ux.tidy_reason(why)}
+                        for backend, why in e.attempts
+                    ],
+                    "hint": e.hint,
+                }, ensure_ascii=False))
             text = receipts.block(
                 tracker.color,
                 "read",

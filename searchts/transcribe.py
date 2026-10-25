@@ -818,9 +818,12 @@ def _validate_backend(order: List[str], cfg: Config) -> None:
         local_hint = local_unavailable_reason() or (
             'install it with `pip install "searchts[local-transcribe]"`'
         )
+        if hosted:
+            backend_hint = f"configure a hosted key (one of: {hosted}), or use keyless local transcription"
+        else:
+            backend_hint = "install keyless local transcription support"
         raise NoProviderConfigured(
-            f"no transcription backend available: configure a hosted key "
-            f"(one of: {hosted}), or use keyless local transcription. {local_hint}"
+            f"no transcription backend available: {backend_hint}. {local_hint}"
         )
 
 

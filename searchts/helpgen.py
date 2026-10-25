@@ -207,7 +207,9 @@ def render_llms_block(payload: dict) -> str:
         "MCP tools: "
         + ", ".join(f"`{tool}`" for tool in catalog.mcp_tool_names())
         + ". `read_url` has no `next_url`; use the signed `next_cursor`. "
-        "MCP results and `--json` output carry `update_available`.",
+        "Successful object-shaped `read` and `grab --json` payloads and JSON object MCP "
+        "results carry `update_available` when a newer release exists. The "
+        "bare-list `search --json` and `doctor --json` shapes do not.",
         "",
         "Machine-readable catalog: `searchts help --json` (`searchts.help.v1`). "
         "Full flags, defaults and examples: "
@@ -253,8 +255,10 @@ def render_skill_block(payload: dict) -> str:
         "MCP-only parameters and the deliberate CLI differences are listed in "
         f"[docs/cli.md]({CLI_DOC_URL}). `web_search` defaults to 5 results; CLI `-n` defaults "
         "to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; "
-        "use the signed `next_cursor`. MCP results and `--json` output carry "
-        "`update_available`.",
+        "use the signed `next_cursor`. Successful object-shaped `read` and `grab --json` "
+        "payloads and JSON object MCP results carry `update_available` when a "
+        "newer release exists; `search --json` remains a bare list and "
+        "`doctor --json` does not carry that field.",
         "",
         "### Exit codes",
         "",

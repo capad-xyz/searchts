@@ -55,7 +55,7 @@ GROUP_ORDER: Tuple[str, ...] = (
 EXIT_CONTENT = (
     ("0", "content or the requested output was returned"),
     ("1", "the command failed; the reasons are on stderr"),
-    ("2", "bad usage, or a URL that cannot be read"),
+    ("2", "bad usage or an invalid URL"),
 )
 EXIT_PLAIN = (
     ("0", "the command finished"),
@@ -65,7 +65,7 @@ EXIT_PLAIN = (
 EXIT_ROOT = (
     ("0", "content returned"),
     ("1", "every rung failed; the reasons are on stderr"),
-    ("2", "bad usage, or a URL that cannot be read"),
+    ("2", "bad usage or an invalid URL"),
 )
 
 
@@ -115,7 +115,11 @@ _add(Command(
         "searchts read https://x.com/jack/status/20 --json",
         "searchts read example.com --pages 3 --expand",
     ),
-    exit_codes=EXIT_CONTENT,
+    exit_codes=(
+        ("0", "page content returned"),
+        ("1", "the URL could not be read; with --json the error object is on stdout and attempts on stderr"),
+        ("2", "bad usage or an invalid URL"),
+    ),
     notes=(
         "A player page comes back as its captions, or the failure names transcribe.",
         "A share link whose HTML is empty is still a read.",
@@ -269,18 +273,20 @@ _add(Command(
 # ── SET UP ONCE ───────────────────────────────────────────────────────────
 _add(Command(
     name="install", group=_LOGIN, root="install",
-    lead="One-shot installer; --system-deps to change things.",
+    lead="One-shot installer; --system-deps to install optional system packages.",
     body=(
-        "Non-mutating by default: without --system-deps it prints the commands",
-        "and touches nothing outside searchts's own config. --browser installs",
-        "the stealth-browser extra into this interpreter.",
+        "Without --system-deps it does not install optional system packages.",
+        "A successful run creates searchts's tools directory and installs the",
+        "agent skill bundle; when Claude Code or Cursor is detected it also",
+        "writes the user-scope reach rule. --dry-run lists these destinations.",
+        "--browser installs the stealth-browser extra into this interpreter.",
     ),
     examples=(
         "searchts install",
         "searchts install --browser",
         "searchts install --system-deps --channels twitter,reddit",
     ),
-    notes=("--safe is a deprecated no-op; non-mutating is now the default.",),
+    notes=("--safe is a deprecated no-op; optional system package installs require --system-deps.",),
 ))
 _add(Command(
     name="setup", group=_LOGIN, root="setup",
@@ -467,9 +473,10 @@ _add(Command(
     name="check-update", group=_HOUSE, root="check-update",
     lead="Is there a newer version?",
     body=(
-        "One GitHub API call. Since 0.22.0 a newer release is also reported in",
-        "`--json` output and in every MCP result as `update_available`, so an",
-        "agent does not need a separate call after each task.",
+        "One GitHub API call. When a newer release exists, object-shaped",
+        "successful `--json` payloads from `read` and `grab`, and JSON object MCP results,",
+        "include `update_available`. The bare-list `search --json` and",
+        "`doctor --json` shapes do not; this command reports the check directly.",
     ),
     examples=("searchts check-update",),
     exit_codes=(("0", "the check finished (newer or current)"), ("2", "bad usage")),
@@ -571,9 +578,8 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "request. Use the signed `next_cursor`, or `searchts read --json` "
             "when a human wants the URL.",
         ),
-        mcp_only_params=("cursor", "page_items", "max_media"),
-        cli_only_flags=("--human", "--scrub", "--backend", "--pages", "--items",
-                        "--media", "--expand", "--json"),
+        mcp_only_params=("cursor", "page_items"),
+        cli_only_flags=("--human", "--scrub", "--backend", "--json"),
     ),
     "web_search": McpTool(
         "web_search", "search",
@@ -581,7 +587,7 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "MCP default is max_results=5 (CLI `-n` default is 10).",
             "MCP has no `provider` parameter; the CLI does.",
         ),
-        cli_only_flags=("-n", "--provider", "--json"),
+        cli_only_flags=("--provider", "--json"),
     ),
     "fetch_asset": McpTool(
         "fetch_asset", "get",
@@ -598,7 +604,7 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "MCP saves only inside the server working directory or "
             "$SEARCHTS_MCP_OUT_DIR.",
         ),
-        cli_only_flags=("--out", "--kinds", "--scripts", "--read", "--json"),
+        cli_only_flags=("--out", "--kinds", "--scripts", "--json"),
     ),
     "get_status": McpTool(
         "get_status", "doctor",
@@ -610,7 +616,7 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "`prefer_subtitles` mirrors CLI `--no-subtitles`.",
             "`cookies_from_browser` is passed to yt-dlp, same as the CLI flag.",
         ),
-        cli_only_flags=("-o", "--output", "--provider", "--no-subtitles"),
+        cli_only_flags=("-o", "--output"),
     ),
     "login_status": McpTool(
         "login_status", "login list",
@@ -660,7 +666,7 @@ CLI_ONLY: Dict[str, str] = {
     "login purge-scratch": "scratch copies are deleted at the end of every read",
     "login sweep": "expired cookies are swept on every MCP result; a tool would duplicate it",
     "update": "installing software is the user's act; MCP reports `update_available` instead",
-    "check-update": "MCP results already carry `update_available`; the CLI verb is for scripts",
+    "check-update": "object-shaped read/grab JSON and MCP results carry `update_available`; the CLI verb checks directly",
     "watch": "a scheduled shell check, not an agent tool",
     "version": "`get_status` carries the version",
     "help": "the MCP tool list is the machine-readable surface",

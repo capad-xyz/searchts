@@ -36,7 +36,7 @@ covers the need.
 | `searchts mcp install` | Wire the MCP server into the agents on this machine. |
 | `searchts skill install` | Write the slash command and the shared SKILL.md bundle. |
 | `searchts doctor` | Which channels are installed, configured, working. |
-| `searchts install` | One-shot installer; --system-deps to change things. |
+| `searchts install` | One-shot installer; --system-deps to install optional system packages. |
 | `searchts setup` | Walk through search, GitHub, Reddit, and Groq in one pass. |
 | `searchts configure` | List the keys, set one, or copy cookies from a browser. |
 | `searchts login` | Site logins: list, keep, kill, signin, purge-scratch, sweep, check. |
@@ -84,13 +84,14 @@ covers the need.
 | `login_check` | `searchts login check` |
 | `login_kill` | `searchts login kill` |
 
-MCP-only parameters and the deliberate CLI differences are listed in [docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md). `web_search` defaults to 5 results; CLI `-n` defaults to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; use the signed `next_cursor`. MCP results and `--json` output carry `update_available`.
+MCP-only parameters and the deliberate CLI differences are listed in [docs/cli.md](https://github.com/capad-xyz/searchts/blob/main/docs/cli.md). `web_search` defaults to 5 results; CLI `-n` defaults to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; use the signed `next_cursor`. Successful object-shaped `read` and `grab --json` payloads and JSON object MCP results carry `update_available` when a newer release exists; `search --json` remains a bare list and `doctor --json` does not carry that field.
 
 ### Exit codes
 
 | Commands | Exit codes |
 |---|---|
-| `read`, `search`, `transcribe`, `grab`, `get` | `0` content or the requested output was returned; `1` the command failed; the reasons are on stderr; `2` bad usage, or a URL that cannot be read |
+| `read` | `0` page content returned; `1` the URL could not be read; with --json the error object is on stdout and attempts on stderr; `2` bad usage or an invalid URL |
+| `search`, `transcribe`, `grab`, `get` | `0` content or the requested output was returned; `1` the command failed; the reasons are on stderr; `2` bad usage or an invalid URL |
 | `mcp`, `mcp install`, `skill`, `skill install`, `install`, `setup`, `configure`, `uninstall` | `0` the command finished; `1` the command failed; the reason is on stderr; `2` bad usage |
 | `mcp serve` | `0` the server stopped normally; `1` the optional `mcp` extra is missing; `2` bad usage, or a non-loopback bind was refused |
 | `doctor` | `0` the health report was printed; `2` bad usage |
@@ -133,9 +134,10 @@ Run `searchts help --json` for the stable machine-readable catalog. Full flags, 
    synthesize.
 4. **On failure, read the matching reference file** under `references/` for
    platform notes and fallbacks — never guess commands.
-5. **Watch versions for the user**: since 0.22.0 every `--json` result and
-   every MCP result carries `update_available` when a newer release exists, so
-   read it instead of making a separate call. `searchts check-update` is still
+5. **Watch versions for the user**: when a newer release exists, object-shaped
+   successful object-shaped `read` and `grab --json` payloads and JSON object MCP results carry
+   `update_available`. `search --json` remains a bare list and `doctor --json`
+   does not carry that field. `searchts check-update` is still
    there for a script. If a new version exists, append one line to your
    wrap-up: "searchts vX.Y.Z is available — `searchts update` installs it
    (`searchts upgrade` is the same command)." Never interrupt the current task

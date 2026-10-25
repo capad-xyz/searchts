@@ -282,6 +282,24 @@ def test_search_json_stays_a_list(monkeypatch, tmp_path, capsys):
     ]
 
 
+def test_search_and_doctor_json_do_not_claim_update_available(monkeypatch, tmp_path, capsys):
+    _enable_agent_checks(monkeypatch, tmp_path)
+    with patch("searchts.search.search", return_value=[]):
+        with patch("sys.argv", ["searchts", "search", "q", "--json"]):
+            main()
+    import json
+
+    search_payload = json.loads(capsys.readouterr().out)
+    assert search_payload == []
+
+    monkeypatch.setattr("searchts.doctor.check_all", lambda *args, **kwargs: [])
+    with patch("sys.argv", ["searchts", "doctor", "--json"]):
+        main()
+    doctor_payload = json.loads(capsys.readouterr().out)
+    assert isinstance(doctor_payload, (dict, list))
+    assert "update_available" not in doctor_payload
+
+
 def test_grab_json_manifest_has_update_available(monkeypatch, tmp_path, capsys):
     _enable_agent_checks(monkeypatch, tmp_path)
     manifest = {"url": "https://x.test/", "downloaded": 0, "assets": []}
@@ -336,12 +354,12 @@ def test_mcp_get_status_always_carries_the_structured_field(monkeypatch, tmp_pat
     _enable_agent_checks(monkeypatch, tmp_path)
 
     class FakeSearchts:
-        def doctor_report(self):
-            return "unlocker: ok"
+        def doctor(self):
+            return {"unlocker": {"status": "ok", "message": "ready"}}
 
     monkeypatch.setattr("searchts.core.Searchts", FakeSearchts)
     out = mcp_server.get_status()
-    assert "unlocker: ok" in out
+    assert '"unlocker": {"status": "ok", "message": "ready"}' in out
     assert '"latest": "9.9.9"' in out
 
 

@@ -77,9 +77,13 @@ def test_exit_codes_are_per_command():
     check = {item["code"]: item["meaning"] for item in payload["login check"]["exit_codes"]}
     keep = {item["code"]: item["meaning"] for item in payload["login keep"]["exit_codes"]}
     update = {item["code"]: item["meaning"] for item in payload["update"]["exit_codes"]}
+    read = {item["code"]: item["meaning"] for item in payload["read"]["exit_codes"]}
     assert check["1"].startswith("logged out")
     assert "consent" in keep["3"]
     assert "install shape" in update["2"]
+    assert "could not be read" in read["1"]
+    assert "error object" in read["1"]
+    assert "invalid URL" in read["2"]
 
 
 def test_json_catalog_has_the_documented_shape():
@@ -110,6 +114,32 @@ def test_json_help_for_one_command_includes_its_verbs():
     assert len(names) == 8
 
 
+def test_catalog_mcp_flag_mapping_matches_live_tool_signatures():
+    server = mcp_server.create_server()
+    parameters = {
+        name: set(server._tool_manager.get_tool(name).parameters["properties"])
+        for name in ("read_url", "web_search", "grab_site", "transcribe")
+    }
+    mappings = {
+        "read_url": {"--pages": "max_pages", "--items": "max_items",
+                     "--media": "max_media", "--expand": "expand"},
+        "web_search": {"-n": "max_results"},
+        "grab_site": {"--read": "read"},
+        "transcribe": {"--provider": "provider", "--no-subtitles": "prefer_subtitles"},
+    }
+    for tool_name, flag_map in mappings.items():
+        params = parameters[tool_name]
+        record = next(
+            r for r in _payload()["commands"]
+            if r["mcp"]["tools"] == [tool_name]
+        )
+        cli_flags = {flag for item in record["flags"] for flag in item["option_strings"]}
+        for flag, parameter in flag_map.items():
+            assert flag in cli_flags
+            assert parameter in params
+            assert flag not in record["mcp"]["cli_only_flags"]
+
+
 def test_unknown_help_path_is_a_clean_exit_2():
     out = _run("help", "not-a-command")
     assert out.returncode == 2
@@ -136,7 +166,7 @@ def test_root_help_keeps_reads_exit_codes():
     stdout = ANSI.sub("", _run("--help").stdout)
     assert "0       content returned" in stdout
     assert "1       every rung failed; the reasons are on stderr" in stdout
-    assert "2       bad usage, or a URL that cannot be read" in stdout
+    assert "2       bad usage or an invalid URL" in stdout
     assert "Other commands: searchts <command> --help or searchts help --json" in stdout
 
 

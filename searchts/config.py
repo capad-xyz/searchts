@@ -40,11 +40,12 @@ class Config:
         "openai_whisper": ["openai_api_key"],
     }
 
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path: Optional[Path] = None, *, create: bool = True):
         self.config_path = Path(config_path) if config_path else self.CONFIG_FILE
         self.config_dir = self.config_path.parent
         self.data: dict = {}
-        self._ensure_dir()
+        if create:
+            self._ensure_dir()
         self.load()
 
     def _ensure_dir(self):
