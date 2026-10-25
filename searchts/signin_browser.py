@@ -159,9 +159,13 @@ def signin_window(
                 f"the sign-in browser did not start within {timeout_s:.0f}s. "
                 f"Close any {browser} window and try again."
             )
+        # stderr, never stdout: under MCP stdout is the JSON-RPC channel.
+        import sys
+
         print(
             f"A {browser} window opened on {host}. Sign in there. This window is "
             f"the approval; nothing is copied from your normal browser.",
+            file=sys.stderr,
             flush=True,
         )
         yield profile, port
@@ -175,12 +179,17 @@ def signin(
     site: str,
     *,
     browser: str = "chrome",
+    wait_s: Optional[float] = None,
 ) -> CookieSource:
     """Sign in once for `site` and return its cookies, ready for one read.
 
     Whether anything is *kept* is decided by the caller, not here: keeping is
     the user's yes and lives in :func:`searchts.login_store.keep`. This
     function only produces the values, and removes the profile it made.
+
+    ``wait_s`` is for callers with no terminal (MCP). Instead of waiting for
+    Enter, the person closes the window when they are signed in, and the wait
+    gives up after ``wait_s`` seconds with nothing kept.
     """
     from searchts.login_store import host_of
 
@@ -192,8 +201,11 @@ def signin(
         # the time we look, so asking afterwards would already be too late: a
         # sign-in that finished while we read is invisible, and a sign-in that
         # has not happened looks exactly the same as one that has.
-        wait_for_the_person(site, browser=browser)
-        records = _read_after_signin(port, url, host)
+        if wait_s is None:
+            wait_for_the_person(site, browser=browser)
+            records = _read_after_signin(port, url, host)
+        else:
+            records = wait_for_window_close(port, url, host, wait_s)
     # The profile has served its purpose either way. A profile left behind is a
     # login on disk that nobody agreed to keep.
     _wipe_one(profile)
@@ -241,9 +253,9 @@ def wait_for_the_person(site: str, *, browser: str) -> None:
         raise CookieReadError(
             f"signing in to {site} has to wait for you, and there is no terminal "
             f"here to wait in. Run it from a terminal "
-            f"(`searchts login signin {site}`), or read the site with "
-            f"`--cookies-from-browser {browser}` instead, which copies a login you "
-            f"already have."
+            f"(`searchts login signin {site}`), or keep a login you already have "
+            f"in Firefox with `searchts login keep {site} --cookies-from-browser "
+            f"firefox --yes`."
         )
     print()
     print(f"Sign in to {site} in the {browser} window above.")
@@ -253,6 +265,108 @@ def wait_for_the_person(site: str, *, browser: str) -> None:
         input("  press Enter when you are signed in: ")
     except EOFError:
         print("  no input available, giving up.", flush=True)
+
+
+def _open_pages(port: int) -> int:
+    """How many page tabs the sign-in browser has open; 0 when it is gone."""
+    import json
+    import urllib.request
+
+    try:
+        with urllib.request.urlopen(  # noqa: S310 - loopback debugger port only
+            f"http://127.0.0.1:{int(port)}/json/list", timeout=2
+        ) as resp:
+            targets = json.loads(resp.read().decode("utf-8", "replace"))
+    except Exception:  # noqa: BLE001 - a closed browser refuses or resets
+        return 0
+    return sum(1 for t in targets if isinstance(t, dict) and t.get("type") == "page")
+
+
+def _fingerprint(records: List[CookieRecord]) -> list:
+    return sorted((c.domain, c.path, c.name, c.value) for c in records)
+
+
+def wait_for_window_close(
+    port: int,
+    url: str,
+    host: str,
+    wait_s: float,
+    *,
+    poll_s: float = 3.0,
+    read=None,
+    pages=None,
+    clock=time.monotonic,
+    sleep=time.sleep,
+) -> List[CookieRecord]:
+    """The no-terminal wait: the person closes the window when signed in.
+
+    The site's cookies are read every ``poll_s`` seconds while the window is
+    open, and the last read is the answer once every tab is closed (two polls
+    in a row, so one slow reply is not a close). Two outcomes keep nothing:
+    the wait passing ``wait_s``, and a window closed with the same cookies it
+    opened with, which is a window closed without signing in.
+    """
+    read = read or _read_after_signin
+    pages = pages or _open_pages
+    deadline = clock() + max(1.0, float(wait_s))
+    first: Optional[List[CookieRecord]] = None
+    last: Optional[List[CookieRecord]] = None
+    closed_polls = 0
+    read_error = ""
+    failed_reads = 0
+    while True:
+        if pages(port) == 0:
+            closed_polls += 1
+            if closed_polls >= 2:
+                break
+        else:
+            closed_polls = 0
+            from searchts.cdp_profile import NoSiteCookies
+
+            try:
+                snap = read(port, url, host)
+            except NoSiteCookies:
+                snap = []  # answered, nothing set yet: a page before sign-in
+            except CookieReadError as e:
+                snap, read_error = None, str(e)
+            except Exception as e:  # noqa: BLE001 - the window may be closing mid-read
+                snap, read_error = None, f"{type(e).__name__}: {e}"
+            failed_reads = failed_reads + 1 if snap is None else 0
+            if snap is None:
+                read_error = read_error.rstrip(".")
+            # Three failures in a row before any read worked is a missing
+            # piece (no CDP client), not a page still loading: say so now
+            # instead of after the whole wait.
+            if first is None and failed_reads >= 3:
+                raise CookieReadError(
+                    f"could not read cookies from the sign-in window for {host}: "
+                    f"{read_error}. Nothing was kept."
+                )
+            if snap is not None:
+                first = snap if first is None else first
+                last = snap
+        if clock() >= deadline:
+            if first is None and read_error:
+                raise CookieReadError(
+                    f"could not read cookies from the sign-in window for {host}: "
+                    f"{read_error}. Nothing was kept."
+                )
+            raise CookieReadError(
+                f"no sign-in finished for {host} within {wait_s:.0f}s, so nothing "
+                f"was kept. Call login_signin again, sign in, then close the window."
+            )
+        sleep(poll_s if closed_polls == 0 else 0.5)
+    if first is None and read_error:
+        raise CookieReadError(
+            f"could not read cookies from the sign-in window for {host}: "
+            f"{read_error}. Nothing was kept."
+        )
+    if not last or first is None or _fingerprint(last) == _fingerprint(first):
+        raise CookieReadError(
+            f"the {host} window was closed without a sign-in (its cookies did not "
+            f"change), so nothing was kept."
+        )
+    return last
 
 
 def _read_after_signin(port: int, url: str, host: str) -> List[CookieRecord]:

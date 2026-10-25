@@ -213,6 +213,25 @@ def test_login_signin_keeps_only_after_a_successful_signin(monkeypatch):
     assert json.loads(mcp_server.login_status())["kept"]
 
 
+def test_login_signin_waits_for_the_window_with_a_bounded_timeout(monkeypatch):
+    """#450: MCP has no terminal; it passes a clamped wait instead of failing."""
+    from searchts import signin_browser
+    from searchts.session_cookies import CookieRecord, CookieSource
+
+    seen = []
+
+    def fake(s, **kw):
+        seen.append(kw.get("wait_s"))
+        return CookieSource(site=s, cookies=[CookieRecord("sid", "S", "example.com")],
+                            count=1, via="test")
+
+    monkeypatch.setattr(signin_browser, "signin", fake)
+    assert json.loads(mcp_server.login_signin("https://example.com"))["kept"] is True
+    mcp_server.login_signin("https://example.com", wait_seconds=5)
+    mcp_server.login_signin("https://example.com", wait_seconds=99999)
+    assert seen == [180, 30, 900]
+
+
 def test_login_signin_reports_a_failure_without_raising(monkeypatch):
     from searchts import signin_browser
     from searchts.session_cookies import CookieReadError

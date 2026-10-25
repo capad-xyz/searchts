@@ -319,6 +319,34 @@ class TestCLI:
         assert "\u2717 read" in captured.err
         assert captured.out == ""  # nothing on stdout on failure
 
+    def test_read_json_failure_prints_a_json_error(self, capsys):
+        """#449: an agent gets a parseable error on stdout, exit 1."""
+        from searchts.unlocker import UnlockerError
+        err = UnlockerError("https://x.test", [("curl_cffi", "http-403"), ("Jina Reader", "challenge")])
+        with patch("searchts.unlocker.fetch", side_effect=err):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch("sys.argv", ["searchts", "read", "https://x.test", "--json"]):
+                    main()
+        assert exc_info.value.code == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["url"] == "https://x.test"
+        assert payload["error"]["kind"] == "read_failed"
+        assert payload["error"]["exit_code"] == 1
+        assert payload["error"]["attempts"][0] == {"backend": "curl_cffi", "reason": "http-403"}
+
+    def test_read_json_ssrf_refusal_is_exit_2(self, capsys):
+        """#449: the catalog's exit 2 is "a URL that cannot be read"."""
+        from searchts.unlocker import UnlockerError
+        err = UnlockerError("http://127.0.0.1/", [("ssrf", "SSRF guard: loopback")])
+        with patch("searchts.unlocker.fetch", side_effect=err):
+            with pytest.raises(SystemExit) as exc_info:
+                with patch("sys.argv", ["searchts", "read", "http://127.0.0.1/", "--json"]):
+                    main()
+        assert exc_info.value.code == 2
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["error"]["kind"] == "ssrf_refused"
+        assert payload["error"]["exit_code"] == 2
+
     def test_search_command_prints_numbered_list(self, capsys):
         from searchts.search import SearchResult
         results = [

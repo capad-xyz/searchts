@@ -48,7 +48,7 @@ def test_signin_has_no_persist_parameter():
     """Keeping is the caller's yes. A flag here would imply this decides it."""
     params = inspect.signature(sb.signin).parameters
     assert "persist" not in params
-    assert set(params) == {"site", "browser"}
+    assert set(params) == {"site", "browser", "wait_s"}
 
 
 def test_the_word_persist_appears_only_in_prose():
@@ -207,7 +207,8 @@ def test_a_non_terminal_refuses_instead_of_reading_anyway(monkeypatch):
 
     assert read == []
     assert "terminal" in str(exc.value)
-    assert "cookies-from-browser" in str(exc.value)
+    assert "login keep" in str(exc.value)
+    assert "--cookies-from-browser firefox" in str(exc.value)
 
 
 def test_a_terminal_waits_for_the_person(monkeypatch):
@@ -241,3 +242,114 @@ def test_the_docstring_says_what_the_timeout_does_not_bound():
 # six files that already ended mid-line before this branch. `ruff check
 # searchts tests` covers it for every current and future file, which a
 # parametrised test over a hand-listed set could not.
+
+
+# ── #450: no terminal, so closing the window is the "done" ──────────────────
+
+
+def _recs(value):
+    from searchts.session_cookies import CookieRecord
+
+    return [CookieRecord("sid", value, "example.com")]
+
+
+class _Clock:
+    def __init__(self):
+        self.now = 0.0
+
+    def __call__(self):
+        return self.now
+
+    def sleep(self, s):
+        self.now += s
+
+
+def test_window_close_after_a_sign_in_returns_the_last_cookies():
+    clock = _Clock()
+    pages = iter([1, 1, 1, 0, 0])
+    reads = iter([_recs("guest"), _recs("guest"), _recs("signed-in")])
+    out = sb.wait_for_window_close(
+        9, "https://example.com", "example.com", 60,
+        read=lambda *a: next(reads), pages=lambda p: next(pages),
+        clock=clock, sleep=clock.sleep,
+    )
+    assert [c.value for c in out] == ["signed-in"]
+
+
+def test_window_closed_without_a_sign_in_keeps_nothing():
+    clock = _Clock()
+    pages = iter([1, 1, 0, 0])
+    with pytest.raises(CookieReadError, match="without a sign-in"):
+        sb.wait_for_window_close(
+            9, "https://example.com", "example.com", 60,
+            read=lambda *a: _recs("guest"), pages=lambda p: next(pages),
+            clock=clock, sleep=clock.sleep,
+        )
+
+
+def test_the_wait_times_out_with_nothing_kept():
+    clock = _Clock()
+    with pytest.raises(CookieReadError, match="within 30s"):
+        sb.wait_for_window_close(
+            9, "https://example.com", "example.com", 30,
+            read=lambda *a: _recs("guest"), pages=lambda p: 1,
+            clock=clock, sleep=clock.sleep,
+        )
+
+
+def test_one_slow_reply_is_not_a_close():
+    clock = _Clock()
+    pages = iter([1, 0, 1, 1, 0, 0])
+    reads = iter([_recs("guest"), _recs("guest"), _recs("signed-in")])
+    out = sb.wait_for_window_close(
+        9, "https://example.com", "example.com", 60,
+        read=lambda *a: next(reads), pages=lambda p: next(pages),
+        clock=clock, sleep=clock.sleep,
+    )
+    assert [c.value for c in out] == ["signed-in"]
+
+
+def test_signin_with_a_wait_never_asks_for_a_terminal(no_browser, monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setattr(sb, "_wait_for_debugger", lambda port, timeout: True)
+    monkeypatch.setattr(sys, "stdin", io.StringIO())  # not a tty
+    monkeypatch.setattr(sb, "wait_for_the_person",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("asked")))
+    monkeypatch.setattr(sb, "wait_for_window_close",
+                        lambda port, url, host, wait_s: _recs("signed-in"))
+    out = sb.signin("https://example.com", browser="chrome", wait_s=60)
+    assert out.count == 1
+
+
+def test_a_read_that_always_fails_says_why():
+    clock = _Clock()
+
+    def boom(*a):
+        raise CookieReadError("patchright is not installed")
+
+    with pytest.raises(CookieReadError, match="patchright is not installed"):
+        sb.wait_for_window_close(
+            9, "https://example.com", "example.com", 30,
+            read=boom, pages=lambda p: 1, clock=clock, sleep=clock.sleep,
+        )
+
+
+def test_a_page_with_no_cookies_yet_is_an_empty_read_not_a_failure():
+    from searchts.cdp_profile import NoSiteCookies
+
+    clock = _Clock()
+    pages = iter([1, 1, 1, 1, 0, 0])
+    reads = iter(["none", "none", "none", "signed-in"])
+
+    def read(*a):
+        v = next(reads)
+        if v == "none":
+            raise NoSiteCookies("no cookies for example.com in that browser.")
+        return _recs(v)
+
+    out = sb.wait_for_window_close(
+        9, "https://example.com", "example.com", 60,
+        read=read, pages=lambda p: next(pages), clock=clock, sleep=clock.sleep,
+    )
+    assert [c.value for c in out] == ["signed-in"]

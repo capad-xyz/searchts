@@ -19,6 +19,7 @@ Fetch a page as markdown, or fail and say why.
 Climbs the same three rungs the MCP server uses: curl_cffi with a browser TLS fingerprint, then the Jina reader relay, then a stealth browser. It stops at the first rung that returns real text. A wall, a login page, or a client-rendered shell is a failure, not a page.
 - A player page comes back as its captions, or the failure names transcribe.
 - A share link whose HTML is empty is still a read.
+- On failure `--json` prints `{"url", "error": {kind, message, exit_code, attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.
 
 ```bash
 searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages PAGES] [--items ITEMS] [--media MEDIA] [--expand] [--scrub] [--cookies-from-browser BROWSER] [--yes] [--cookies PATH] [--cdp-port PORT] [--proxy URL] [--proxy-trusted]
@@ -56,9 +57,9 @@ searchts read example.com --pages 3 --expand
 
 | Exit | Meaning |
 |---|---|
-| `0` | content or the requested output was returned |
-| `1` | the command failed; the reasons are on stderr |
-| `2` | bad usage, or a URL that cannot be read |
+| `0` | the page was read |
+| `1` | every rung failed (a wall, a login page, a network error) |
+| `2` | bad usage, a malformed URL, or the SSRF guard refused the URL |
 
 MCP: `read_url`.
 MCP-only parameters: `cursor`, `page_items`.
@@ -664,8 +665,10 @@ searchts login signin https://example.com --browser firefox --yes
 | `2` | bad usage |
 
 MCP: `login_signin`.
+MCP-only parameters: `wait_seconds`.
 CLI-only flags: `--yes`.
 - MCP keeps the login; CLI `login signin` keeps only with `--yes`.
+- MCP has no terminal: the user closes the window to finish, and the call waits up to `wait_seconds` (default 180, 30 to 900).
 
 ### `login purge-scratch`
 
