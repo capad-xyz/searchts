@@ -18,7 +18,13 @@ class GitHubChannel(Channel):
         probe = probe_command("gh", ["auth", "status"], timeout=10, package="gh")
         if probe.status == "missing":
             self.active_backend = None
-            return "warn", "gh CLI is not installed. Install: https://cli.github.com"
+            from searchts.setup_plan import missing_tool_hint
+
+            return "warn", (
+                "gh CLI is not installed. Install it with the first-pass setup:\n"
+                f"{missing_tool_hint('gh')}\n"
+                "or from https://cli.github.com"
+            )
         if probe.status == "broken":
             # gh is a binary install (brew/official package), not a pip package, so the fix doesn't use pipx/uv wording
             self.active_backend = None

@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """YouTube — check if yt-dlp is available with JS runtime."""
 
+import os
 import shutil
+import sysconfig
 
 from searchts.probe import probe_command
 from searchts.utils.paths import get_ytdlp_config_path, render_ytdlp_fix_command
@@ -18,6 +20,18 @@ def _has_js_runtime_config(config_path) -> bool:
         return "--js-runtimes" in read_utf8_text(config_path)
     except OSError:
         return False
+
+
+def bundled_deno() -> str:
+    """The deno binary from the ``deno`` PyPI package (yt-dlp[deno], #442).
+
+    It lands in this interpreter's scripts directory, which is exactly where
+    yt-dlp looks first, so it works even when that directory is not on PATH.
+    """
+    exe = os.path.join(
+        sysconfig.get_path("scripts"), "deno" + (sysconfig.get_config_var("EXE") or "")
+    )
+    return exe if os.path.isfile(exe) and os.access(exe, os.X_OK) else ""
 
 
 class YouTubeChannel(Channel):
@@ -47,15 +61,15 @@ class YouTubeChannel(Channel):
         # The yt-dlp binary is alive; the later JS runtime/transcription checks only affect ok/warn, not backend attribution
         self.active_backend = "yt-dlp"
         # Check JS runtime
-        has_js = shutil.which("deno") or shutil.which("node")
+        has_deno = bool(bundled_deno() or shutil.which("deno"))
+        has_js = has_deno or shutil.which("node")
         if not has_js:
             return "warn", (
                 "yt-dlp is installed but lacks a JS runtime (required by YouTube).\n"
-                "  Install Node.js or deno, then run: searchts install"
+                "  searchts ships one (yt-dlp[deno]); reinstall searchts to restore it"
             )
         # Check yt-dlp config for --js-runtimes
         # Deno works out of the box; Node.js requires explicit config
-        has_deno = shutil.which("deno")
         if not has_deno:
             ytdlp_config = get_ytdlp_config_path()
             if not _has_js_runtime_config(ytdlp_config):

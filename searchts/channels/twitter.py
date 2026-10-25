@@ -46,11 +46,12 @@ class TwitterChannel(Channel):
         if findings:  # only broken/timeout candidates remain
             return "error", "\n".join(m for _, _, m in findings)
 
+        from searchts.setup_plan import missing_tool_hint
+
         return "warn", (
-            "Twitter CLI is not installed. Install with:\n"
-            "  pipx install twitter-cli\n"
-            "or:\n"
-            "  uv tool install twitter-cli"
+            "Twitter CLI is not installed. Install it with the first-pass setup:\n"
+            f"{missing_tool_hint('twitter')}\n"
+            "or by hand: pipx install twitter-cli (or uv tool install twitter-cli)"
         )
 
     def _check_twitter_cli(self):

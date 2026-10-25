@@ -8,7 +8,10 @@ python-dotenv==1.2.2
 loguru==0.7.3
 PyYAML==6.0.3
 rich==15.0.0
-yt-dlp==2026.8.19
+yt-dlp==2026.10.21
+# yt-dlp[default,deno] (#442): the YouTube JS runtime and its solver scripts.
+deno==2.9.8
+yt-dlp-ejs==0.8.0
 # Unlocker / search runtime. These were missing from the file, so CI
 # floated to whatever PyPI served. Pins are the current releases as of
 # 2026-08-20 (satisfy curl_cffi>=0.7, trafilatura>=1.8, ddgs>=9.0).
@@ -16,8 +19,12 @@ curl_cffi==0.16.0
 trafilatura==2.2.0
 ddgs==9.15.0
 
-# Optional [mcp] extra. P2.3: SDK 2.x (FastMCP -> MCPServer).
+# Base since #442 (were the [mcp], [browser] and [cookies] extras).
+# P2.3: SDK 2.x (FastMCP -> MCPServer).
 mcp==2.0.0
+patchright==1.64.2
+browser-cookie3==0.20.1
+imageio-ffmpeg==0.6.0
 
 pytest==8.0.0
 ruff==0.15.1

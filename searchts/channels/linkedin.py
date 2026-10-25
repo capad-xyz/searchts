@@ -19,8 +19,13 @@ class LinkedInChannel(Channel):
         self.active_backend = None
         probe = probe_command("mcporter", ["config", "list"], timeout=10, package="mcporter")
         if probe.status == "missing":
+            from searchts.setup_plan import missing_tool_hint
+
             return "off", (
-                "Basic content can be read via Jina Reader. Full functionality requires:\n"
+                "Basic content can be read via Jina Reader. Full functionality needs "
+                "mcporter and linkedin-scraper-mcp; install both with the first-pass setup:\n"
+                f"{missing_tool_hint('linkedin')}\n"
+                "or by hand:\n"
                 "  pip install linkedin-scraper-mcp\n"
                 "  mcporter config add linkedin http://localhost:3000/mcp\n"
                 "  See https://github.com/stickerdaniel/linkedin-mcp-server for details"

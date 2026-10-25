@@ -301,6 +301,9 @@ def browser_extra_requirements() -> list[str]:
         # importlib.metadata: 'patchright>=1.50; extra == "browser"'
         if 'extra == "browser"' in marker or "extra == 'browser'" in marker:
             out.append(spec)
+        # #442: patchright is a base dependency now and the extra is empty.
+        elif not marker and _req_name(spec).lower() == "patchright":
+            out.append(spec)
     return out or [_BROWSER_REQ_FALLBACK]
 
 

@@ -161,9 +161,9 @@ def _decode_chunk_ffmpeg(
     with every PyAV version. numpy is imported here, not at module import, so
     the core install does not need it.
     """
-    _require("ffmpeg")
+    ffmpeg = _ffmpeg()
     cmd = [
-        "ffmpeg",
+        ffmpeg,
         "-nostdin",
         "-hide_banner",
         "-loglevel",
@@ -230,6 +230,26 @@ def transcribe_chunk_local(
 def _require(binary: str) -> None:
     if not shutil.which(binary):
         raise MissingDependency(f"{binary} not found in PATH")
+
+
+def ytdlp_ffmpeg_args() -> List[str]:
+    """``--ffmpeg-location`` when ffmpeg is only the bundled one (#442)."""
+    from searchts.utils.ffmpeg import ytdlp_ffmpeg_args as _args
+
+    return _args()
+
+
+def _ffmpeg() -> str:
+    """ffmpeg to run: PATH first, then the bundled imageio-ffmpeg binary (#442)."""
+    from searchts.utils.ffmpeg import ffmpeg_exe
+
+    exe = ffmpeg_exe()
+    if not exe:
+        raise MissingDependency(
+            "ffmpeg not found in PATH and the bundled imageio-ffmpeg binary is "
+            "missing; reinstall searchts or install ffmpeg"
+        )
+    return exe
 
 
 def _tick(progress: bool, msg: str) -> None:
@@ -340,6 +360,7 @@ def download_audio(
         [
             *_ytdlp_cmd(),
             *cookies_from_browser_args(cookies_from_browser),
+            *ytdlp_ffmpeg_args(),
             "-x",
             "--audio-format",
             "m4a",
@@ -570,11 +591,11 @@ def _vtt_to_text(vtt: str) -> str:
 
 def compress_audio(src: Path, out_dir: Path) -> Path:
     """Re-encode to mono / 16kHz / 32kbps m4a — keeps most content under 25MB."""
-    _require("ffmpeg")
+    ffmpeg = _ffmpeg()
     dst = out_dir / "compressed.m4a"
     _run(
         [
-            "ffmpeg",
+            ffmpeg,
             "-loglevel",
             "error",
             "-y",
@@ -595,11 +616,11 @@ def compress_audio(src: Path, out_dir: Path) -> Path:
 
 def chunk_audio(src: Path, out_dir: Path, segment_seconds: int = CHUNK_SECONDS) -> List[Path]:
     """Split src into segments. Re-encodes each segment so cuts align to keyframes."""
-    _require("ffmpeg")
+    ffmpeg = _ffmpeg()
     pattern = out_dir / "chunk_%03d.m4a"
     _run(
         [
-            "ffmpeg",
+            ffmpeg,
             "-loglevel",
             "error",
             "-y",
@@ -649,7 +670,9 @@ def transcription_readiness(config: Optional[Config]) -> str:
     if not providers and not local:
         return ""
 
-    has_ffmpeg = bool(shutil.which("ffmpeg"))
+    from searchts.utils.ffmpeg import ffmpeg_exe
+
+    has_ffmpeg = bool(ffmpeg_exe())
 
     # Subtitles-first needs no ffmpeg; audio transcription (hosted OR local)
     # does. If a backend is configured but ffmpeg is missing, captions still

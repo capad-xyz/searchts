@@ -410,12 +410,12 @@ CLI-only flags: `--json`.
 
 ### `install`
 
-One-shot installer; --system-deps to change things.
-Non-mutating by default: without --system-deps it prints the system commands instead of running them. It does write the agent skill files (~/.agents/skills/searchts, or each OpenClaw/Claude Code skills dir that exists) and the user-scope memory rule; both are listed up front, and --dry-run lists them and writes nothing. --browser installs the stealth-browser extra into this interpreter.
+First-pass setup: one list, one approval; --system-deps for system packages.
+Shows one list with sizes: Chromium for the stealth browser and the site tools (X, Reddit, LinkedIn, mcporter, GitHub), all checked by default. A terminal asks once; uncheck by id. Without a terminal nothing on the list is installed unless --yes is passed. --skip ids unchecks items. --dry-run --json prints the list as searchts.setup.v1. Site logins are not part of this approval. It also writes the agent skill files (~/.agents/skills/searchts, or each OpenClaw/Claude Code skills dir that exists) and the user-scope memory rule; both are listed up front, and --dry-run lists them and writes nothing. --browser installs only the stealth browser; --system-deps also installs system packages instead of printing the commands.
 - --safe is a deprecated no-op; non-mutating is now the default.
 
 ```bash
-searchts install [--verbose] [--env {local,server,auto}] [--proxy PROXY] [--system-deps] [--safe] [--dry-run] [--channels CHANNELS] [--browser]
+searchts install [--verbose] [--env {local,server,auto}] [--proxy PROXY] [--system-deps] [--safe] [--dry-run] [--channels CHANNELS] [--browser] [--yes] [--skip IDS] [--json]
 ```
 
 | Flag | Description |
@@ -428,11 +428,16 @@ searchts install [--verbose] [--env {local,server,auto}] [--proxy PROXY] [--syst
 | `--dry-run` | Show what would be done without making any changes |
 | `--channels` CHANNELS | Comma-separated optional channels to install (twitter,reddit,opencli,linkedin,all) |
 | `--browser` | Install searchts[browser] + Chromium into this CLI's environment (same interpreter as the running searchts). Refuses ephemeral uvx. |
+| `--yes`, `-y` | Approve the first-pass list without a prompt: Chromium and the site tools (X, Reddit, LinkedIn, mcporter, GitHub), minus any --skip. Without it and without a terminal, nothing on the list is installed |
+| `--skip` IDS | Uncheck first-pass items, comma-separated: chromium,twitter,reddit,linkedin,mcporter,gh |
+| `--json` | With --dry-run: print the first-pass list as searchts.setup.v1 JSON (sizes, installed state, approve command) and change nothing |
 
 Examples:
 
 ```bash
 searchts install
+searchts install --yes --skip linkedin,mcporter
+searchts install --dry-run --json
 searchts install --browser
 searchts install --system-deps --channels twitter,reddit
 ```

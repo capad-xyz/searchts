@@ -34,19 +34,34 @@ dependencies = [
     "loguru>=0.7",
     "pyyaml>=6.0",
     "rich>=13.0",
-    "yt-dlp>=2024.0",
+    # #442: the JS runtime YouTube needs comes in as a Python package (deno via
+    # yt-dlp's own extra), so no apt/NodeSource Node.js and no edit to the
+    # user's yt-dlp config. yt-dlp finds it in this env's scripts directory.
+    "yt-dlp[default,deno]>=2026.10.21",
     "curl_cffi>=0.7",
     "trafilatura>=1.8",
     "ddgs>=9.0",
+    # #442: first-pass setup. These used to be extras a plain install missed.
+    # The stealth browser is core to reads now (Chromium itself is on the one
+    # up-front consent list, `searchts install`).
+    "patchright>=1.50",
+    "browser-cookie3>=0.19",
+    # P2.3: SDK 2.x renamed FastMCP -> MCPServer. Cap below 3.
+    "mcp[cli]>=2,<3",
+    # A bundled ffmpeg binary (no ffprobe; nothing searchts runs needs it).
+    # Used when ffmpeg is not on PATH, so transcription needs no system install.
+    "imageio-ffmpeg>=0.5",
 ]
 
 [project.optional-dependencies]
-browser = ["patchright>=1.50"]  # tier-2 stealth-browser backend (undetected Playwright)
-cookies = ["browser-cookie3>=0.19"]
-# P2.3: SDK 2.x renamed FastMCP -> MCPServer. Cap below 3.
-mcp = ["mcp[cli]>=2,<3"]  # MCPServer stdio + localhost HTTP/SSE (searchts mcp serve)
+# #442: browser, cookies and mcp are in the base install now. The extras stay
+# as empty aliases so existing specs (searchts[mcp,browser], the uvx and
+# `claude mcp add` lines) keep resolving.
+browser = []
+cookies = []
+mcp = []
 local-transcribe = ["faster-whisper>=1.0"]  # keyless local Whisper (searchts transcribe --provider local)
-all = ["patchright>=1.50", "mcp[cli]>=2,<3", "browser-cookie3>=0.19", "faster-whisper>=1.0"]
+all = ["faster-whisper>=1.0"]
 dev = [
     "pytest>=8.0",
     "ruff>=0.8",
