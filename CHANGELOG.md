@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.22.1](https://github.com/capad-xyz/searchts/compare/v0.22.0...v0.22.1) (2026-10-25)
+
+
+### Fixed
+
+* **transcribe:** decode audio with ffmpeg for local Whisper ([#440](https://github.com/capad-xyz/searchts/issues/440)) ([d49c38a](https://github.com/capad-xyz/searchts/commit/d49c38a1ab10127d40118dc987fc710fba5896ee)), closes [#438](https://github.com/capad-xyz/searchts/issues/438)
+
 ## [0.22.0](https://github.com/capad-xyz/searchts/compare/v0.21.1...v0.22.0) (2026-10-24)
 
 
