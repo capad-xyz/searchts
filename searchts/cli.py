@@ -3804,6 +3804,16 @@ def _cmd_search(args):
                 for r in results
             ]
             print(json.dumps(payload, ensure_ascii=False))
+            # stdout stays the bare array existing consumers parse, so a newer
+            # release is one JSON line on stderr, next to the snippet line.
+            from searchts.update_nudge import update_available_for_agent
+
+            update = update_available_for_agent()
+            if update:
+                print(
+                    json.dumps({"update_available": update}, ensure_ascii=False),
+                    file=sys.stderr,
+                )
             return
 
         sources = {r.source for r in results if r.source}
@@ -3840,7 +3850,13 @@ def _cmd_doctor(args=None):
     results = check_all(config, progress=not getattr(args, "json", False))
 
     if args is not None and getattr(args, "json", False):
-        print(json.dumps(results, ensure_ascii=False, indent=2))
+        # Same rule as read/grab --json: present only when the cached release
+        # is newer. It is the one top-level key that is not a channel.
+        from searchts.update_nudge import update_available_for_agent
+
+        update = update_available_for_agent()
+        payload = {**results, "update_available": update} if update else results
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
         from searchts.doctor import format_lock_note, windows_searchts_pids
         note = format_lock_note(windows_searchts_pids())
         if note:

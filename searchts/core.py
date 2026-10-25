@@ -37,11 +37,11 @@ class Searchts:
         return check_all(self.config)
 
     def doctor_report(self) -> str:
-        """Health report as plain text.
+        """Health report as plain text, one line per channel.
 
-        MCP ``get_status`` prints this string as-is, so no ANSI colour and no
-        wrapping the caller cannot control. The CLI calls ``format_report``
-        itself when it wants colour.
+        MCP ``get_status`` prints this string as-is: no ANSI colour, no glyphs
+        and no wrapping, so a fix command is never split across lines. The CLI
+        calls ``format_report`` itself for the terminal screen.
         """
-        from searchts.doctor import check_all, format_report
-        return format_report(check_all(self.config), color=False)
+        from searchts.doctor import check_all, format_plain
+        return format_plain(check_all(self.config))

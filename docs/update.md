@@ -18,10 +18,12 @@ failure is silent.
 
 When the latest release is newer:
 
-- `searchts read --json` and `searchts grab --json` include a top-level
-  `update_available` object (`current`, `latest`, `command`) only on that run.
-  `searchts search --json` and `searchts doctor --json` are top-level lists, so
-  their shape does not change.
+- `searchts read --json`, `searchts grab --json` and `searchts doctor --json`
+  include a top-level `update_available` object (`current`, `latest`,
+  `command`) only on that run. In `doctor --json` it is the one top-level key
+  that is not a channel.
+- `searchts search --json` keeps stdout a bare array, so it prints
+  `{"update_available": {...}}` as one JSON line on stderr instead.
 - MCP tool results include the same object. At most once per 24 hours they also
   include one line telling the agent a newer version exists; the stamp is in
   `~/.searchts/update-notice.json`.

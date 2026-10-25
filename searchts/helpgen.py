@@ -210,7 +210,8 @@ def render_llms_block(payload: dict) -> str:
         "MCP tools: "
         + ", ".join(f"`{tool}`" for tool in catalog.mcp_tool_names())
         + ". `read_url` has no `next_url`; use the signed `next_cursor`. "
-        "MCP results and `--json` output carry `update_available`.",
+        "MCP results and `--json` output carry `update_available` "
+        "(`search --json`: one JSON line on stderr).",
         "",
         "Machine-readable catalog: `searchts help --json` (`searchts.help.v1`). "
         "Full flags, defaults and examples: "
@@ -257,7 +258,8 @@ def render_skill_block(payload: dict) -> str:
         f"[docs/cli.md]({CLI_DOC_URL}). `web_search` defaults to 5 results; CLI `-n` defaults "
         "to 10. MCP has no `provider` parameter. `read_url` has no `next_url`; "
         "use the signed `next_cursor`. MCP results and `--json` output carry "
-        "`update_available`.",
+        "`update_available` (`search --json`: one JSON line on stderr, so stdout "
+        "stays the array).",
         "",
         "### Exit codes",
         "",
