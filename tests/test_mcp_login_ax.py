@@ -126,6 +126,15 @@ def test_the_refusal_names_the_approval_parameter_not_a_missing_login(monkeypatc
     assert "Only if they say yes" in out
 
 
+
+def test_the_refusal_describes_the_one_call_grant_not_a_session(monkeypatch):
+    """#465: the store's CLI text promised a session-wide yes over MCP."""
+    serves(monkeypatch)
+    out = mcp_server.read_url("https://example.com/a", cookies_from_browser="firefox")
+    assert "once per session" not in out
+    assert "this session may copy" not in out
+    assert "one read_url call for example.com only" in out
+
 def _fake_firefox(monkeypatch, seen):
     import searchts.cdp_profile as cdp
     from searchts import login_store

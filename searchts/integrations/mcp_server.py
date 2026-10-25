@@ -810,7 +810,12 @@ def read_url(
         # Bound before the try: the anonymous-read path returns from inside
         # `except CookieReadError` with jar already None, and a name only
         # assigned on the success path would be unbound at the line after.
-        from searchts.login_store import SessionConsentNeeded, grant_for_one_call, prepare
+        from searchts.login_store import (
+            SessionConsentNeeded,
+            grant_for_one_call,
+            host_of,
+            prepare,
+        )
         from searchts.session_cookies import CookieReadError
 
         source = None
@@ -820,7 +825,7 @@ def read_url(
                     source = prepare(url, browser=cookies_from_browser)
             else:
                 source = prepare(url, browser=cookies_from_browser or "")
-        except SessionConsentNeeded as e:
+        except SessionConsentNeeded:
             # This is the answer an agent needs most and had no way to get: the
             # read stopped because it wanted a login, and here is the exact
             # command that gets it one.
@@ -833,9 +838,15 @@ def read_url(
                     "`--remote-debugging-port=9222` and pass `cdp_port='9222'` "
                     "to read_url (the MCP equivalent of `--cdp-port`)."
                 )
+            # Not the store's own text: that one describes the CLI's
+            # once-per-session yes, and approve_cookie_copy grants one call.
+            host = host_of(url) or url
             return (
                 f"Error: copying cookies from {cookies_from_browser} needs the "
-                f"user's approval, so nothing was read.\n{e}\n"
+                f"user's approval, so nothing was read.\n"
+                f"{host} is not kept. An approval covers one read_url call for "
+                f"{host} only: it is not remembered, and a later call or another "
+                f"site asks again.\n"
                 f"Ask the user whether to copy this site's login from "
                 f"{cookies_from_browser}. Only if they say yes, call read_url "
                 f"again with the same cookies_from_browser and "
