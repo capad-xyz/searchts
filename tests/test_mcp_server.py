@@ -987,7 +987,9 @@ def test_the_receipts_key_set_is_pinned(monkeypatch):
         # not "did this carry a login" but "where did that login come from", which
         # is what tells an agent whether the next read will prompt. Empty on an
         # anonymous read.
-        "authenticated", "login_via", "text", "more", "pages",
+        # `pages` is absent on a one-page read: it would be an unfenced copy
+        # of `text` (#345). It appears only when the walk read several pages.
+        "authenticated", "login_via", "text", "more",
     }
     assert set(json.loads(mcp_server.read_url("https://x.test/a", page_items=2))) == {
         "url", "final_url", "fetched_at", "backend", "status", "authenticated",
