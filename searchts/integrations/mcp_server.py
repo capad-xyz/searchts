@@ -50,7 +50,8 @@ MCP_MISSING_MESSAGE = (
 #: One sentence every tool description carries, so the check is never a
 #: surprise: what is read, how often, what travels, and that it never installs.
 UPDATE_CHECK_DESCRIPTION = (
-    " Update check: when a newer release exists, the result also carries "
+    " Update check: when a newer release exists, a successful result also "
+    "carries "
     "'update_available' plus, at most once per 24 hours, one line telling the "
     "agent. The check is one GET to the GitHub latest release of "
     "capad-xyz/searchts, at most once per 24 hours, cached in "
@@ -230,8 +231,7 @@ def create_server():
 
     @mcp.tool(name="web_search", description=WEB_SEARCH_DESCRIPTION)
     def web_search_tool(query: str, max_results: int = 5) -> str:
-        n = max(1, min(int(max_results or 5), 25))
-        return web_search(query, n)
+        return web_search(query, clamp_max_results(max_results))
 
     # ── logins ──────────────────────────────────────────────────────────────
     # read_url's login-wall error names these by name. A tool list that says
@@ -460,6 +460,17 @@ def _as_mcp_params(text: str) -> str:
     for flag, param in _MCP_PARAM_FOR_FLAG:
         text = flag.sub(param, text)
     return text
+
+
+def clamp_max_results(max_results: Optional[int]) -> int:
+    """web_search's documented range: 1 to 25, and 5 when not given.
+
+    0 is a number the caller sent, so it is raised to 1 like any other value
+    under the floor (it used to read as "unset" and give 5).
+    """
+    if max_results is None:
+        return 5
+    return max(1, min(int(max_results), 25))
 
 
 def login_check(url: str, check_url: str = "") -> str:

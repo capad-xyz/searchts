@@ -826,7 +826,7 @@ No MCP tool: installing software is the user's act; MCP reports `update_availabl
 ### `check-update`
 
 Is there a newer version?
-One GitHub API call. Since 0.22.0 a newer release is also reported in `--json` output and in every MCP result as `update_available`, so an agent does not need a separate call after each task. `search --json` keeps stdout a bare array, so it prints `{"update_available": ...}` as one JSON line on stderr instead.
+One GitHub API call. Since 0.22.0 a newer release is also reported in `--json` output and in every successful MCP result as `update_available` (an `Error: ...` result does not carry it), so an agent does not need a separate call after each task. `search --json` keeps stdout a bare array, so it prints `{"update_available": ...}` as one JSON line on stderr instead.
 
 ```bash
 searchts check-update [--verbose]

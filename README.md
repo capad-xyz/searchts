@@ -257,7 +257,7 @@ When that release is newer:
   newer, so existing parsers see no new key. `searchts search --json` keeps
   stdout a bare array and prints `{"update_available": {...}}` as one JSON line
   on stderr.
-- MCP tool results carry the same object, plus at most once per 24 hours one
+- Successful MCP tool results (not `Error: ...` strings) carry the same object, plus at most once per 24 hours one
   line telling the agent to tell you. The stamp lives in
   `~/.searchts/update-notice.json`.
 - A terminal run still gets the existing stderr nudge.
