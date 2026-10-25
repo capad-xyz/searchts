@@ -145,8 +145,11 @@ def render_cli_doc(payload: dict) -> str:
         "> Generated from the live argparse tree by "
         "`python -m searchts.helpgen --write`. Do not edit by hand.",
         "",
+        # The marker lets release-please bump this line in its release PR,
+        # the way it bumps __init__.py; without it every release PR failed
+        # the drift test on docs/cli.md.
         f"searchts v{payload['version']}. Machine-readable: "
-        "`searchts help --json` (`searchts.help.v1`).",
+        "`searchts help --json` (`searchts.help.v1`). <!-- x-release-please-version -->",
         "",
         "## Global flags",
         "",

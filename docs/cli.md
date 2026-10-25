@@ -2,7 +2,7 @@
 
 > Generated from the live argparse tree by `python -m searchts.helpgen --write`. Do not edit by hand.
 
-searchts v0.22.0. Machine-readable: `searchts help --json` (`searchts.help.v1`).
+searchts v0.22.0. Machine-readable: `searchts help --json` (`searchts.help.v1`). <!-- x-release-please-version -->
 
 ## Global flags
 

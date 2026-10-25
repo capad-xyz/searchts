@@ -30,7 +30,7 @@ class TestCLI:
                 main()
         assert exc_info.value.code == 0
 
-    def test_doctor_runs(self, capsys):
+    def test_doctor_runs(self, capsys, offline_jina_probe):
         with patch("sys.argv", ["searchts", "doctor"]):
             main()
         captured = capsys.readouterr()

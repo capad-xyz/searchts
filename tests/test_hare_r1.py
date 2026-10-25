@@ -13,6 +13,18 @@ import hare_r1  # noqa: E402
 import pytest  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def no_live_github(monkeypatch):
+    """The head tree comes from api.github.com; a test never fetches it.
+
+    Unstubbed, `_hare_once` asked GitHub for a tarball with a fake token, got a
+    401 (or nothing, offline) and fell back to "not run". Same path, no network.
+    The reasoning catalog is a live /models call too; {} is its own fallback.
+    """
+    monkeypatch.setattr(hare_r1, "fetch_head_tree", lambda *a, **k: "")
+    monkeypatch.setattr(hare_r1, "fetch_reasoning_catalog", lambda base, timeout=20: {})
+
+
 def _hare_world(monkeypatch, order, event, ask="", reviewed=True):
     """`_hare_once` with only the network faked, for tests that drive it."""
     pr = {"head": {"sha": "abc", "repo": {"full_name": "o/r"}}, "base": {"sha": "b0", "repo": {"full_name": "o/r"}},
