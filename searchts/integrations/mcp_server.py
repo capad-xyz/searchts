@@ -446,6 +446,22 @@ def login_signin(url: str, browser: str = "chrome",
     ))
 
 
+#: CLI flags that shared login and transcribe messages name, rewritten to the
+#: MCP parameter an agent can actually pass (#466). The CLI keeps the flags.
+_MCP_PARAM_FOR_FLAG = (
+    (re.compile(r"--provider (\w+)"), r"provider='\1'"),
+    (re.compile(r"--cookies-from-browser\b"), "cookies_from_browser"),
+    (re.compile(r"(?<![\w-])--url\b"), "check_url"),
+)
+
+
+def _as_mcp_params(text: str) -> str:
+    """Name MCP parameters, not CLI flags, in a message an agent will follow."""
+    for flag, param in _MCP_PARAM_FOR_FLAG:
+        text = flag.sub(param, text)
+    return text
+
+
 def login_check(url: str, check_url: str = "") -> str:
     """Settle whether a saved login is alive. Never carries a cookie value."""
     from searchts.login_store import check_login, host_of
@@ -461,7 +477,7 @@ def login_check(url: str, check_url: str = "") -> str:
         {
             "host": host,
             "status": out.status,
-            "why": out.why,
+            "why": _as_mcp_params(out.why),
             "page": out.url,
             "exit_code": out.exit_code,
         },
@@ -1142,7 +1158,7 @@ def transcribe_source(
             progress=False,
         ), update_info)
     except TranscribeError as e:
-        return f"Error: {e}"
+        return _as_mcp_params(f"Error: {e}")
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
         return _unexpected("transcribe", e)
 

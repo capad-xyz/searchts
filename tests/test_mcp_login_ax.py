@@ -332,3 +332,33 @@ def test_the_login_wall_error_names_a_registered_tool():
     # cookies_from_browser is a read_url argument, not a tool, so it is checked
     # separately: naming a flag is fine, naming a missing tool is not.
     assert "cookies_from_browser" in msg
+
+
+def test_login_check_advice_names_check_url_not_the_cli_flag():
+    """#466: the shared text said "Pass --url", a flag MCP does not have."""
+    out = json.loads(mcp_server.login_check("https://example.com"))
+    assert out["status"] == "unknown"
+    assert "--url" not in out["why"]
+    assert "check_url" in out["why"]
+
+
+def test_transcribe_advice_names_the_provider_param_not_the_cli_flag(monkeypatch):
+    """#466: the no-backend error named `--provider local/auto` over MCP."""
+    import searchts.transcribe as tr
+
+    monkeypatch.setattr(tr, "local_available", lambda: False)
+
+    def no_backend(source, provider="auto", **_kw):
+        tr._validate_backend([tr.LOCAL_PROVIDER], tr.Config())
+
+    monkeypatch.setattr(tr, "transcribe", no_backend)
+    out = mcp_server.transcribe_source("clip.wav", provider="local")
+    assert out.startswith("Error: no transcription backend")
+    assert "--provider" not in out
+    assert "provider='local'" in out and "provider='auto'" in out
+
+
+def test_cli_login_check_still_names_the_flag():
+    from searchts.login_store import check_login
+
+    assert "Pass --url" in check_login("https://example.com").why
