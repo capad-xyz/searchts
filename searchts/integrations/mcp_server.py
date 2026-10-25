@@ -111,6 +111,11 @@ READ_URL_DESCRIPTION = (
     "opt-in, never guessed, and host-fenced: the cookies go only to that URL's "
     "own host on the direct request, never to a relay service, never to a "
     "redirect elsewhere, and are never returned. Ask the user before using one. "
+    "Copying a site's cookies out of a browser profile with "
+    "'cookies_from_browser' also needs 'approve_cookie_copy': set it true "
+    "ONLY after the user said yes to copying that site's login from that "
+    "browser; it approves this one call and is not remembered. Never set it "
+    "on your own initiative. A login kept in the searchts store needs neither. "
     "'proxy' routes the read through a proxy for walls decided on the address "
     "rather than the request; it refuses to carry cookies unless "
     "'proxy_trusted' is true. 'max_pages' and 'max_items' ask for more of a "
@@ -206,6 +211,7 @@ def create_server():
         proxy: str = "",
         proxy_trusted: bool = False,
         max_media: int = 0,
+        approve_cookie_copy: bool = False,
     ) -> str:
         # The stealth-browser rung is sync Playwright work that refuses to run
         # on a running asyncio loop. ``asyncio.to_thread`` runs it in a worker
@@ -219,6 +225,7 @@ def create_server():
             read_url, url, max_pages, max_items, cursor, page_items,
             expand, cookies, cookies_from_browser, cdp_port, proxy,
             proxy_trusted, max_media, update_info=info,
+            approve_cookie_copy=approve_cookie_copy,
         )
 
     @mcp.tool(name="web_search", description=WEB_SEARCH_DESCRIPTION)
@@ -511,9 +518,10 @@ def _login_wall_error(url: str, exc: BaseException, *, had_cookies: bool) -> str
         )
     return base + (
         f"  {host} is behind a login and this read had none. Two ways forward:\n"
-        f"    1. Ask the user to approve one copy for this session, then "
-        f"re-call read_url with cookies_from_browser set to a Firefox-family "
-        f"browser (firefox, zen, librewolf).\n"
+        f"    1. Ask the user whether to copy their login from a Firefox-family "
+        f"browser (firefox, zen, librewolf). Only if they say yes, re-call "
+        f"read_url with cookies_from_browser set to it and "
+        f"approve_cookie_copy=true.\n"
         f"    2. Ask the user to sign in once: call `login_signin` with url "
         f"{url}. Then re-call read_url."
     )
@@ -718,6 +726,7 @@ def read_url(
     max_media: int = 0,
     *,
     update_info: Any = _UPDATE_UNSET,
+    approve_cookie_copy: bool = False,
 ) -> str:
     """Fetch `url` via the unlocker and return a JSON source-receipt + markdown.
 
@@ -757,6 +766,11 @@ def read_url(
     ``searchts.knobs``. The agent asks up to it and cannot raise it; a request
     over it is clamped and the note says so, in the same ``text`` the rest of
     the findings land in. The names are the CLI's names.
+
+    ``approve_cookie_copy`` is the MCP form of the CLI's ``--yes`` for a
+    ``cookies_from_browser`` copy. The agent sets it only after the user said
+    yes; it approves this one call (``login_store.grant_for_one_call``) and is
+    never remembered by the long-lived server process.
     """
     from searchts import paging, sanitize, ssrf, unlocker
 
@@ -793,15 +807,19 @@ def read_url(
         # does. A kept login is used with no prompt, which is the point of
         # keeping it. A browser named without a grant is refused here rather
         # than silently reading that profile's cookies.
-        from searchts.login_store import SessionConsentNeeded, prepare
-        from searchts.session_cookies import CookieReadError
-
         # Bound before the try: the anonymous-read path returns from inside
         # `except CookieReadError` with jar already None, and a name only
         # assigned on the success path would be unbound at the line after.
+        from searchts.login_store import SessionConsentNeeded, grant_for_one_call, prepare
+        from searchts.session_cookies import CookieReadError
+
         source = None
         try:
-            source = prepare(url, browser=cookies_from_browser or "")
+            if cookies_from_browser and approve_cookie_copy:
+                with grant_for_one_call():
+                    source = prepare(url, browser=cookies_from_browser)
+            else:
+                source = prepare(url, browser=cookies_from_browser or "")
         except SessionConsentNeeded as e:
             # This is the answer an agent needs most and had no way to get: the
             # read stopped because it wanted a login, and here is the exact
@@ -816,10 +834,14 @@ def read_url(
                     "to read_url (the MCP equivalent of `--cdp-port`)."
                 )
             return (
-                f"Error: this read needs a login and did not have one.\n{e}\n"
-                f"Either ask the user to approve one copy for this session, or "
-                f"have them sign in once with the `login_signin` tool, then "
-                f"call read_url again.{chromium_hint}"
+                f"Error: copying cookies from {cookies_from_browser} needs the "
+                f"user's approval, so nothing was read.\n{e}\n"
+                f"Ask the user whether to copy this site's login from "
+                f"{cookies_from_browser}. Only if they say yes, call read_url "
+                f"again with the same cookies_from_browser and "
+                f"approve_cookie_copy=true (it approves that one call). Or have "
+                f"them sign in once with the `login_signin` tool, which needs no "
+                f"copy.{chromium_hint}"
             )
         except CookieReadError as e:
             if not cookies_from_browser:

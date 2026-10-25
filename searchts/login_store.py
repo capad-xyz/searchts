@@ -203,6 +203,32 @@ def grant_session_copy() -> None:
     )
 
 
+def grant_for_one_call():
+    """Approve copying for the duration of one ``with`` block, then restore.
+
+    For MCP ``read_url(approve_cookie_copy=true)``: the server process lives
+    for the whole host session, so a grant recorded against its PID would
+    approve every later copy too. This approves the one call the user said
+    yes to and puts back whatever grant was there before.
+    """
+    from contextlib import contextmanager
+
+    @contextmanager
+    def _scope():
+        path = session_grant_path()
+        before = _read_json(path) if os.path.exists(path) else None
+        grant_session_copy()
+        try:
+            yield
+        finally:
+            if before:
+                _write_json(path, before, 0o600)
+            else:
+                revoke_session_copy()
+
+    return _scope()
+
+
 def revoke_session_copy() -> None:
     """Forget this session's approval. Asks again on the next copy."""
     try:

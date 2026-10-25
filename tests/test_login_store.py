@@ -352,3 +352,20 @@ def test_unknown_browser_is_reported_not_crashed():
 
 def test_not_a_url_is_none_state():
     assert ls.decide("not a url").state == ls.NONE
+
+
+def test_a_one_call_grant_restores_the_grant_that_was_there(monkeypatch):
+    """#451: the MCP one-call approval must not erase a CLI run's own grant."""
+    other = {"copy": True, "pid": 424242, "at": 1}
+    ls._write_json(ls.session_grant_path(), other, 0o600)
+    with ls.grant_for_one_call():
+        assert ls.session_granted() is True
+    assert ls._read_json(ls.session_grant_path()) == other
+    assert ls.session_granted() is False
+
+
+def test_a_one_call_grant_leaves_nothing_when_there_was_none():
+    with ls.grant_for_one_call():
+        assert ls.session_granted() is True
+    assert ls.session_granted() is False
+    assert not os.path.exists(ls.session_grant_path())

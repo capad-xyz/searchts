@@ -585,11 +585,13 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "The JSON has no `next_url`: a page-authored URL is not a safe next "
             "request. Use the signed `next_cursor`, or `searchts read --json` "
             "when a human wants the URL.",
+            "`approve_cookie_copy` is CLI `--yes` for one call: set it only after "
+            "the user said yes to a `cookies_from_browser` copy.",
         ),
         mcp_only_params=("cursor", "page_items"),
-        cli_only_flags=("--human", "--scrub", "--backend", "--json", "--yes"),
+        cli_only_flags=("--human", "--scrub", "--backend", "--json"),
         param_flags=(("max_pages", "--pages"), ("max_items", "--items"),
-                     ("max_media", "--media")),
+                     ("max_media", "--media"), ("approve_cookie_copy", "--yes")),
     ),
     "web_search": McpTool(
         "web_search", "search",

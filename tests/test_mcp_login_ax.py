@@ -117,6 +117,64 @@ def test_a_refused_copy_does_not_reach_the_network(monkeypatch):
     assert called == []
 
 
+def test_the_refusal_names_the_approval_parameter_not_a_missing_login(monkeypatch):
+    """#451: the old text said the page "needs a login", which it may not."""
+    serves(monkeypatch)
+    out = mcp_server.read_url("https://example.com/a", cookies_from_browser="firefox")
+    assert "needs a login" not in out
+    assert "approve_cookie_copy=true" in out
+    assert "Only if they say yes" in out
+
+
+def _fake_firefox(monkeypatch, seen):
+    import searchts.cdp_profile as cdp
+    from searchts import login_store
+    from searchts.session_cookies import CookieRecord, CookieSource
+
+    def read_site_cookies(site, browser, confirm=None):
+        seen.append(login_store.session_granted())
+        return CookieSource(site=site, cookies=[
+            CookieRecord("sid", "SECRET", "example.com", secure=True)], count=1,
+            via=f"{browser} profile")
+
+    monkeypatch.setattr(cdp, "read_site_cookies", read_site_cookies)
+
+
+def test_approve_cookie_copy_approves_that_one_call(monkeypatch):
+    """#451: the approval reaches the copy, and is gone after the call."""
+    from searchts import login_store
+
+    seen = []
+    _fake_firefox(monkeypatch, seen)
+    serves(monkeypatch, pages=[ok_page(authenticated=True)])
+    out = json.loads(mcp_server.read_url(
+        "https://example.com/a", cookies_from_browser="firefox",
+        approve_cookie_copy=True,
+    ))
+    assert seen == [True]
+    assert out["authenticated"] is True
+    assert "SECRET" not in json.dumps(out)
+    # Not remembered by the long-lived server process.
+    assert login_store.session_granted() is False
+    again = mcp_server.read_url("https://example.com/b", cookies_from_browser="firefox")
+    assert again.startswith("Error:") and "approval" in again
+
+
+def test_approve_cookie_copy_alone_copies_nothing(monkeypatch):
+    seen = []
+    _fake_firefox(monkeypatch, seen)
+    serves(monkeypatch)
+    out = json.loads(mcp_server.read_url("https://example.com/a", approve_cookie_copy=True))
+    assert seen == []
+    assert out["authenticated"] is False
+
+
+def test_the_tool_description_says_only_after_the_user_said_yes():
+    flat = " ".join(mcp_server.READ_URL_DESCRIPTION.split())
+    assert "approve_cookie_copy" in flat
+    assert "ONLY after the user said yes" in flat
+
+
 # ── a login wall names the next step ────────────────────────────────────────
 
 

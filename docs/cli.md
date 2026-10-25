@@ -63,9 +63,10 @@ searchts read example.com --pages 3 --expand
 
 MCP: `read_url`.
 MCP-only parameters: `cursor`, `page_items`.
-CLI-only flags: `--human`, `--scrub`, `--backend`, `--json`, `--yes`.
+CLI-only flags: `--human`, `--scrub`, `--backend`, `--json`.
 - Same unlocker path as `searchts read`.
 - The JSON has no `next_url`: a page-authored URL is not a safe next request. Use the signed `next_cursor`, or `searchts read --json` when a human wants the URL.
+- `approve_cookie_copy` is CLI `--yes` for one call: set it only after the user said yes to a `cookies_from_browser` copy.
 
 ### `search`
 
