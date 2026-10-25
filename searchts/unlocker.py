@@ -1110,7 +1110,7 @@ def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
             # the extract is longer than a third of the page. Structure is a
             # separate property from size, so it is checked separately.
             if _line_count(kept) <= 1 and _line_count(crude) >= _MIN_CRUDE_LINES:
-                return _tidy_crude(_strip_keeping_links(html, url), url)
+                return _crude_fallback(html, url)
             # Cheap gate first: an extract that is nearly as long as the page
             # cannot be the one that dropped it.
             if len(kept) >= _EXTRACT_MIN_RECALL * len(crude) or len(
@@ -1119,10 +1119,66 @@ def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
                 return kept
             if _word_recall(kept, crude) >= _EXTRACT_MIN_RECALL:
                 return kept
-            return _tidy_crude(_strip_keeping_links(html, url), url)
+            return _crude_fallback(html, url)
     except Exception:
         pass
-    return _tidy_crude(_strip_keeping_links(html, url), url)
+    return _crude_fallback(html, url)
+
+
+#: #333: the recall fallback drops the page's navigation landmarks only while
+#: they hold less than this share of its words. Above it the navigation *is*
+#: the page (a documentation index such as tailwindcss.com/docs keeps every doc
+#: title inside <nav>), and dropping it would trade the content for tidiness.
+_NAV_MAX_SHARE = 0.25
+
+
+def _without_nav(html: str) -> Optional[str]:
+    """The page with its <nav> and role="navigation" landmarks taken out.
+
+    Only those two: <header> and <footer> are not chrome by themselves, a
+    front page puts its headlines inside <header>. None when there is no such
+    landmark, or the markup cannot be parsed.
+    """
+    if not html or ("<nav" not in html.lower() and "navigation" not in html.lower()):
+        return None
+    try:
+        from lxml import html as lhtml
+
+        doc = lhtml.fromstring(html)
+        landmarks = doc.xpath(
+            '//nav|//*[translate(@role, "NAVIGTO", "navigto")="navigation"]'
+        )
+        if not landmarks:
+            return None
+        for el in landmarks:
+            parent = el.getparent()
+            if parent is not None:
+                parent.remove(el)
+        return lhtml.tostring(doc, encoding="unicode")
+    except Exception:  # noqa: BLE001 - the fallback must still yield the whole page
+        return None
+
+
+def _crude_fallback(html: str, url: Optional[str]) -> str:
+    """The recall fallback: the crude strip, minus the site navigation when
+    that navigation is furniture rather than the page.
+
+    #331 restored link-list pages by falling back to the crude strip, which
+    brings the menus back with the headlines. A <nav> landmark is the one place
+    a page says "this is navigation"; it is dropped only while it is a small
+    share of the page's words, so a page whose content is a nav-wrapped index
+    keeps it.
+    """
+    whole = _tidy_crude(_strip_keeping_links(html, url), url)
+    trimmed_html = _without_nav(html)
+    if trimmed_html is None:
+        return whole
+    words = len(re.findall(r"\w+", _strip_html(html)))
+    kept_words = len(re.findall(r"\w+", _strip_html(trimmed_html)))
+    if not words or (words - kept_words) > _NAV_MAX_SHARE * words:
+        return whole
+    trimmed = _tidy_crude(_strip_keeping_links(trimmed_html, url), url)
+    return trimmed if trimmed.strip() else whole
 
 
 def extract_text(html: str, url: Optional[str] = None) -> str:
