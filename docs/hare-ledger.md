@@ -2,27 +2,28 @@
 
 Every finding Hare posted here, what became of it, and what the owner said. Built by `scripts/hare_ledger.py` from the notes, the Since lines, resolved threads, `/hare score` and `/hare fate` comments; a PR closed unmerged drops its open findings. PLAN R2b.
 
-Built 2026-10-18. 233 PRs, 350 notes, 62 real and 225 skip findings, 32 notes cut at the budget, 147 runs where no hop answered.
+Built 2026-10-25. 245 PRs, 464 notes, 81 real and 279 skip findings, 35 notes cut at the budget, 65 runs where no hop answered.
 
-**Hit rate:** 15 of 62 real findings fixed or resolved (24%); 26 judged, 5 wrong, 2 wontfix, 1 dropped with a closed PR.
-**Owner scores:** 45 given, average 3.67 of 5.
+**Hit rate:** 20 of 81 real findings fixed or resolved (24%); 37 judged, 6 wrong, 2 wontfix, 3 dropped with a closed PR.
+**Owner scores:** 46 given, average 3.67 of 5.
 
 | Hop | Notes |
 | --- | --- |
-| `nous:poolside/laguna-s-2.1:free` | 143 |
-| `openrouter:qwen/qwen3.8-27b:free` | 59 |
-| `nous:meituan/longcat-2.5-preview:free` | 55 |
-| `openrouter:nex-agi/nex-n2.5-pro:free` | 24 |
-| `openrouter:poolside/laguna-s-2.1:free` | 18 |
+| `nous:poolside/laguna-s-2.1:free` | 150 |
+| `nous:reflection/beam-1.0-501b-a23b:free` | 140 |
+| `openrouter:qwen/qwen3.8-27b:free` | 57 |
+| `nous:meituan/longcat-2.5-preview:free` | 56 |
 | `groq:openai/gpt-oss-120b` | 15 |
+| `openrouter:poolside/laguna-s-2.1:free` | 10 |
 | `openrouter:nvidia/nemotron-3.5-lightning:free` | 8 |
 | `openrouter:stealth/space-bunny-alpha` | 7 |
 | `gemini:gemini-3.1-flash-lite` | 4 |
 | `openrouter:qwen/qwen3.8-27b:free · deep` | 3 |
 | `openrouter:nvidia/nemotron-3-super-120b-a12b:free` | 2 |
+| `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free` | 2 |
+| `openrouter:nex-agi/nex-n2.5-pro:free` | 2 |
 | `nous:stealth/space-bunny-alpha` | 2 |
 | `nous:poolside/laguna-s-2.1:free · deep` | 1 |
-| `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free` | 1 |
 | `groq:openai/gpt-oss-120b · deep` | 1 |
 | `nous:inclusionai/ling-3.0-flash-sante:free` | 1 |
 | `nous:meituan/longcat-2.5-preview:free · deep` | 1 |
@@ -31,8 +32,8 @@ Built 2026-10-18. 233 PRs, 350 notes, 62 real and 225 skip findings, 32 notes cu
 
 ## Caps
 
-- caps that fired: 21 across 350 notes (reasoning retry 19, rate limit 2)
-- median reasoning tokens per note: 0
+- caps that fired: 31 across 464 notes (reasoning retry 29, rate limit 2)
+- median reasoning tokens per note: 569.5
 
 Sources for each default are in `docs/hare-next.md`. `0` is uncapped for the reasoning
 budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
@@ -41,10 +42,80 @@ budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
 
 | PR | Notes | Real | Skip | Fates of real | Scores |
 | --- | --- | --- | --- | --- | --- |
+| #471 | 1 | 0 | 0 |  |  |
+| #470 | 1 | 0 | 0 |  |  |
+| #469 | 3 | 0 | 2 |  |  |
+| #468 | 1 | 0 | 0 |  |  |
+| #467 | 1 | 0 | 1 |  |  |
+| #464 | 2 | 0 | 0 |  |  |
+| #463 | 2 | 1 | 1 | open 1 |  |
+| #462 | 2 | 0 | 2 |  |  |
+| #461 | 3 | 0 | 2 |  |  |
+| #460 | 2 | 0 | 2 |  |  |
+| #459 | 2 | 0 | 0 |  |  |
+| #458 | 2 | 0 | 0 |  |  |
+| #457 | 2 | 1 | 0 | still applies 1 |  |
+| #456 | 3 | 0 | 1 |  |  |
+| #455 | 1 | 0 | 0 |  |  |
+| #454 | 4 | 0 | 1 |  |  |
+| #453 | 1 | 0 | 1 |  |  |
+| #441 | 2 | 0 | 1 |  |  |
+| #440 | 2 | 1 | 0 | open 1 |  |
+| #437 | 2 | 1 | 0 | open 1 |  |
+| #436 | 1 | 0 | 0 |  |  |
+| #434 | 2 | 0 | 2 |  |  |
+| #433 | 1 | 0 | 0 |  |  |
+| #432 | 5 | 0 | 3 |  |  |
+| #429 | 4 | 1 | 1 | open 1 |  |
+| #427 | 1 | 0 | 0 |  |  |
+| #426 | 2 | 1 | 0 | wrong 1 |  |
+| #425 | 1 | 0 | 1 |  |  |
+| #424 | 1 | 0 | 0 |  |  |
+| #423 | 3 | 1 | 0 | fixed 1 |  |
+| #422 | 1 | 0 | 1 |  |  |
+| #421 | 1 | 0 | 0 |  |  |
+| #420 | 2 | 0 | 0 |  |  |
+| #419 | 1 | 0 | 1 |  |  |
+| #418 | 2 | 1 | 0 | fixed 1 |  |
+| #417 | 2 | 0 | 1 |  |  |
+| #416 | 1 | 0 | 1 |  |  |
+| #415 | 4 | 0 | 3 |  |  |
+| #414 | 1 | 0 | 0 |  |  |
+| #413 | 1 | 0 | 1 |  |  |
+| #412 | 4 | 2 | 0 | fixed 1, still applies 1 | 4 (the nested-progress finding was real and is fixed; the doctor finding does not reproduce. The CI read (test, typecheck) matched the run exactly and both are addressed.) |
+| #411 | 1 | 0 | 0 |  |  |
+| #410 | 10 | 0 | 6 |  |  |
+| #409 | 2 | 0 | 0 |  |  |
+| #408 | 1 | 1 | 0 | open 1 |  |
+| #407 | 1 | 0 | 0 |  |  |
+| #406 | 2 | 1 | 0 | fixed 1 |  |
+| #405 | 1 | 0 | 0 |  |  |
+| #404 | 4 | 0 | 1 |  |  |
+| #403 | 2 | 2 | 0 | moved 1, resolved 1 |  |
+| #402 | 2 | 0 | 1 |  |  |
+| #401 | 1 | 0 | 0 |  |  |
+| #400 | 2 | 0 | 0 |  |  |
+| #399 | 2 | 0 | 0 |  |  |
+| #398 | 3 | 0 | 0 |  |  |
+| #397 | 2 | 0 | 0 |  |  |
+| #396 | 2 | 0 | 2 |  |  |
+| #395 | 2 | 0 | 1 |  |  |
+| #394 | 3 | 2 | 2 | open 2 |  |
+| #393 | 3 | 0 | 1 |  |  |
+| #392 | 2 | 0 | 2 |  |  |
+| #391 | 2 | 1 | 0 | open 1 |  |
+| #390 | 2 | 0 | 0 |  |  |
+| #389 | 1 | 0 | 0 |  |  |
+| #388 | 6 | 0 | 1 |  |  |
+| #387 | 1 | 2 | 1 | dropped 2 |  |
+| #386 | 1 | 0 | 1 |  |  |
+| #385 | 1 | 0 | 3 |  |  |
+| #384 | 1 | 0 | 1 |  |  |
+| #383 | 1 | 0 | 1 |  |  |
 | #382 | 1 | 2 | 1 | open 2 |  |
 | #381 | 2 | 0 | 0 |  |  |
 | #380 | 3 | 2 | 3 | open 1, still applies 1 |  |
-| #377 | 3 | 0 | 2 |  |  |
+| #377 | 8 | 0 | 3 |  |  |
 | #376 | 1 | 0 | 0 |  |  |
 | #375 | 3 | 1 | 4 | open 1 |  |
 | #374 | 1 | 0 | 0 |  |  |
@@ -214,66 +285,8 @@ budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
 | #204 | 0 | 0 | 0 |  |  |
 | #203 | 0 | 0 | 0 |  |  |
 | #202 | 0 | 0 | 0 |  |  |
-| #201 | 1 | 0 | 0 |  |  |
 | #199 | 1 | 0 | 0 |  |  |
 | #198 | 8 | 0 | 0 |  |  |
-| #196 | 0 | 0 | 0 |  |  |
-| #195 | 0 | 0 | 0 |  |  |
-| #194 | 0 | 0 | 0 |  |  |
-| #193 | 2 | 0 | 0 |  |  |
-| #192 | 0 | 0 | 0 |  |  |
-| #191 | 0 | 0 | 0 |  |  |
-| #189 | 0 | 0 | 0 |  |  |
-| #188 | 0 | 0 | 0 |  |  |
-| #185 | 1 | 0 | 0 |  |  |
-| #184 | 1 | 0 | 0 |  |  |
-| #183 | 0 | 0 | 0 |  |  |
-| #182 | 0 | 0 | 0 |  |  |
-| #181 | 1 | 0 | 0 |  |  |
-| #180 | 1 | 0 | 0 |  |  |
-| #179 | 0 | 0 | 0 |  |  |
-| #177 | 0 | 0 | 0 |  |  |
-| #176 | 0 | 0 | 0 |  |  |
-| #175 | 1 | 0 | 0 |  |  |
-| #174 | 6 | 0 | 0 |  |  |
-| #173 | 2 | 0 | 0 |  |  |
-| #172 | 1 | 0 | 0 |  |  |
-| #171 | 1 | 0 | 0 |  |  |
-| #170 | 1 | 0 | 0 |  |  |
-| #169 | 2 | 0 | 0 |  |  |
-| #168 | 1 | 0 | 0 |  |  |
-| #167 | 0 | 0 | 0 |  |  |
-| #166 | 1 | 0 | 0 |  |  |
-| #165 | 2 | 0 | 0 |  |  |
-| #164 | 0 | 0 | 0 |  |  |
-| #163 | 0 | 0 | 0 |  |  |
-| #162 | 0 | 0 | 0 |  |  |
-| #161 | 0 | 0 | 0 |  |  |
-| #160 | 1 | 0 | 0 |  |  |
-| #159 | 0 | 0 | 0 |  |  |
-| #158 | 0 | 0 | 0 |  |  |
-| #156 | 6 | 0 | 0 |  |  |
-| #155 | 0 | 0 | 0 |  |  |
-| #154 | 0 | 0 | 0 |  |  |
-| #153 | 0 | 0 | 0 |  |  |
-| #151 | 0 | 0 | 0 |  |  |
-| #150 | 0 | 0 | 0 |  |  |
-| #149 | 0 | 0 | 0 |  |  |
-| #148 | 0 | 0 | 0 |  |  |
-| #147 | 0 | 0 | 0 |  |  |
-| #146 | 0 | 0 | 0 |  |  |
-| #145 | 0 | 0 | 0 |  |  |
-| #144 | 0 | 0 | 0 |  |  |
-| #143 | 0 | 0 | 0 |  |  |
-| #142 | 0 | 0 | 0 |  |  |
-| #141 | 1 | 0 | 0 |  |  |
-| #140 | 0 | 0 | 0 |  |  |
-| #139 | 0 | 0 | 0 |  |  |
-| #138 | 0 | 0 | 0 |  |  |
-| #137 | 0 | 0 | 0 |  |  |
-| #136 | 0 | 0 | 0 |  |  |
-| #134 | 2 | 0 | 0 |  |  |
-| #128 | 0 | 0 | 0 |  |  |
 | #126 | 1 | 0 | 0 |  |  |
 | #125 | 1 | 0 | 0 |  |  |
 | #124 | 1 | 0 | 0 |  |  |
@@ -281,6 +294,7 @@ budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
 
 ## Owner feedback
 
+- #412: 4/5, the nested-progress finding was real and is fixed; the doctor finding does not reproduce. The CI read (test, typecheck) matched the run exactly and both are addressed. (capad-xyz, 2026-10-22)
 - #330: 4/5, Caught a real defect I introduced, the missing newline at EOF, and named it precisely. Not 5: one pass. But the substance is right, and the two things it did not do matter as much as the one it did. I (capad-xyz, 2026-10-07)
 - #329: 4/5, Correct read and correct verdict on a docs PR, and it picked the one real weakness: the doc cites line numbers it cannot verify. Not 5 because a plan doc whose citations have drifted is a plan doc tha (capad-xyz, 2026-10-07)
 - #324: 2/5, Held nothing, so it cost nothing, but it read an incremental diff as the whole PR again and returned prose where the prompt asks for JSON. The 2 is for the same reason as 321's: correct-by-accident is (capad-xyz, 2026-10-07)
