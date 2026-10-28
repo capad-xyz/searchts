@@ -214,6 +214,11 @@ def test_login_signin_description_explains_the_stdio_refusal():
     description = next(tool.description for tool in tools if tool.name == "login_signin")
     assert "refuses before opening a browser" in description
     assert "searchts login signin <url>" in description
+    status_description = next(
+        tool.description for tool in tools if tool.name == "login_status"
+    )
+    assert "terminal sign-in" in status_description
+    assert "from login_signin" not in status_description
 
 
 def test_the_login_wall_error_explains_the_terminal_route():

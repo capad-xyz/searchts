@@ -284,6 +284,9 @@ def test_mcp_docs_match_the_server():
     assert "check_url" in text
     assert "carries `next_url`" not in text
     assert "`next_cursor`" in text
+    assert "login_signin(url, browser=\"chrome\")" not in text
+    assert "MCP keeps the login" not in text
+    assert "MCP refuses before opening a browser" in text
 
 
 def test_mcp_server_docstring_and_signature_match_the_catalog():

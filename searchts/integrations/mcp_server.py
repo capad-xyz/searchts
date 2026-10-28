@@ -226,10 +226,8 @@ def create_server():
         return web_search(query, n)
 
     # ── logins ──────────────────────────────────────────────────────────────
-    # read_url's login-wall error names these by name. A tool list that says
-    # "ask the user to sign in" with no way to sign in is an instruction the
-    # agent cannot carry out, so the three verbs that change a site's state are
-    # exposed rather than left for the user to find in a shell.
+    # Login tools explain the state around saved cookies. MCP stdio cannot
+    # confirm a sign-in, so login_signin explicitly redirects to the CLI.
 
     @mcp.tool(
         name="login_status",
@@ -237,7 +235,7 @@ def create_server():
             "What searchts holds for logged-in reads: which sites are kept, "
             "how many live cookies each has and when they expire (an expiry is "
             "an upper bound, not a promise), whether each site was kept from a "
-            "browser or from login_signin, whether the per-site consent for an "
+            "browser or from a terminal sign-in, whether the per-site consent for an "
             "automatic re-copy is recorded, whether this session may copy "
             "logins, which sites it has copied, and where the scratch folder "
             "is. Expired cookies are swept on every command, offline, with no "
