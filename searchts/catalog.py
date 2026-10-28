@@ -148,8 +148,9 @@ _add(Command(
     body=(
         "Captions come first and cost nothing. Audio goes to Groq, then OpenAI",
         "if a key is set, else whisper.cpp, which ships with searchts and runs",
-        "locally with no key. PyPI wheels are CPU-only today; GPU wheels are",
-        "a follow-up. A local file works the same way. The quantized small",
+        "locally with no key. Linux and Windows wheels are CPU builds; the",
+        "macOS arm64 wheel ships Metal. Vulkan/CUDA wheels are a follow-up.",
+        "A local file works the same way. The quantized small",
         "model (about 190 MB; --model turbo or base) downloads after approval:",
         "a terminal is asked, an agent",
         "passes --yes only after the user agreed. --json names the engine,",

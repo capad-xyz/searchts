@@ -50,8 +50,9 @@ Preconditions:
 - `doctor --json` reports `youtube` and `tiktok` `ok` with an active backend.
   Without one, the drive is unreachable with that precondition recorded, not
   failed.
-- The recorded real local drive uses the packaged CPU build and an isolated
-  model cache. GPU acceleration is not available in the current PyPI wheels.
+- The recorded real local drive was Linux, using the packaged CPU wheel and
+  an isolated model cache. The macOS arm64 wheel ships Metal, but no Mac
+  drive was recorded, so a `metal` device receipt stays unproven here.
 - The video has a caption track. A video without one reaches the fallback and
   needs a key or a local model download, which is a different proof.
 

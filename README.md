@@ -150,10 +150,12 @@ supported by turbo). Use searchts transcribe --list-models to inspect the
 cache and searchts transcribe --remove-model small --yes to remove a cached
 model after approval. faster-whisper remains an explicit migration fallback
 with --provider local-fw while it is installed. The published pywhispercpp
-wheels are CPU-only: CPython 3.10-3.14 wheels cover Linux x64/arm64, Windows
-x64 and macOS arm64; Windows arm64 and macOS x64 have no wheel. Metal, Vulkan
-and CUDA wheels are not yet shipped, so supported wheel installs report CPU.
-Building GPU wheels and filling the two wheel gaps are a follow-up.
+wheels are CPU builds on Linux and Windows: CPython 3.10-3.14 wheels cover
+Linux x64/arm64, Windows x64 and macOS arm64; Windows arm64 and macOS x64
+have no wheel. The macOS arm64 wheel ships whisper.cpp's Metal backend with
+an embedded metallib, so an Apple Silicon install can run on the GPU; the
+Linux and Windows wheels ship no GPU backend, so Vulkan and CUDA wheels are
+still a follow-up.
 
 `grab` saves the set of files when the files are the deliverable. It uses the same unlocker, so a fingerprint-gated CDN is the same ladder as a read.
 

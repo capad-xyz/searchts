@@ -6,9 +6,12 @@ bundles the native whisper.cpp library per OS/arch. Only the model file is
 fetched, once, after the user approves it: what, from where, and how big are
 said first, and nothing is downloaded silently. A cached model needs no network.
 
-The PyPI wheels are CPU builds. GPU support is not shipped yet: locally built
-bindings can enable Metal, Vulkan or CUDA, and runtime detection uses those
-backends when present. GPU model initialization falls back to CPU.
+The Linux and Windows PyPI wheels are CPU builds. The macOS arm64 wheel
+ships the Metal backend (an embedded metallib), so an Apple Silicon wheel
+install can run on the GPU; this machine drives Linux, so metal receipts
+stay unproven here. Locally built bindings can enable Metal, Vulkan or CUDA,
+and runtime detection uses those backends when present. GPU model
+initialization falls back to CPU.
 """
 
 from __future__ import annotations
