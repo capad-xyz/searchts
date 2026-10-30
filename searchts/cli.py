@@ -2510,6 +2510,13 @@ def _cmd_transcribe(args):
     if args.json:
         out = {"schema": "searchts.transcribe.v1", "ok": True, "text": text,
                "receipt": result.receipt()}
+        # Same rule as read --json: present only when the cached release is
+        # newer. The error payloads below never carry it, matching MCP.
+        from searchts.update_nudge import update_available_for_agent
+
+        update = update_available_for_agent()
+        if update:
+            out["update_available"] = update
         # TODO(remove-after-window): temporary notice uses the update_note channel.
         out = fw_migration.add_agent_note(out)
         if args.output:
