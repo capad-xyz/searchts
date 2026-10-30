@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.24.2](https://github.com/capad-xyz/searchts/compare/v0.24.1...v0.24.2) (2026-10-30)
+
+
+### Fixed
+
+* **transcribe:** carry update_available in transcribe --json ([#484](https://github.com/capad-xyz/searchts/issues/484)) ([c132adb](https://github.com/capad-xyz/searchts/commit/c132adb901c29dbaedae319225809df1038289a1)), closes [#483](https://github.com/capad-xyz/searchts/issues/483)
+
 ## [0.24.1](https://github.com/capad-xyz/searchts/compare/v0.24.0...v0.24.1) (2026-10-30)
 
 
