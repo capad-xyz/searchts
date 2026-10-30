@@ -40,7 +40,7 @@ DRY_RUN_COMMAND = "searchts transcribe --cleanup --dry-run"
 MIGRATION_WINDOW: Dict[str, Any] = {
     "first_version": "0.24.0",
     "after_two_releases_version": "0.26.0",
-    "release_date": "2026-10-25",
+    "release_date": "2026-10-30",
     "days": 30,
 }
 
