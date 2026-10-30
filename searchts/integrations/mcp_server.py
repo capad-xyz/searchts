@@ -311,12 +311,23 @@ def create_server():
             "need a signed-in-only URL, and a public page is reported as "
             "'unknown' because it proves nothing about the account. "
             "check_url checks a custom signed-in-only page instead of the "
-            "known one; the cookies still come from url's site."
+            "known one; the cookies still come from url's site. An invalid "
+            "url is an error result carrying the usual JSON error envelope, "
+            "not an 'unknown' login answer."
             + UPDATE_CHECK_DESCRIPTION
         ),
     )
-    def login_check_tool(url: str, check_url: str = "") -> str:
-        return login_check(url, check_url=check_url)
+    def login_check_tool(url: str, check_url: str = "") -> Any:
+        out = login_check(url, check_url=check_url)
+        if _is_json_error(out):
+            # Bad input is an MCP error result, the same kind hosts show for a
+            # failed tool call, carrying the JSON envelope other commands use.
+            from mcp.types import CallToolResult, TextContent
+
+            return CallToolResult(
+                content=[TextContent(type="text", text=out)], is_error=True
+            )
+        return out
 
     @mcp.tool(
         name="login_kill",
@@ -502,10 +513,25 @@ def clamp_max_results(max_results: Optional[int]) -> int:
     return max(1, min(int(max_results), 25))
 
 
+def _is_json_error(text: str) -> bool:
+    """True when ``text`` is a JSON object carrying an ``error`` object."""
+    try:
+        data = json.loads(text)
+    except (TypeError, ValueError):
+        return False
+    return isinstance(data, dict) and isinstance(data.get("error"), dict)
+
+
 def login_check(url: str, check_url: str = "") -> str:
     """Settle whether a saved login is alive. Never carries a cookie value."""
-    from searchts.login_store import check_login, host_of
+    from searchts.login_store import bad_login_url, check_login, host_of
 
+    bad = bad_login_url(url, check_url)
+    if bad:
+        # #487: a typo'd site reached the host path and came back as a normal
+        # "unknown, pass check_url" result. Bad input is the JSON error
+        # envelope here, and an MCP error result in login_check_tool.
+        return json.dumps(bad, ensure_ascii=False)
     host = host_of(url)
     if not host:
         return f"Error: {url!r} is not a site searchts can file a login under."

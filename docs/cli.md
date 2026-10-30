@@ -784,7 +784,7 @@ Read one signed-in-only page with the saved cookies.
 Exit 0 means logged in, 1 logged out, 2 unknown. Expiry is only an upper bound (a server can end a session early), and this proves no login wall, not which account is signed in. A captcha or block is unknown, never a guess. Only direct requests carry the cookies; the Jina relay never receives them.
 
 ```bash
-searchts login check <site> [--verbose] [--url CHECK_URL]
+searchts login check <site> [--verbose] [--json] [--url CHECK_URL]
 ```
 
 | Argument | Description |
@@ -794,6 +794,7 @@ searchts login check <site> [--verbose] [--url CHECK_URL]
 | Flag | Description |
 |---|---|
 | `-v`, `--verbose` | Show debug logs |
+| `--json` | Print the result as JSON on stdout: host, status, why, page, exit_code. An invalid site prints the same url/error envelope read --json uses and exits 2. |
 | `--url` CHECK_URL | A page only signed-in users see. Without it, a known account page is used for reddit.com, linkedin.com, github.com and x.com. For any other site (or a custom page) a no-wall result is reported as unknown, because a public page proves nothing about your account. |
 
 Examples:
@@ -810,8 +811,10 @@ searchts login check example.com --url https://example.com/account
 | `2` | unknown: a captcha, block, network error, or no page could be chosen |
 
 MCP: `login_check`.
+CLI-only flags: `--json`.
 - `check_url` mirrors CLI `--url`: a page only a signed-in account sees.
 - Without it, the known account pages for reddit.com, linkedin.com, github.com and x.com are used.
+- An invalid URL is a `bad_url` error envelope, not an `unknown` login.
 
 ### `uninstall`
 

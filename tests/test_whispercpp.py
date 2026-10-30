@@ -256,6 +256,29 @@ def test_translate_refuses_turbo(fake_binding, tmp_path):
     assert fake_binding.calls[-1]["translate"] is True
 
 
+def test_native_whisper_logs_are_silenced_unless_verbose(
+    monkeypatch, fake_binding, tmp_path
+):
+    """#486: whisper.cpp's C log lines stay off stderr; -v turns them back on."""
+    import contextlib
+
+    import pywhispercpp.utils as utils
+
+    seen = []
+
+    @contextlib.contextmanager
+    def fake_redirect(to=False):
+        seen.append(to)
+        yield
+
+    monkeypatch.setattr(utils, "redirect_stderr", fake_redirect)
+    monkeypatch.setattr(whispercpp, "_SHOW_NATIVE_LOGS", False)
+    whispercpp.transcribe_samples([0.0], whispercpp.MODELS["small"], tmp_path / "m")
+    whispercpp.show_native_logs(True)
+    whispercpp.transcribe_samples([0.0], whispercpp.MODELS["small"], tmp_path / "m")
+    assert seen == [None, False]
+
+
 def test_translate_refuses_turbo_before_model_download(monkeypatch, fake_config):
     monkeypatch.setattr(
         whispercpp, "ensure_model", lambda *a, **k: pytest.fail("downloaded unsupported model")

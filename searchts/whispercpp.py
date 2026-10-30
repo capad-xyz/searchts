@@ -356,6 +356,29 @@ def device(system_info: Optional[str] = None) -> str:
 _MODEL_CACHE: Dict[str, Any] = {}
 _DEVICE_CACHE: Dict[str, str] = {}
 
+#: whisper.cpp's native log lines ("whisper_lang_id: unknown language 'auto'")
+#: are fd-2 output from its C code. By default they go to devnull (#486):
+#: stderr holds searchts's own plain progress lines, and a C log line there
+#: looks like an error to an agent. ``-v`` / debug logging turns them back on.
+_SHOW_NATIVE_LOGS = False
+
+
+def show_native_logs(enabled: bool) -> None:
+    """The CLI wiring for native whisper.cpp log output: on with ``-v``, else off."""
+    global _SHOW_NATIVE_LOGS
+    _SHOW_NATIVE_LOGS = bool(enabled)
+
+
+def _quiet_stderr():
+    """A stderr redirect: devnull by default, no-op when native logs are on.
+
+    ``pywhispercpp`` redirects its target only around model initialization;
+    the native lines a *transcribe* run prints go straight to fd 2.
+    """
+    from pywhispercpp.utils import redirect_stderr
+
+    return redirect_stderr(to=None if not _SHOW_NATIVE_LOGS else False)
+
 
 def _load(path: Path) -> Any:
     key = str(path)
@@ -424,21 +447,24 @@ def transcribe_samples(
     pw, _ = _import_binding()
     model = _load(path)
     try:
-        # Set every per-call param: pywhispercpp keeps overrides across calls.
-        segments = model.transcribe(
-            samples,
-            language=language or "auto",
-            translate=bool(translate),
-            initial_prompt=hint or "",
-        )
+        with _quiet_stderr():
+            # Set every per-call param: pywhispercpp keeps overrides across calls.
+            segments = model.transcribe(
+                samples,
+                language=language or "auto",
+                translate=bool(translate),
+                initial_prompt=hint or "",
+            )
+            detected = language or ""
+            if not detected:
+                try:
+                    detected = str(pw.whisper_lang_str(
+                        pw.whisper_full_lang_id(model._ctx)
+                    ))
+                except Exception:  # noqa: BLE001
+                    detected = ""
     except Exception as e:  # noqa: BLE001 - surface any native failure as ours
         raise WhisperCppError(f"whisper.cpp failed: {e}") from e
-    detected = language or ""
-    if not detected:
-        try:
-            detected = str(pw.whisper_lang_str(pw.whisper_full_lang_id(model._ctx)))
-        except Exception:  # noqa: BLE001
-            detected = ""
     text = "".join(getattr(s, "text", "") for s in segments).strip()
     return Transcript(
         text=text,

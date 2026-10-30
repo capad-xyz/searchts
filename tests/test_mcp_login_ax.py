@@ -356,6 +356,55 @@ def test_login_check_advice_names_check_url_not_the_cli_flag():
     assert "check_url" in out["why"]
 
 
+def test_login_check_bad_url_is_the_json_error_envelope():
+    """#487: a non-URL is bad input, not a host with an unknown login."""
+    out = mcp_server.login_check("notaurl")
+    doc = json.loads(out)
+    assert doc["url"] == "notaurl"
+    assert doc["error"]["kind"] == "bad_url"
+    assert doc["error"]["exit_code"] == 2
+    assert "not a URL" in doc["error"]["message"]
+    # The old answer told the caller to pass check_url, which was not the problem.
+    assert "check_url" not in doc["error"]["message"]
+    assert "status" not in doc
+
+
+def test_login_check_bad_check_url_is_the_json_error_envelope():
+    doc = json.loads(mcp_server.login_check("https://example.com", check_url="notaurl"))
+    assert doc["url"] == "notaurl"
+    assert doc["error"]["kind"] == "bad_url"
+    assert "not a URL" in doc["error"]["message"]
+
+
+def test_login_check_bad_url_is_an_mcp_error_result():
+    if not mcp_server.HAS_MCP:
+        pytest.skip("mcp extra not installed")
+    import asyncio
+
+    result = asyncio.run(mcp_server.create_server().call_tool(
+        "login_check", {"url": "notaurl"},
+    ))
+    assert result.is_error is True
+    doc = json.loads(result.content[0].text)
+    assert doc["error"]["kind"] == "bad_url" and doc["error"]["exit_code"] == 2
+
+
+def test_cli_login_check_bad_url_json_is_the_same_envelope(monkeypatch, capsys):
+    """#487: the CLI --json path says bad input the way read --json does."""
+    from searchts.cli import main
+
+    monkeypatch.setattr(sys, "argv", ["searchts", "login", "check", "notaurl", "--json"])
+    with pytest.raises(SystemExit) as exit_info:
+        main()
+    assert exit_info.value.code == 2
+    captured = capsys.readouterr()
+    doc = json.loads(captured.out)
+    assert doc["url"] == "notaurl"
+    assert doc["error"]["kind"] == "bad_url"
+    assert doc["error"]["exit_code"] == 2
+    assert "is not a URL" in captured.err
+
+
 def test_transcribe_advice_names_the_provider_param_not_the_cli_flag(monkeypatch):
     """#466: the no-backend error named `--provider local/auto` over MCP."""
     import searchts.transcribe as tr

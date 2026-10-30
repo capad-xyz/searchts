@@ -77,6 +77,10 @@ def _configure_logging(verbose: bool = False):
     logger.remove()  # Remove default stderr handler
     if verbose:
         logger.add(sys.stderr, level="INFO")
+    # whisper.cpp's own native logs are in -v's party too (#486); default off.
+    from searchts import whispercpp
+
+    whispercpp.show_native_logs(verbose)
 
 
 def _first_command_token(argv):
@@ -502,6 +506,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p_login_check.add_argument("site", help="The site whose saved login to check")
+    p_login_check.add_argument(
+        "--json", action="store_true",
+        help="Print the result as JSON on stdout: host, status, why, page, "
+             "exit_code. An invalid site prints the same url/error envelope "
+             "read --json uses and exits 2.",
+    )
     p_login_check.add_argument(
         "--url",
         dest="check_url",
@@ -3534,6 +3544,7 @@ def _cmd_login(args):
     from searchts.login_store import (
         SessionConsentNeeded,
         audit,
+        bad_login_url,
         check_login,
         grant_session_copy,
         host_of,
@@ -3594,7 +3605,22 @@ def _cmd_login(args):
 
     if action == "check":
         site = args.site
+        bad = bad_login_url(site, getattr(args, "check_url", ""))
+        if bad:
+            print(f"searchts login check: {bad['error']['message']}", file=sys.stderr)
+            if getattr(args, "json", False):
+                print(json.dumps(bad, ensure_ascii=False))
+            sys.exit(2)
         checked = check_login(site, url=getattr(args, "check_url", ""))
+        if getattr(args, "json", False):
+            print(json.dumps({
+                "host": host_of(site),
+                "status": checked.status,
+                "why": checked.why,
+                "page": checked.url,
+                "exit_code": checked.exit_code,
+            }, ensure_ascii=False))
+            sys.exit(checked.exit_code)
         status_row = {
             "logged in": progress.ROW_OK,
             "logged out": progress.ROW_FAIL,

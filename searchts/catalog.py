@@ -706,8 +706,10 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "`check_url` mirrors CLI `--url`: a page only a signed-in account sees.",
             "Without it, the known account pages for reddit.com, linkedin.com, "
             "github.com and x.com are used.",
+            "An invalid URL is a `bad_url` error envelope, not an `unknown` login.",
         ),
         param_flags=(("url", "site"), ("check_url", "--url")),
+        cli_only_flags=("--json",),
     ),
     "login_kill": McpTool(
         "login_kill", "login kill",

@@ -98,6 +98,37 @@ def test_own_uv_or_pipx_env_says_removal_is_safe(monkeypatch, hf_cache):
     assert "safe" in rep["environment"]["note"]
 
 
+def test_a_dedicated_venv_is_searchts_own_environment(monkeypatch, hf_cache):
+    """#488: a pip venv holding only searchts and its tree is not shared."""
+    _shared(monkeypatch)
+    dists = _env(extra={
+        "pip": _Dist("24.0"),          # venv tooling, not another program
+        "widget": _Dist("1.0"),
+    })
+    dists["searchts"] = _Dist("0.24.2", ["faster-whisper", "widget"])
+    rep = fw.report(dists=dists)
+    assert rep["environment"]["own_environment"] is True
+    assert "safe" in rep["environment"]["note"]
+    assert "shared Python environment" not in rep["environment"]["note"]
+
+
+def test_unknown_environment_says_it_cannot_tell(monkeypatch, hf_cache):
+    """#488: without searchts metadata, do not call the environment shared."""
+    import importlib.metadata as metadata
+
+    _shared(monkeypatch)
+    dists = _env()
+    dists.pop("searchts")
+    monkeypatch.setattr(
+        metadata, "requires",
+        lambda name: (_ for _ in ()).throw(metadata.PackageNotFoundError(name)),
+    )
+    rep = fw.report(dists=dists)
+    assert rep["environment"]["own_environment"] is False
+    assert "cannot tell" in rep["environment"]["note"]
+    assert "shared Python environment" not in rep["environment"]["note"]
+
+
 def test_only_faster_whisper_model_folders_are_listed(monkeypatch, hf_cache):
     _shared(monkeypatch)
     rep = fw.report(dists=_env())

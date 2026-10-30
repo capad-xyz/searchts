@@ -126,7 +126,81 @@ def _required_by(target: str, dists: Dict[str, object], ignore: set) -> List[str
     return sorted(set(users))
 
 
-def _environment() -> dict:
+def _clearance_note() -> str:
+    return (
+        "searchts has its own environment here, so nothing else imports "
+        "faster-whisper from it; removing it is safe."
+    )
+
+
+def _shared_note() -> str:
+    return (
+        "This is a shared Python environment: other programs in it may "
+        "import faster-whisper. The packages that declare it are listed."
+    )
+
+
+def _unclear_note() -> str:
+    return (
+        "searchts cannot tell which other programs use this Python "
+        "environment, so it does not call it shared: the packages that "
+        "declare it are listed."
+    )
+
+
+def _searchts_tree(dists: Dict[str, object]) -> Optional[set]:
+    """The canonical names searchts's own dependency tree covers.
+
+    From searchts's declared requirements (its extras included, since this
+    machine installed them the same way) closed over the installed dists.
+    Used to tell a venv created for searchts apart from one another programs
+    also live in: every installed package inside the tree, and nothing else.
+
+    None when searchts's own metadata is missing or broken: only then is the
+    caller allowed to say it cannot tell.
+    """
+    source = dists.get("searchts")
+    if source is not None:
+        try:
+            roots = getattr(source, "requires") or []
+        except AttributeError:
+            # A distribution object without requirements metadata cannot tell
+            # us what searchts brought in.
+            return None
+    else:
+        try:
+            from importlib.metadata import requires
+
+            roots = requires("searchts") or []
+        except Exception:  # noqa: BLE001 - no metadata, no claim
+            return None
+    try:
+        tree = {"searchts"}
+        pending = [_req_name(str(req)) for req in roots]
+        seen: set = set()
+        while pending:
+            name = pending.pop()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            dist = dists.get(name)
+            if dist is None:
+                continue
+            tree.add(name)
+            pending.extend(
+                _req_name(str(req)) for req in getattr(dist, "requires", None) or []
+            )
+        return tree
+    except Exception:  # noqa: BLE001 - no metadata, no claim
+        return None
+
+
+#: Environment tooling that belongs to the venv itself, not another program's.
+_ENV_TOOLING = {"pip", "setuptools", "wheel", "distribute"}
+
+
+def _environment(dists: Optional[Dict[str, object]] = None) -> dict:
+    dists = _distributions() if dists is None else dists
     try:
         from searchts.update_nudge import detect_install_kind
 
@@ -134,17 +208,31 @@ def _environment() -> dict:
     except Exception:  # noqa: BLE001
         kind = "pip"
     own = kind in ("uv_tool", "uvx", "pipx")
+    note = _clearance_note()
+    if not own:
+        # Not an environment searchts owns by construction. The kind alone is
+        # too conservative to shape the note (#488): a venv whose every
+        # installed package is searchts and its tree was made for searchts.
+        tree = _searchts_tree(dists)
+        if tree is None:
+            # No searchts metadata to walk: cannot tell, say so.
+            return {
+                "kind": kind,
+                "python": sys.executable,
+                "own_environment": False,
+                "note": _unclear_note(),
+            }
+        if set(dists) - tree - _ENV_TOOLING:
+            # A package outside searchts's tree is present, so this env is
+            # shared with something else. That is a fact, not a guess.
+            note = _shared_note()
+        else:
+            own = True
     return {
         "kind": kind,
         "python": sys.executable,
         "own_environment": own,
-        "note": (
-            "searchts has its own environment here, so nothing else imports "
-            "faster-whisper from it; removing it is safe."
-            if own else
-            "This is a shared Python environment: other programs in it may "
-            "import faster-whisper. The packages that declare it are listed."
-        ),
+        "note": note,
     }
 
 
@@ -210,7 +298,7 @@ def report(*, dists: Optional[Dict[str, object]] = None, cache_root: Optional[Pa
     version = installed_version(dists)
     if not version:
         return None
-    env = _environment()
+    env = _environment(dists)
     retiring = {FW_PACKAGE, *FW_CHAIN}
     packages = []
     for name in (FW_PACKAGE, *FW_CHAIN):
