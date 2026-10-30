@@ -514,6 +514,15 @@ class TestInstallNonInvasive:
         assert "mcporter_real" in calls
         assert "system_safe" not in calls
 
+    def test_skipped_mcporter_is_never_configured(self, capsys, monkeypatch):
+        calls = self._stub_install(monkeypatch)
+        with patch(
+            "sys.argv",
+            ["searchts", "install", "--system-deps", "--skip", "mcporter"],
+        ):
+            main()
+        assert "mcporter_real" not in calls
+
     def test_apply_alias_opts_in(self, capsys, monkeypatch):
         calls = self._stub_install(monkeypatch)
         with patch("sys.argv", ["searchts", "install", "--apply"]):
@@ -574,6 +583,51 @@ class TestInstallNonInvasive:
         assert cli._skill_targets() == [str(tmp_path / ".agents" / "skills" / "searchts")]
         (tmp_path / ".claude" / "skills").mkdir(parents=True)
         assert cli._skill_targets() == [str(tmp_path / ".claude" / "skills" / "searchts")]
+
+
+class TestInstallMcporter:
+    """Exa and LinkedIn go to mcporter's home config, never the current folder."""
+
+    def _stub_mcporter(self, monkeypatch, add_rc=0):
+        calls = []
+
+        def fake_which(name):
+            return "/usr/local/bin/mcporter" if name == "mcporter" else None
+
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            if cmd[:3] == ["mcporter", "config", "add"]:
+                return subprocess.CompletedProcess(cmd, add_rc, "", "")
+            return subprocess.CompletedProcess(cmd, 0, "No servers configured", "")
+
+        monkeypatch.setattr(shutil, "which", fake_which)
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        return calls
+
+    def test_exa_is_added_to_the_home_config(self, monkeypatch, capsys):
+        calls = self._stub_mcporter(monkeypatch)
+        cli._install_mcporter()
+        add = next(c for c in calls if c[:4] == ["mcporter", "config", "add", "exa"])
+        assert add == [
+            "mcporter", "config", "add", "exa",
+            "https://mcp.exa.ai/mcp", "--scope", "home",
+        ]
+        assert "✓ Exa search configured" in capsys.readouterr().out
+
+    def test_a_failed_add_is_not_reported_as_configured(self, monkeypatch, capsys):
+        self._stub_mcporter(monkeypatch, add_rc=1)
+        cli._install_mcporter()
+        out = capsys.readouterr().out
+        assert "✓ Exa search configured" not in out
+        assert "Could not configure Exa" in out
+        assert "mcporter config add exa https://mcp.exa.ai/mcp --scope home" in out
+
+    def test_safe_hint_uses_the_home_config_command(self, monkeypatch, capsys):
+        monkeypatch.setattr(shutil, "which", lambda name: "/usr/local/bin/mcporter")
+        cli._install_mcporter_safe()
+        out = capsys.readouterr().out
+        assert "mcporter config add exa https://mcp.exa.ai/mcp --scope home" in out
+
 
 
 class TestSetupRecommendsFirstPartySearch:

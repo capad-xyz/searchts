@@ -30,7 +30,43 @@ SCHEMA = "searchts.setup.v1"
 SETUP_COMMAND = "searchts install"
 APPROVE_COMMAND = "searchts install --yes"
 
+EXA_MCP_URL = "https://mcp.exa.ai/mcp"
+
 _MB = 1_000_000
+
+
+def _mcporter_add(name: str, *options: str) -> List[str]:
+    """The argv for one ``mcporter config add``, written to the home config.
+
+    mcporter takes the first token after ``add`` as the server name, even when
+    options come first, so put the name first and the scope last. That parses
+    the same way on the 0.9 line and on current releases; ``--scope home``
+    keeps the entry out of ``./config/mcporter.json`` in the current folder.
+    """
+    return ["mcporter", "config", "add", name, *options, "--scope", "home"]
+
+
+def linkedin_command() -> str:
+    """The linkedin-scraper-mcp executable to register with mcporter."""
+    if shutil.which("linkedin-mcp-server") and not shutil.which("linkedin-scraper-mcp"):
+        return "linkedin-mcp-server"
+    return "linkedin-scraper-mcp"
+
+
+def exa_config_command() -> List[str]:
+    return _mcporter_add("exa", EXA_MCP_URL)
+
+
+def linkedin_config_command() -> List[str]:
+    return _mcporter_add(
+        "linkedin",
+        "--command", linkedin_command(),
+        "--arg", "--transport", "--arg", "stdio",
+    )
+
+
+def command_text(cmd: Sequence[str]) -> str:
+    return " ".join(cmd)
 
 
 @dataclass(frozen=True)
@@ -50,6 +86,8 @@ class SetupItem:
     when: str
     installed: Callable[[], bool]
     install: Optional[Callable[[], bool]] = None
+    #: Other items this one needs. They stay selected in its agent command.
+    requires: Sequence[str] = ()
     note: str = ""
 
     def as_dict(self, skip: Iterable[str] = ()) -> dict:
@@ -145,20 +183,88 @@ def _install_reddit() -> bool:
     return _which("rdt")
 
 
+def _mcporter_has(server: str) -> bool:
+    try:
+        proc = subprocess.run(
+            ["mcporter", "config", "list"],
+            capture_output=True, encoding="utf-8", errors="replace", timeout=10,
+        )
+    except Exception:  # noqa: BLE001 - a failed probe is just "not configured"
+        return False
+    return proc.returncode == 0 and server.lower() in (proc.stdout or "").lower()
+
+
+def register_exa_search() -> bool:
+    """Register Exa with mcporter in the home config, once."""
+    if not _which("mcporter"):
+        return False
+    if _mcporter_has("exa"):
+        return True
+    if _run(exa_config_command(), timeout=15):
+        print("  ✓ Exa search configured (free, no API key needed)")
+        return True
+    print(
+        "  !  Could not configure Exa. Run manually: "
+        f"{command_text(exa_config_command())}"
+    )
+    return False
+
+
+def register_linkedin_mcp() -> bool:
+    """Register linkedin-scraper-mcp with mcporter in the home config.
+
+    Only when both commands are present. The server serves stdio by default,
+    so the registration names the executable and passes ``--transport stdio``
+    instead of pointing at a localhost HTTP port.
+    """
+    if not (_linkedin_installed() and _which("mcporter")):
+        return False
+    if _mcporter_has("linkedin"):
+        return True
+    if _run(linkedin_config_command(), timeout=15):
+        print("  ✓ LinkedIn MCP configured (mcporter, home config)")
+        return True
+    print(
+        "  !  Could not configure the LinkedIn MCP. Run manually: "
+        f"{command_text(linkedin_config_command())}"
+    )
+    return False
+
+
+def ensure_mcporter_setup(skip: Iterable[str] = ()) -> None:
+    """Register what the approved, non-skipped items promise.
+
+    Called after an approved install even when the tools were already on PATH,
+    so a user who installed before this fix still ends with home-scope entries.
+    A skipped item is never registered.
+    """
+    skipped = set(skip)
+    if "mcporter" in skipped or not _which("mcporter"):
+        return
+    register_exa_search()
+    if "linkedin" not in skipped:
+        register_linkedin_mcp()
+
+
 def _install_linkedin() -> bool:
     print("Setting up LinkedIn (linkedin-scraper-mcp)...")
     if _linkedin_installed():
         print("  ✓ linkedin-scraper-mcp already installed")
-        return True
-    for tool, cmd in (
-        ("pipx", ["pipx", "install", "linkedin-scraper-mcp"]),
-        ("uv", ["uv", "tool", "install", "linkedin-scraper-mcp"]),
-    ):
-        if shutil.which(tool) and _run(cmd) and _linkedin_installed():
-            print("  ✓ linkedin-scraper-mcp installed")
-            return True
-    print("  !  linkedin-scraper-mcp install failed. Run: pipx install linkedin-scraper-mcp")
-    return False
+    else:
+        installed = False
+        for tool, cmd in (
+            ("pipx", ["pipx", "install", "linkedin-scraper-mcp"]),
+            ("uv", ["uv", "tool", "install", "linkedin-scraper-mcp"]),
+        ):
+            if shutil.which(tool) and _run(cmd) and _linkedin_installed():
+                print("  ✓ linkedin-scraper-mcp installed")
+                installed = True
+                break
+        if not installed:
+            print("  !  linkedin-scraper-mcp install failed. Run: pipx install linkedin-scraper-mcp")
+            return False
+    register_linkedin_mcp()
+    return True
 
 
 def _install_mcporter() -> bool:
@@ -225,6 +331,7 @@ def items() -> List[SetupItem]:
             size_bytes=214 * _MB, size_is_estimate=True,
             needs_login=True, needs_system_change=False, default_selected=True,
             when="now", installed=_linkedin_installed, install=_install_linkedin,
+            requires=("mcporter",),
         ),
         SetupItem(
             id="mcporter",
@@ -275,7 +382,12 @@ def parse_skip(raw: str) -> List[str]:
 def approve_command_for(item: SetupItem) -> str:
     if item.when == "first_use":
         return ""
-    others = [i.id for i in items() if i.default_selected and i.id != item.id and i.when == "now"]
+    required = set(item.requires)
+    others = [
+        i.id for i in items()
+        if i.default_selected and i.id != item.id and i.when == "now"
+        and i.id not in required
+    ]
     return f"{APPROVE_COMMAND} --skip {','.join(others)}"
 
 

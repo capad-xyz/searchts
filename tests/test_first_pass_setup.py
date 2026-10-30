@@ -1,5 +1,6 @@
 """#442: first-pass setup with one up-front consent."""
 import json
+import subprocess
 import sys
 
 import pytest
@@ -117,3 +118,125 @@ def test_missing_tool_hints_point_at_the_setup_command():
     hint = setup_plan.missing_tool_hint("twitter")
     assert "searchts install" in hint
     assert "--skip chromium,reddit,linkedin,mcporter,gh" in hint
+
+
+def test_linkedin_agent_command_keeps_its_mcporter_dependency():
+    linkedin = next(i for i in setup_plan.items() if i.id == "linkedin")
+    assert setup_plan.approve_command_for(linkedin) == (
+        "searchts install --yes --skip chromium,twitter,reddit,gh"
+    )
+
+
+def test_mcporter_commands_write_the_home_config(monkeypatch):
+    monkeypatch.setattr(
+        setup_plan.shutil, "which", lambda name: f"/usr/local/bin/{name}"
+    )
+    assert setup_plan.command_text(setup_plan.exa_config_command()) == (
+        "mcporter config add exa https://mcp.exa.ai/mcp --scope home"
+    )
+    assert setup_plan.command_text(setup_plan.linkedin_config_command()) == (
+        "mcporter config add linkedin --command linkedin-scraper-mcp "
+        "--arg --transport --arg stdio --scope home"
+    )
+
+
+def test_linkedin_install_registers_the_stdio_server(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(setup_plan, "_linkedin_installed", lambda: True)
+    monkeypatch.setattr(setup_plan, "_which", lambda *names: True)
+    monkeypatch.setattr(setup_plan, "_mcporter_has", lambda server: False)
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(setup_plan.subprocess, "run", fake_run)
+
+    assert setup_plan._install_linkedin() is True
+    assert setup_plan.linkedin_config_command() in calls
+    assert "LinkedIn MCP configured" in capsys.readouterr().out
+
+
+def test_ensure_registers_tools_that_were_already_present(monkeypatch):
+    calls = []
+    monkeypatch.setattr(setup_plan, "_which", lambda *names: True)
+    monkeypatch.setattr(
+        setup_plan, "register_exa_search", lambda: calls.append("exa") or True
+    )
+    monkeypatch.setattr(
+        setup_plan, "register_linkedin_mcp", lambda: calls.append("linkedin") or True
+    )
+
+    setup_plan.ensure_mcporter_setup([])
+    assert calls == ["exa", "linkedin"]
+
+
+def test_ensure_never_registers_skipped_items(monkeypatch):
+    calls = []
+    monkeypatch.setattr(setup_plan, "_which", lambda *names: True)
+    monkeypatch.setattr(
+        setup_plan, "register_exa_search", lambda: calls.append("exa") or True
+    )
+    monkeypatch.setattr(
+        setup_plan, "register_linkedin_mcp", lambda: calls.append("linkedin") or True
+    )
+
+    setup_plan.ensure_mcporter_setup(["linkedin"])
+    assert calls == ["exa"]
+
+    calls.clear()
+    setup_plan.ensure_mcporter_setup(["mcporter"])
+    assert calls == []
+
+
+def test_ensure_does_not_add_when_already_listed(monkeypatch):
+    monkeypatch.setattr(setup_plan, "_which", lambda *names: True)
+    monkeypatch.setattr(setup_plan, "_mcporter_has", lambda server: True)
+    calls = []
+    monkeypatch.setattr(
+        setup_plan.subprocess,
+        "run",
+        lambda *args, **kwargs: calls.append(args[0]),
+    )
+
+    setup_plan.ensure_mcporter_setup([])
+    assert calls == []
+
+
+def test_yes_reconciles_even_when_everything_is_already_installed(
+    monkeypatch, capsys
+):
+    from searchts import cli
+
+    class Args:
+        skip_ids = ["linkedin"]
+        yes = True
+
+    monkeypatch.setattr(setup_plan, "render", lambda skip: [])
+    monkeypatch.setattr(setup_plan, "plan", lambda skip: {"pending": []})
+    called = []
+    monkeypatch.setattr(
+        setup_plan, "ensure_mcporter_setup", lambda skip: called.append(list(skip))
+    )
+
+    cli._first_pass(Args(), dry_run=False)
+    assert called == [["linkedin"]]
+    assert "Everything checked is already installed" in capsys.readouterr().out
+
+
+def test_without_yes_an_all_installed_plan_changes_nothing(monkeypatch):
+    from searchts import cli
+
+    class Args:
+        skip_ids = []
+        yes = False
+
+    monkeypatch.setattr(setup_plan, "render", lambda skip: [])
+    monkeypatch.setattr(setup_plan, "plan", lambda skip: {"pending": []})
+    called = []
+    monkeypatch.setattr(
+        setup_plan, "ensure_mcporter_setup", lambda skip: called.append(list(skip))
+    )
+
+    cli._first_pass(Args(), dry_run=False)
+    assert called == []

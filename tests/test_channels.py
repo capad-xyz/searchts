@@ -272,6 +272,22 @@ class TestLinkedInChannel:
         status, msg = ch.check()
         assert status == "off"
         assert ch.active_backend is None
+        assert "mcporter config add linkedin --command linkedin-scraper-mcp" in msg
+        assert "--arg --transport --arg stdio --scope home" in msg
+        assert "localhost:3000" not in msg
+
+    def test_missing_mcporter_hint_keeps_mcporter_in_the_agent_command(
+        self, monkeypatch
+    ):
+        monkeypatch.setattr(shutil, "which", lambda _: None)
+        from searchts.channels.linkedin import LinkedInChannel
+        ch = LinkedInChannel()
+        status, msg = ch.check()
+        assert status == "off"
+        assert "searchts install --yes --skip chromium,twitter,reddit,gh" in msg
+        assert "mcporter config add linkedin --command linkedin-scraper-mcp" in msg
+        assert "--arg --transport --arg stdio --scope home" in msg
+        assert "localhost:3000" not in msg
 
 
 class TestExaSearchChannel:
@@ -302,3 +318,24 @@ class TestExaSearchChannel:
         status, msg = ch.check()
         assert status == "ok"
         assert ch.active_backend == "Exa via mcporter"
+
+    def test_off_hint_writes_the_home_config(self, monkeypatch):
+        monkeypatch.setattr(shutil, "which", lambda _: "/usr/local/bin/mcporter")
+
+        def fake_run(cmd, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, "No servers configured", "")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        from searchts.channels.exa_search import ExaSearchChannel
+        ch = ExaSearchChannel()
+        status, msg = ch.check()
+        assert status == "off"
+        assert "mcporter config add exa https://mcp.exa.ai/mcp --scope home" in msg
+
+    def test_missing_mcporter_hint_writes_the_home_config(self, monkeypatch):
+        monkeypatch.setattr(shutil, "which", lambda _: None)
+        from searchts.channels.exa_search import ExaSearchChannel
+        ch = ExaSearchChannel()
+        status, msg = ch.check()
+        assert status == "off"
+        assert "mcporter config add exa https://mcp.exa.ai/mcp --scope home" in msg

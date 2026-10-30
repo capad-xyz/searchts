@@ -2,6 +2,11 @@
 """LinkedIn — check if linkedin-scraper-mcp is available."""
 
 from searchts.probe import probe_command
+from searchts.setup_plan import (
+    command_text,
+    linkedin_config_command,
+    missing_tool_hint,
+)
 
 from .base import Channel
 
@@ -18,16 +23,15 @@ class LinkedInChannel(Channel):
     def check(self, config=None):
         self.active_backend = None
         probe = probe_command("mcporter", ["config", "list"], timeout=10, package="mcporter")
+        linkedin_add = command_text(linkedin_config_command())
         if probe.status == "missing":
-            from searchts.setup_plan import missing_tool_hint
-
             return "off", (
                 "Basic content can be read via Jina Reader. Full functionality needs "
                 "mcporter and linkedin-scraper-mcp; install both with the first-pass setup:\n"
                 f"{missing_tool_hint('linkedin')}\n"
                 "or by hand:\n"
                 "  pip install linkedin-scraper-mcp\n"
-                "  mcporter config add linkedin http://localhost:3000/mcp\n"
+                f"  {linkedin_add}\n"
                 "  See https://github.com/stickerdaniel/linkedin-mcp-server for details"
             )
         if probe.status == "broken":
@@ -40,5 +44,5 @@ class LinkedInChannel(Channel):
         return "off", (
             "mcporter is installed but the LinkedIn MCP is not configured. Run:\n"
             "  pip install linkedin-scraper-mcp\n"
-            "  mcporter config add linkedin http://localhost:3000/mcp"
+            f"  {linkedin_add}"
         )

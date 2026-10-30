@@ -2,6 +2,11 @@
 """Exa Search — check if mcporter + Exa MCP is available."""
 
 from searchts.probe import probe_command
+from searchts.setup_plan import (
+    command_text,
+    exa_config_command,
+    missing_tool_hint,
+)
 
 from .base import Channel
 
@@ -19,14 +24,12 @@ class ExaSearchChannel(Channel):
         self.active_backend = None
         probe = probe_command("mcporter", ["config", "list"], timeout=10, package="mcporter")
         if probe.status == "missing":
-            from searchts.setup_plan import missing_tool_hint
-
             return "off", (
                 "Requires mcporter + Exa MCP. Install mcporter with the first-pass setup:\n"
                 f"{missing_tool_hint('mcporter')}\n"
                 "or by hand:\n"
                 "  npm install -g mcporter\n"
-                "  mcporter config add exa https://mcp.exa.ai/mcp"
+                f"  {command_text(exa_config_command())}"
             )
         if probe.status == "broken":
             return "error", _MCPORTER_BROKEN_HINT
@@ -37,5 +40,5 @@ class ExaSearchChannel(Channel):
             return "ok", "Web-wide semantic search available (free, no API key required)"
         return "off", (
             "mcporter is installed but Exa is not configured. Run:\n"
-            "  mcporter config add exa https://mcp.exa.ai/mcp"
+            f"  {command_text(exa_config_command())}"
         )
