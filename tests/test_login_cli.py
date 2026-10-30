@@ -68,6 +68,45 @@ def test_list_names_a_kept_site_and_no_value(capsys, monkeypatch):
     assert "SECRETVALUE" not in out
 
 
+# ── status ──────────────────────────────────────────────────────────────────
+
+
+def test_status_names_the_exact_stored_host(capsys, monkeypatch):
+    seed()
+    rc, out, _ = run(
+        ["login", "status", "https://example.com/path"], capsys, monkeypatch
+    )
+    assert rc == 0
+    assert "example.com resolved to example.com (exact host)" in out
+    assert "SECRETVALUE" not in out
+
+
+def test_status_says_a_subdomain_resolved_to_its_parent(capsys, monkeypatch):
+    seed()
+    rc, out, _ = run(
+        ["login", "status", "https://app.example.com/path"], capsys, monkeypatch
+    )
+    assert rc == 0
+    assert "app.example.com resolved to example.com (a parent host)" in out
+    assert "SECRETVALUE" not in out
+
+
+def test_status_says_not_kept_for_a_private_suffix(capsys, monkeypatch):
+    seed("a.github.io")
+    rc, out, _ = run(
+        ["login", "status", "https://b.github.io"], capsys, monkeypatch
+    )
+    assert rc == 0
+    assert "no stored host for b.github.io" in out
+    assert "a.github.io" not in out
+
+
+def test_status_rejects_a_malformed_site(capsys, monkeypatch):
+    rc, _, err = run(["login", "status", "not a url"], capsys, monkeypatch)
+    assert rc == 2
+    assert "not a site searchts can file" in err
+
+
 # ── keep ────────────────────────────────────────────────────────────────────
 
 
@@ -167,6 +206,17 @@ def test_kill_does_not_delete_another_sites_login(capsys, monkeypatch):
     seed("other.com")
     run(["login", "kill", "example.com"], capsys, monkeypatch)
     assert sorted(ls.list_kept()) == ["other.com"]
+
+
+def test_kill_is_keyed_by_the_stored_host_not_a_child(capsys, monkeypatch):
+    """A child may use the parent's login, but kill names what it removes."""
+    seed("example.com")
+    rc, out, _ = run(
+        ["login", "kill", "https://app.example.com"], capsys, monkeypatch
+    )
+    assert rc == 0
+    assert "no saved login for app.example.com" in out
+    assert sorted(ls.list_kept()) == ["example.com"]
 
 
 def test_kill_rejects_a_malformed_site(capsys, monkeypatch):

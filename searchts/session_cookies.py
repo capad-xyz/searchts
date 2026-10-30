@@ -23,6 +23,7 @@ import os
 import sqlite3
 import time
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import quote, urlparse
 
@@ -173,6 +174,9 @@ class CookieSource:
     expires_at: Optional[int] = None
     expiry_known: bool = False
     expired: bool = False
+    #: For the owned store: the host the login is filed under. It can be a
+    #: parent of ``site`` (``example.com`` serving ``app.example.com``).
+    stored_host: str = ""
 
     def describe(self) -> str:
         """One safe line for a human. Contains no cookie values."""
@@ -184,16 +188,82 @@ class CookieSource:
 # ── scoping ─────────────────────────────────────────────────────────────────
 
 
+def _host_from(site: str) -> str:
+    """The lower-case host of `site`, without a trailing dot."""
+    return (
+        urlparse(site if "://" in site else "https://" + site).hostname or ""
+    ).lower().rstrip(".")
+
+
+def _is_ip(host: str) -> bool:
+    """True for an IP literal, which has no parent hosts to walk."""
+    import ipaddress
+
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
+
+
+@lru_cache(maxsize=1)
+def _psl() -> Any:
+    """The Public Suffix List, loaded once on first use.
+
+    Lazy so a read that never touches a kept login does not parse the list at
+    CLI startup. ``publicsuffixlist`` is pure Python, has no dependencies, and
+    ships the list, so the answer is the real one rather than a guess.
+    """
+    from publicsuffixlist import PublicSuffixList
+
+    return PublicSuffixList()
+
+
+def public_suffix(host: str) -> str:
+    """The public suffix of `host`, or "" when it cannot be decided.
+
+    An empty result means the caller must skip any parent fallback: guessing a
+    suffix is how one registrant's login would reach another site's.
+    """
+    h = _host_from(host)
+    if not h or _is_ip(h):
+        return ""
+    try:
+        suffix = str(_psl().publicsuffix(h) or "").strip(".").lower()
+    except Exception:
+        return ""
+    if suffix and (suffix == h or h.endswith("." + suffix)):
+        return suffix
+    return ""
+
+
+def _is_public_suffix_host(host: str) -> bool:
+    """True when `host` is itself a suffix, so no login may be filed there.
+
+    Single-label hosts and IP literals are excluded: they have no subdomains
+    for a login to leak to, and refusing them would break local development.
+    """
+    h = _host_from(host)
+    return "." in h and not _is_ip(h) and public_suffix(h) == h
+
+
 def registrable(host: str) -> str:
-    """Approximate registrable domain. Good enough to keep a cookie in its family."""
-    parts = [p for p in (host or "").lower().strip(".").split(".") if p]
-    if len(parts) <= 2:
-        return ".".join(parts)
-    # Handle the common two-part public suffixes so example.co.uk stays whole.
-    two = {"co", "com", "org", "net", "gov", "edu", "ac", "or", "ne"}
-    if len(parts) >= 3 and parts[-2] in two and len(parts[-1]) == 2:
-        return ".".join(parts[-3:])
-    return ".".join(parts[-2:])
+    """The registrable domain: one label below the public suffix.
+
+    Uses the real Public Suffix List, so ``a.github.io`` is its own registrable
+    domain and ``shop.example.co.uk`` is not ``co.uk``. Returns "" when `host`
+    is itself a public suffix (or cannot be classified), because no registrant
+    owns it as a site.
+    """
+    h = _host_from(host)
+    if not h or _is_ip(h):
+        return ""
+    suffix = public_suffix(h)
+    if not suffix or h == suffix:
+        return ""
+    labels = h.split(".")
+    suffix_labels = len(suffix.split("."))
+    return ".".join(labels[-(suffix_labels + 1):])
 
 
 def _domain_matches(cookie_domain: str, host: str) -> bool:
@@ -202,13 +272,24 @@ def _domain_matches(cookie_domain: str, host: str) -> bool:
     This is the reason the module exists. A loose ``endswith`` here would hand
     every cookie in the jar to whatever host was being read, which is the
     failure mode where an agent opens your mail.
+
+    A leading dot is what makes a cookie a domain cookie. Without one the
+    cookie is host-only: a browser sends it to that exact host and never to a
+    subdomain. ``example.com`` is therefore not sent to ``app.example.com``,
+    while ``.example.com`` is.
     """
-    cd = (cookie_domain or "").lstrip(".").lower()
+    raw = (cookie_domain or "").strip().lower()
     h = (host or "").lower().strip(".")
-    if not cd or not h:
+    if not raw or not h:
+        return False
+    domain_cookie = raw.startswith(".")
+    cd = raw.lstrip(".")
+    if not cd:
         return False
     if cd == h:
         return True
+    if not domain_cookie:
+        return False
     # A cookie domain with no dot is a host, not a suffix. "com" is not a parent
     # of example.com, so such a cookie matches exactly or not at all: a suffix
     # rule here would sweep a jar's stray single-label cookie onto every site
@@ -434,6 +515,12 @@ def save_owned_site(
     host = (urlparse(site if "://" in site else "https://" + site).hostname or "").lower()
     if not host or not records:
         raise CookieReadError(f"nothing to save for {site!r}")
+    if _is_public_suffix_host(host):
+        raise CookieReadError(
+            f"refusing to keep a login for {host}: it is a public suffix, "
+            f"not a site anyone owns. Keep the login for the registrable "
+            f"domain instead (for example example.com, not com)."
+        )
     scoped = filter_for_host(records, host)
     if not scoped:
         raise CookieReadError(f"refusing to save: no cookies match {host}")
@@ -581,17 +668,59 @@ def sweep_owned_store(now: Optional[int] = None) -> SweepResult:
     return result
 
 
-def read_owned_site(site: str) -> CookieSource:
-    """Return `site`'s live cookies from the owned store.
+def resolve_owned_host(
+    host: str, store: Optional[Dict[str, dict]] = None
+) -> Optional[str]:
+    """The stored host a read of `host` uses, or None.
 
-    Expired cookies are filtered here as well as by the startup sweep, so a
-    stale file cannot put a dead cookie on a request. An entry whose cookies
-    have all died (or that the sweep marked expired) raises a named error
-    instead of pretending the site was never kept.
+    The exact host always wins. Otherwise parents are tried from the nearest
+    up to and including the registrable domain, never a public suffix. A
+    ``github.io`` entry therefore never serves ``a.github.io``, and an
+    ``a.github.io`` entry never serves ``b.github.io``. When the suffix cannot
+    be decided, the parent walk is skipped rather than guessed.
     """
-    host = (urlparse(site if "://" in site else "https://" + site).hostname or "").lower()
-    entry = read_owned_store().get(host)
-    if not entry:
+    h = _host_from(host)
+    if not h or _is_public_suffix_host(h):
+        return None
+    entries = read_owned_store() if store is None else store
+    if h in entries:
+        return h
+    if "." not in h or _is_ip(h):
+        return None
+    suffix = public_suffix(h)
+    reg = registrable(h)
+    if not suffix or not reg or reg == suffix or reg == h:
+        return None
+    labels = h.split(".")
+    reg_labels = reg.split(".")
+    for i in range(1, len(labels) - len(reg_labels) + 1):
+        candidate = ".".join(labels[i:])
+        if candidate == suffix:
+            break
+        if candidate in entries:
+            return candidate
+    return None
+
+
+def read_owned_site(site: str) -> CookieSource:
+    """Return `site`'s cookies from the owned store.
+
+    The exact host is preferred. When it is absent, the nearest kept parent
+    down to the registrable domain is used. The stored records are then
+    filtered for the host being read, so a host-only cookie kept for the
+    parent is not sent to a child, while a domain cookie is.
+    """
+    host = _host_from(site)
+    if _is_public_suffix_host(host):
+        raise CookieReadError(
+            f"{host} is a public suffix, not a site; no saved login can apply"
+        )
+    store = read_owned_store()
+    stored_host = resolve_owned_host(host, store)
+    if not stored_host:
+        raise CookieReadError(f"no saved login for {host} in the searchts store")
+    entry = store[stored_host]
+    if not isinstance(entry, dict):
         raise CookieReadError(f"no saved login for {host} in the searchts store")
     raw = [c for c in entry.get("cookies", []) if isinstance(c, dict)]
     records = [
@@ -618,6 +747,7 @@ def read_owned_site(site: str) -> CookieSource:
         expires_at=at,
         expiry_known=known,
         expired=bool(entry.get("expired")),
+        stored_host=stored_host,
     )
 
 

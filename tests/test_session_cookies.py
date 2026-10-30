@@ -40,9 +40,11 @@ from searchts.session_cookies import (
     filter_for_host,
     for_site,
     owned_store_path,
+    public_suffix,
     read_firefox_family,
     read_owned_site,
     registrable,
+    resolve_owned_host,
     save_owned_site,
 )
 
@@ -124,10 +126,34 @@ def test_registrable_keeps_a_cookie_in_its_family():
     assert registrable("") == ""
 
 
-def test_cookie_for_a_parent_domain_matches_the_host():
+def test_public_suffix_handles_multi_part_and_private_suffixes():
+    """The real list, not a two-label guess.
+
+    ``github.io`` and ``vercel.app`` are private suffixes: every subdomain is a
+    separate registrant. Treating them as sites in one family is how a login
+    kept by one user would be offered to another.
+    """
+    assert public_suffix("www.example.co.uk") == "co.uk"
+    assert public_suffix("co.uk") == "co.uk"
+    assert public_suffix("a.github.io") == "github.io"
+    assert public_suffix("github.io") == "github.io"
+    assert public_suffix("x.vercel.app") == "vercel.app"
+    assert registrable("a.github.io") == "a.github.io"
+    assert registrable("x.vercel.app") == "x.vercel.app"
+    assert registrable("co.uk") == ""
+
+
+def test_a_domain_cookie_matches_the_host_and_its_subdomains():
     assert _domain_matches(".amazon.com", "www.amazon.com")
-    assert _domain_matches("amazon.com", "amazon.com")
+    assert _domain_matches(".amazon.com", "amazon.com")
     assert _domain_matches(".AMAZON.COM", "www.amazon.com")
+
+
+def test_a_host_only_cookie_matches_only_its_exact_host():
+    """No leading dot means host-only: the browser never sends it to a child."""
+    assert _domain_matches("amazon.com", "amazon.com")
+    assert not _domain_matches("amazon.com", "www.amazon.com")
+    assert not _domain_matches("www.amazon.com", "shop.www.amazon.com")
 
 
 def test_cookie_for_amazon_does_not_match_notamazon():
@@ -138,14 +164,14 @@ def test_cookie_for_amazon_does_not_match_notamazon():
 
 def test_look_alike_tld_is_not_a_parent_domain():
     """notamazon.in is a different site from amazon.in, not a subdomain."""
-    assert not _domain_matches("notamazon.in", "amazon.in")
-    assert not _domain_matches("amazon.in", "notamazon.in")
+    assert not _domain_matches(".notamazon.in", "amazon.in")
+    assert not _domain_matches(".amazon.in", "notamazon.in")
 
 
 def test_cookie_for_a_child_domain_does_not_match_the_parent():
-    """A cookie minted for shop.* must not ride along on the bare parent."""
-    assert not _domain_matches("shop.www.amazon.com", "www.amazon.com")
-    assert _domain_matches("shop.www.amazon.com", "checkout.shop.www.amazon.com")
+    """A domain cookie minted for shop.* must not ride along on the bare parent."""
+    assert not _domain_matches(".shop.www.amazon.com", "www.amazon.com")
+    assert _domain_matches(".shop.www.amazon.com", "checkout.shop.www.amazon.com")
 
 
 def test_empty_domain_or_host_never_matches():
@@ -177,11 +203,10 @@ def test_filter_for_host_keeps_only_cookies_this_host_would_receive():
     assert [c.name for c in kept] == ["sid", "csrf"]
     assert filter_for_host(records, "example.org")[0].name == "other"
     assert filter_for_host(records, "notamazon.com")[0].name == "nope"
-    # A deeper host receives both parent-domain cookies plus its own exact
-    # match. Nothing narrower than the host ever comes back.
+    # A deeper host receives the parent *domain* cookie plus its own exact
+    # match. The host-only cookie for www.amazon.com does not ride along.
     assert [c.name for c in filter_for_host(records, "shop.www.amazon.com")] == [
         "sid",
-        "csrf",
         "deeper",
     ]
 
@@ -319,6 +344,96 @@ def test_reading_an_empty_store_does_not_create_it(tmp_home):
     with pytest.raises(CookieReadError):
         read_owned_site("https://example.com")
     assert not Path(owned_store_path()).exists()
+
+
+# ── 4b. one site's login across its subdomains ─────────────────────────────
+
+
+def test_a_kept_parent_login_serves_a_subdomain_with_a_domain_cookie(tmp_home):
+    save_owned_site(
+        "https://example.com",
+        [CookieRecord("sid", "parent-value", ".example.com")],
+    )
+    src = read_owned_site("https://www.example.com")
+    assert src.count == 1
+    assert src.cookies[0].value == "parent-value"
+    assert src.stored_host == "example.com"
+    assert src.site == "https://www.example.com"
+
+
+def test_a_host_only_cookie_kept_on_the_parent_is_not_sent_to_a_subdomain(tmp_home):
+    save_owned_site(
+        "https://example.com",
+        [CookieRecord("sid", "host-only", "example.com")],
+    )
+    assert read_owned_site("https://example.com").count == 1
+    child = read_owned_site("https://app.example.com")
+    assert child.count == 0
+    assert child.cookies == []
+    assert "sid" not in child.names
+
+
+def test_a_private_suffix_login_is_not_shared_across_subdomains(tmp_home):
+    save_owned_site(
+        "https://a.github.io",
+        [CookieRecord("sid", "a-value", ".a.github.io")],
+    )
+    assert read_owned_site("https://a.github.io").count == 1
+    assert resolve_owned_host("a.github.io") == "a.github.io"
+    assert resolve_owned_host("b.github.io") is None
+    with pytest.raises(CookieReadError):
+        read_owned_site("https://b.github.io")
+
+
+def test_an_exact_host_entry_wins_over_a_parent_entry(tmp_home):
+    save_owned_site(
+        "https://example.com",
+        [CookieRecord("sid", "parent", ".example.com")],
+    )
+    save_owned_site(
+        "https://www.example.com",
+        [CookieRecord("sid", "exact", "www.example.com")],
+    )
+    src = read_owned_site("https://www.example.com")
+    assert [c.value for c in src.cookies] == ["exact"]
+    assert src.stored_host == "www.example.com"
+    assert resolve_owned_host("www.example.com") == "www.example.com"
+
+
+def test_multi_part_suffix_falls_back_only_to_the_registrable_domain(tmp_home):
+    save_owned_site(
+        "https://example.co.uk",
+        [CookieRecord("sid", "uk-value", ".example.co.uk")],
+    )
+    assert read_owned_site("https://shop.example.co.uk").count == 1
+    assert resolve_owned_host("shop.example.co.uk") == "example.co.uk"
+    assert resolve_owned_host("other.co.uk") is None
+
+
+def test_nothing_can_be_kept_or_resolved_at_a_public_suffix(tmp_home):
+    for host in ("co.uk", "github.io", "vercel.app"):
+        with pytest.raises(CookieReadError):
+            save_owned_site(host, [CookieRecord("sid", "v", host)])
+        assert resolve_owned_host(host) is None
+        with pytest.raises(CookieReadError):
+            read_owned_site(host)
+
+
+def test_a_legacy_public_suffix_entry_is_never_resolved(tmp_home):
+    """A store written before this guard cannot leak a suffix entry upwards."""
+    path = Path(owned_store_path())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({
+        "github.io": {
+            "cookies": [{"n": "sid", "v": "legacy", "d": ".github.io",
+                         "p": "/", "s": False, "h": False}],
+            "browser": "",
+        },
+    }), encoding="utf-8")
+
+    assert resolve_owned_host("a.github.io") is None
+    with pytest.raises(CookieReadError):
+        read_owned_site("https://a.github.io")
 
 
 # ── 5. save refuses what it cannot scope ───────────────────────────────────

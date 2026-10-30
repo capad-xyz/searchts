@@ -323,7 +323,7 @@ _add(Command(
 ))
 _add(Command(
     name="login", group=_LOGIN, root="login <verb>",
-    lead="Site logins: list, keep, kill, signin, purge-scratch, sweep, check.",
+    lead="Site logins: list, status, keep, kill, signin, purge-scratch, sweep, check.",
     body=(
         "Nothing is copied out of your browser without --yes. A kept login",
         "stays on this machine: direct requests and a temporary local browser",
@@ -352,6 +352,20 @@ _add(Command(
     ),
     examples=("searchts login list",),
     exit_codes=(("0", "the audit was printed"), ("2", "bad usage")),
+))
+_add(Command(
+    name="login status", group=_LOGIN,
+    lead="Show which stored host a URL's login resolves to.",
+    body=(
+        "An exact kept host wins. Otherwise the lookup can use a kept parent",
+        "within the same registrable domain. The result names the stored host",
+        "without exposing cookie values.",
+    ),
+    examples=(
+        "searchts login status https://www.example.com",
+        "searchts login status https://app.example.com",
+    ),
+    exit_codes=(("0", "the resolution was printed"), ("2", "bad usage")),
 ))
 _add(Command(
     name="login keep", group=_LOGIN,
@@ -645,7 +659,11 @@ MCP_TOOLS: Dict[str, McpTool] = {
     ),
     "login_status": McpTool(
         "login_status", "login list",
-        notes=("Same audit as `searchts login list`; never a cookie value.",),
+        notes=(
+            "Same audit as `searchts login list`; never a cookie value.",
+            "MCP-only `url` also reports which stored host the URL resolves to.",
+        ),
+        mcp_only_params=("url",),
     ),
     "login_signin": McpTool(
         "login_signin", "login signin",
@@ -691,6 +709,7 @@ CLI_ONLY: Dict[str, str] = {
     "mcp serve": "this is the server itself; a tool for it would be the server",
     "mcp install": "writes client configs; the host does this once",
     "login": "parent verb for the login tools and the CLI-only login verbs",
+    "login status": "the MCP `login_status` tool accepts `url` for the same lookup",
     "login keep": "MCP reaches the same login through `login_signin` or `read_url` + `cookies_from_browser`",
     "login purge-scratch": "scratch copies are deleted at the end of every read",
     "login sweep": "expired cookies are swept on every MCP result; a tool would duplicate it",

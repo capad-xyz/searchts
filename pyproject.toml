@@ -51,6 +51,10 @@ dependencies = [
     # A bundled ffmpeg binary (no ffprobe; nothing searchts runs needs it).
     # Used when ffmpeg is not on PATH, so transcription needs no system install.
     "imageio-ffmpeg>=0.5",
+    # Login reuse across subdomains needs the real Public Suffix List, not an
+    # approximation: co.uk and github.io must never become one shared site.
+    # Pure Python, no dependencies, ships the list (about 109 KB).
+    "publicsuffixlist>=1.1",
 ]
 
 [project.optional-dependencies]

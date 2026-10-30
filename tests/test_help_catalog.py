@@ -67,7 +67,9 @@ def test_every_command_has_its_own_lead_and_example():
 def test_a_subcommand_does_not_reuse_the_parent_screen():
     parent = catalog.meta_for("login")
     assert parent is not None
-    for verb in ("list", "keep", "kill", "signin", "purge-scratch", "sweep", "check"):
+    for verb in (
+        "list", "status", "keep", "kill", "signin", "purge-scratch", "sweep", "check",
+    ):
         child = catalog.meta_for(["login", verb])
         assert child is not None
         assert child.lead != parent.lead
@@ -110,7 +112,7 @@ def test_json_help_for_one_command_includes_its_verbs():
     assert "login" in names
     assert "login check" in names
     assert "login sweep" in names
-    assert len(names) == 8
+    assert len(names) == 9
 
 
 def test_unknown_help_path_is_a_clean_exit_2():

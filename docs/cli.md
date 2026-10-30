@@ -514,11 +514,11 @@ No MCP tool: keys are the user's; MCP reads only what is already configured.
 
 ### `login`
 
-Site logins: list, keep, kill, signin, purge-scratch, sweep, check.
+Site logins: list, status, keep, kill, signin, purge-scratch, sweep, check.
 Nothing is copied out of your browser without --yes. A kept login stays on this machine: direct requests and a temporary local browser context can use it; the Jina relay never receives it. A bare `searchts login` is the same as `searchts login list`.
 
 ```bash
-searchts login {list|keep|kill|signin|purge-scratch|sweep|check} [--verbose]
+searchts login {list|status|keep|kill|signin|purge-scratch|sweep|check} [--verbose]
 ```
 
 | Flag | Description |
@@ -541,7 +541,7 @@ searchts login keep https://example.com --cookies-from-browser zen --yes
 | `3` | consent is needed for a cookie copy |
 
 No MCP tool: parent verb for the login tools and the CLI-only login verbs.
-Subcommands: `login list`, `login keep`, `login kill`, `login signin`, `login purge-scratch`, `login sweep`, `login check`.
+Subcommands: `login list`, `login status`, `login keep`, `login kill`, `login signin`, `login purge-scratch`, `login sweep`, `login check`.
 
 ### `login list`
 
@@ -568,7 +568,40 @@ searchts login list
 | `2` | bad usage |
 
 MCP: `login_status`.
+MCP-only parameters: `url`.
 - Same audit as `searchts login list`; never a cookie value.
+- MCP-only `url` also reports which stored host the URL resolves to.
+
+### `login status`
+
+Show which stored host a URL's login resolves to.
+An exact kept host wins. Otherwise the lookup can use a kept parent within the same registrable domain. The result names the stored host without exposing cookie values.
+
+```bash
+searchts login status <url> [--verbose]
+```
+
+| Argument | Description |
+|---|---|
+| `url` | The site to resolve against the store |
+
+| Flag | Description |
+|---|---|
+| `-v`, `--verbose` | Show debug logs |
+
+Examples:
+
+```bash
+searchts login status https://www.example.com
+searchts login status https://app.example.com
+```
+
+| Exit | Meaning |
+|---|---|
+| `0` | the resolution was printed |
+| `2` | bad usage |
+
+No MCP tool: the MCP `login_status` tool accepts `url` for the same lookup.
 
 ### `login keep`
 
