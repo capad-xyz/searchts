@@ -357,39 +357,104 @@ _MODEL_CACHE: Dict[str, Any] = {}
 _DEVICE_CACHE: Dict[str, str] = {}
 
 #: whisper.cpp's native log lines ("whisper_lang_id: unknown language 'auto'")
-#: are fd-2 output from its C code. By default they go to devnull (#486):
-#: stderr holds searchts's own plain progress lines, and a C log line there
-#: looks like an error to an agent. ``-v`` / debug logging turns them back on.
+#: are fd-2 output from its C code. They are intercepted with the library's own
+#: log callback (``whisper_log_set``), not by redirecting fd 2: a redirect also
+#: swallows searchts's own progress ticks, which can be written from another
+#: thread while a chunk is transcribing (#486, #452 follow-up). Off by default;
+#: ``-v`` / debug logging turns them back on.
 _SHOW_NATIVE_LOGS = False
+
+#: The callback object must outlive the C pointer handed to whisper_log_set.
+_NATIVE_LOG_CALLBACK: Optional[Callable[..., None]] = None
+_NATIVE_LOG_SINK_INSTALLED = False
 
 
 def show_native_logs(enabled: bool) -> None:
     """The CLI wiring for native whisper.cpp log output: on with ``-v``, else off."""
     global _SHOW_NATIVE_LOGS
     _SHOW_NATIVE_LOGS = bool(enabled)
+    if enabled:
+        _install_native_log_sink()
+
+
+def _native_log(level: Any, text: Any, *_rest: Any) -> None:
+    """One whisper.cpp log line: plain stderr with ``-v``, nowhere otherwise."""
+    if not _SHOW_NATIVE_LOGS:
+        return
+    try:
+        line = str(text)
+    except Exception:  # noqa: BLE001 - a native callback never raises
+        return
+    if not line:
+        return
+    stream = sys.stderr
+    if stream is None:
+        return
+    try:
+        stream.write(line if line.endswith("\n") else line + "\n")
+        stream.flush()
+    except Exception:  # noqa: BLE001 - a closed stderr must never abort a run
+        pass
+
+
+def _install_native_log_sink() -> bool:
+    """Point whisper.cpp's logger at :func:`_native_log`, once per process.
+
+    True when the callback is in place, so callers know they must not fall back
+    to the fd-2 redirect. False on a pywhispercpp too old to expose the setter.
+    """
+    global _NATIVE_LOG_CALLBACK, _NATIVE_LOG_SINK_INSTALLED
+    if _NATIVE_LOG_SINK_INSTALLED:
+        return True
+    try:
+        pw, _ = _import_binding()
+        setter = getattr(pw, "whisper_log_set", None)
+        if setter is None:
+            return False
+
+        def callback(*args: Any) -> None:
+            _native_log(*args)
+
+        setter(callback)
+        _NATIVE_LOG_CALLBACK = callback
+        _NATIVE_LOG_SINK_INSTALLED = True
+        return True
+    except Exception:  # noqa: BLE001 - fall back to the old redirect below
+        return False
 
 
 def _quiet_stderr():
-    """A stderr redirect: devnull by default, no-op when native logs are on.
+    """Keep whisper.cpp's native logs off stderr, and nothing else.
 
-    ``pywhispercpp`` redirects its target only around model initialization;
-    the native lines a *transcribe* run prints go straight to fd 2.
+    With the log callback installed (the normal case) nothing is redirected:
+    the callback drops whisper.cpp's own lines while every other writer to fd 2
+    keeps its voice. With ``-v`` the callback forwards them. The old fd-2
+    redirect remains only for a pywhispercpp without the callback API, and is
+    skipped when the user asked to see the native lines.
     """
+    from contextlib import nullcontext
+
+    if _install_native_log_sink() or _SHOW_NATIVE_LOGS:
+        return nullcontext()
     from pywhispercpp.utils import redirect_stderr
 
-    return redirect_stderr(to=None if not _SHOW_NATIVE_LOGS else False)
+    return redirect_stderr(to=None)
 
 
 def _load(path: Path) -> Any:
     key = str(path)
     if key not in _MODEL_CACHE:
         pw, Model = _import_binding()
+        # With our log callback in place, initialization logs are filtered at
+        # the source; there is no fd-2 redirect to make (which would also mute
+        # another thread's progress tick). Without it, keep #486's redirect.
+        quiet_to = False if _install_native_log_sink() or _SHOW_NATIVE_LOGS else None
         backend = device(str(pw.whisper_print_system_info()))
         context_params = {"use_gpu": backend != "cpu"}
         try:
             model = Model(
                 key,
-                redirect_whispercpp_logs_to=None,
+                redirect_whispercpp_logs_to=quiet_to,
                 print_progress=False,
                 print_realtime=False,
                 context_params=context_params,
@@ -402,7 +467,7 @@ def _load(path: Path) -> Any:
             try:
                 model = Model(
                     key,
-                    redirect_whispercpp_logs_to=None,
+                    redirect_whispercpp_logs_to=quiet_to,
                     print_progress=False,
                     print_realtime=False,
                     context_params={"use_gpu": False},

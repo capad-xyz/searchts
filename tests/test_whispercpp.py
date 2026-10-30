@@ -256,27 +256,66 @@ def test_translate_refuses_turbo(fake_binding, tmp_path):
     assert fake_binding.calls[-1]["translate"] is True
 
 
-def test_native_whisper_logs_are_silenced_unless_verbose(
-    monkeypatch, fake_binding, tmp_path
+def test_native_logs_use_the_callback_and_never_redirect_fd2(
+    monkeypatch, capsys
 ):
-    """#486: whisper.cpp's C log lines stay off stderr; -v turns them back on."""
+    """#452: whisper.cpp's own lines are filtered by its log callback, so a
+    progress tick written from another thread still reaches stderr."""
     import contextlib
 
-    import pywhispercpp.utils as utils
-
-    seen = []
+    monkeypatch.setattr(whispercpp, "_NATIVE_LOG_SINK_INSTALLED", False)
+    monkeypatch.setattr(whispercpp, "_NATIVE_LOG_CALLBACK", None)
+    monkeypatch.setattr(whispercpp, "_SHOW_NATIVE_LOGS", False)
+    installed = []
+    pw = types.SimpleNamespace(whisper_log_set=installed.append)
+    monkeypatch.setattr(whispercpp, "_import_binding", lambda: (pw, object))
+    redirected = []
 
     @contextlib.contextmanager
     def fake_redirect(to=False):
-        seen.append(to)
+        redirected.append(to)
         yield
 
-    monkeypatch.setattr(utils, "redirect_stderr", fake_redirect)
-    monkeypatch.setattr(whispercpp, "_SHOW_NATIVE_LOGS", False)
-    whispercpp.transcribe_samples([0.0], whispercpp.MODELS["small"], tmp_path / "m")
+    monkeypatch.setattr("pywhispercpp.utils.redirect_stderr", fake_redirect)
+    with whispercpp._quiet_stderr():
+        pass
+    assert len(installed) == 1 and redirected == []
+
+    installed[0](1, "whisper_lang_id: unknown language 'auto'\n")
+    print("searchts's own tick", file=sys.stderr)
+    err = capsys.readouterr().err
+    assert "searchts's own tick" in err and "whisper_lang_id" not in err
+
     whispercpp.show_native_logs(True)
-    whispercpp.transcribe_samples([0.0], whispercpp.MODELS["small"], tmp_path / "m")
-    assert seen == [None, False]
+    installed[0](1, "whisper_init: native line\n")
+    assert "whisper_init: native line" in capsys.readouterr().err
+
+
+def test_a_binding_without_the_log_setter_keeps_the_fd2_redirect(monkeypatch):
+    """The old wheel has no ``whisper_log_set``; #486's redirect still applies."""
+    import contextlib
+
+    monkeypatch.setattr(whispercpp, "_NATIVE_LOG_SINK_INSTALLED", False)
+    monkeypatch.setattr(whispercpp, "_NATIVE_LOG_CALLBACK", None)
+    monkeypatch.setattr(whispercpp, "_SHOW_NATIVE_LOGS", False)
+    monkeypatch.setattr(
+        whispercpp, "_import_binding", lambda: (types.SimpleNamespace(), object)
+    )
+    redirected = []
+
+    @contextlib.contextmanager
+    def fake_redirect(to=False):
+        redirected.append(to)
+        yield
+
+    monkeypatch.setattr("pywhispercpp.utils.redirect_stderr", fake_redirect)
+    with whispercpp._quiet_stderr():
+        pass
+    assert redirected == [None]
+    whispercpp.show_native_logs(True)
+    with whispercpp._quiet_stderr():
+        pass
+    assert redirected == [None]  # -v: nothing is muted
 
 
 def test_translate_refuses_turbo_before_model_download(monkeypatch, fake_config):
@@ -303,6 +342,7 @@ def test_auto_without_a_key_runs_whispercpp_and_reports_it(
     assert result.receipt() == {
         "source": "audio", "provider": "local", "engine": "whisper.cpp",
         "model": "small", "device": "cpu", "language": "de", "translated": False,
+        "audio_cache": "off",  # a local file was never downloaded
     }
 
 

@@ -292,6 +292,37 @@ def model_caches(root: Optional[Path] = None) -> List[dict]:
     return out
 
 
+def audio_cache_entry() -> dict:
+    """The #452 kept-audio folder: path, size, and how long an entry lives."""
+    from searchts import audio_cache
+
+    return audio_cache.info()
+
+
+def audio_cache_only_report(cache: Optional[dict] = None) -> dict:
+    """The cleanup report when faster-whisper is gone but kept audio remains.
+
+    Without this, ``transcribe --cleanup`` said "nothing to remove" on a machine
+    that never installed faster-whisper and still held cached audio (#452).
+    """
+    return {
+        "schema": "searchts.fw_migration.v1",
+        "temporary": True,
+        "installed": False,
+        "message": (
+            "faster-whisper is not installed here. The only thing this cleanup "
+            "can remove is the audio kept for transcription re-runs."
+        ),
+        "environment": _environment(),
+        "packages": [],
+        "model_caches": [],
+        "model_cache_note": _CACHE_NOTE,
+        "audio_cache": cache if cache is not None else audio_cache_entry(),
+        "remove_command": REMOVE_COMMAND,
+        "dry_run_command": DRY_RUN_COMMAND,
+    }
+
+
 def report(*, dists: Optional[Dict[str, object]] = None, cache_root: Optional[Path] = None) -> Optional[dict]:
     """What a removal would touch and what else uses it, or None without faster-whisper."""
     dists = _distributions() if dists is None else dists
@@ -324,6 +355,7 @@ def report(*, dists: Optional[Dict[str, object]] = None, cache_root: Optional[Pa
         "environment": env,
         "packages": packages,
         "model_caches": caches,
+        "audio_cache": audio_cache_entry(),
         "model_cache_note": _CACHE_NOTE,
         "remove_command": REMOVE_COMMAND,
         "dry_run_command": DRY_RUN_COMMAND,
@@ -373,6 +405,12 @@ def human_notice(rep: dict) -> str:
         lines.append(f"  model cache {cache['path']} ({cache['size']}, last modified {cache['modified']})")
     if rep["model_caches"]:
         lines.append("  " + rep["model_cache_note"])
+    audio = rep.get("audio_cache") or {}
+    if audio.get("files"):
+        lines.append(
+            f"  audio cache {audio['path']} ({audio['size']}, kept "
+            f"{audio['ttl_hours']:g}h after a transcription)"
+        )
     lines.append(f"  See what would go: {rep['dry_run_command']}")
     lines.append(f"  Remove it: {rep['remove_command']}  (nothing is removed without your yes)")
     lines.append("  This notice is temporary.")
@@ -473,6 +511,15 @@ def cleanup(rep: dict, *, run: Runner = _run) -> dict:
             result["removed_caches"].append(cache["path"])
         except OSError as e:
             result["kept_caches"].append({"path": cache["path"], "reason": str(e)})
+    audio = rep.get("audio_cache") or {}
+    if audio.get("exists"):
+        from searchts import audio_cache
+
+        try:
+            audio_cache.clear()
+            result["removed_caches"].append(audio["path"])
+        except OSError as e:
+            result["kept_caches"].append({"path": audio["path"], "reason": str(e)})
     return result
 
 

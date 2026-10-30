@@ -167,11 +167,15 @@ TRANSCRIBE_DESCRIPTION = (
     "downloaded once: without yes=true the call returns an Error naming its "
     "size and source; ask the user, then call again with yes=true. "
     "cookies_from_browser is opt-in (chrome/firefox/…) and uses THIS "
-    "machine's browser cookies; read_url does not copy them. Returns the "
+    "machine's browser cookies; read_url does not copy them. The compressed "
+    "audio (never the video) is kept for 24 hours in ~/.searchts/cache/audio, "
+    "so a repeat of the same URL skips the download; pass fresh=true to "
+    "download again, and the receipt's audio_cache says hit, miss or off "
+    "(off for a local file, cookies, or caching turned off). Returns the "
     "transcript text, then a `transcribed_by:` JSON line (source, engine, "
-    "model, device, detected language). Missing-model consent is returned as "
-    "structured JSON with the exact yes=true approval; other failures use an "
-    "'Error: ...' string."
+    "model, device, detected language, audio_cache). Missing-model consent is "
+    "returned as structured JSON with the exact yes=true approval; other "
+    "failures use an 'Error: ...' string."
     + UPDATE_CHECK_DESCRIPTION
 )
 
@@ -401,6 +405,7 @@ def create_server():
         hint: str = "",
         translate: bool = False,
         yes: bool = False,
+        fresh: bool = False,
     ) -> str:
         # yt-dlp / Whisper is blocking; keep the MCP loop free (same as
         # read_url), including the update lookup's possible GitHub GET.
@@ -415,6 +420,7 @@ def create_server():
             hint=hint or None,
             translate=translate,
             yes=yes,
+            fresh=fresh,
             update_info=info,
         )
 
@@ -1267,6 +1273,7 @@ def transcribe_source(
     hint: str | None = None,
     translate: bool = False,
     yes: bool = False,
+    fresh: bool = False,
     update_info: Any = _UPDATE_UNSET,
 ) -> str:
     """Transcribe a URL or local file. Error-string contract, like read_url.
@@ -1297,6 +1304,7 @@ def transcribe_source(
             hint=(hint or "").strip() or None,
             translate=bool(translate),
             yes=bool(yes),
+            fresh=bool(fresh),
         )
         text = result.text
         if result.engine:

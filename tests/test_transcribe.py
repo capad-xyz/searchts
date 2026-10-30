@@ -1099,3 +1099,107 @@ class TestProgressTicks:
         captured = capsys.readouterr()
         assert captured.out == ""
         assert captured.err == ""
+
+
+class TestAudioCache:
+    """#452: the compressed audio of a URL is kept a day and reused."""
+
+    URL = "https://youtu.be/dQw4w9WgXcQ"
+
+    @pytest.fixture(autouse=True)
+    def cache_root(self, tmp_path, monkeypatch):
+        root = tmp_path / "audio-cache"
+        monkeypatch.setenv("SEARCHTS_AUDIO_CACHE_DIR", str(root))
+        monkeypatch.delenv("SEARCHTS_AUDIO_CACHE", raising=False)
+        return root
+
+    def _pipeline(self, monkeypatch, tmp_path):
+        """A hosted run whose download is counted and whose m4a is real."""
+        self.downloads = []
+
+        def download(url, out_dir, **kwargs):
+            self.downloads.append(url)
+            return tmp_path / "source-media"
+
+        def compress(src, out_dir):
+            path = tmp_path / f"compressed-{len(self.downloads)}.m4a"
+            path.write_bytes(b"m4a-bytes" * 64)
+            return path
+
+        monkeypatch.setattr(tr, "fetch_subtitles", lambda *a, **k: None)
+        monkeypatch.setattr(tr, "download_audio", download)
+        monkeypatch.setattr(tr, "compress_audio", compress)
+        monkeypatch.setattr(
+            tr.requests, "post", lambda *a, **k: FakeResponse(200, "spoken words")
+        )
+
+    def test_a_second_run_reports_a_hit_and_skips_the_download(
+        self, monkeypatch, fake_config, tmp_path, cache_root
+    ):
+        fake_config.set("groq_api_key", "gsk_test")
+        self._pipeline(monkeypatch, tmp_path)
+        first = tr.transcribe_result(self.URL, config=fake_config)
+        assert (first.audio_cache, first.text) == ("miss", "spoken words")
+        kept = list(cache_root.glob("*.m4a"))
+        assert len(kept) == 1 and kept[0].read_bytes() == b"m4a-bytes" * 64
+
+        second = tr.transcribe_result(self.URL, config=fake_config)
+        assert (second.audio_cache, second.text) == ("hit", "spoken words")
+        assert len(self.downloads) == 1
+
+    def test_fresh_downloads_again_even_with_a_kept_copy(
+        self, monkeypatch, fake_config, tmp_path
+    ):
+        fake_config.set("groq_api_key", "gsk_test")
+        self._pipeline(monkeypatch, tmp_path)
+        assert tr.transcribe_result(self.URL, config=fake_config).audio_cache == "miss"
+        fresh = tr.transcribe_result(self.URL, config=fake_config, fresh=True)
+        assert fresh.audio_cache == "miss"
+        assert len(self.downloads) == 2
+
+    def test_a_local_file_is_off_and_never_stored(
+        self, monkeypatch, fake_config, tmp_path, chunk_file, cache_root
+    ):
+        fake_config.set("groq_api_key", "gsk_test")
+        monkeypatch.setattr(tr, "compress_audio", lambda src, out: chunk_file)
+        monkeypatch.setattr(
+            tr.requests, "post", lambda *a, **k: FakeResponse(200, "local words")
+        )
+        result = tr.transcribe_result(str(chunk_file), config=fake_config)
+        assert (result.audio_cache, result.text) == ("off", "local words")
+        assert not list(cache_root.glob("*.m4a"))
+
+    def test_cookie_audio_is_off_and_never_stored(
+        self, monkeypatch, fake_config, tmp_path, cache_root
+    ):
+        fake_config.set("groq_api_key", "gsk_test")
+        self._pipeline(monkeypatch, tmp_path)
+        result = tr.transcribe_result(
+            self.URL, config=fake_config, cookies_from_browser="chrome"
+        )
+        assert result.audio_cache == "off"
+        assert len(self.downloads) == 1
+        assert not list(cache_root.glob("*.m4a"))
+
+    def test_caching_off_downloads_every_run_and_keeps_nothing(
+        self, monkeypatch, fake_config, tmp_path, cache_root
+    ):
+        fake_config.set("groq_api_key", "gsk_test")
+        monkeypatch.setenv("SEARCHTS_AUDIO_CACHE", "0")
+        self._pipeline(monkeypatch, tmp_path)
+        runs = [tr.transcribe_result(self.URL, config=fake_config) for _ in range(2)]
+        assert [run.audio_cache for run in runs] == ["off", "off"]
+        assert len(self.downloads) == 2
+        assert not list(cache_root.glob("*.m4a"))
+
+    def test_captions_report_off_because_no_audio_was_fetched(
+        self, monkeypatch, fake_config, cache_root
+    ):
+        monkeypatch.setattr(
+            tr, "fetch_subtitles",
+            lambda *a, **k: "these are existing captions, long enough to use",
+        )
+        result = tr.transcribe_result(self.URL, config=fake_config)
+        assert result.audio_cache == "off"
+        assert result.receipt()["engine"] == "captions"
+        assert not list(cache_root.glob("*.m4a"))

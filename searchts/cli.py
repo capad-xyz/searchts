@@ -548,13 +548,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_tr.add_argument("--yes", "-y", action="store_true",
                       help="Approve the one-time local model download (agents: only "
                            "after the user said yes); with --cleanup, approve the removal")
+    p_tr.add_argument("--fresh", action="store_true",
+                      help="Download the audio again instead of reusing the copy kept "
+                           "from the last 24 hours (a re-run otherwise skips the download)")
     p_tr.add_argument("--json", action="store_true",
                       help="Print searchts.transcribe.v1 JSON: the text plus which "
                            "source, engine, model and device ran, and the language")
     p_tr.add_argument("--cleanup", action="store_true",
                       # TODO(remove-after-window): remove with fw_migration.py.
-                      help="Temporary: remove the faster-whisper fallback and its model "
-                           "cache. Shows what else uses them first, then asks")
+                      help="Temporary: remove the faster-whisper fallback, its model "
+                           "cache, and the 24-hour audio cache. Shows what else uses "
+                           "them first, then asks")
     p_tr.add_argument("--list-models", action="store_true",
                       help="List local whisper.cpp models, sizes, cache status and paths")
     p_tr.add_argument("--remove-model", choices=["small", "turbo", "base"],
@@ -2502,6 +2506,7 @@ def _cmd_transcribe(args):
                     hint=args.hint,
                     translate=args.translate,
                     yes=approved,
+                    fresh=getattr(args, "fresh", False),
                 )
                 pending = None
             except ModelDownloadNeeded as e:
@@ -2571,6 +2576,8 @@ def _transcribe_ran(result) -> str:
         bits.append(result.device)
     if result.language:
         bits.append(("to en from " if result.translated else "") + result.language)
+    if result.audio_cache == "hit":
+        bits.append("audio cache hit")
     return " · ".join(b for b in bits if b)
 
 
@@ -2635,14 +2642,19 @@ def _cmd_transcribe_cleanup(args):
     from searchts import fw_migration
 
     rep = fw_migration.report()
+    audio = fw_migration.audio_cache_entry()
     if rep is None:
-        msg = "faster-whisper is not installed here; nothing to remove."
-        if args.json:
-            print(json.dumps({"schema": "searchts.fw_migration.v1", "installed": False,
-                              "message": msg}, indent=2))
-        else:
-            print(msg)
-        return
+        # #452: without faster-whisper the kept audio is still ours to report
+        # and remove, so this is not "nothing to remove" any more.
+        if not audio.get("files"):
+            msg = "faster-whisper is not installed here; nothing to remove."
+            if args.json:
+                print(json.dumps({"schema": "searchts.fw_migration.v1", "installed": False,
+                                  "message": msg}, indent=2))
+            else:
+                print(msg)
+            return
+        rep = fw_migration.audio_cache_only_report(audio)
     if args.json and (args.dry_run or not args.yes):
         print(json.dumps({**rep, "removed": False}, ensure_ascii=False, indent=2))
         if not args.dry_run:
@@ -2659,7 +2671,7 @@ def _cmd_transcribe_cleanup(args):
     approved = bool(args.yes)
     if not approved and sys.stdin.isatty():
         try:
-            approved = input("\nRemove the packages marked unused and the model folders? [y/N] ").strip().lower() in ("y", "yes")
+            approved = input("\nRemove the packages marked unused and the model and audio folders? [y/N] ").strip().lower() in ("y", "yes")
         except (EOFError, KeyboardInterrupt):
             approved = False
     if not approved:

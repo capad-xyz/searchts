@@ -160,12 +160,19 @@ _add(Command(
         "Use --list-models to inspect the cache or --remove-model NAME --yes",
         "to remove one. --hint supplies names; --translate opts into English",
         "output (not supported by turbo).",
+        "The compressed audio (16 kHz mono, never the video) is kept for 24",
+        "hours in ~/.searchts/cache/audio, at most 256 MB, oldest dropped",
+        "first, so a re-run of the same URL skips the download. --fresh",
+        "downloads again; `audio_cache: off` in config or",
+        "SEARCHTS_AUDIO_CACHE=0 keeps nothing, and --cleanup removes the",
+        "folder. --json reports audio_cache: hit, miss or off.",
         "Use --provider local-fw to force the temporary faster-whisper fallback.",
     ),
     examples=(
         "searchts transcribe https://www.youtube.com/watch?v=...",
         "searchts transcribe talk.mp4 --provider local --model turbo",
         "searchts transcribe https://www.instagram.com/reel/... --hint \"Laurentius, Dark Souls\"",
+        "searchts transcribe https://youtu.be/... --fresh --json",
         "searchts transcribe --list-models",
         "searchts transcribe --remove-model small --yes",
         "searchts transcribe --cleanup --dry-run",
@@ -669,10 +676,13 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "`prefer_subtitles` mirrors CLI `--no-subtitles`.",
             "`cookies_from_browser` is passed to yt-dlp, same as the CLI flag.",
             "`yes` is CLI `--yes`: the user's approval to download the local model.",
+            "`fresh` is CLI `--fresh`: download the audio instead of reusing the",
+            "24-hour copy in ~/.searchts/cache/audio.",
             "A missing-model response is structured and names its size, source, "
             "cache path, and yes=true approval.",
             "The text ends with a `transcribed_by:` JSON line, the receipt "
-            "CLI `--json` puts under `receipt`.",
+            "CLI `--json` puts under `receipt`, including `audio_cache: "
+            "hit|miss|off`.",
             "Use provider=local-fw to force the temporary faster-whisper fallback.",
             "`--cleanup` (temporary faster-whisper removal) is CLI only.",
         ),
@@ -680,7 +690,7 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "-o", "--json", "--cleanup", "--dry-run", "--list-models",
             "--remove-model",
         ),
-        param_flags=(("prefer_subtitles", "--no-subtitles"),),
+        param_flags=(("prefer_subtitles", "--no-subtitles"), ("fresh", "--fresh")),
     ),
     "login_status": McpTool(
         "login_status", "login list",

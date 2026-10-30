@@ -21,6 +21,12 @@ there are none. YouTube, TikTok, Instagram and Reddit video are supported.
   opts into English output except with turbo.
 - `transcribe-models` lists cached models and removes one with
   `--remove-model NAME --yes`.
+- `transcribe-cache` keeps the compressed 16 kHz mono audio for 24 hours in
+  `~/.searchts/cache/audio` (256 MB cap, oldest first) and reuses it on a
+  re-run; the receipt says `audio_cache: hit`, `miss` or `off`.
+- `transcribe-fresh` downloads the audio again for one run with `--fresh` (MCP
+  `fresh`); `audio_cache: off` in config or `SEARCHTS_AUDIO_CACHE=0` keeps
+  nothing at all.
 
 ## How to get to it (user POV)
 
@@ -42,6 +48,10 @@ there are none. YouTube, TikTok, Instagram and Reddit video are supported.
   old faster-whisper model folders.
 - Run `searchts transcribe <url> --provider local-fw` to force the temporary
   faster-whisper fallback while it remains installed.
+- Re-run the same URL to reuse the kept audio; add `--fresh --json` to download
+  it again and see `audio_cache: miss` instead of `hit`.
+- Run `searchts transcribe --cleanup --dry-run --json` to see the audio cache
+  folder and its size before any removal.
 
 ## Driving it with searchts
 
@@ -80,6 +90,22 @@ Preconditions:
   `--remove-model base --yes --json` drive exits `0` and removes the model
   plus any partial download from the isolated cache. See
   `artifacts/transcribe/list.*` and `remove.*`.
+- **Kept audio, hit.** In a throwaway `HOME` with the base model copied in,
+  `python -m searchts transcribe https://www.youtube.com/watch?v=jNQXAC9IVRw
+  --provider local --model base --no-subtitles --json` ran twice after clearing
+  `~/.searchts/cache/audio`. The first run exited `0` in 8351 ms with
+  `"audio_cache": "miss"` and `downloading audio…` on stderr; the second
+  exited `0` in 2168 ms with `"audio_cache": "hit"`, no download tick, and the
+  same 178-character transcript. Evidence: `artifacts/transcribe/run1.*` and
+  `run2.*`. One 80 KB m4a sat in the cache folder.
+- **Native logs, not fd 2.** The hit drive without `-v` printed zero
+  `whisper_*` lines and its `transcribing…` tick survived; the same drive with
+  `-v` printed 35 native lines. Evidence: `artifacts/transcribe/verbose0.err`
+  and `verbose1.err`. A silent tick during transcription would mean fd 2 is
+  being redirected again.
+- **Cleanup lists it.** `transcribe --cleanup --dry-run --json` reported the
+  folder as `~/.searchts/cache/audio` with `"files": 1`, `"size_bytes": 80185`
+  and `"size": "80 KB"`. Evidence: `artifacts/transcribe/cleanup-audio.json`.
 
 ## Gotchas
 
@@ -93,3 +119,7 @@ Preconditions:
 - Never pipe a transcribe into `head`.
 - Progress is written to stderr as it happens. A drive that only captures stdout
   will think the command hung.
+- A cache `hit` is only a proof of reuse when the download tick is absent from
+  stderr. A hit that still downloads is a receipt that lies.
+- Audio fetched with `--cookies-from-browser` is never kept, and a local file
+  is never stored: both report `audio_cache: off`, not `miss`.
