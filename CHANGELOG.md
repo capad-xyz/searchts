@@ -2,6 +2,17 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.24.3](https://github.com/capad-xyz/searchts/compare/v0.24.2...v0.24.3) (2026-10-30)
+
+
+### Fixed
+
+* **install:** register Exa and LinkedIn with mcporter in the home config ([#490](https://github.com/capad-xyz/searchts/issues/490)) ([3bbc36b](https://github.com/capad-xyz/searchts/commit/3bbc36b99cbc7361223a33e404af9efb4ad02d4d))
+* **login:** report a non-URL in login check with the JSON error envelope ([eac085f](https://github.com/capad-xyz/searchts/commit/eac085fc2a9b6b5ab8239697b2bce0f0ce5afbdf))
+* **mcp:** read_url more notes name a step the tool offers ([#489](https://github.com/capad-xyz/searchts/issues/489)) ([f3e7376](https://github.com/capad-xyz/searchts/commit/f3e7376d45dd758784500adac4b8ec7aa2193218))
+* **transcribe:** silence whisper.cpp native logs unless -v ([#492](https://github.com/capad-xyz/searchts/issues/492)) ([eac085f](https://github.com/capad-xyz/searchts/commit/eac085fc2a9b6b5ab8239697b2bce0f0ce5afbdf)), closes [#486](https://github.com/capad-xyz/searchts/issues/486) [#487](https://github.com/capad-xyz/searchts/issues/487) [#488](https://github.com/capad-xyz/searchts/issues/488)
+* **transcribe:** stop calling a searchts-only venv shared in the cleanup report ([eac085f](https://github.com/capad-xyz/searchts/commit/eac085fc2a9b6b5ab8239697b2bce0f0ce5afbdf))
+
 ## [0.24.2](https://github.com/capad-xyz/searchts/compare/v0.24.1...v0.24.2) (2026-10-30)
 
 
