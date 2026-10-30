@@ -2,6 +2,18 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.25.0](https://github.com/capad-xyz/searchts/compare/v0.24.3...v0.25.0) (2026-10-30)
+
+
+### Added
+
+* **transcribe:** reuse recently downloaded audio for 24h ([#493](https://github.com/capad-xyz/searchts/issues/493)) ([ce8a33a](https://github.com/capad-xyz/searchts/commit/ce8a33a221739feaa481e70013f7b22d685d0dc4))
+
+
+### Fixed
+
+* **transcribe:** drop only whisper.cpp native logs, not all of stderr ([ce8a33a](https://github.com/capad-xyz/searchts/commit/ce8a33a221739feaa481e70013f7b22d685d0dc4))
+
 ## [0.24.3](https://github.com/capad-xyz/searchts/compare/v0.24.2...v0.24.3) (2026-10-30)
 
 
