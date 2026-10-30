@@ -335,6 +335,98 @@ def test_json_opt_out_disables_the_key(monkeypatch, tmp_path, capsys):
     assert calls["n"] == 0
 
 
+# ── CLI transcribe --json ───────────────────────────────────────────────────
+
+
+def _transcribe(capsys, argv, *, result=None, error=None):
+    """Drive `searchts transcribe --json` with the transcription call stubbed."""
+    from searchts import transcribe as tr
+
+    def fake(source, **kw):
+        if error is not None:
+            raise error
+        return result
+
+    with patch.object(tr, "transcribe_result", fake):
+        with patch("sys.argv", ["searchts", *argv]):
+            try:
+                main()
+                code = 0
+            except SystemExit as e:
+                code = e.code
+    return code, capsys.readouterr().out
+
+
+def _audio_result():
+    from searchts.transcribe import TranscribeResult
+
+    return TranscribeResult(
+        text="hello", source="audio", provider="local", engine="whisper.cpp",
+        model="small", device="cpu", language="en",
+    )
+
+
+def test_transcribe_json_has_update_available(monkeypatch, tmp_path, capsys):
+    _enable_agent_checks(monkeypatch, tmp_path)
+    import json
+
+    code, out = _transcribe(
+        capsys, ["transcribe", "clip.mp3", "--json", "--provider", "local"],
+        result=_audio_result(),
+    )
+    payload = json.loads(out)
+    assert code == 0
+    assert payload["schema"] == "searchts.transcribe.v1"
+    assert payload["ok"] is True and payload["text"] == "hello"
+    assert payload["update_available"] == {
+        "current": un.__version__,
+        "latest": "9.9.9",
+        "command": "searchts update",
+    }
+
+
+def test_transcribe_json_absent_when_current(monkeypatch, tmp_path, capsys):
+    _enable_agent_checks(monkeypatch, tmp_path, latest=un.__version__)
+    import json
+
+    code, out = _transcribe(
+        capsys, ["transcribe", "clip.mp3", "--json", "--provider", "local"],
+        result=_audio_result(),
+    )
+    assert code == 0
+    assert "update_available" not in json.loads(out)
+
+
+def test_transcribe_consent_error_has_no_update_available(monkeypatch, tmp_path, capsys):
+    from searchts.transcribe import ModelDownloadNeeded
+
+    _enable_agent_checks(monkeypatch, tmp_path)
+    import json
+
+    code, out = _transcribe(
+        capsys, ["transcribe", "clip.mp3", "--json", "--provider", "local"],
+        error=ModelDownloadNeeded("needs a yes", {"name": "small", "size": "190 MB"}),
+    )
+    payload = json.loads(out)
+    assert code == 1
+    assert payload["ok"] is False and payload["consent_needed"] is True
+    assert "update_available" not in payload
+
+
+def test_transcribe_json_opt_out_disables_the_key(monkeypatch, tmp_path, capsys):
+    _, calls = _enable_agent_checks(monkeypatch, tmp_path)
+    monkeypatch.setenv("SEARCHTS_NO_UPDATE_CHECK", "1")
+    import json
+
+    code, out = _transcribe(
+        capsys, ["transcribe", "clip.mp3", "--json", "--provider", "local"],
+        result=_audio_result(),
+    )
+    assert code == 0
+    assert "update_available" not in json.loads(out)
+    assert calls["n"] == 0
+
+
 # ── MCP ─────────────────────────────────────────────────────────────────────
 
 
