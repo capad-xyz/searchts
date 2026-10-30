@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.24.1](https://github.com/capad-xyz/searchts/compare/v0.24.0...v0.24.1) (2026-10-30)
+
+
+### Fixed
+
+* **read:** point the missing-browser hint at searchts install --browser ([#481](https://github.com/capad-xyz/searchts/issues/481)) ([007562f](https://github.com/capad-xyz/searchts/commit/007562fd68ef18bc5bc5e487fc5d4bd2e3ed5f12)), closes [#480](https://github.com/capad-xyz/searchts/issues/480)
+
 ## [0.24.0](https://github.com/capad-xyz/searchts/compare/v0.23.0...v0.24.0) (2026-10-30)
 
 
