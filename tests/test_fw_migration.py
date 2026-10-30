@@ -267,3 +267,37 @@ def test_read_json_carries_the_agent_note(monkeypatch, hf_cache):
     payload = fw.add_agent_note({"text": "page"})
     assert "no longer uses them" in payload["update_note"]
     assert payload["fw_migration_report"]["packages"][0]["name"] == "faster-whisper"
+
+
+def _kept_audio(monkeypatch, tmp_path):
+    from searchts import audio_cache
+
+    monkeypatch.setenv("SEARCHTS_AUDIO_CACHE_DIR", str(tmp_path / "audio"))
+    src = tmp_path / "compressed.m4a"
+    src.write_bytes(b"x" * 64)
+    audio_cache.store("https://youtu.be/dQw4w9WgXcQ", src)
+    return tmp_path / "audio"
+
+
+def test_cleanup_report_lists_the_audio_cache(monkeypatch, hf_cache, tmp_path):
+    _shared(monkeypatch)
+    folder = _kept_audio(monkeypatch, tmp_path)
+    rep = fw.report(dists=_env())
+    assert rep["audio_cache"]["path"] == str(folder)
+    assert rep["audio_cache"]["files"] == 1
+    assert rep["audio_cache"]["size_bytes"] == 64
+    assert "audio cache" in fw.human_notice(rep)
+
+    done = fw.cleanup(rep, run=lambda argv: subprocess.CompletedProcess(argv, 0, "", ""))
+    assert str(folder) in done["removed_caches"]
+    assert not folder.exists()
+
+
+def test_cli_cleanup_offers_kept_audio_without_faster_whisper(monkeypatch, capsys, tmp_path):
+    _shared(monkeypatch)
+    monkeypatch.setattr(fw, "_distributions", lambda: {})
+    folder = _kept_audio(monkeypatch, tmp_path)
+    code, out, _ = _cli(["transcribe", "--cleanup", "--dry-run", "--json"], capsys)
+    doc = json.loads(out)
+    assert code == 0 and doc["removed"] is False
+    assert doc["audio_cache"]["path"] == str(folder) and doc["audio_cache"]["files"] == 1

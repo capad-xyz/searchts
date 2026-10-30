@@ -38,6 +38,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 
+from searchts import audio_cache
 from searchts.config import Config
 from searchts.progress import phase as progress_phase
 
@@ -112,6 +113,9 @@ class TranscribeResult:
     device: Optional[str] = None  # metal, cuda, vulkan, cpu; None when hosted
     language: Optional[str] = None
     translated: bool = False
+    #: "hit" (kept audio reused), "miss" (downloaded this run), or "off"
+    #: (caching disabled, cookies, a local file, or captions satisfied it).
+    audio_cache: Optional[str] = None
 
     def receipt(self) -> dict:
         return {
@@ -122,6 +126,7 @@ class TranscribeResult:
             "device": self.device,
             "language": self.language,
             "translated": self.translated,
+            "audio_cache": self.audio_cache,
         }
 
 
@@ -999,6 +1004,7 @@ def transcribe(
     hint: Optional[str] = None,
     translate: bool = False,
     yes: bool = False,
+    fresh: bool = False,
 ) -> str:
     """Transcribe a URL or local file path. Returns the joined transcript text.
 
@@ -1030,13 +1036,21 @@ def transcribe(
     succeeds or fails, so nothing is left on the user's disk. Pass `out_dir`
     only if you want to keep the intermediates; in that case the directory is
     yours to manage.
+
+    The one exception is the compressed audio (16 kHz mono m4a, never the
+    original video): it is kept for 24 hours in the searchts audio cache
+    (``~/.searchts/cache/audio`` by default, at most 256 MB) so a re-run of the
+    same URL skips the download (#452). A local file and anything fetched with
+    ``cookies_from_browser`` are never kept. `fresh=True` ignores an existing
+    entry for this run (and replaces it). ``audio_cache: off`` in the config or
+    ``SEARCHTS_AUDIO_CACHE=0`` turns the cache off entirely.
     """
     receipt = _RECEIPT.get()
     return _transcribe(
         source, {} if receipt is None else receipt, provider=provider,
         out_dir=out_dir, config=config, prefer_subtitles=prefer_subtitles,
         progress=progress, cookies_from_browser=cookies_from_browser,
-        model=model, hint=hint, translate=translate, yes=yes,
+        model=model, hint=hint, translate=translate, yes=yes, fresh=fresh,
     )
 
 
@@ -1052,7 +1066,7 @@ def transcribe_result(source: str, **kwargs: Any) -> TranscribeResult:
     Goes through the module's ``transcribe`` so there is one entry point;
     the local options are passed only when set.
     """
-    for key in ("model", "hint", "translate", "yes"):
+    for key in ("model", "hint", "translate", "yes", "fresh"):
         if not kwargs.get(key):
             kwargs.pop(key, None)
     receipt: dict = {}
@@ -1070,6 +1084,7 @@ def transcribe_result(source: str, **kwargs: Any) -> TranscribeResult:
         device=receipt.get("device"),
         language=receipt.get("language"),
         translated=bool(kwargs.get("translate")),
+        audio_cache=receipt.get("audio_cache"),
     )
 
 
@@ -1087,10 +1102,11 @@ def _transcribe(
     hint: Optional[str] = None,
     translate: bool = False,
     yes: bool = False,
+    fresh: bool = False,
 ) -> str:
     cfg = config or Config()
     local: Dict[str, Any] = {"model": model, "hint": hint, "translate": translate,
-                             "yes": yes, "receipt": receipt}
+                             "yes": yes, "receipt": receipt, "fresh": fresh}
 
     if not Path(source).is_file():
         assert_youtube_id_exact(source)
@@ -1187,6 +1203,7 @@ def _run_transcription(
     hint: Optional[str] = None,
     translate: bool = False,
     yes: bool = False,
+    fresh: bool = False,
     receipt: Optional[dict] = None,
 ) -> str:
     """Try subtitles first (URL only), else download audio and transcribe.
@@ -1209,7 +1226,10 @@ def _run_transcription(
         with progress_phase("fetching subtitles…", enabled=bool(progress)):
             subs = fetch_subtitles(source, work_dir, config=cfg, **sub_kw)
         if subs and len(subs.replace(" ", "")) >= MIN_SUBTITLE_CHARS:
-            receipt.update(source="subtitles", provider=None, engine="captions")
+            receipt.update(
+                source="subtitles", provider=None, engine="captions",
+                audio_cache="off",  # no audio was fetched
+            )
             return subs
 
     # Fallback: audio -> Whisper. Resolve provider order and require a usable
@@ -1224,8 +1244,28 @@ def _run_transcription(
         order, cfg, model=model, yes=yes, progress=bool(progress), translate=translate
     )
 
+    # #452: keep the compressed audio for a day, so a re-run of the same URL
+    # skips the download `downloading audio…` below. A local file was never
+    # downloaded, and cookie audio must not be kept: both report "off".
+    cache_on = (
+        not is_local_file
+        and not cookies_from_browser
+        and audio_cache.enabled(cfg)
+    )
+    cache_state = "off"
+    kept: Optional[Path] = None
+    if cache_on:
+        cache_state = "miss"
+        # The sweep runs once per transcribe, before anything is looked up.
+        audio_cache.evict()
+        if not fresh:
+            kept = audio_cache.lookup(source)
+
     if is_local_file:
         audio = src_path  # a local file the caller owns; never deleted by us
+    elif kept is not None:
+        cache_state = "hit"
+        audio = kept
     else:
         dl_kw = {}
         if cookies_from_browser:
@@ -1234,17 +1274,27 @@ def _run_transcription(
             audio = download_audio(source, work_dir, **dl_kw)
 
     with progress_phase("preparing audio…", enabled=bool(progress)):
-        if _uses_local_pcm(order):
+        if kept is not None:
+            # The kept file is already the 16 kHz mono m4a the chunker wants.
+            compressed: Optional[Path] = kept
+        elif _uses_local_pcm(order) and is_local_file:
             # Local engines decode to an in-memory float32 array. Always split
             # before that decode so PCM stays near 38 MB per 10-minute chunk.
+            # A local file is not cached, so there is nothing to compress for.
             chunks = chunk_audio(audio, work_dir)
+            compressed = None
         else:
             compressed = compress_audio(audio, work_dir)
-            if compressed.stat().st_size <= SIZE_LIMIT_BYTES:
-                chunks = [compressed]
-            else:
+            if cache_on:
+                # Best-effort: a cache that cannot write is still a transcript.
+                audio_cache.store(source, compressed)
+        if compressed is not None:
+            if _uses_local_pcm(order) or compressed.stat().st_size > SIZE_LIMIT_BYTES:
                 chunks = chunk_audio(compressed, work_dir)
+            else:
+                chunks = [compressed]
 
+    receipt["audio_cache"] = cache_state
     pieces: List[str] = []
     many = len(chunks) > 1
     with progress_phase("transcribing…", enabled=bool(progress)) as spoken:
