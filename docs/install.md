@@ -61,7 +61,7 @@ It prints which env it is mutating (pipx / uv tool / venv / editable).
 uvx --from "searchts[mcp,browser]@latest" searchts install --browser
 ```
 
-Manual equivalent (venv only): `pip install "searchts[browser]"` then `patchright install chromium`.
+Manual equivalent (venv only): `searchts install --browser`, or `patchright install chromium` if patchright is already installed.
 
 ### After install
 

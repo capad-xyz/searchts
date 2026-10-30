@@ -3,7 +3,8 @@
 
 Ladder (see searchts.unlocker): curl_cffi -> Jina Reader -> stealth-browser.
 curl_cffi is always importable; Jina is probed with the same client as read.
-stealth-browser needs the optional ``searchts[browser]`` extra.
+stealth-browser uses patchright, which is in the base install; it still needs a
+Chromium binary (`searchts install --browser`, or `patchright install chromium`).
 """
 
 import urllib.error
@@ -13,8 +14,10 @@ from .base import Channel
 
 
 def _stealth_installed() -> bool:
-    """True when the optional patchright package is importable.
+    """True when patchright is importable.
 
+    patchright is a base dependency, not an extra; the browser rung still needs
+    the Chromium binary, which this probe cannot see.
     Does not launch Chromium — doctor must stay offline and fast. A broken
     browser install still surfaces later when the stealth tier is actually used.
     """

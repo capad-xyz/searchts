@@ -1960,13 +1960,13 @@ _MISSING_CHROMIUM = (
     "playwright was just installed or updated",
 )
 
-#: The one sentence for "the browser rung is not there". Named in both spellings
-#: because they are different fixes for different machines: pip is what puts the
-#: extra in an ordinary venv, and ``searchts install --browser`` is what puts it
-#: in a pipx or uv tool env where a bare pip write is wiped by the next upgrade.
+#: The one sentence for "the browser rung is not there". What is missing is
+#: Chromium, not the package: since #442 patchright ships in the base install
+#: and the ``browser`` extra is empty, so ``pip install "searchts[browser]"``
+#: downloads nothing. ``searchts install --browser`` fetches the Chromium build
+#: into the environment the CLI actually runs from.
 _BROWSER_MISSING_HINT = (
-    'install the browser tier: pip install "searchts[browser]" (or '
-    "searchts install --browser), then read again"
+    "Chromium is not installed: run searchts install --browser, then read again"
 )
 
 
@@ -1981,7 +1981,7 @@ def _browser_missing_reason(exc: BaseException) -> Optional[str]:
     """
     msg = str(exc).lower()
     if any(needle in msg for needle in _MISSING_CHROMIUM):
-        return f"browser not installed: {_BROWSER_MISSING_HINT}"
+        return _BROWSER_MISSING_HINT
     return None
 
 
@@ -1994,10 +1994,7 @@ def _fetch_stealth_impl(
     try:
         from patchright.sync_api import sync_playwright
     except ImportError as e:  # pragma: no cover - environment dependent
-        raise RuntimeError(
-            "stealth-browser backend needs patchright: "
-            + _BROWSER_MISSING_HINT
-        ) from e
+        raise RuntimeError(_BROWSER_MISSING_HINT) from e
 
     ms = int(timeout * 1000)
     from searchts.ssrf import chromium_pin_args

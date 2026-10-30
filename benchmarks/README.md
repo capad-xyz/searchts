@@ -31,10 +31,11 @@ On a TTY the final scorecard is rendered with Rich (tables, not literal `**100%*
 While cases run, stderr gets one `{name}…` tick each (P4.6). Piped stdout, `--json`,
 and `--out DIR` stay plain Markdown/JSON — never Rich markup in files.
 
-For the full ladder, install the stealth-browser tier:
+For the full ladder, install Chromium for the stealth-browser tier (patchright
+itself is already in the base install):
 
 ```bash
-pip install "searchts[browser]" && patchright install chromium
+searchts install --browser   # manual equivalent: patchright install chromium
 ```
 
 ## Run it from your own connection
