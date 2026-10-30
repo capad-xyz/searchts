@@ -890,6 +890,8 @@ def _first_pass(args, *, dry_run: bool) -> None:
     pending = doc["pending"]
     if not pending:
         print("  Everything checked is already installed.")
+        if getattr(args, "yes", False) and not dry_run:
+            setup_plan.ensure_mcporter_setup(skip)
         return
     size = setup_plan.human_size(doc["pending_size_bytes"], estimate=True)
     print(f"  To install now: {', '.join(pending)} ({size}). "
@@ -908,6 +910,7 @@ def _first_pass(args, *, dry_run: bool) -> None:
         skip = chosen
     print()
     results = setup_plan.run_install(skip)
+    setup_plan.ensure_mcporter_setup(skip)
     failed = [k for k, ok in results.items() if not ok]
     if failed:
         print(f"  Not installed: {', '.join(failed)}. Re-run `searchts install --yes` "
@@ -1057,8 +1060,9 @@ def _cmd_install(args):
         ))
     elif safe_mode:
         _install_mcporter_safe()
-    else:
+    elif "mcporter" not in skip:
         _install_mcporter()
+        setup_plan.ensure_mcporter_setup(skip)
 
     # ── Install optional channels (only if --channels specified) ──
     if requested_channels and not dry_run and not safe_mode:
@@ -2052,20 +2056,26 @@ def _install_mcporter():
             return
 
     # Configure Exa MCP (free, no key needed)
+    from searchts import setup_plan
+
+    exa_cmd = setup_plan.exa_config_command()
+    exa_text = setup_plan.command_text(exa_cmd)
     try:
         r = subprocess.run(
             ["mcporter", "config", "list"], capture_output=True, encoding="utf-8", errors="replace", timeout=5
         )
-        if "exa" not in r.stdout:
-            subprocess.run(
-                ["mcporter", "config", "add", "exa", "https://mcp.exa.ai/mcp"],
-                capture_output=True, encoding="utf-8", errors="replace", timeout=10,
+        if "exa" not in (r.stdout or "").lower():
+            add = subprocess.run(
+                exa_cmd, capture_output=True, encoding="utf-8", errors="replace", timeout=10,
             )
-            print("  ✓ Exa search configured (free, no API key needed)")
+            if add.returncode == 0:
+                print("  ✓ Exa search configured (free, no API key needed)")
+            else:
+                print(f"  !  Could not configure Exa. Run manually: {exa_text}")
         else:
             print("  ✓ Exa search already configured")
     except Exception:
-        print("  !  Could not configure Exa. Run manually: mcporter config add exa https://mcp.exa.ai/mcp")
+        print(f"  !  Could not configure Exa. Run manually: {exa_text}")
 
 
 def _install_mcporter_safe():
@@ -2076,17 +2086,21 @@ def _install_mcporter_safe():
     """
     import shutil
 
+    from searchts import setup_plan
+
+    exa_text = setup_plan.command_text(setup_plan.exa_config_command())
+
     print("Search: the recommended path is the keyless built-in 'searchts search'")
     print("  (DuckDuckGo + RRF fusion, no Node/npm needed). Just run: searchts search \"query\"")
     print("Checking mcporter (optional extra Exa provider)...")
 
     if shutil.which("mcporter"):
         print("  ✓ mcporter already installed")
-        print("  Optional — to add Exa as an extra provider: mcporter config add exa https://mcp.exa.ai/mcp")
+        print(f"  Optional — to add Exa as an extra provider: {exa_text}")
     else:
         print("  · mcporter not installed (optional; not required for search)")
         print("  Optional — to install: npm install -g mcporter")
-        print("  Then add Exa: mcporter config add exa https://mcp.exa.ai/mcp")
+        print(f"  Then add Exa: {exa_text}")
 
 
 def _detect_environment():
@@ -4411,29 +4425,33 @@ def _cmd_setup():
     # Optional: Exa via mcporter is still supported as an extra provider, but no
     # longer the recommended path (it needs Node/npm). Only surfaced if present.
     if shutil.which("mcporter"):
+        from searchts import setup_plan
+
+        exa_cmd = setup_plan.exa_config_command()
+        exa_text = setup_plan.command_text(exa_cmd)
         print("[Optional] Exa (via mcporter) -- extra search provider")
         try:
             r = subprocess.run(
                 ["mcporter", "config", "list"], capture_output=True, encoding="utf-8", errors="replace", timeout=10
             )
-            if "exa" in r.stdout.lower():
+            if "exa" in (r.stdout or "").lower():
                 print("  Current status: ✓ configured")
             else:
                 print("  Current status: · not configured")
                 setup_now = _ask("  Configure Exa automatically now? [y/N]: ").lower()
                 if setup_now in ("y", "yes"):
                     add_r = subprocess.run(
-                        ["mcporter", "config", "add", "exa", "https://mcp.exa.ai/mcp"],
+                        exa_cmd,
                         capture_output=True, encoding="utf-8", errors="replace", timeout=10,
                     )
                     if add_r.returncode == 0:
                         print("  ✓ Exa configured")
                     else:
                         print("  ! Automatic configuration failed, please run manually:")
-                        print("     mcporter config add exa https://mcp.exa.ai/mcp")
+                        print(f"     {exa_text}")
         except Exception:
             print("  ! Could not check the Exa configuration, please run manually:")
-            print("     mcporter config add exa https://mcp.exa.ai/mcp")
+            print(f"     {exa_text}")
         print()
 
     # Step 2: GitHub token (env only — searchts does not store this in YAML)
