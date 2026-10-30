@@ -424,6 +424,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show kept sites, this session's copies, and any scratch left over",
     )
 
+    p_login_status = login_sub.add_parser(
+        "status", parents=[_verbose],
+        help="Show which stored host a URL's login resolves to",
+    )
+    p_login_status.add_argument("url", help="The site to resolve against the store")
+
     p_login_keep = login_sub.add_parser(
         "keep", parents=[_verbose],
         help="Keep one site's login in the searchts store",
@@ -3300,7 +3306,18 @@ def _read_command_cookies(args):
     label = getattr(source, "via", "") or "login"
     print(f"cookies: {label} -> {source.count} cookies for {args.url}", file=sys.stderr)
     if source.via == "owned store":
-        print(f"{host} was already kept; the source browser was not consulted.", file=sys.stderr)
+        if source.stored_host and source.stored_host != host:
+            print(
+                f"{host} resolved to the login kept for {source.stored_host}; "
+                f"only the cookies a browser would send to {host} are used. "
+                f"The source browser was not consulted.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"{host} was already kept; the source browser was not consulted.",
+                file=sys.stderr,
+            )
     elif getattr(args, "_cookie_refreshed", False):
         print(
             f"{host}'s saved login was refreshed from {source.browser or 'its browser'}.",
@@ -3502,6 +3519,7 @@ def _cmd_login(args):
         kill,
         note_copied,
         purge_scratch,
+        resolve_site,
     )
     from searchts.session_cookies import CookieReadError, sweep_owned_store
 
@@ -3614,6 +3632,35 @@ def _cmd_login(args):
         )
         sys.exit(0)
 
+    if action == "status":
+        resolved = resolve_site(args.url)
+        if not resolved.host:
+            print(
+                f"{args.url!r} is not a site searchts can file a login under.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        if resolved.kept:
+            from searchts.session_cookies import read_owned_site
+
+            try:
+                applicable = read_owned_site(args.url).count
+            except CookieReadError:
+                applicable = 0
+            rows = [receipts.Row(
+                progress.ROW_OK,
+                resolved.stored_host or "",
+                f"{resolved.describe()} {applicable} cookies would be sent.",
+            )]
+        else:
+            rows = [receipts.Row(
+                progress.ROW_SKIP,
+                "not kept",
+                resolved.describe(),
+            )]
+        receipt(rows, subject=resolved.host)
+        sys.exit(0)
+
     if action == "kill":
         host = host_of(args.url)
         if not host:
@@ -3662,7 +3709,11 @@ def _cmd_login(args):
         except CookieReadError as e:
             print(str(e), file=sys.stderr)
             sys.exit(1)
-        out = keep(args.url, source.cookies, browser=browser)
+        try:
+            out = keep(args.url, source.cookies, browser=browser)
+        except CookieReadError as e:
+            print(str(e), file=sys.stderr)
+            sys.exit(1)
         receipt(
             [receipts.Row(progress.ROW_OK, "kept", out.why)],
             subject=host,
@@ -3697,7 +3748,11 @@ def _cmd_login(args):
             f"and only a later read of {host} can tell the difference.",
         )]
         if args.yes:
-            kept_login = keep(args.url, source.cookies, browser=args.browser, consent=False)
+            try:
+                kept_login = keep(args.url, source.cookies, browser=args.browser, consent=False)
+            except CookieReadError as e:
+                print(str(e), file=sys.stderr)
+                sys.exit(1)
             rows.append(receipts.Row(progress.ROW_OK, "kept", kept_login.why))
         else:
             rows.append(receipts.Row(

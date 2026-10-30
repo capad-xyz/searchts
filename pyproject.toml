@@ -56,6 +56,10 @@ dependencies = [
     # x64/arm64. Windows arm64/macOS x64 may build from source. GPU wheels are
     # not published; Metal/Vulkan wheels are a separately approved follow-up.
     "pywhispercpp>=1.5,<2",
+    # Login reuse across subdomains needs the real Public Suffix List, not an
+    # approximation: co.uk and github.io must never become one shared site.
+    # Pure Python, no dependencies, ships the list (about 109 KB).
+    "publicsuffixlist>=1.1",
 ]
 
 [project.optional-dependencies]

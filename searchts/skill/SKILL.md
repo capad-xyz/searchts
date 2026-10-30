@@ -39,7 +39,7 @@ covers the need.
 | `searchts install` | First-pass setup: one list, one approval; --system-deps for system packages. |
 | `searchts setup` | Walk through search, GitHub, Reddit, and Groq in one pass. |
 | `searchts configure` | List the keys, set one, or copy cookies from a browser. |
-| `searchts login` | Site logins: list, keep, kill, signin, purge-scratch, sweep, check. |
+| `searchts login` | Site logins: list, status, keep, kill, signin, purge-scratch, sweep, check. |
 | `searchts uninstall` | Remove config, tokens and skill files. |
 | `searchts update` | Update to the latest release (`upgrade` is the same command). |
 | `searchts check-update` | Is there a newer version? |
@@ -52,6 +52,7 @@ covers the need.
 | Command | What it does |
 |---|---|
 | `searchts login list` | Show kept sites, this session's copies, and leftover scratch. |
+| `searchts login status` | Show which stored host a URL's login resolves to. |
 | `searchts login keep` | Keep one site's login in the searchts store. |
 | `searchts login kill` | Delete searchts's copy of one site's login. |
 | `searchts login signin` | Sign in once for a site in a browser searchts opens. |
@@ -97,6 +98,7 @@ MCP-only parameters and the deliberate CLI differences are listed in [docs/cli.m
 | `doctor` | `0` the health report was printed; `2` bad usage |
 | `login` | `0` the requested login action finished; `1` a cookie copy or sign-in failed; `2` bad usage; `3` consent is needed for a cookie copy |
 | `login list` | `0` the audit was printed; `2` bad usage |
+| `login status` | `0` the resolution was printed; `2` bad usage |
 | `login keep` | `0` the login was kept; `1` the browser copy failed; `2` bad usage, or no browser was named; `3` consent is needed for the cookie copy |
 | `login kill` | `0` searchts's copy was removed; `2` bad usage |
 | `login signin` | `0` the sign-in browser closed; `1` the browser or cookie read failed; `2` bad usage |

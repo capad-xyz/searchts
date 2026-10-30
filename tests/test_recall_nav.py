@@ -75,7 +75,9 @@ def test_a_docs_index_inside_nav_is_the_page_and_stays():
 
 
 def test_page_without_nav_is_unchanged():
-    page = _front_page("", "")
+    # No landmark at all: neither <nav> nor a site <header> (#333 drops a
+    # site header's short links too, see test_recall_header_chrome.py).
+    page = _front_page("", "").replace("<header>", "<div>").replace("</header>", "</div>")
     text = unlocker.html_to_text(page, "https://news.test/")
     assert HEADLINES[-1] in text
     assert "Newsletters" in text

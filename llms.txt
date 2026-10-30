@@ -37,7 +37,7 @@ uvx --from "searchts[mcp]" searchts -v read https://en.wikipedia.org/wiki/Ada_Lo
 | `searchts install` | First-pass setup: one list, one approval; --system-deps for system packages. |
 | `searchts setup` | Walk through search, GitHub, Reddit, and Groq in one pass. |
 | `searchts configure` | List the keys, set one, or copy cookies from a browser. |
-| `searchts login` | Site logins: list, keep, kill, signin, purge-scratch, sweep, check. |
+| `searchts login` | Site logins: list, status, keep, kill, signin, purge-scratch, sweep, check. |
 | `searchts uninstall` | Remove config, tokens and skill files. |
 | `searchts update` | Update to the latest release (`upgrade` is the same command). |
 | `searchts check-update` | Is there a newer version? |
@@ -45,7 +45,7 @@ uvx --from "searchts[mcp]" searchts -v read https://en.wikipedia.org/wiki/Ada_Lo
 | `searchts version` | Version. |
 | `searchts help` | The command index, one command, or the machine-readable catalog. |
 
-Every login verb: `searchts login list`, `searchts login keep`, `searchts login kill`, `searchts login signin`, `searchts login purge-scratch`, `searchts login sweep`, `searchts login check`.
+Every login verb: `searchts login list`, `searchts login status`, `searchts login keep`, `searchts login kill`, `searchts login signin`, `searchts login purge-scratch`, `searchts login sweep`, `searchts login check`.
 
 MCP tools: `read_url`, `web_search`, `fetch_asset`, `grab_site`, `get_status`, `transcribe`, `login_status`, `login_signin`, `login_check`, `login_kill`. `read_url` has no `next_url`; use the signed `next_cursor`. Successful MCP results and `--json` output carry `update_available` (`search --json`: one JSON line on stderr; an MCP `Error: ...` result does not carry it).
 

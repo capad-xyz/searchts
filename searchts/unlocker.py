@@ -1132,14 +1132,53 @@ def _extract_inner(html: str, url: Optional[str]) -> Optional[str]:
 _NAV_MAX_SHARE = 0.25
 
 
-def _without_nav(html: str) -> Optional[str]:
-    """The page with its <nav> and role="navigation" landmarks taken out.
+#: #333: a site header's own links and buttons of at most this many words are
+#: account and promo chrome ("Sign in", "Print subscriptions", "Log in").
+_HEADER_CHROME_MAX_WORDS = 3
 
-    Only those two: <header> and <footer> are not chrome by themselves, a
-    front page puts its headlines inside <header>. None when there is no such
-    landmark, or the markup cannot be parsed.
+#: A site header is a <header> or role="banner" outside the page's content
+#: sections; a <header> inside <main>, <article>, <section> or <aside> belongs
+#: to that content.
+_SITE_HEADER_XPATH = (
+    '//*[(self::header or translate(@role, "BANER", "baner")="banner")'
+    ' and not(ancestor::main or ancestor::article or ancestor::section'
+    ' or ancestor::aside)]'
+)
+
+
+def _header_chrome(doc: Any) -> list:
+    """The short links and buttons in the site header that are not headlines.
+
+    A front page can put its headlines inside <header> (theguardian.com does),
+    so the header itself stays. Only a link or button of a few words that sits
+    under no heading and holds none is chrome.
     """
-    if not html or ("<nav" not in html.lower() and "navigation" not in html.lower()):
+    chrome = []
+    for header in doc.xpath(_SITE_HEADER_XPATH):
+        for el in header.xpath('.//a|.//button|.//*[@role="button"]'):
+            words = len(re.findall(r"\w+", el.text_content() or ""))
+            if not words or words > _HEADER_CHROME_MAX_WORDS:
+                continue
+            if el.xpath('.//h1|.//h2|.//h3|.//h4|.//h5|.//h6'):
+                continue
+            if el.xpath('ancestor::h1|ancestor::h2|ancestor::h3|ancestor::h4'
+                        '|ancestor::h5|ancestor::h6'):
+                continue
+            chrome.append(el)
+    return chrome
+
+
+def _without_nav(html: str) -> Optional[str]:
+    """The page with its site chrome taken out: the <nav> and
+    role="navigation" landmarks, and the site header's account and promo
+    links (:func:`_header_chrome`).
+
+    The <header> and <footer> themselves stay: a front page puts its
+    headlines inside <header>. None when there is no such chrome, or the
+    markup cannot be parsed.
+    """
+    lowered = (html or "").lower()
+    if not html or not any(k in lowered for k in ("<nav", "navigation", "<header", "banner")):
         return None
     try:
         from lxml import html as lhtml
@@ -1148,12 +1187,21 @@ def _without_nav(html: str) -> Optional[str]:
         landmarks = doc.xpath(
             '//nav|//*[translate(@role, "NAVIGTO", "navigto")="navigation"]'
         )
-        if not landmarks:
+        chrome = _header_chrome(doc)
+        if not landmarks and not chrome:
             return None
-        for el in landmarks:
+        for el in list(landmarks) + chrome:
             parent = el.getparent()
-            if parent is not None:
-                parent.remove(el)
+            if parent is None:
+                continue
+            # Keep the tail text: it belongs to the parent, not the link.
+            if el.tail and el.tail.strip():
+                prev = el.getprevious()
+                if prev is not None:
+                    prev.tail = (prev.tail or "") + el.tail
+                else:
+                    parent.text = (parent.text or "") + el.tail
+            parent.remove(el)
         return lhtml.tostring(doc, encoding="unicode")
     except Exception:  # noqa: BLE001 - the fallback must still yield the whole page
         return None
