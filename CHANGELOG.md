@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.25.1](https://github.com/capad-xyz/searchts/compare/v0.25.0...v0.25.1) (2026-10-30)
+
+
+### Fixed
+
+* **mcp:** return login_check bad_url as an error result on every Python ([#496](https://github.com/capad-xyz/searchts/issues/496)) ([c720671](https://github.com/capad-xyz/searchts/commit/c72067106d55b7719000fd9b2d3d30ec9a0bf902))
+
 ## [0.25.0](https://github.com/capad-xyz/searchts/compare/v0.24.3...v0.25.0) (2026-10-30)
 
 
