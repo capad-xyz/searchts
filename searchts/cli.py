@@ -213,8 +213,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_install.add_argument(
         "--browser",
         action="store_true",
-        help="Install searchts[browser] + Chromium into this CLI's environment "
-             "(same interpreter as the running searchts). Refuses ephemeral uvx.",
+        help="Install Chromium for the stealth browser into this CLI's environment "
+             "(patchright itself is already in the base install; same interpreter as "
+             "the running searchts). Refuses ephemeral uvx.",
     )
     p_install.add_argument(
         "--yes", "-y", action="store_true",

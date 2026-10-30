@@ -444,7 +444,7 @@ searchts install [--verbose] [--env {local,server,auto}] [--proxy PROXY] [--syst
 | `--safe` (deprecated) | Deprecated no-op: safe (non-mutating) is now the default. Use --system-deps to opt in to system changes. |
 | `--dry-run` | Show what would be done without making any changes |
 | `--channels` CHANNELS | Comma-separated optional channels to install (twitter,reddit,opencli,linkedin,all) |
-| `--browser` | Install searchts[browser] + Chromium into this CLI's environment (same interpreter as the running searchts). Refuses ephemeral uvx. |
+| `--browser` | Install Chromium for the stealth browser into this CLI's environment (patchright itself is already in the base install; same interpreter as the running searchts). Refuses ephemeral uvx. |
 | `--yes`, `-y` | Approve the first-pass list without a prompt: Chromium and the site tools (X, Reddit, LinkedIn, mcporter, GitHub), minus any --skip. Without it and without a terminal, nothing on the list is installed |
 | `--skip` IDS | Uncheck first-pass items, comma-separated: chromium,twitter,reddit,linkedin,mcporter,gh |
 | `--json` | With --dry-run: print the first-pass list as searchts.setup.v1 JSON (sizes, installed state, approve command) and change nothing |

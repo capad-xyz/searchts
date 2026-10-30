@@ -48,9 +48,10 @@ Author's machine is Windows 11, PowerShell primary, Git Bash available.
 - No Docker, WSL, Rust toolchain, Android SDK, or Visual C++ build tools are
   required for the core: every runtime dependency ships prebuilt wheels on
   Windows/CPython 3.10-3.13.
-- Optional, only for the stealth-browser tier: `pip install "searchts[browser]"`
-  plus a Chromium downloaded by patchright (`patchright install chromium`).
-  Nothing in the codebase installs or checks for that binary.
+- Optional, only for the stealth-browser tier: a Chromium downloaded by
+  patchright (`searchts install --browser`, or `patchright install chromium` if
+  patchright is already installed). patchright itself is in the base install;
+  nothing in the codebase installs or checks for the Chromium binary.
 - Optional, only for audio transcription when a video has no captions: `ffmpeg`
   on PATH (`winget install Gyan.FFmpeg`). Verified present on this machine at
   `%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg...\bin\ffmpeg.exe`.
@@ -306,8 +307,8 @@ otherwise; file references are where the string is produced.
 |-------------------|-------|-----|
 | `ERROR collecting scratch/test_stealth.py` ... `ModuleNotFoundError: No module named 'agent_reach'`, then `Interrupted: 3 errors during collection` | Bare `pytest` also collects the gitignored `scratch/` dir, which holds pre-fork experiments importing the old `agent_reach` package. CI never sees it because `scratch/` is not committed | Run `pytest tests/ -q` (this is the command in `CLAUDE.md`). Expect 411 passed, 8 skipped |
 | `The MCP server needs the optional "mcp" dependency. Install it with:` / `  pip install "searchts[mcp]"` (`searchts/integrations/mcp_server.py`) | `searchts mcp serve` without the `mcp` extra. In Claude Code this looks like an MCP server that dies the instant it connects | `pip install "searchts[mcp]"` |
-| `all backends failed for <url> -> curl_cffi: challenge; Jina Reader: http-403; stealth-browser: RuntimeError: stealth-browser backend needs patchright: pip install patchright && patchright install chromium` (`searchts/unlocker.py`) | Top rung of the ladder is not installed, so nothing can beat a real bot-wall | `pip install "searchts[browser]"` then `patchright install chromium`. Nothing in the code installs the Chromium binary - it is a separate manual step |
-| Same as above but with a patchright launch error instead of the ImportError | patchright is installed, the Chromium binary was never downloaded. No code checks for it, and `doctor` still advertises the tier | `patchright install chromium` |
+| `all backends failed for <url> -> curl_cffi: challenge; Jina Reader: http-403; stealth-browser: RuntimeError: Chromium is not installed: run searchts install --browser, then read again` (`searchts/unlocker.py`) | The stealth rung is there (patchright is a base dependency) but the Chromium binary was never downloaded, so nothing can beat a real bot-wall | `searchts install --browser`. Nothing in the code installs the Chromium binary - it is a separate step |
+| Same as above, but the reason is raised directly by `_fetch_stealth_impl` (patchright not importable) | A damaged install: patchright is no longer importable, so the rung cannot start | `searchts install --browser` re-installs the browser tier in the env the CLI runs from |
 | `[x] ffmpeg not found in PATH` (`searchts/transcribe.py` `_require`, printed by `cli.py`, exit 1) | Audio fallback needs ffmpeg (`compress_audio` and `chunk_audio` both shell out to it). Subtitle-based transcription does NOT | `winget install Gyan.FFmpeg`, then open a new shell so PATH refreshes |
 | `[x] local transcription needs faster-whisper. Install it with:` / `  pip install "searchts[local-transcribe]"` (`searchts/transcribe.py`) | `--provider local`, or `auto` with no hosted key, without the extra | `pip install "searchts[local-transcribe]"` |
 | doctor: `yt-dlp is installed but the JS runtime is not configured. Run:` followed by a multi-line PowerShell block (`searchts/channels/youtube.py` + `searchts/utils/paths.py`) | YouTube needs a JS runtime; node is on PATH but `--js-runtimes node` is not in the yt-dlp user config | Paste the emitted block into PowerShell - it is PowerShell syntax and will NOT run in cmd or Git Bash. Or append `--js-runtimes node` to `%APPDATA%\yt-dlp\config` |

@@ -111,8 +111,11 @@ def _fetch_bytes_stealth(url: str, timeout: int) -> AssetResult:
     try:
         from patchright.sync_api import sync_playwright
     except ImportError as e:  # pragma: no cover - environment dependent
+        # patchright is in the base install (#442), so this is a broken tier
+        # rather than the optional extra: the fix is the browser install, which
+        # fetches Chromium into the env the CLI runs from.
         raise AssetError(url, [("stealth-browser",
-                                'needs patchright: pip install "searchts[browser]"')]) from e
+                                "Chromium is not installed: run searchts install --browser")]) from e
 
     from searchts.ssrf import chromium_pin_args, guard_browser_page
     ms = int(timeout * 1000)

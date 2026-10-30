@@ -23,7 +23,9 @@ contains no challenge phrase, so every block test passed it.
 no browser downloaded, the rung raised Playwright's own box, which tells the
 user to run ``patchright install``: a command that is not in their environment
 and installs nothing searchts can use. The brief for this file is that the
-error names ``pip install "searchts[browser]"` or ``searchts install --browser``.
+error names ``searchts install --browser``, and never
+``pip install "searchts[browser]"`` (the empty extra since #442 waits for a
+Chromium that pip never downloads).
 
 Nothing here names a host. Every test drives a saved page or a double, so the
 suite is hermetic: no request leaves the machine and no browser is launched.
@@ -314,8 +316,11 @@ _MISSING_BROWSER_ERROR = (
 def test_a_missing_chromium_names_the_searchts_command():
     reason = unlocker._browser_missing_reason(RuntimeError(_MISSING_BROWSER_ERROR))
     assert reason, "a browser that was never installed was not named"
-    assert 'pip install "searchts[browser]"' in reason
+    assert "Chromium is not installed" in reason
     assert "searchts install --browser" in reason
+    assert 'pip install "searchts[browser]"' not in reason, (
+        "the empty extra installs nothing and never fetches Chromium"
+    )
     assert "patchright install" not in reason.replace(
         "searchts install --browser", ""
     ), "the reason still tells the user to run a command searchts does not ship"
@@ -336,7 +341,8 @@ def test_the_rung_raises_the_named_reason_for_a_missing_browser(monkeypatch):
     with pytest.raises(RuntimeError) as raised:
         _install_double_browser(monkeypatch, launch_error=RuntimeError(_MISSING_BROWSER_ERROR))
         unlocker._fetch_stealth_impl("https://example.org/app", timeout=5)
-    assert 'pip install "searchts[browser]"' in str(raised.value)
+    assert "searchts install --browser" in str(raised.value)
+    assert 'pip install "searchts[browser]"' not in str(raised.value)
 
 
 def test_the_ladder_names_the_install_command_when_the_browser_is_missing(
@@ -366,8 +372,11 @@ def test_the_ladder_names_the_install_command_when_the_browser_is_missing(
             use_memory=False,
         )
     reasons = " ".join(why for _b, why in raised.value.attempts)
-    assert 'pip install "searchts[browser]"' in reasons, (
+    assert "searchts install --browser" in reasons, (
         f"the report never names the install command: {reasons}"
+    )
+    assert 'pip install "searchts[browser]"' not in reasons, (
+        f"the report still points at the empty extra: {reasons}"
     )
 
 
