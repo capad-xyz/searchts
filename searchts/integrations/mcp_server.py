@@ -304,6 +304,11 @@ def create_server():
 
     @mcp.tool(
         name="login_check",
+        # No output schema: an error result is a CallToolResult, which carries
+        # no structured_content to validate. On 3.10 mcp invents a schema for
+        # an ``Any`` return (typing.Any is not a class there) and would reject
+        # it; on 3.11+ no schema is made and the same call passes.
+        structured_output=False,
         description=(
             "Read one signed-in-only page with the saved cookies, once, and "
             "say 'logged in', 'logged out' or 'unknown'. Direct requests only: "
