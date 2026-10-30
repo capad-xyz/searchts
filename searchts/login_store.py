@@ -297,6 +297,41 @@ def account_page_for(host: str) -> str:
     return ""
 
 
+def bad_url_result(site: str, message: str) -> dict:
+    """The JSON error envelope for URL input `login check` rejects.
+
+    Same shape `read --json` uses for bad input: an `error` object with a
+    `kind`, a `message` naming the problem, and the matching exit code. The
+    command calls its argument `site`, and the envelope says `url` because
+    that is what the value was meant to be.
+    """
+    return {
+        "url": site,
+        "error": {"kind": "bad_url", "message": message, "exit_code": 2},
+    }
+
+
+def bad_login_url(site: str, check_url: str = "") -> Optional[dict]:
+    """The envelope when `login check` cannot treat a argument as a URL, else None.
+
+    The same validator `read` runs before spending the ladder — a typo'd host
+    entered `check_login` as a usable host and came back as a normal
+    ``unknown`` result telling the caller to pass a signed-in page (#487),
+    instead of saying the URL is invalid. ``site`` is the login's key;
+    ``check_url`` (CLI ``--url``, MCP ``check_url``) is the page to read.
+    """
+    from searchts import ux
+
+    problem = ux.check_url(site)
+    if problem:
+        return bad_url_result(site, problem)
+    if check_url.strip():
+        problem = ux.check_url(check_url)
+        if problem:
+            return bad_url_result(check_url, problem)
+    return None
+
+
 def site_consent(site: str) -> bool:
     """True when copying this site's cookies was already approved and recorded.
 
