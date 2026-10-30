@@ -2,6 +2,19 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.24.0](https://github.com/capad-xyz/searchts/compare/v0.23.0...v0.24.0) (2026-10-30)
+
+
+### Added
+
+* **login:** reuse a kept login across subdomains of the same site ([#429](https://github.com/capad-xyz/searchts/issues/429)) ([540d477](https://github.com/capad-xyz/searchts/commit/540d4774cec6fba1d46153046a0295f9b2672b2a)), closes [#428](https://github.com/capad-xyz/searchts/issues/428)
+* **transcribe:** use whisper.cpp as the local engine ([#478](https://github.com/capad-xyz/searchts/issues/478)) ([c9d0eb7](https://github.com/capad-xyz/searchts/commit/c9d0eb7ecdd229fa642cbbaf8650cb4ee2cea5be))
+
+
+### Fixed
+
+* **read:** leave the site header's sign-in and promo links out of the recall fallback ([#471](https://github.com/capad-xyz/searchts/issues/471)) ([4f53989](https://github.com/capad-xyz/searchts/commit/4f53989f2c469f594fe575f6bdf70e1f261c2f33)), closes [#333](https://github.com/capad-xyz/searchts/issues/333)
+
 ## [0.23.0](https://github.com/capad-xyz/searchts/compare/v0.22.2...v0.23.0) (2026-10-25)
 
 
