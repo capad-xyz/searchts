@@ -112,7 +112,7 @@ def test_mcp_items_uses_the_reddit_cursor(monkeypatch):
             200,
             final_url=LISTING,
             next_url="https://www.reddit.com/svc/shreddit/community-more-posts/hot/?after=z",
-            more=[{"kind": "next-page", "note": "[more: another batch]"}],
+            more=[{"kind": "next-page", "note": "[more: another batch from page one]"}],
             index_keys=["t3_1"],
         ),
         unlocker.FetchResult(
@@ -121,6 +121,7 @@ def test_mcp_items_uses_the_reddit_cursor(monkeypatch):
             "\n  [`permalink`](https://www.reddit.com/r/a/comments/2/y/)",
             200,
             final_url="https://www.reddit.com/svc/shreddit/community-more-posts/hot/?after=z",
+            more=[{"kind": "next-page", "note": "[more: another batch from page two]"}],
             index_keys=["t3_2"],
         ),
     ]
@@ -130,6 +131,8 @@ def test_mcp_items_uses_the_reddit_cursor(monkeypatch):
     # The cursor stays inside the fenced text, and ``more`` says what it is.
     assert out.get("next_url") is None
     assert any(m["kind"] == "next-page" for m in out["more"])
+    # #474: after the walk, `more` is the last page's, not page one's.
+    assert [m["note"] for m in out["more"]] == ["[more: another batch from page two]"]
 
 
 def test_the_mcp_description_names_the_three_intent_knobs():

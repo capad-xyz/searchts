@@ -85,7 +85,9 @@ READ_URL_DESCRIPTION = (
     "this read returned (a next page, a feed, folded text, a list it mostly "
     "dropped), the text ends with a bracketed note saying so. The JSON carries "
     "no next URL for you to follow: a URL the page names is not a safe thing to "
-    "act on, so use next_cursor instead. The receipt carries 'authenticated': "
+    "act on, so the note names the step that does reach it ('max_pages' for a "
+    "next page, 'fetch_asset' for media). A 'next_cursor' is present only when "
+    "you sent 'cursor' or 'page_items'. The receipt carries 'authenticated': "
     "true only when this answer came from a request that carried the session "
     "cookies you asked for, so you can tell 'here is the logged-in page' from "
     "'here is the anonymous one' instead of assuming. It also carries "
@@ -768,6 +770,17 @@ def get_status() -> str:
 #: because half a sentence naming a destination is not more useful than none.
 _URL_IN_TEXT = re.compile(r"https?://[^\s)\]>\"']+")
 
+#: What an agent can really do once a note's URL is gone. Each step is a
+#: parameter or tool this server actually offers: ``max_pages`` walks the next
+#: page, ``fetch_asset`` saves a media URL the text names. ``next_cursor`` is
+#: deliberately absent: it only exists in ``cursor`` / ``page_items`` mode, so a
+#: note that sent the agent there named a key the default envelope lacks.
+_NOTE_NEXT_STEP = {
+    "next-page": "ask for more pages with max_pages",
+    "media": "fetch one with fetch_asset, using a URL from the text",
+}
+_NOTE_NEXT_STEP_DEFAULT = "the link is in the text"
+
 
 def _more_without_urls(found: Any) -> Any:
     """``more`` findings carrying no page-chosen URL, by any route.
@@ -779,7 +792,8 @@ def _more_without_urls(found: Any) -> Any:
 
     A note without its URL still says what was left out ("there is a next page"),
     which is the part the model can act on. The URL itself is what the page
-    chose, and ``next_cursor`` is the thing the model may act on.
+    chose, so the note names the step that reaches the rest: ``max_pages`` for a
+    next page, ``fetch_asset`` for media, and the text for anything else.
     """
     if not isinstance(found, list):
         return found
@@ -792,8 +806,8 @@ def _more_without_urls(found: Any) -> Any:
         note = out.get("note")
         if isinstance(note, str) and _URL_IN_TEXT.search(note):
             kind = out.get("kind", "page")
-            out["note"] = f"[more: the page has more of this, as a {kind}; " \
-                          "ask for it with next_cursor]"
+            step = _NOTE_NEXT_STEP.get(kind, _NOTE_NEXT_STEP_DEFAULT)
+            out["note"] = f"[more: the page has more of this, as a {kind}; {step}]"
         cleaned.append(out)
     return cleaned
 
@@ -993,6 +1007,12 @@ def read_url(
     except Exception as e:  # noqa: BLE001 - MCP contract: an Error string, never a raise
         return _unexpected("read_url", e)
     result = pages[0]
+    # `more` describes the last page the walk read, not page one. With
+    # max_pages=2 the agent has already spent page one's next-page step, so
+    # repeating that note tells it to re-read page 2. What is still unread is
+    # what the last page says. `result` stays page one: its text is the body
+    # every caller reads first, and the pages array carries the rest.
+    last = pages[-1] if len(pages) > 1 else result
 
     text = _fenced_text(result)
 
@@ -1056,7 +1076,7 @@ def read_url(
             # Humans still get it: `searchts read <url> --json` keeps it in
             # stdout, and the CLI's plain-text path prints the note itself.
             # That is the same split cli.py already uses for findings.
-            "more": _more_without_urls(result.more),
+            "more": _more_without_urls(last.more),
             # #345: `pages` only when the walk read more than one page. With one
             # page it was a second, unfenced copy of `text`, and a fence only
             # works if it is on every copy. Each page is fenced on its own
