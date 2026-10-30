@@ -99,7 +99,8 @@ def test_more_still_says_there_is_more_without_naming_it(monkeypatch):
     _stub(monkeypatch)
     doc = json.loads(mcp_server.read_url(URL))
     notes = " ".join(m.get("note") or "" for m in doc["more"])
-    assert "next_cursor" in notes, "the model must be told how to continue"
+    assert "max_pages" in notes, "the model must be told the step that reaches it"
+    assert "next_cursor" not in notes, "the default envelope has no such key"
     assert "http" not in notes
 
 
@@ -126,6 +127,45 @@ def test_a_page_with_no_more_findings_is_unaffected(monkeypatch):
     assert doc["chars"] == len(r.text)
 
 
+def test_more_after_a_multi_page_walk_describes_the_last_page(monkeypatch):
+    """#474: with max_pages=2 the walk already read page 2, so page one's
+    next-page note is stale and the agent re-reads a page it has."""
+    from searchts import unlocker
+
+    class R:
+        pass
+
+    def page(url, more):
+        r = R()
+        r.text = f"Page body for {url} with enough words to look like a read."
+        r.status = 200
+        r.backend = "curl_cffi"
+        r.final_url = url
+        r.fetched_at = "2026-10-08T00:00:00Z"
+        r.warnings = []
+        r.authenticated = False
+        r.next_url = NEXT
+        r.more = more
+        r.page_html = None
+        return r
+
+    first = page(URL, [{"kind": "list", "note": "[partial: page one had 30 items]"}])
+    second = page(
+        "https://example.test/page/2/",
+        [{"kind": "next-page", "note": f"[more: the next page is {NEXT}]", "url": NEXT}],
+    )
+    monkeypatch.setattr(unlocker, "read_pages", lambda url, p=None, **kw: [first, second])
+    monkeypatch.setattr(unlocker, "reset_jina_spend", lambda: None)
+    doc = json.loads(mcp_server.read_url(URL, max_pages=2))
+    assert len(doc["pages"]) == 2
+    assert "page one had 30 items" not in json.dumps(doc["more"])
+    assert doc["more"] == [{
+        "kind": "next-page",
+        "note": "[more: the page has more of this, as a next-page; "
+                "ask for more pages with max_pages]",
+    }]
+
+
 def test_more_without_urls_is_pure():
     """Directly, because it is where the second leak was."""
     found = [
@@ -133,13 +173,33 @@ def test_more_without_urls_is_pure():
          "url": "https://x.test/2/"},
         {"kind": "fold", "note": "[more: 3 sections folded]"},
         {"kind": "feed", "note": "[more: an RSS feed]", "url": "https://x.test/f.xml"},
+        {"kind": "region", "note": "[more: the rest is at https://x.test/full]"},
     ]
     cleaned = mcp_server._more_without_urls(found)
     assert all("url" not in item for item in cleaned)
     assert "https://" not in json.dumps(cleaned)
     # The non-URL note survives untouched: it never carried one.
     assert cleaned[1]["note"] == "[more: 3 sections folded]"
-    assert "next_cursor" in cleaned[0]["note"]
+    assert cleaned[2]["note"] == "[more: an RSS feed]"
+    # The next-page note names the knob read_url really offers, not the cursor
+    # the default envelope does not carry (#474).
+    assert "max_pages" in cleaned[0]["note"]
+    assert "next_cursor" not in cleaned[0]["note"]
+    # Anything else points at the text, where the link really is.
+    assert cleaned[3]["note"].endswith("the link is in the text]")
+
+
+def test_a_media_note_names_fetch_asset():
+    """#474: media is fetched one file at a time, not paged with a cursor."""
+    cleaned = mcp_server._more_without_urls([{
+        "kind": "media",
+        "note": "[media: 2 images in the main content: "
+                "https://x.test/a.png, https://x.test/b.png. "
+                "searchts get fetches one of these.]",
+    }])
+    assert "fetch_asset" in cleaned[0]["note"]
+    assert "next_cursor" not in cleaned[0]["note"]
+    assert "https://" not in cleaned[0]["note"]
 
 
 def test_more_without_urls_survives_junk():
