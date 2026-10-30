@@ -110,20 +110,29 @@ CLI-only flags: `--provider`, `--json`.
 ### `transcribe`
 
 A player page's words: captions, then Whisper.
-Captions come first and cost nothing. Audio goes to Groq, then OpenAI if a key is set, else the keyless local Whisper. A local file works the same way.
+Captions come first and cost nothing. Audio goes to Groq, then OpenAI if a key is set, else whisper.cpp, which ships with searchts and runs locally with no key. Linux and Windows wheels are CPU builds; the macOS arm64 wheel ships Metal. Vulkan/CUDA wheels are a follow-up. A local file works the same way. The quantized small model (about 190 MB; --model turbo or base) downloads after approval: a terminal is asked, an agent passes --yes only after the user agreed. --json names the engine, model, device and detected language. --cleanup (temporary) removes the old faster-whisper fallback after showing what else uses it. Use --list-models to inspect the cache or --remove-model NAME --yes to remove one. --hint supplies names; --translate opts into English output (not supported by turbo). Use --provider local-fw to force the temporary faster-whisper fallback.
 
 ```bash
-searchts transcribe <source> [--verbose] [--provider {auto,groq,openai,local}] [--no-subtitles] [--output OUTPUT] [--cookies-from-browser BROWSER]
+searchts transcribe [source] [--verbose] [--provider {auto,groq,openai,local,local-fw}] [--model {small,turbo,base}] [--hint WORDS] [--translate] [--yes] [--json] [--cleanup] [--list-models] [--remove-model {small,turbo,base}] [--dry-run] [--no-subtitles] [--output OUTPUT] [--cookies-from-browser BROWSER]
 ```
 
 | Argument | Description |
 |---|---|
-| `source` | Audio/video URL or local file path |
+| `[source]` | Audio/video URL or local file path |
 
 | Flag | Description |
 |---|---|
 | `-v`, `--verbose` | Show debug logs |
-| `--provider` {auto,groq,openai,local} | Audio transcription provider used when there are no subtitles (default: auto = hosted key if set, else keyless local faster-whisper; `local` forces local, no API key) Choices: auto, groq, openai, local. Default: `auto`. |
+| `--provider` {auto,groq,openai,local,local-fw} | Audio transcription provider used when there are no subtitles (default: auto = hosted key if set, else keyless local whisper.cpp; `local` forces local, no API key; `local-fw` forces the temporary faster-whisper fallback) Choices: auto, groq, openai, local, local-fw. Default: `auto`. |
+| `--model` {small,turbo,base} | Local whisper.cpp model (small q5_1, ~190 MB default; config whisper_model / SEARCHTS_WHISPER_MODEL). turbo is large-v3-turbo: most accurate, slowest on CPU Choices: small, turbo, base. |
+| `--hint` WORDS | Words the audio contains, such as names from the page title, to bias local transcription toward them |
+| `--translate` | Translate the speech to English (local engine; not with turbo). Default: transcribe in the spoken language |
+| `--yes`, `-y` | Approve the one-time local model download (agents: only after the user said yes); with --cleanup, approve the removal |
+| `--json` | Print searchts.transcribe.v1 JSON: the text plus which source, engine, model and device ran, and the language |
+| `--cleanup` | Temporary: remove the faster-whisper fallback and its model cache. Shows what else uses them first, then asks |
+| `--list-models` | List local whisper.cpp models, sizes, cache status and paths |
+| `--remove-model` {small,turbo,base} | Remove a cached local model (requires --yes or a terminal yes) Choices: small, turbo, base. |
+| `--dry-run` | With --cleanup: print the report only, remove nothing |
 | `--no-subtitles` | Skip the video's existing captions and force audio transcription (captions otherwise come first and need no API key) Default: `True`. |
 | `-o`, `--output` OUTPUT | Write transcript to a file instead of stdout |
 | `--cookies-from-browser` BROWSER | Opt-in: pass this browser's cookies to yt-dlp. Accepts the browser names yt-dlp knows (chrome, chromium, firefox, edge, brave, opera, safari, vivaldi, whale); unlike read, the name is not checked against searchts's browser registry. Transcribe only. Never used by searchts read. |
@@ -132,8 +141,11 @@ Examples:
 
 ```bash
 searchts transcribe https://www.youtube.com/watch?v=...
-searchts transcribe talk.mp4 --provider local
-searchts transcribe https://www.instagram.com/reel/... --cookies-from-browser chrome
+searchts transcribe talk.mp4 --provider local --model turbo
+searchts transcribe https://www.instagram.com/reel/... --hint "Laurentius, Dark Souls"
+searchts transcribe --list-models
+searchts transcribe --remove-model small --yes
+searchts transcribe --cleanup --dry-run
 ```
 
 | Exit | Meaning |
@@ -143,9 +155,14 @@ searchts transcribe https://www.instagram.com/reel/... --cookies-from-browser ch
 | `2` | bad usage, or a URL that cannot be read |
 
 MCP: `transcribe`.
-CLI-only flags: `-o`.
+CLI-only flags: `-o`, `--json`, `--cleanup`, `--dry-run`, `--list-models`, `--remove-model`.
 - `prefer_subtitles` mirrors CLI `--no-subtitles`.
 - `cookies_from_browser` is passed to yt-dlp, same as the CLI flag.
+- `yes` is CLI `--yes`: the user's approval to download the local model.
+- A missing-model response is structured and names its size, source, cache path, and yes=true approval.
+- The text ends with a `transcribed_by:` JSON line, the receipt CLI `--json` puts under `receipt`.
+- Use provider=local-fw to force the temporary faster-whisper fallback.
+- `--cleanup` (temporary faster-whisper removal) is CLI only.
 
 ### `grab`
 

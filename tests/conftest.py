@@ -208,6 +208,17 @@ def isolate_unlocker_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("SEARCHTS_CACHE_DIR", str(tmp_path / "searchts-cache"))
 
 
+@pytest.fixture(autouse=True)
+def isolate_whisper_models(monkeypatch, tmp_path):
+    """No test sees, or downloads into, the real ~/.searchts/models (#439).
+
+    A machine that already has the small model cached would otherwise run a
+    "needs approval" test straight into a real whisper.cpp transcription.
+    """
+    monkeypatch.setenv("SEARCHTS_MODEL_DIR", str(tmp_path / "searchts-models"))
+    monkeypatch.delenv("SEARCHTS_WHISPER_MODEL", raising=False)
+
+
 @pytest.fixture
 def offline_jina_probe(monkeypatch):
     """Doctor's web check probes r.jina.ai live. Tests answer for it instead."""

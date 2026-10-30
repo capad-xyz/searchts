@@ -516,11 +516,40 @@ def build_parser() -> argparse.ArgumentParser:
     # ── transcribe ──
     p_tr = sub.add_parser("transcribe", parents=[_verbose],
                           help="Read the audio when a player page has no captions, or transcribe a local file (subtitles first, then Whisper)")
-    p_tr.add_argument("source", help="Audio/video URL or local file path")
-    p_tr.add_argument("--provider", choices=["auto", "groq", "openai", "local"], default="auto",
+    p_tr.add_argument("source", nargs="?", default=None,
+                      help="Audio/video URL or local file path")
+    p_tr.add_argument("--provider", choices=["auto", "groq", "openai", "local", "local-fw"],
+                      default="auto",
                       help="Audio transcription provider used when there are no subtitles "
                            "(default: auto = hosted key if set, else keyless local "
-                           "faster-whisper; `local` forces local, no API key)")
+                           "whisper.cpp; `local` forces local, no API key; `local-fw` "
+                           "forces the temporary faster-whisper fallback)")
+    p_tr.add_argument("--model", choices=["small", "turbo", "base"], default=None,
+                      help="Local whisper.cpp model (small q5_1, ~190 MB default; config "
+                           "whisper_model / SEARCHTS_WHISPER_MODEL). turbo is "
+                           "large-v3-turbo: most accurate, slowest on CPU")
+    p_tr.add_argument("--hint", default=None, metavar="WORDS",
+                      help="Words the audio contains, such as names from the page "
+                           "title, to bias local transcription toward them")
+    p_tr.add_argument("--translate", action="store_true",
+                      help="Translate the speech to English (local engine; not with turbo). "
+                           "Default: transcribe in the spoken language")
+    p_tr.add_argument("--yes", "-y", action="store_true",
+                      help="Approve the one-time local model download (agents: only "
+                           "after the user said yes); with --cleanup, approve the removal")
+    p_tr.add_argument("--json", action="store_true",
+                      help="Print searchts.transcribe.v1 JSON: the text plus which "
+                           "source, engine, model and device ran, and the language")
+    p_tr.add_argument("--cleanup", action="store_true",
+                      # TODO(remove-after-window): remove with fw_migration.py.
+                      help="Temporary: remove the faster-whisper fallback and its model "
+                           "cache. Shows what else uses them first, then asks")
+    p_tr.add_argument("--list-models", action="store_true",
+                      help="List local whisper.cpp models, sizes, cache status and paths")
+    p_tr.add_argument("--remove-model", choices=["small", "turbo", "base"],
+                      help="Remove a cached local model (requires --yes or a terminal yes)")
+    p_tr.add_argument("--dry-run", action="store_true",
+                      help="With --cleanup: print the report only, remove nothing")
     p_tr.add_argument("--no-subtitles", dest="prefer_subtitles", action="store_false",
                       default=True,
                       help="Skip the video's existing captions and force audio transcription "
@@ -2410,51 +2439,83 @@ def _cmd_transcribe(args):
 
     Subtitles-first: a captioned URL is returned straight from its existing
     captions (no API key needed). Falls back to Whisper audio transcription
-    (Groq -> OpenAI, or keyless local) only when there are no usable subtitles,
-    or when --no-subtitles forces the audio path.
+    (Groq -> OpenAI, or keyless local whisper.cpp) only when there are no
+    usable subtitles, or when --no-subtitles forces the audio path.
     """
+    import json
     from pathlib import Path
 
-    from searchts import progress
-    from searchts.transcribe import TranscribeError, transcribe
+    from searchts import fw_migration, progress, whispercpp
+    from searchts.transcribe import ModelDownloadNeeded, TranscribeError, transcribe_result
 
-    tracker = progress.live("transcribe", _short_subject(args.source))
-    with tracker:
-        try:
-            text = transcribe(
-                args.source,
-                provider=args.provider,
-                prefer_subtitles=args.prefer_subtitles,
-                # Progress ticks make long ladder/audio runs visible; stderr only.
-                progress=True,
-                cookies_from_browser=getattr(args, "cookies_from_browser", None),
-            )
-        except TranscribeError as e:
-            tracker.abort()
-            # An error on stdout is invisible to every `2>` redirect and
-            # makes a failed run look like a successful empty transcript.
-            # The ending is the read ladder's shape: a red header and one
-            # reason row, not a bracketed marker from an older theme.
-            from searchts import receipts
+    if args.list_models or args.remove_model:
+        _cmd_transcribe_models(args)
+        return
+    if args.cleanup:
+        _cmd_transcribe_cleanup(args)
+        return
+    if not args.source:
+        print("searchts transcribe: give a URL or file (or --cleanup)", file=sys.stderr)
+        sys.exit(2)
+    if not args.json:
+        # TODO(remove-after-window): temporary faster-whisper human notice.
+        fw_migration.maybe_print_notice()
 
-            text = receipts.block(
-                tracker.color,
-                "transcribe",
-                [receipts.Row(progress.ROW_FAIL, "reason", str(e))],
-                subject=tracker.subject,
-                elapsed=tracker.elapsed(),
-                status=progress.ROW_FAIL,
-                unicode_ok=tracker.unicode_ok,
-            )
-            print(text, file=sys.stderr)
-            sys.exit(1)
-        if tracker.wants():
-            s = tracker.color
-            mark = "✓" if tracker.unicode_ok else "+"
-            tracker.summary(
-                f"  {s.green(mark)} {s.cyan('transcribe')}  "
-                f"{s.dim(_human_chars(len(text)))}  "
-                f"{s.dim(progress.human_time(tracker.elapsed()))}")
+    approved = bool(args.yes)
+    while True:
+        tracker = progress.live("transcribe", _short_subject(args.source))
+        with tracker:
+            try:
+                result = transcribe_result(
+                    args.source,
+                    provider=args.provider,
+                    prefer_subtitles=args.prefer_subtitles,
+                    # Progress ticks make long ladder/audio runs visible; stderr only.
+                    progress=True,
+                    cookies_from_browser=getattr(args, "cookies_from_browser", None),
+                    model=args.model,
+                    hint=args.hint,
+                    translate=args.translate,
+                    yes=approved,
+                )
+                pending = None
+            except ModelDownloadNeeded as e:
+                tracker.abort()
+                pending = e
+            except TranscribeError as e:
+                tracker.abort()
+                _transcribe_failed(args, tracker, str(e))
+        if pending is None:
+            break
+        # Asked once, outside the live display. A terminal says yes or no;
+        # anywhere else the error says what would be fetched and how to approve.
+        spec = whispercpp.resolve_model(pending.model["name"])
+        if not approved and not args.json and whispercpp.ask_tty(spec):
+            approved = True
+            continue
+        _transcribe_failed(args, None, str(pending), model_download=pending.model)
+
+    text = result.text
+    if tracker.wants():
+        s = tracker.color
+        mark = "✓" if tracker.unicode_ok else "+"
+        ran = _transcribe_ran(result)
+        tracker.summary(
+            f"  {s.green(mark)} {s.cyan('transcribe')}  "
+            f"{s.dim(_human_chars(len(text)))}  "
+            + (f"{s.dim(ran)}  " if ran else "")
+            + f"{s.dim(progress.human_time(tracker.elapsed()))}")
+
+    if args.json:
+        out = {"schema": "searchts.transcribe.v1", "ok": True, "text": text,
+               "receipt": result.receipt()}
+        # TODO(remove-after-window): temporary notice uses the update_note channel.
+        out = fw_migration.add_agent_note(out)
+        if args.output:
+            Path(args.output).write_text(text + "\n", encoding="utf-8")
+            out["output"] = str(Path(args.output).resolve())
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+        return
 
     if args.output:
         Path(args.output).write_text(text + "\n", encoding="utf-8")
@@ -2465,6 +2526,193 @@ def _cmd_transcribe(args):
         print(text)
 
 
+
+
+def _transcribe_ran(result) -> str:
+    """The receipt's "what ran" part: engine, model, device, language."""
+    if result.source == "subtitles":
+        return "captions"
+    bits = [result.engine or result.provider or ""]
+    if result.engine in ("whisper.cpp", "faster-whisper") and result.model:
+        bits.append(result.model)
+    if result.device:
+        bits.append(result.device)
+    if result.language:
+        bits.append(("to en from " if result.translated else "") + result.language)
+    return " · ".join(b for b in bits if b)
+
+
+def _transcribe_failed(args, tracker, reason: str, *, model_download=None):
+    """End a failed transcribe: JSON on stdout with --json, else the red receipt."""
+    import json
+
+    from searchts import progress, receipts
+
+    if getattr(args, "json", False):
+        out = {"schema": "searchts.transcribe.v1", "ok": False, "error": reason}
+        if model_download:
+            import shlex
+
+            approve = ["searchts", "transcribe", args.source or ""]
+            if args.provider != "auto":
+                approve.extend(["--provider", args.provider])
+            model_name = model_download.get("name") or args.model
+            if model_name:
+                approve.extend(["--model", model_name])
+            if args.hint:
+                approve.extend(["--hint", args.hint])
+            if args.translate:
+                approve.append("--translate")
+            if not args.prefer_subtitles:
+                approve.append("--no-subtitles")
+            if args.output:
+                approve.extend(["--output", args.output])
+            if args.cookies_from_browser:
+                approve.extend(["--cookies-from-browser", args.cookies_from_browser])
+            approve.extend(["--yes", "--json"])
+            out["consent_needed"] = True
+            out["model_download"] = {
+                **model_download,
+                "approve_command": shlex.join(approve),
+                "mcp_approval": "Retry the transcribe tool with yes=true after user approval.",
+            }
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+        sys.exit(1)
+    # An error on stdout is invisible to every `2>` redirect and makes a
+    # failed run look like a successful empty transcript. The ending is the
+    # read ladder's shape: a red header and one reason row.
+    if tracker is None:
+        tracker = progress.live("transcribe", _short_subject(args.source or ""))
+    text = receipts.block(
+        tracker.color,
+        "transcribe",
+        [receipts.Row(progress.ROW_FAIL, "reason", reason)],
+        subject=tracker.subject,
+        elapsed=tracker.elapsed(),
+        status=progress.ROW_FAIL,
+        unicode_ok=tracker.unicode_ok,
+    )
+    print(text, file=sys.stderr)
+    sys.exit(1)
+
+
+def _cmd_transcribe_cleanup(args):
+    """TEMPORARY (#439): report, then remove faster-whisper and its model cache on yes."""
+    import json
+
+    from searchts import fw_migration
+
+    rep = fw_migration.report()
+    if rep is None:
+        msg = "faster-whisper is not installed here; nothing to remove."
+        if args.json:
+            print(json.dumps({"schema": "searchts.fw_migration.v1", "installed": False,
+                              "message": msg}, indent=2))
+        else:
+            print(msg)
+        return
+    if args.json and (args.dry_run or not args.yes):
+        print(json.dumps({**rep, "removed": False}, ensure_ascii=False, indent=2))
+        if not args.dry_run:
+            print("Nothing removed: pass --yes after the user approves.", file=sys.stderr)
+        return
+    if not args.json:
+        print(fw_migration.human_notice(rep))
+    elif args.yes and not args.dry_run:
+        # TODO(remove-after-window): display the full removal report before acting.
+        print(json.dumps(rep, ensure_ascii=False, indent=2), file=sys.stderr)
+    if args.dry_run:
+        print("\nDry run: nothing was removed.")
+        return
+    approved = bool(args.yes)
+    if not approved and sys.stdin.isatty():
+        try:
+            approved = input("\nRemove the packages marked unused and the model folders? [y/N] ").strip().lower() in ("y", "yes")
+        except (EOFError, KeyboardInterrupt):
+            approved = False
+    if not approved:
+        print("Nothing removed. To remove: " + fw_migration.REMOVE_COMMAND, file=sys.stderr)
+        if not sys.stdin.isatty():
+            sys.exit(2)
+        return
+    done = fw_migration.cleanup(rep)
+    if args.json:
+        print(json.dumps({**rep, "removed": True, "result": done}, ensure_ascii=False, indent=2))
+        return
+    for name in done["removed_packages"]:
+        print(f"  removed {name}")
+    for kept in done["kept_packages"]:
+        print(f"  kept {kept['name']}: {kept['reason']}")
+    for path in done["removed_caches"]:
+        print(f"  removed {path}")
+    for kept in done["kept_caches"]:
+        print(f"  kept {kept['path']}: {kept['reason']}")
+
+
+def _cmd_transcribe_models(args):
+    """List local model files, or remove one after explicit approval."""
+    import json
+
+    from searchts import whispercpp
+
+    if args.list_models:
+        models = whispercpp.model_status()
+        payload = {
+            "schema": "searchts.whispercpp.models.v1",
+            "models": models,
+        }
+        if args.json:
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            for model in models:
+                state = "cached" if model["cached"] else "not downloaded"
+                print(f"{model['name']}: {model['size']} ({state})\n  {model['path']}")
+        return
+
+    spec = whispercpp.resolve_model(args.remove_model)
+    paths = [
+        whispercpp.model_path(spec),
+        whispercpp.model_path(spec).with_name(spec.filename + ".part"),
+    ]
+    existing = [str(path) for path in paths if path.exists()]
+    if args.json and not args.yes:
+        print(json.dumps({
+            "schema": "searchts.whispercpp.models.v1",
+            "ok": False,
+            "consent_needed": True,
+            "model": spec.name,
+            "files": existing,
+            "approve_command": f"searchts transcribe --remove-model {spec.name} --yes",
+        }, ensure_ascii=False, indent=2))
+        sys.exit(2)
+    if not args.yes:
+        print(f"Will remove the cached {spec.name} model files:", file=sys.stderr)
+        for path in existing:
+            print(f"  {path}", file=sys.stderr)
+        approved = False
+        if sys.stdin.isatty() and sys.stderr.isatty():
+            try:
+                approved = input("Remove these files? [y/N] ").strip().lower() in ("y", "yes")
+            except (EOFError, KeyboardInterrupt):
+                approved = False
+        if not approved:
+            print(
+                f"Nothing removed. Run searchts transcribe --remove-model "
+                f"{spec.name} --yes after approval.",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+    removed = whispercpp.remove_model(spec)
+    if args.json:
+        print(json.dumps({
+            "schema": "searchts.whispercpp.models.v1",
+            "ok": True,
+            "removed": removed,
+        }, ensure_ascii=False, indent=2))
+    else:
+        print("Removed:" if removed else f"No cached {spec.name} model files.")
+        for path in removed:
+            print(f"  {path}")
 
 def _parse_twitter_cookie_input(value: str):
     """Parse Twitter cookie input from either separate values or a cookie header."""
@@ -2837,6 +3085,10 @@ def _cmd_read(args):
         update = update_available_for_agent()
         if update:
             payload["update_available"] = update
+        # TODO(remove-after-window): temporary agent notice on read JSON.
+        from searchts.fw_migration import add_agent_note
+
+        payload = add_agent_note(payload)
         print(json.dumps(payload, ensure_ascii=False))
     else:
         # Status to stderr so stdout stays a clean, pipeable content stream.
@@ -3769,12 +4021,15 @@ def _cmd_grab(args):
             print(note, file=sys.stderr)
         # The printed manifest is an object, so the key is additive; the
         # manifest.json on disk keeps its existing shape.
+        # TODO(remove-after-window): temporary agent notice on grab JSON.
+        from searchts.fw_migration import add_agent_note
         from searchts.update_nudge import update_available_for_agent
 
         payload = {**manifest}
         update = update_available_for_agent()
         if update:
             payload["update_available"] = update
+        payload = add_agent_note(payload)
         print(json.dumps(payload, ensure_ascii=False))
         return
 
@@ -4082,7 +4337,11 @@ def _cmd_doctor(args=None):
         from searchts.update_nudge import update_available_for_agent
 
         update = update_available_for_agent()
+        # TODO(remove-after-window): temporary agent notice on doctor JSON.
+        from searchts.fw_migration import add_agent_note
+
         payload = {**results, "update_available": update} if update else results
+        payload = add_agent_note(payload)
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         from searchts.doctor import format_lock_note, windows_searchts_pids
         note = format_lock_note(windows_searchts_pids())
@@ -4097,6 +4356,10 @@ def _cmd_doctor(args=None):
     from searchts.integrations.agent_wiring import format_wiring_report
     print(format_wiring_report())
     # doctor is read-only: skill install stays on `searchts install` / `searchts skill`.
+    # TODO(remove-after-window): temporary faster-whisper human notice.
+    from searchts.fw_migration import maybe_print_notice
+
+    maybe_print_notice()
 
 
 def _ask(prompt: str) -> str:

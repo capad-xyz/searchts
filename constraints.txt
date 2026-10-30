@@ -28,6 +28,9 @@ patchright==1.64.2
 browser-cookie3==0.20.1
 imageio-ffmpeg==0.6.0
 
+# Base since #439: whisper.cpp for keyless local transcription.
+pywhispercpp==1.5.1
+
 pytest==8.0.0
 ruff==0.15.1
 mypy==2.3.0

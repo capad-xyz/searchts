@@ -7,10 +7,12 @@ them. Only when there are no usable subtitles do we fall back to the audio ->
 Whisper pipeline: download audio (yt-dlp), compress + chunk (ffmpeg), then turn
 each chunk into text. With a hosted key that posts to a Whisper-compatible API
 (Groq's free `whisper-large-v3`, falling back to OpenAI's `whisper-1`). With no
-key at all it can run `faster-whisper` locally on the CPU — an optional
-dependency installed via ``pip install "searchts[local-transcribe]"``. The
-local path decodes each chunk with ffmpeg and passes the model samples, so it
-never calls PyAV's decoder and works with newer PyAV releases.
+key at all it runs whisper.cpp locally (keyless; bundled with searchts as the
+pywhispercpp CPU wheel). GPU-enabled wheels are not yet published by this
+project. The model file is downloaded once, after the user approves it (see
+``searchts.whispercpp``).
+faster-whisper (``searchts[local-transcribe]``) is a fallback during the
+migration window and goes away after it.
 
 Public entry point:
     transcribe(source, *, provider="auto", out_dir=None, config=None,
@@ -21,6 +23,7 @@ Designed to be importable from channels (e.g. YouTubeChannel.transcribe).
 
 from __future__ import annotations
 
+import contextvars
 import importlib.util
 import os
 import re
@@ -31,7 +34,7 @@ import tempfile
 import urllib.parse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -42,14 +45,16 @@ from searchts.progress import phase as progress_phase
 SIZE_LIMIT_BYTES = 24 * 1024 * 1024
 CHUNK_SECONDS = 600  # 10 min — small enough that boundary cuts rarely lose meaning
 
-#: The keyless, local backend (faster-whisper). Not in PROVIDERS because it has
-#: no endpoint/key — it is selected explicitly and handled on its own path.
+#: The keyless, local backend: whisper.cpp, else faster-whisper while that
+#: fallback exists. Not in PROVIDERS because it has no endpoint/key.
 LOCAL_PROVIDER = "local"
 
-#: Default faster-whisper model. "base" is a good CPU/quality balance and runs
-#: comfortably on a 16GB machine. Override via config `whisper_model` or env
-#: `SEARCHTS_WHISPER_MODEL`.
-DEFAULT_LOCAL_MODEL = "base"
+#: TEMPORARY (#439): forces the faster-whisper fallback. Removed with it.
+FASTER_WHISPER_PROVIDER = "local-fw"
+
+#: Default local model (#439: `base` misheard too much). Override with
+#: --model, config `whisper_model`, or env `SEARCHTS_WHISPER_MODEL`.
+DEFAULT_LOCAL_MODEL = "small"
 
 PROVIDERS = {
     "groq": {
@@ -83,13 +88,53 @@ class NoProviderConfigured(TranscribeError):
     """Raised when no provider has an API key configured."""
 
 
+class ModelDownloadNeeded(TranscribeError):
+    """The local model is not cached and the download was not approved.
+
+    Carries the model's name, size, source and destination so a caller can
+    ask the user once and retry with ``yes``.
+    """
+
+    def __init__(self, message: str, model: dict):
+        super().__init__(message)
+        self.model = model
+
+
+@dataclass
+class TranscribeResult:
+    """A transcript plus what made it: the receipt for --json and MCP."""
+
+    text: str
+    source: str  # "subtitles" or "audio"
+    provider: Optional[str] = None  # groq, openai, local, or None for subtitles
+    engine: Optional[str] = None  # whisper.cpp, faster-whisper, or the hosted model
+    model: Optional[str] = None
+    device: Optional[str] = None  # metal, cuda, vulkan, cpu; None when hosted
+    language: Optional[str] = None
+    translated: bool = False
+
+    def receipt(self) -> dict:
+        return {
+            "source": self.source,
+            "provider": self.provider,
+            "engine": self.engine,
+            "model": self.model,
+            "device": self.device,
+            "language": self.language,
+            "translated": self.translated,
+        }
+
+
 #: Cached faster-whisper model, keyed by model size, so repeated chunks (and
 #: repeated transcribe() calls in one process) do not reload the weights.
 _LOCAL_MODEL_CACHE: dict = {}
 
 
 def _local_model_size(config: Optional[Config]) -> str:
-    """Resolve the faster-whisper model size from config/env, default `base`."""
+    """Resolve the local model name from config/env, default `small`.
+
+    faster-whisper takes the same names (small, base, turbo).
+    """
     cfg = config or Config()
     return cfg.get("whisper_model") or os.environ.get(
         "SEARCHTS_WHISPER_MODEL"
@@ -99,7 +144,7 @@ def _local_model_size(config: Optional[Config]) -> str:
 def _local_import_error_message(error: ImportError) -> str:
     """Name the interpreter that lacks faster-whisper, plus the import error."""
     return (
-        "local transcription needs faster-whisper, but importing it failed in "
+        "the faster-whisper fallback needs faster-whisper, but importing it failed in "
         f"the Python running searchts ({sys.executable}): {error}\n"
         "Install the extra into that interpreter with:\n"
         f'  "{sys.executable}" -m pip install "searchts[local-transcribe]"'
@@ -115,12 +160,11 @@ def _import_faster_whisper():
     return WhisperModel
 
 
-def local_unavailable_reason() -> str:
+def faster_whisper_unavailable_reason() -> str:
     """Why faster-whisper cannot be imported here, or "" when it can.
 
-    ``local_available`` stays a bool for callers that only route; a failure
-    that reaches the user needs the ImportError and the interpreter path so a
-    machine with several installs can tell which one lacks the extra.
+    A failure that reaches the user needs the ImportError and the interpreter
+    path so a machine with several installs can tell which one lacks it.
     """
     try:
         _import_faster_whisper()
@@ -129,9 +173,39 @@ def local_unavailable_reason() -> str:
     return ""
 
 
+def faster_whisper_available() -> bool:
+    return not faster_whisper_unavailable_reason()
+
+
+def whispercpp_available() -> bool:
+    """Whether whisper.cpp (pywhispercpp, a base dependency) imports here."""
+    from searchts import whispercpp
+
+    return whispercpp.available()
+
+
+def local_engine() -> Optional[str]:
+    """The local engine `--provider local` runs: whisper.cpp, else the
+    faster-whisper fallback, else None."""
+    if whispercpp_available():
+        return "whisper.cpp"
+    if faster_whisper_available():
+        return "faster-whisper"
+    return None
+
+
+def local_unavailable_reason() -> str:
+    """Why no local engine runs here, or "" when one does."""
+    if local_engine():
+        return ""
+    from searchts import whispercpp
+
+    return whispercpp.unavailable_reason() or faster_whisper_unavailable_reason()
+
+
 def local_available() -> bool:
-    """Return whether the keyless local backend (faster-whisper) is importable."""
-    return not local_unavailable_reason()
+    """Return whether a keyless local engine is importable."""
+    return local_engine() is not None
 
 
 def _load_local_model(model_size: str):
@@ -146,6 +220,8 @@ def _load_local_model(model_size: str):
 
 #: Seconds ffmpeg may spend decoding one chunk before we call it stuck.
 LOCAL_DECODE_TIMEOUT = 600
+LOCAL_PCM_OUTPUT_LIMIT_BYTES = 64 * 1024 * 1024
+LOCAL_PCM_OUTPUT_HEADROOM_BYTES = 1024 * 1024
 
 
 def _decode_chunk_ffmpeg(
@@ -176,6 +252,10 @@ def _decode_chunk_ffmpeg(
         "1",
         "-ar",
         "16000",
+        # Keep stdout's capture bounded even if a malformed or unexpectedly
+        # long input reaches this decoder without the normal 10-minute split.
+        "-fs",
+        str(LOCAL_PCM_OUTPUT_LIMIT_BYTES - LOCAL_PCM_OUTPUT_HEADROOM_BYTES),
         "-",
     ]
     try:
@@ -194,6 +274,13 @@ def _decode_chunk_ffmpeg(
         )
         err.output = stderr
         raise err
+    if len(proc.stdout or b"") >= (
+        LOCAL_PCM_OUTPUT_LIMIT_BYTES - LOCAL_PCM_OUTPUT_HEADROOM_BYTES
+    ):
+        raise TranscribeError(
+            f"ffmpeg decoded too much audio from {chunk.name} for local "
+            "transcription; searchts limits each local audio segment to 10 minutes"
+        )
     if not proc.stdout:
         detail = stderr.strip()[:300]
         raise TranscribeError(
@@ -206,12 +293,13 @@ def _decode_chunk_ffmpeg(
     return numpy.frombuffer(proc.stdout, dtype=numpy.float32)
 
 
-def transcribe_chunk_local(
+def transcribe_chunk_faster_whisper(
     chunk: Path,
     *,
     config: Optional[Config] = None,
+    hint: Optional[str] = None,
 ) -> str:
-    """Transcribe one chunk locally with faster-whisper. No API key needed.
+    """Transcribe one chunk with the faster-whisper fallback. No API key needed.
 
     The audio is decoded with ffmpeg first; the model gets samples, never a
     path, so faster-whisper does not touch PyAV's decoder. Raises
@@ -221,10 +309,93 @@ def transcribe_chunk_local(
     model = _load_local_model(model_size)
     samples = _decode_chunk_ffmpeg(chunk)
     try:
-        segments, _info = model.transcribe(samples)
+        if hint:
+            segments, _info = model.transcribe(samples, initial_prompt=hint)
+        else:
+            segments, _info = model.transcribe(samples)
         return "".join(seg.text for seg in segments)
     except Exception as e:  # surface model/runtime failures as TranscribeError
         raise TranscribeError(f"local: faster-whisper failed: {e}") from e
+
+
+def _model_info(spec) -> dict:
+    from searchts import whispercpp
+
+    return {
+        "name": spec.name,
+        "file": spec.filename,
+        "size_bytes": spec.size_bytes,
+        "size": whispercpp.format_bytes(spec.size_bytes),
+        "url": spec.url,
+        "path": str(whispercpp.model_path(spec)),
+    }
+
+
+def prepare_local_model(
+    model: Optional[str] = None,
+    *,
+    config: Optional[Config] = None,
+    yes: bool = False,
+    progress: bool = False,
+    translate: bool = False,
+):
+    """Resolve and, with approval, download the whisper.cpp model.
+
+    Called before any audio is downloaded, so a missing approval costs
+    nothing. Raises ModelDownloadNeeded without approval.
+    """
+    from searchts import whispercpp
+
+    try:
+        spec = whispercpp.resolve_model(model, config)
+    except whispercpp.WhisperCppError as e:
+        raise TranscribeError(str(e)) from e
+    if translate and not spec.translates:
+        raise TranscribeError(
+            f"the '{spec.name}' model was not trained to translate; use "
+            "--model small (or base) with --translate"
+        )
+
+    def _show(done: int, total: int) -> None:
+        if progress:
+            pct = int(done * 100 / max(total, 1))
+            if pct % 10 == 0:
+                _tick(True, f"downloading model {spec.filename}: {pct}%")
+
+    try:
+        path = whispercpp.ensure_model(spec, yes=yes, progress=_show)
+    except whispercpp.ModelConsentNeeded as e:
+        raise ModelDownloadNeeded(str(e), _model_info(spec)) from e
+    except whispercpp.WhisperCppError as e:
+        raise TranscribeError(f"local: {e}") from e
+    return spec, path
+
+
+def transcribe_chunk_whispercpp(
+    chunk: Path,
+    *,
+    config: Optional[Config] = None,
+    model: Optional[str] = None,
+    hint: Optional[str] = None,
+    translate: bool = False,
+    yes: bool = False,
+):
+    """Transcribe one chunk with whisper.cpp; returns a ``whispercpp.Transcript``.
+
+    ffmpeg decodes the chunk to samples, the same path faster-whisper uses.
+    """
+    from searchts import whispercpp
+
+    spec, path = prepare_local_model(
+        model, config=config, yes=yes, translate=translate
+    )
+    samples = _decode_chunk_ffmpeg(chunk)
+    try:
+        return whispercpp.transcribe_samples(
+            samples, spec, path, hint=hint, translate=translate,
+        )
+    except whispercpp.WhisperCppError as e:
+        raise TranscribeError(f"local: {e}") from e
 
 
 def _require(binary: str) -> None:
@@ -684,8 +855,26 @@ def transcription_readiness(config: Optional[Config]) -> str:
     if providers:
         parts.append(f"can transcribe audio ({'->'.join(providers)})")
     if local:
-        parts.append("local Whisper available (no key needed)")
+        parts.append(f"local Whisper available (no key needed): {local_status(config)}")
     return ", " + ", ".join(parts)
+
+
+def local_status(config: Optional[Config] = None) -> str:
+    """One line for doctor: engine, model and whether it is cached, device."""
+    engine = local_engine()
+    if engine != "whisper.cpp":
+        return "faster-whisper fallback" if engine else "no local engine"
+    from searchts import whispercpp
+
+    try:
+        spec = whispercpp.resolve_model(None, config)
+    except whispercpp.WhisperCppError as e:
+        return f"whisper.cpp; {e}"
+    cached = (
+        "model cached" if whispercpp.model_cached(spec)
+        else f"model downloads on first use after a yes, {whispercpp.format_bytes(spec.size_bytes)}"
+    )
+    return f"whisper.cpp {spec.name}, {cached}, device {whispercpp.device()}"
 
 
 def transcribe_chunk(
@@ -694,10 +883,53 @@ def transcribe_chunk(
     *,
     config: Optional[Config] = None,
     timeout: int = 120,
+    model: Optional[str] = None,
+    hint: Optional[str] = None,
+    translate: bool = False,
+    yes: bool = False,
 ) -> str:
     """Transcribe one chunk via the named provider. Raises TranscribeError on failure."""
-    if provider == LOCAL_PROVIDER:
-        return transcribe_chunk_local(chunk, config=config)
+    text, _meta = transcribe_chunk_detailed(
+        chunk, provider, config=config, timeout=timeout, model=model,
+        hint=hint, translate=translate, yes=yes,
+    )
+    return text
+
+
+def transcribe_chunk_detailed(
+    chunk: Path,
+    provider: str,
+    *,
+    config: Optional[Config] = None,
+    timeout: int = 120,
+    model: Optional[str] = None,
+    hint: Optional[str] = None,
+    translate: bool = False,
+    yes: bool = False,
+) -> tuple:
+    """(text, receipt fields) for one chunk via the named provider."""
+    if provider in (LOCAL_PROVIDER, FASTER_WHISPER_PROVIDER):
+        engine = "faster-whisper" if provider == FASTER_WHISPER_PROVIDER else local_engine()
+        if engine == "whisper.cpp":
+            got = transcribe_chunk_whispercpp(
+                chunk, config=config, model=model, hint=hint,
+                translate=translate, yes=yes,
+            )
+            return got.text, {
+                "provider": LOCAL_PROVIDER, "engine": got.engine, "model": got.model,
+                "device": got.device, "language": got.language,
+            }
+        if translate:
+            raise TranscribeError("--translate needs the whisper.cpp engine")
+        text = transcribe_chunk_faster_whisper(chunk, config=config, hint=hint)
+        return text, {
+            "provider": LOCAL_PROVIDER, "engine": "faster-whisper",
+            "model": _local_model_size(config), "device": "cpu", "language": None,
+        }
+    if translate:
+        raise TranscribeError(
+            "--translate runs on the local engine; use --provider local (or auto without a hosted key)"
+        )
     if provider not in PROVIDERS:
         raise TranscribeError(f"unknown provider: {provider}")
     cfg = config or Config()
@@ -723,7 +955,10 @@ def transcribe_chunk(
 
     if not resp.ok:
         raise TranscribeError(f"{provider}: HTTP {resp.status_code}: {resp.text[:300]}")
-    return resp.text
+    return resp.text, {
+        "provider": provider, "engine": info["model"], "model": info["model"],
+        "device": None, "language": None,
+    }
 
 
 def _provider_order(provider: str, config: Optional[Config] = None) -> List[str]:
@@ -731,7 +966,7 @@ def _provider_order(provider: str, config: Optional[Config] = None) -> List[str]
 
     `auto` prefers a hosted provider when its key is configured (groq, then
     openai — both faster than local CPU inference) and otherwise falls back to
-    the keyless local backend when faster-whisper is importable.
+    the keyless local backend (whisper.cpp, else the faster-whisper fallback).
     """
     if provider == "auto":
         cfg = config or Config()
@@ -742,11 +977,13 @@ def _provider_order(provider: str, config: Optional[Config] = None) -> List[str]
             return [LOCAL_PROVIDER]
         # Nothing usable — return hosted order so validation raises a helpful error.
         return ["groq", "openai"]
-    if provider == LOCAL_PROVIDER:
-        return [LOCAL_PROVIDER]
+    if provider in (LOCAL_PROVIDER, FASTER_WHISPER_PROVIDER):
+        return [provider]
     if provider in PROVIDERS:
         return [provider]
-    raise TranscribeError(f"unknown provider: {provider} (use auto|groq|openai|local)")
+    raise TranscribeError(
+        f"unknown provider: {provider} (use auto|groq|openai|local|local-fw)"
+    )
 
 
 def transcribe(
@@ -758,8 +995,15 @@ def transcribe(
     prefer_subtitles: bool = True,
     progress: Optional[bool] = None,
     cookies_from_browser: Optional[str] = None,
+    model: Optional[str] = None,
+    hint: Optional[str] = None,
+    translate: bool = False,
+    yes: bool = False,
 ) -> str:
     """Transcribe a URL or local file path. Returns the joined transcript text.
+
+    :func:`transcribe_result` takes the same arguments and also returns the
+    receipt: which source, engine, model and device ran, and the language.
 
     Subtitles-first: for a URL (not a local file) and when `prefer_subtitles`
     is set, the video's EXISTING captions are fetched via yt-dlp and returned
@@ -767,11 +1011,18 @@ def transcribe(
     are no usable subtitles does it fall back to the audio -> Whisper pipeline,
     and ONLY then is a transcription backend required.
 
-    `provider` is one of `auto`, `groq`, `openai`, or `local`. `auto` prefers a
-    configured hosted key (groq -> openai) and otherwise uses the keyless
-    `local` backend (faster-whisper) when it is installed. `local` forces local
-    transcription and needs no API key. Pass `prefer_subtitles=False` to skip
+    `provider` is one of `auto`, `groq`, `openai`, `local`, or `local-fw`.
+    `auto` prefers a configured hosted key (groq -> openai) and otherwise uses
+    the keyless `local` backend: whisper.cpp, bundled with searchts. `local`
+    forces local transcription and needs no API key; `local-fw` forces the
+    temporary faster-whisper fallback. Pass `prefer_subtitles=False` to skip
     captions and force audio transcription.
+
+    Local options: `model` (small, turbo, base; default small), `hint` (words
+    to bias the decoder toward, e.g. names from the page title), `translate`
+    (to English; not with turbo), and `yes`, the user's approval to download a
+    model that is not cached yet. Without `yes` a terminal is asked once;
+    otherwise ModelDownloadNeeded says what would be fetched.
 
     Intermediate audio (the download, the compressed copy, and any chunks) plus
     any fetched .vtt subtitle files are written to a private temporary directory
@@ -780,7 +1031,66 @@ def transcribe(
     only if you want to keep the intermediates; in that case the directory is
     yours to manage.
     """
+    receipt = _RECEIPT.get()
+    return _transcribe(
+        source, {} if receipt is None else receipt, provider=provider,
+        out_dir=out_dir, config=config, prefer_subtitles=prefer_subtitles,
+        progress=progress, cookies_from_browser=cookies_from_browser,
+        model=model, hint=hint, translate=translate, yes=yes,
+    )
+
+
+#: Where the running transcribe() writes its receipt for transcribe_result().
+_RECEIPT: "contextvars.ContextVar[Optional[dict]]" = contextvars.ContextVar(
+    "searchts_transcribe_receipt", default=None
+)
+
+
+def transcribe_result(source: str, **kwargs: Any) -> TranscribeResult:
+    """:func:`transcribe`, plus the receipt (source, engine, model, device, language).
+
+    Goes through the module's ``transcribe`` so there is one entry point;
+    the local options are passed only when set.
+    """
+    for key in ("model", "hint", "translate", "yes"):
+        if not kwargs.get(key):
+            kwargs.pop(key, None)
+    receipt: dict = {}
+    token = _RECEIPT.set(receipt)
+    try:
+        text = transcribe(source, **kwargs)
+    finally:
+        _RECEIPT.reset(token)
+    return TranscribeResult(
+        text=text,
+        source=receipt.get("source", "audio"),
+        provider=receipt.get("provider"),
+        engine=receipt.get("engine"),
+        model=receipt.get("model"),
+        device=receipt.get("device"),
+        language=receipt.get("language"),
+        translated=bool(kwargs.get("translate")),
+    )
+
+
+def _transcribe(
+    source: str,
+    receipt: dict,
+    *,
+    provider: str = "auto",
+    out_dir: Optional[Path] = None,
+    config: Optional[Config] = None,
+    prefer_subtitles: bool = True,
+    progress: Optional[bool] = None,
+    cookies_from_browser: Optional[str] = None,
+    model: Optional[str] = None,
+    hint: Optional[str] = None,
+    translate: bool = False,
+    yes: bool = False,
+) -> str:
     cfg = config or Config()
+    local: Dict[str, Any] = {"model": model, "hint": hint, "translate": translate,
+                             "yes": yes, "receipt": receipt}
 
     if not Path(source).is_file():
         assert_youtube_id_exact(source)
@@ -807,7 +1117,7 @@ def transcribe(
         work_dir.mkdir(parents=True, exist_ok=True)
         return _run_transcription(
             source, work_dir, provider, cfg, prefer_subtitles, progress,
-            cookies_from_browser=cookies_from_browser,
+            cookies_from_browser=cookies_from_browser, **local,
         )
 
     # Default: an ephemeral workspace removed on exit (even on exception), so a
@@ -821,7 +1131,7 @@ def transcribe(
     ) as tmp:
         return _run_transcription(
             source, Path(tmp), provider, cfg, prefer_subtitles, progress,
-            cookies_from_browser=cookies_from_browser,
+            cookies_from_browser=cookies_from_browser, **local,
         )
 
 
@@ -833,12 +1143,20 @@ def _validate_backend(order: List[str], cfg: Config) -> None:
     when subtitles already satisfied the request.
     """
     usable = any(
-        local_available() if p == LOCAL_PROVIDER else bool(_provider_key(p, cfg))
+        local_available() if p == LOCAL_PROVIDER
+        else faster_whisper_available() if p == FASTER_WHISPER_PROVIDER
+        else bool(_provider_key(p, cfg))
         for p in order
     )
     if not usable:
+        if order == [FASTER_WHISPER_PROVIDER]:
+            raise NoProviderConfigured(
+                "no transcription backend available for --provider local-fw: "
+                f"{faster_whisper_unavailable_reason()}\nUse --provider local "
+                "(whisper.cpp, bundled) instead."
+            )
         local_hint = local_unavailable_reason() or (
-            'install it with `pip install "searchts[local-transcribe]"`'
+            "reinstall searchts to restore its bundled whisper.cpp"
         )
         hosted_order = [p for p in order if p in PROVIDERS]
         if not hosted_order:
@@ -865,6 +1183,11 @@ def _run_transcription(
     prefer_subtitles: bool,
     progress: bool = False,
     cookies_from_browser: Optional[str] = None,
+    model: Optional[str] = None,
+    hint: Optional[str] = None,
+    translate: bool = False,
+    yes: bool = False,
+    receipt: Optional[dict] = None,
 ) -> str:
     """Try subtitles first (URL only), else download audio and transcribe.
 
@@ -875,6 +1198,10 @@ def _run_transcription(
     src_path = Path(source)
     is_local_file = src_path.is_file()
 
+    receipt = {} if receipt is None else receipt
+    if translate:
+        # Captions are in the video's language; translation needs the audio.
+        prefer_subtitles = False
     if not is_local_file and prefer_subtitles:
         sub_kw = {}
         if cookies_from_browser:
@@ -882,12 +1209,20 @@ def _run_transcription(
         with progress_phase("fetching subtitles…", enabled=bool(progress)):
             subs = fetch_subtitles(source, work_dir, config=cfg, **sub_kw)
         if subs and len(subs.replace(" ", "")) >= MIN_SUBTITLE_CHARS:
+            receipt.update(source="subtitles", provider=None, engine="captions")
             return subs
 
     # Fallback: audio -> Whisper. Resolve provider order and require a usable
     # backend now — a captioned URL never reaches this point.
-    order = _provider_order(provider, cfg)
+    if translate and provider == "auto":
+        order = [LOCAL_PROVIDER]  # hosted APIs here only transcribe
+    else:
+        order = _provider_order(provider, cfg)
     _validate_backend(order, cfg)
+    # Ask for the model before downloading any audio: a "no" costs nothing.
+    _preflight_local(
+        order, cfg, model=model, yes=yes, progress=bool(progress), translate=translate
+    )
 
     if is_local_file:
         audio = src_path  # a local file the caller owns; never deleted by us
@@ -899,11 +1234,16 @@ def _run_transcription(
             audio = download_audio(source, work_dir, **dl_kw)
 
     with progress_phase("preparing audio…", enabled=bool(progress)):
-        compressed = compress_audio(audio, work_dir)
-        if compressed.stat().st_size <= SIZE_LIMIT_BYTES:
-            chunks = [compressed]
+        if _uses_local_pcm(order):
+            # Local engines decode to an in-memory float32 array. Always split
+            # before that decode so PCM stays near 38 MB per 10-minute chunk.
+            chunks = chunk_audio(audio, work_dir)
         else:
-            chunks = chunk_audio(compressed, work_dir)
+            compressed = compress_audio(audio, work_dir)
+            if compressed.stat().st_size <= SIZE_LIMIT_BYTES:
+                chunks = [compressed]
+            else:
+                chunks = chunk_audio(compressed, work_dir)
 
     pieces: List[str] = []
     many = len(chunks) > 1
@@ -911,25 +1251,71 @@ def _run_transcription(
         for i, chunk in enumerate(chunks, start=1):
             if many:
                 spoken.update("transcribing…", done=i, total=len(chunks))
-            text = _transcribe_with_fallback(chunk, order, cfg)
+            text = _transcribe_with_fallback(
+                chunk, order, cfg, model=model, hint=hint, translate=translate,
+                yes=True if _local_first(order) else yes, receipt=receipt,
+            )
             pieces.append(text.strip())
     joined = "\n".join(p for p in pieces if p)
     if not joined.strip():
         raise TranscribeError("empty transcript")
+    receipt["source"] = "audio"
     return joined
 
 
-def _transcribe_with_fallback(chunk: Path, order: List[str], config: Config) -> str:
-    """Try each provider in order; return first success or raise the last error."""
+def _local_first(order: List[str]) -> bool:
+    return bool(order) and order[0] == LOCAL_PROVIDER and local_engine() == "whisper.cpp"
+
+
+def _uses_local_pcm(order: List[str]) -> bool:
+    """Whether this provider path decodes audio to local float32 samples."""
+    return any(provider in (LOCAL_PROVIDER, FASTER_WHISPER_PROVIDER) for provider in order)
+
+
+def _preflight_local(
+    order: List[str], cfg: Config, *, model: Optional[str], yes: bool, progress: bool,
+    translate: bool = False,
+) -> None:
+    """When whisper.cpp will run, have its model (approved) before any audio work."""
+    if _local_first(order):
+        prepare_local_model(
+            model, config=cfg, yes=yes, progress=progress, translate=translate
+        )
+
+
+def _transcribe_with_fallback(
+    chunk: Path,
+    order: List[str],
+    config: Config,
+    *,
+    model: Optional[str] = None,
+    hint: Optional[str] = None,
+    translate: bool = False,
+    yes: bool = False,
+    receipt: Optional[dict] = None,
+) -> str:
+    """Try each provider in order; return first success or raise the last error.
+
+    A model download that still needs a yes is not a provider failure: it is
+    raised at once, never papered over by another backend.
+    """
     last_err: Optional[Exception] = None
     for p in order:
         # Local needs no key; hosted providers without a configured key are
         # skipped silently — caller already validated at least one is usable.
-        if p != LOCAL_PROVIDER and not _provider_key(p, config):
+        if p not in (LOCAL_PROVIDER, FASTER_WHISPER_PROVIDER) and not _provider_key(p, config):
             continue
         try:
-            return transcribe_chunk(chunk, p, config=config)
+            text, meta = transcribe_chunk_detailed(
+                chunk, p, config=config, model=model, hint=hint,
+                translate=translate, yes=yes,
+            )
+        except ModelDownloadNeeded:
+            raise
         except TranscribeError as e:
             last_err = e
             continue
+        if receipt is not None:
+            receipt.update(meta)
+        return text
     raise TranscribeError(f"all providers failed for {chunk.name}: {last_err}")
