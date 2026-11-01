@@ -1,13 +1,13 @@
 {
- "built": "2026-10-25",
+ "built": "2026-11-01",
  "repo": "capad-xyz/searchts",
  "summary": {
-  "prs": 245,
-  "notes": 464,
-  "real": 81,
-  "skip": 279,
+  "prs": 243,
+  "notes": 472,
+  "real": 83,
+  "skip": 291,
   "real_fates": {
-   "open": 44,
+   "open": 46,
    "still applies": 5,
    "wrong": 6,
    "fixed": 17,
@@ -18,15 +18,15 @@
   },
   "real_fixed_or_resolved": 20,
   "hops": {
-   "nous:reflection/beam-1.0-501b-a23b:free": 140,
-   "nous:poolside/laguna-s-2.1:free": 150,
+   "nous:reflection/beam-1.0-501b-a23b:free": 163,
+   "nous:poolside/laguna-s-2.1:free": 148,
    "openrouter:nvidia/nemotron-3-super-120b-a12b:free": 2,
-   "nous:meituan/longcat-2.5-preview:free": 56,
+   "nous:meituan/longcat-2.5-preview:free": 55,
    "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free": 2,
    "nous:poolside/laguna-s-2.1:free · deep": 1,
    "groq:openai/gpt-oss-120b": 15,
    "groq:openai/gpt-oss-120b · deep": 1,
-   "openrouter:qwen/qwen3.8-27b:free": 57,
+   "openrouter:qwen/qwen3.8-27b:free": 55,
    "openrouter:nvidia/nemotron-3.5-lightning:free": 8,
    "nous:inclusionai/ling-3.0-flash-sante:free": 1,
    "gemini:gemini-3.1-flash-lite": 4,
@@ -34,23 +34,715 @@
    "openrouter:qwen/qwen3.8-27b:free · deep": 3,
    "nous:meituan/longcat-2.5-preview:free · deep": 1,
    "openrouter:stealth/space-bunny-alpha": 7,
-   "openrouter:poolside/laguna-s-2.1:free": 10,
+   "openrouter:poolside/laguna-s-2.1:free": 2,
    "gemini:gemini-3.1-flash-lite · deep": 1,
-   "gemini:gemini-3.5-flash": 1,
-   "nous:stealth/space-bunny-alpha": 2
+   "gemini:gemini-3.5-flash": 1
   },
   "scores": 46,
   "score_avg": 3.67,
   "cut_notes": 35,
-  "needed": 65,
+  "needed": 26,
   "caps_fired": {
    "reasoning retry": 29,
    "rate limit": 2
   },
   "caps_fired_total": 31,
-  "reasoning_tokens_median": 569.5
+  "reasoning_tokens_median": 715
  },
  "entries": [
+  {
+   "pr": 501,
+   "title": "chore: bump curl-cffi from 0.16.0 to 0.17.0",
+   "state": "open",
+   "files": [],
+   "notes": [],
+   "findings": [],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 500,
+   "title": "ci: bump actions/setup-python from 5 to 7",
+   "state": "open",
+   "files": [],
+   "notes": [],
+   "findings": [],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 502,
+   "title": "chore: bump types-pyyaml from 6.0.12.20260815 to 6.0.12.20260906",
+   "state": "open",
+   "files": [],
+   "notes": [],
+   "findings": [],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 499,
+   "title": "chore: bump pytest from 8.0.0 to 9.2.0",
+   "state": "open",
+   "files": [],
+   "notes": [],
+   "findings": [],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 498,
+   "title": "ci: bump actions/upload-artifact from 4 to 7",
+   "state": "open",
+   "files": [],
+   "notes": [],
+   "findings": [],
+   "scores": [],
+   "needed": 1
+  },
+  {
+   "pr": 497,
+   "title": "chore(main): release 0.25.1",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T17:15:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/497#pullrequestreview-5715973274",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "12,599 prompt + 779 answer + 551 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 12 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease bump to 0.25.1 across the version files. One recurring CHANGELOG spacing nit.\n\nCI on `ab7c322`: green.\n\nIntent: Cut the 0.25.1 release by bumping the version in all synced files and adding the changelog entry.\n\n**Verdict:** Ship (CI green, no real findings). This is a generated release PR: every version surface the version-sync job checks (pyproject.toml, __init__.py, server.json top-level and package) moves together to 0.25.1, docs/cli.md follows, and the manifest and CHANGELOG match. Nothing else changes, so there is no behavior to hold.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `CHANGELOG.md:5`\n\n**Issue:** The new 0.25.1 heading is followed by two blank lines before ### Fixed, the same untidy spacing flagged on earlier release sections.\n\n**Fix:** later. Collapse the double blank line after the version heading to a single blank line.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `ab7c322`\n- tests on `ab7c322`: not run (no affected test file in this diff)\n- CI test (windows-latest) / version-sync / test (macos-latest) / lint / test (ubuntu-latest) / mcp2-compat / typecheck → green\n- CI read again when it finished (17:18 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,599 prompt + 779 answer + 551 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 12 s\n- graph: 7 files from the repo, 12,491 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md:5",
+     "sev": "skip",
+     "issue": "The new 0.25.1 heading is followed by two blank lines before ### Fixed, the same untidy spacing flagged on earlier release sections.",
+     "fate": "open",
+     "first": "2026-10-30T17:15:49Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 496,
+   "title": "fix(mcp): return login_check bad_url as an error result on every Python",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T17:10:13Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/496#pullrequestreview-5715906720",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "11,631 prompt + 797 answer + 638 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 9 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nOne decorator kwarg so `login_check` builds no output schema on any Python.\n\nCI on `970d16b`: green.\n\nIntent: Stop mcp 2.0.0 from generating an output schema for `login_check` on Python 3.10, where `typing.Any` is not a class and the `bad_url` error result fails validation.\n\n**Verdict:** Ship (CI green, no real findings). The change is the smallest thing that fixes the described failure: `structured_output=False` opts out of schema generation, and since the success path is a JSON string like every other tool, no schema is lost. The comment explains the 3.10 vs 3.11+ difference accurately. Nothing in the diff regresses a caller or contradicts the docs I can see.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `970d16b`\n- tests on `970d16b`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-970d16b[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI mcp2-compat / test (windows-latest) / test (macos-latest) / typecheck / lint / version-sync / test (ubuntu-latest) → green\n- CI read again when it finished (17:13 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 11,631 prompt + 797 answer + 638 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 9 s\n- graph: 6 files from the repo, 10,676 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 494,
+   "title": "chore(main): release 0.25.0",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T16:38:49Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/494#pullrequestreview-5715504641",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "12,754 prompt + 3,158 answer + 2,928 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 24 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease Please bumps everything to 0.25.0. Quiet. Mechanical.\n\nCI on `9ebe751`: green.\n\nIntent: Cut the 0.25.0 release: bump version strings across pyproject.toml, __init__.py, server.json, docs/cli.md and the manifest, and prepend the changelog section.\n\n**Verdict:** Ship (CI green, no real findings). All version strings agree at 0.25.0, matching the version-sync gate, and the changelog entries point at the merged ce8a33a commit. The only thing left is the recurring double-blank-line spacing nit in CHANGELOG.md.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `CHANGELOG.md:5`\n\n**Issue:** The new 0.25.0 heading is followed by two blank lines before ### Added, and the same double blank appears before ### Fixed; the same untidy spacing flagged on earlier release sections.\n\n**Fix:** later. Collapse both double blank lines to a single blank line.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `9ebe751`\n- tests on `9ebe751`: not run (no affected test file in this diff)\n- CI typecheck / test (macos-latest) / version-sync / test (ubuntu-latest) / mcp2-compat / test (windows-latest) / lint → green\n- CI read again when it finished (16:41 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,754 prompt + 3,158 answer + 2,928 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 24 s\n- graph: 7 files from the repo, 12,491 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md:5",
+     "sev": "skip",
+     "issue": "The new 0.25.0 heading is followed by two blank lines before ### Added, and the same double blank appears before ### Fixed; the same untidy spacing flagged on earlier release sections.",
+     "fate": "open",
+     "first": "2026-10-30T16:38:49Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 493,
+   "title": "feat(transcribe): reuse recently downloaded audio for 24h",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T16:33:33Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/493#pullrequestreview-5715435572",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "medium",
+     "cost": "32,127 prompt + 6,541 answer + 6,446 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 42 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nAudio cache lands, plus whisper.cpp native logs stop eating fd 2.\n\nCI on `092045e`: green.\n\nIntent: Add a 24-hour bounded audio cache to transcribe and filter whisper.cpp logs through its callback.\n\n**Verdict:** Ship (CI green, no real findings). The cache is bounded, keyed by normalized URL, off for cookies and local files, and cleanup/report paths are wired through; the whisper change keeps searchts progress visible. No defects spotted in the diff.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `092045e`\n- tests on `092045e`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-092045e[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI test (ubuntu-latest) / test (windows-latest) / test (macos-latest) / typecheck / mcp2-compat / lint / version-sync → green\n- CI read again when it finished (16:35 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 32,127 prompt + 6,541 answer + 6,446 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 42 s\n- graph: 41 files from the repo, 18,525 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 491,
+   "title": "chore(main): release 0.24.3",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T14:01:21Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/491#pullrequestreview-5713397044",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "12,587 prompt + 472 answer + 317 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 6 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease Please bump: 0.24.2 to 0.24.3 across the four version sites.\n\nCI on `3613b58`: green.\n\nIntent: Cut the 0.24.3 release carrying the MCP read_url notes fix.\n\n**Verdict:** Ship (CI green, no real findings). Mechanical version bump generated by Release Please: pyproject, __init__, server.json (both entries), docs/cli.md and the manifest all move to 0.24.3 together, and the CHANGELOG gains the matching section. The version-sync job in CI exists exactly to catch drift between these files, so the only thing to verify is that all four sites agree, which they do. No code changes, nothing to hold.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `3613b58`\n- tests on `3613b58`: not run (no affected test file in this diff)\n- CI test (windows-latest) / test (macos-latest) / test (ubuntu-latest) / mcp2-compat / lint / typecheck / version-sync → green\n- CI read again when it finished (14:04 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,587 prompt + 472 answer + 317 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 6 s\n- graph: 7 files from the repo, 12,491 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    },
+    {
+     "at": "2026-10-30T14:09:35Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/491#pullrequestreview-5713531338",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "12,775 prompt + 1,993 answer + 1,757 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 15 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease Please bumps searchts to 0.24.3 across the version files.\n\nCI on `8d7f28b`: green.\n\nIntent: Cut the 0.24.3 release for the two fixes already merged.\n\n**Verdict:** Ship (CI green, no real findings). The version strings agree across pyproject.toml, searchts/__init__.py, server.json and docs/cli.md, so this is a clean release bump. The only nit is the usual double blank line after the new CHANGELOG heading.\n\n### Since `3613b58`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `CHANGELOG.md:6`\n\n**Issue:** The new 0.24.3 heading is followed by two blank lines before ### Fixed, the same untidy spacing flagged on earlier release sections.\n\n**Fix:** later. Collapse the two blank lines after the new version heading to one.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `8d7f28b`\n- tests on `8d7f28b`: not run (no affected test file in this diff)\n- CI test (windows-latest) / test (ubuntu-latest) / lint / mcp2-compat / typecheck / test (macos-latest) / version-sync → green\n- CI read again when it finished (14:11 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,775 prompt + 1,993 answer + 1,757 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 15 s\n- graph: 7 files from the repo, 12,491 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    },
+    {
+     "at": "2026-10-30T14:33:17Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/491#pullrequestreview-5713810640",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "13,381 prompt + 341 answer + 109 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 3 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease bump to 0.24.3. Mechanical version sync across five files plus the CHANGELOG entry; no code changes.\n\nCI on `830b893`: green.\n\nIntent: Cut the 0.24.3 release: bump the version string in every place release-please touches and prepend the changelog section.\n\n**Verdict:** Ship (CI green, no real findings). Mechanical, well-scoped release. Version matches across pyproject, __init__, server.json (both spots), docs/cli.md, and the manifest; changelog lists the five fixes named in the release notes. Only the recurring double-blank-line spacing nit in CHANGELOG, already tracked on prior release PRs.\n\n### Since `8d7f28b`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `CHANGELOG.md:4`\n\n**Issue:** Two blank lines after the new 0.24.3 heading before ### Fixed, the same spacing nit flagged on every prior release section.\n\n**Fix:** later. Collapse the extra blank line so one blank line separates the heading from ### Fixed.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `830b893`\n- tests on `830b893`: not run (no affected test file in this diff)\n- CI test (macos-latest) / test (windows-latest) / version-sync / typecheck / test (ubuntu-latest) / mcp2-compat / lint → green\n- CI read again when it finished (14:35 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 13,381 prompt + 341 answer + 109 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 3 s\n- graph: 7 files from the repo, 12,491 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md:6",
+     "sev": "skip",
+     "issue": "The new 0.24.3 heading is followed by two blank lines before ### Fixed, the same untidy spacing flagged on earlier release sections.",
+     "fate": "open",
+     "first": "2026-10-30T14:09:35Z"
+    },
+    {
+     "loc": "CHANGELOG.md:4",
+     "sev": "skip",
+     "issue": "Two blank lines after the new 0.24.3 heading before ### Fixed, the same spacing nit flagged on every prior release section.",
+     "fate": "open",
+     "first": "2026-10-30T14:33:17Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 492,
+   "title": "fix(transcribe): silence whisper.cpp native logs unless -v",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T14:29:41Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/492#pullrequestreview-5713764086",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "medium",
+     "cost": "20,433 prompt + 2,681 answer + 2,561 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 19 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nThree little armor plates: whisper logs hushed by default, bad login URLs get the same envelope as read, cleanup learns to spot its own venv.\n\nCI on `3d1131c`: green.\n\nIntent: Fix #486, #487 and #488 without changing the happy path for valid hosts or verbose runs.\n\n**Verdict:** Ship (CI green, no real findings). The diff does what it says on all three fronts, keeps the valid-host path unchanged, and adds tests at the lines that matter; nothing in the change looks like it would hold merge.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `3d1131c`\n- tests on `3d1131c`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-3d1131c[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI test (windows-latest) / mcp2-compat / test (ubuntu-latest) / typecheck / lint / test (macos-latest) / version-sync → green\n- CI read again when it finished (14:31 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 20,433 prompt + 2,681 answer + 2,561 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 19 s\n- graph: 30 files from the repo, 19,125 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 490,
+   "title": "fix(install): register Exa and LinkedIn with mcporter in the home config",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T13:59:18Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/490#pullrequestreview-5713362876",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "medium",
+     "cost": "19,041 prompt + 2,922 answer + 2,802 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 26 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRegisters Exa and LinkedIn in mcporter's home config and reconciles registration after approved installs.\n\nCI on `536167a`: green.\n\nIntent: Make every mcporter config add use home scope, report Exa success only on exit 0, and register LinkedIn when both mcporter and linkedin-scraper-mcp are available.\n\n**Verdict:** Ship (CI green, no real findings). The diff centralizes the mcporter add commands with --scope home, keeps skipped items unregistered, and adds tests for home scope, failed Exa adds, and idempotent reconciliation; no behavior gap is visible in the code.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `536167a`\n- tests on `536167a`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-536167a[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI version-sync / test (windows-latest) / lint / test (macos-latest) / mcp2-compat / test (ubuntu-latest) / typecheck → green\n- CI read again when it finished (14:02 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 19,041 prompt + 2,922 answer + 2,802 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 26 s\n- graph: 28 files from the repo, 10,278 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 489,
+   "title": "fix(mcp): read_url more notes name a step the tool offers",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T13:39:57Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/489#pullrequestreview-5713079829",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "19,396 prompt + 2,607 answer + 2,451 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 24 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRead_url notes now name a real next step instead of a next_cursor the default envelope lacks, and more comes from the last page read. Two armor plates, quietly fitted.\n\nCI on `1a204f8`: still running (test (windows-latest)).\n\nIntent: Make read_url's bracketed notes actionable by naming max_pages, fetch_asset, or the link in the text instead of a next_cursor that only exists with cursor/page_items, and report more from the last page of a multi-page walk.\n\n**Verdict:** Wait (CI still running: test (windows-latest), no real findings). The change is small and focused: the note mapping is driven by kind, the default fallback is sensible, and the last-page selection is guarded by len(pages) > 1. Tests cover the multi-page case and the pure mapping. No behavior regression visible in the diff.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `1a204f8`\n- tests on `1a204f8`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-1a204f8[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI mcp2-compat / test (macos-latest) / test (ubuntu-latest) / version-sync / lint / typecheck → green\n- CI test (windows-latest) → in_progress\n- CI read again when it finished (13:42 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 19,396 prompt + 2,607 answer + 2,451 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 24 s\n- graph: 35 files from the repo, 19,896 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 485,
+   "title": "chore(main): release 0.24.2",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T11:22:04Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/485#pullrequestreview-5711512933",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "12,624 prompt + 1,559 answer + 1,258 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 13 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease bump to 0.24.2. Quiet machinery.\n\nCI on `4798e1d`: green.\n\nIntent: Cut the 0.24.2 release by bumping version metadata and adding the changelog entry.\n\n**Verdict:** Ship (CI green, no real findings). The version strings agree across pyproject.toml, searchts/__init__.py, and server.json, docs/cli.md follows, and the changelog records the one shipped fix. Only a recurring spacing nit remains, so nothing blocks shipping.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `CHANGELOG.md:8`\n\n**Issue:** The new 0.24.2 heading is followed by two blank lines before ### Fixed, the same untidy spacing flagged on earlier release sections.\n\n**Fix:** yes. Remove one blank line between the version heading and ### Fixed. One-click fix in the bubble.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `4798e1d`\n- tests on `4798e1d`: not run (no affected test file in this diff)\n- CI version-sync / typecheck / test (windows-latest) / lint / test (macos-latest) / test (ubuntu-latest) / mcp2-compat → green\n- CI read again when it finished (11:24 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,624 prompt + 1,559 answer + 1,258 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 13 s\n- graph: 7 files from the repo, 12,491 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md:8",
+     "sev": "skip",
+     "issue": "The new 0.24.2 heading is followed by two blank lines before ### Fixed, the same untidy spacing flagged on earlier release sections.",
+     "fate": "open",
+     "first": "2026-10-30T11:22:04Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 484,
+   "title": "fix(transcribe): carry update_available in transcribe --json",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T11:17:28Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/484#pullrequestreview-5711470465",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "12,922 prompt + 1,062 answer + 901 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 8 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\ntranscribe --json now carries update_available on success, matching read. Quiet, consistent, one armor plate. 🐰\n\nCI on `53d72b6`: green.\n\nIntent: Make a successful transcribe --json payload include update_available when a newer release is cached, the same way read --json does, while error and consent_needed payloads stay without it.\n\n**Verdict:** Ship (CI green, no real findings). The change mirrors the existing read --json rule by calling the same update_available_for_agent helper on the success path only, and the catalog plus regenerated docs agree. Error and opt-out paths are untouched by construction, and the new tests cover present, absent, consent, and opt-out cases. Nothing in the diff looks off.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `53d72b6`\n- tests on `53d72b6`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-53d72b6[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI lint / version-sync / test (windows-latest) / test (ubuntu-latest) / test (macos-latest) / typecheck / mcp2-compat → green\n- CI read again when it finished (11:20 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,922 prompt + 1,062 answer + 901 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 8 s\n- graph: 22 files from the repo, 6,903 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 482,
+   "title": "chore(main): release 0.24.1",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T11:05:18Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/482#pullrequestreview-5711344777",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "12,633 prompt + 1,408 answer + 1,176 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 12 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease 0.24.1: a mechanical version bump, all six sites in sync.\n\nCI on `f3269ea`: green.\n\nIntent: Cut the 0.24.1 release after the missing-browser hint fix.\n\n**Verdict:** Ship (CI green, no real findings). Every version site (manifest, pyproject, __init__, server.json top and package, docs/cli.md) moved to 0.24.1 together and the CHANGELOG gained the matching section, so version-sync has nothing to catch. The only thing worth a note is the release-please double blank line after the new heading, a recurring cosmetic nit.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `CHANGELOG.md:6`\n\n**Issue:** The new 0.24.1 heading is followed by two blank lines before ### Fixed, the same untidy spacing flagged on earlier release sections.\n\n**Fix:** yes. Collapse the double blank line after the version heading to a single blank line.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `f3269ea`\n- tests on `f3269ea`: not run (no affected test file in this diff)\n- CI mcp2-compat / test (ubuntu-latest) / test (windows-latest) / test (macos-latest) / lint / typecheck / version-sync → green\n- CI read again when it finished (11:07 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,633 prompt + 1,408 answer + 1,176 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 12 s\n- graph: 7 files from the repo, 12,491 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md:6",
+     "sev": "skip",
+     "issue": "The new 0.24.1 heading is followed by two blank lines before ### Fixed, the same untidy spacing flagged on earlier release sections.",
+     "fate": "open",
+     "first": "2026-10-30T11:05:18Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 481,
+   "title": "fix(read): point the missing-browser hint at searchts install --browser",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T11:00:51Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/481#pullrequestreview-5711300343",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "18,706 prompt + 1,907 answer + 1,812 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 15 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nOne wording fix across the browser rung. Quiet. Useful.\n\nCI on `f021183`: green.\n\nIntent: Make missing-Chromium failures point at `searchts install --browser` instead of the empty pip extra.\n\n**Verdict:** Ship (CI green, no real findings). The change is confined to an error string plus matching docs and tests, so it cannot alter read behavior; the only risk is stale callers asserting the old wording, and the diff updates the known assertions.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `f021183`\n- tests on `f021183`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-f021183[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI mcp2-compat / test (macos-latest) / test (windows-latest) / typecheck / version-sync / lint / test (ubuntu-latest) → green\n- CI read again when it finished (11:03 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 18,706 prompt + 1,907 answer + 1,812 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 15 s\n- graph: 30 files from the repo, 19,988 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 479,
+   "title": "chore(main): release 0.24.0",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-30T10:31:45Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/479#pullrequestreview-5711017074",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "12,656 prompt + 1,363 answer + 1,153 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 27 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease Please bumps searchts to 0.23.1 across the version files.\n\nCI on `76a9417`: green.\n\nIntent: Cut the 0.23.1 patch release for the 0.23.0 read fix.\n\n**Verdict:** Ship (CI green, no real findings). Safe to ship: the manifest, pyproject, __init__, server.json, and generated CLI doc all move to 0.23.1 in lockstep, and the changelog names the one fixed commit. The only nit is the familiar double blank line after the new version heading.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `CHANGELOG.md:6`\n\n**Issue:** The new 0.23.1 heading is followed by two blank lines before ### Fixed, the same spacing nit flagged on earlier release sections.\n\n**Fix:** later. Collapse the double blank line after the version heading to a single blank line.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `76a9417`\n- tests on `76a9417`: not run (no affected test file in this diff)\n- CI test (ubuntu-latest) / version-sync / test (macos-latest) / mcp2-compat / test (windows-latest) / typecheck / lint → green\n- CI read again when it finished (10:33 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,656 prompt + 1,363 answer + 1,153 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 27 s\n- graph: 7 files from the repo, 12,491 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    },
+    {
+     "at": "2026-10-30T10:35:37Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/479#pullrequestreview-5711054252",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "12,912 prompt + 1,204 answer + 983 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 20 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease Please bumps searchts to 0.24.0. Version strings agree across all five files it touches.\n\nCI on `8257208`: green.\n\nIntent: Cut the 0.24.0 release: manifest, changelog, pyproject, package init, server.json, and generated cli.md.\n\n**Verdict:** Ship (CI green, no real findings). Mechanical release PR. Every version location the version-sync gate checks (pyproject.toml, searchts/__init__.py, both server.json entries) moved together with the manifest and docs/cli.md, so no drift. Only nit is the recurring double blank line after the new version heading, already flagged on prior releases.\n\n### Since `76a9417`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `CHANGELOG.md:5`\n\n**Issue:** The new 0.24.0 heading is followed by two blank lines before ### Added, the same untidy spacing flagged on earlier release sections.\n\n**Fix:** later. Collapse the two blank lines after the version heading to one.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `8257208`\n- tests on `8257208`: not run (no affected test file in this diff)\n- CI test (windows-latest) / test (ubuntu-latest) / test (macos-latest) / lint / version-sync / mcp2-compat / typecheck → green\n- CI read again when it finished (10:37 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,912 prompt + 1,204 answer + 983 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 20 s\n- graph: 7 files from the repo, 12,491 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    },
+    {
+     "at": "2026-10-30T10:43:05Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/479#pullrequestreview-5711126561",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "13,083 prompt + 1,067 answer + 853 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 9 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease Please cuts 0.24.0. Version bump across all five files, changelog filled in.\n\nCI on `a876aac`: green.\n\nIntent: Bump the package version from 0.23.0 to 0.24.0 and publish the release changelog.\n\n**Verdict:** Ship (CI green, no real findings). Clean mechanical release: every version file moves to 0.24.0 in lockstep and the changelog entries match the shipped commits. The only blemish is the recurring double blank lines after the new heading, already tracked as an open skip on prior releases.\n\n### Since `8257208`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `CHANGELOG.md:4`\n\n**Issue:** Two blank lines after the new 0.24.0 heading before ### Added, the same spacing nit flagged on every prior release section.\n\n**Fix:** later. Collapse the double blank line to a single blank line after the version heading.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `a876aac`\n- tests on `a876aac`: not run (no affected test file in this diff)\n- CI mcp2-compat / test (macos-latest) / test (windows-latest) / version-sync / test (ubuntu-latest) / typecheck / lint → green\n- CI read again when it finished (10:45 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 13,083 prompt + 1,067 answer + 853 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 9 s\n- graph: 7 files from the repo, 12,491 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md:6",
+     "sev": "skip",
+     "issue": "The new 0.23.1 heading is followed by two blank lines before ### Fixed, the same spacing nit flagged on earlier release sections.",
+     "fate": "open",
+     "first": "2026-10-30T10:31:45Z"
+    },
+    {
+     "loc": "CHANGELOG.md:5",
+     "sev": "skip",
+     "issue": "The new 0.24.0 heading is followed by two blank lines before ### Added, the same untidy spacing flagged on earlier release sections.",
+     "fate": "open",
+     "first": "2026-10-30T10:35:37Z"
+    },
+    {
+     "loc": "CHANGELOG.md:4",
+     "sev": "skip",
+     "issue": "Two blank lines after the new 0.24.0 heading before ### Added, the same spacing nit flagged on every prior release section.",
+     "fate": "open",
+     "first": "2026-10-30T10:43:05Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 478,
+   "title": "feat(transcribe): use whisper.cpp as the local engine",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-25T10:13:43Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/478#pullrequestreview-5642694016",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "medium",
+     "cost": "38,677 prompt + 4,281 answer + 3,842 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 17 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 2,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nwhisper.cpp takes over local transcription, plus consent, receipts and the faster-whisper exit ramp. Two real edges in the new path.\n\nCI on `4e9f6c4`: green.\n\nIntent: Replace faster-whisper with bundled whisper.cpp as the keyless local engine, with consented model downloads, receipts, model management and a temporary migration path.\n\n**Verdict:** Hold (CI green, 2 real findings). The feature is broad but coherent, and the consent flow is structured. Ship is blocked by the consent retry command emitting `--model None` for the default model, and by the still-unbounded ffmpeg PCM capture that HARE already flagged.\n\n### Findings\n\n#### 🔴 real · `searchts/cli.py:2553`\n\n**Issue:** In the missing-model consent result, the generated approval command always adds `--model` with `args.model`, which is `None` when the user did not pass `--model`. The retry command is then invalid instead of naming the model that was actually selected.\n\n**Fix:** yes. Use the resolved model name from the consent payload, falling back to args.model when present. One-click fix in the bubble.\n\n#### 🔴 real · `searchts/transcribe.py`\n\n**Issue:** The ffmpeg decode path still uses `subprocess.run(..., capture_output=True)`, so a whole decoded chunk's PCM is held in memory with no streaming or cap.\n\n**Fix:** later. Stream or cap ffmpeg's decoded output instead of capturing it all.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `4e9f6c4`\n- tests on `4e9f6c4`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-4e9f6c4[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI mcp2-compat / version-sync / test (ubuntu-latest) / test (macos-latest) / test (windows-latest) / lint / typecheck → green\n- CI read again when it finished (10:16 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 38,677 prompt + 4,281 answer + 3,842 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 17 s\n- graph: 16 files from the repo, 19,923 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
+    },
+    {
+     "at": "2026-10-25T10:20:57Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/478#pullrequestreview-5642718192",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "high",
+     "cost": "38,497 prompt + 4,936 answer + 4,775 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 17 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nWhisper.cpp takes the local transcription slot, with consent, receipts and cleanup in tow.\n1. **transcribe** new engine, model approval, receipts and inventory.\n2. **cleanup** temporary faster-whisper migration path.\n3. **docs** catalog, README and verify feature refreshed.\n\nCI on `a9da379`: green.\n\nIntent: Replace faster-whisper with bundled whisper.cpp as the keyless local transcriber while adding model consent, receipts, inventory and temporary migration cleanup.\n\n**Verdict:** Ship (CI green, no real findings). The changed paths agree across CLI, catalog, MCP, docs and config, and the visible code keeps the new bounds and approval flow in place. No defect is evident in the provided diff; tests were not run in this environment.\n\n### Since `4e9f6c4`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `a9da379`\n- tests on `a9da379`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-a9da379[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI test (ubuntu-latest) / mcp2-compat / typecheck / version-sync / test (windows-latest) / test (macos-latest) / lint → green\n- CI read again when it finished (10:23 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 38,497 prompt + 4,936 answer + 4,775 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 17 s\n- graph: 16 files from the repo, 19,923 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | high |\n"
+    },
+    {
+     "at": "2026-10-28T20:58:31Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/478#pullrequestreview-5689608245",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "12,080 prompt + 1,552 answer + 1,339 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 8 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nDocs-only: wheel GPU wording now says Metal on macOS arm64.\n\nCI on `aee04f0`: green.\n\nIntent: Align transcription documentation and help text with the claimed macOS Metal wheel support.\n\n**Verdict:** Ship (CI green, no real findings). Safe to ship as a wording-only change; the only issue is that the PR body still describes all published wheels as CPU-only, so its wheel research is stale.\n\n### Since `a9da379`\n\nNew commits only. The note on `a9da379` stays.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `README.md:156`\n\n**Issue:** The PR body's wheel research still says the published pywhispercpp wheels are CPU-only and that GPU execution is unavailable, while this diff's docs say the macOS arm64 wheel ships Metal.\n\n**Fix:** no.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `aee04f0`\n- tests on `aee04f0`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-aee04f0[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI version-sync / test (macos-latest) / test (windows-latest) / test (ubuntu-latest) / typecheck / mcp2-compat / lint → green\n- CI read again when it finished (21:01 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,080 prompt + 1,552 answer + 1,339 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 8 s\n- graph: 15 files from the repo, 5,147 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    },
+    {
+     "at": "2026-10-30T10:39:27Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/478#pullrequestreview-5711091787",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "high",
+     "cost": "38,517 prompt + 5,414 answer + 5,242 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 49 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nWhisper.cpp becomes the bundled local engine, with consent, receipts and cleanup.\n1. **Transcribe** whisper.cpp replaces faster-whisper as the default local engine.\n2. **Consent** missing models return structured approval data instead of downloading.\n3. **Cleanup** temporary faster-whisper migration notice and removal command.\n4. **Docs** CLI, catalog, agent skill and verify feature updated.\n\nCI on `4b05200`: green.\n\nIntent: Replace the keyless local transcription backend with bundled whisper.cpp while keeping captions and hosted providers first.\n\n**Verdict:** Ship (CI green, no real findings). The diff is one coherent engine swap: transcribe keeps one entry point, adds receipts and model consent, and updates the generated surfaces. No code defect is visible in the provided diff; the head could not be installed, so no test claim is made.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `4b05200`\n- tests on `4b05200`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-4b05200[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI typecheck / version-sync / lint / test (ubuntu-latest) / mcp2-compat / test (windows-latest) / test (macos-latest) → green\n- CI read again when it finished (10:41 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 38,517 prompt + 5,414 answer + 5,242 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 49 s\n- graph: 16 files from the repo, 19,885 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | high |\n"
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/cli.py:2553",
+     "sev": "real",
+     "issue": "In the missing-model consent result, the generated approval command always adds `--model` with `args.model`, which is `None` when the user did not pass `--model`. The retry command is then invalid instead of naming the model that was actually selected.",
+     "fate": "open",
+     "first": "2026-10-25T10:13:43Z"
+    },
+    {
+     "loc": "searchts/transcribe.py",
+     "sev": "real",
+     "issue": "The ffmpeg decode path still uses `subprocess.run(..., capture_output=True)`, so a whole decoded chunk's PCM is held in memory with no streaming or cap.",
+     "fate": "open",
+     "first": "2026-10-25T10:13:43Z"
+    },
+    {
+     "loc": "README.md:156",
+     "sev": "skip",
+     "issue": "The PR body's wheel research still says the published pywhispercpp wheels are CPU-only and that GPU execution is unavailable, while this diff's docs say the macOS arm64 wheel ships Metal.",
+     "fate": "open",
+     "first": "2026-10-28T20:58:31Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 429,
+   "title": "feat(login): reuse a kept login across subdomains of the same site",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-24T11:45:15Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/429#pullrequestreview-5638122249",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "high",
+     "cost": "23,889 prompt + 5,586 answer + 5,416 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 22 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nSubdomain login reuse with a real Public Suffix List. Clean, bounded, fail-closed.\n\nCI on `1188335`: green.\n\nIntent: Let a login kept for a parent host serve its subdomains when no exact entry exists, scoped by real cookie domain rules and the Public Suffix List, and expose the resolution in CLI and MCP status.\n\n**Verdict:** Ship (CI green, no real findings). The diff is internally consistent: parent walk stops at the registrable domain, host-only cookies stay host-only, public suffixes are refused for storage and resolution, exact host wins, and the new dependency is pinned in both pyproject and constraints. The implementation fails closed when the PSL cannot classify a host. Nothing in the diff looks like wrong behavior or a broken contract; the main risk (PSL API correctness) is covered by the new tests.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `1188335`\n- tests on `1188335`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-1188335[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI typecheck / test (macos-latest) / test (ubuntu-latest) / lint / test (windows-latest) / version-sync / mcp2-compat → green\n- CI read again when it finished (11:47 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 23,889 prompt + 5,586 answer + 5,416 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 22 s\n- graph: 27 files from the repo, 19,910 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | high |\n"
+    },
+    {
+     "at": "2026-10-25T02:10:40Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/429#pullrequestreview-5641094862",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "medium",
+     "cost": "26,766 prompt + 5,188 answer + 5,063 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 24 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nLogin reuse across subdomains landed, with PSL boundaries and a status surface. No defects found in review.\n\nCI on `a79f72e`: green.\n\nIntent: Let a kept login for a parent host serve its subdomains, filtered by cookie scope and bounded by the Public Suffix List, and expose resolution in CLI and MCP status.\n\n**Verdict:** Ship (CI green, no real findings). The diff carries the resolver, PSL guard, CLI/MCP status, and tests together, and the behavior is consistent with the PR's stated constraints: exact host wins, host-only cookies stay host-only, and public suffixes are not shared.\n\n### Since `1188335`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `a79f72e`\n- tests on `a79f72e`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-a79f72e[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI test (macos-latest) / test (ubuntu-latest) / version-sync / mcp2-compat / lint / typecheck / test (windows-latest) → green\n- CI read again when it finished (02:12 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 26,766 prompt + 5,188 answer + 5,063 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 24 s\n- graph: 28 files from the repo, 19,983 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
+    },
+    {
+     "at": "2026-10-25T02:28:08Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/429#pullrequestreview-5641168274",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "26,765 prompt + 4,606 answer + 4,346 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 21 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nSubdomain login reuse with a real Public Suffix List. Quiet, useful, and the suffix logic is the part worth checking.\n\nCI on `f17a958`: green.\n\nIntent: Let a login kept for a parent host serve its subdomains while keeping host-only cookies host-only and never crossing a public suffix.\n\n**Verdict:** Ship (CI green, no real findings). The suffix handling is the risky part and it checks out: github.io, vercel.app and co.uk are treated as real boundaries, the parent walk stops at the registrable domain, and host-only cookies no longer ride along to children. The dependency is justified and pinned, and the CLI/MCP/docs surfaces agree. Ship.\n\n### Since `a79f72e`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `searchts/session_cookies.py:178`\n\n**Issue:** `_psl` is cached with `lru_cache(maxsize=1)` at module scope, so tests or a long-lived process cannot swap the list; a test that needs a different suffix set has to monkeypatch `_psl` itself.\n\n**Fix:** later. Expose a small reset hook or accept the list as a parameter if a test ever needs a different one.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `f17a958`\n- tests on `f17a958`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-f17a958[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI test (ubuntu-latest) / lint / test (windows-latest) / test (macos-latest) / version-sync / mcp2-compat / typecheck → green\n- CI read again when it finished (02:30 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 26,765 prompt + 4,606 answer + 4,346 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 21 s\n- graph: 28 files from the repo, 19,983 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    },
+    {
+     "at": "2026-10-25T03:26:41Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/429#pullrequestreview-5641341607",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "medium",
+     "cost": "26,798 prompt + 4,290 answer + 3,885 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 19 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nSubdomain login reuse via the real Public Suffix List, plus a `login status` verb. One real seam where a test and the code disagree.\n\nCI on `60c1c51`: green.\n\nIntent: Let a login kept for a parent host serve its subdomains, bounded by the registrable domain and never crossing a public suffix, with host-only cookies staying host-only.\n\n**Verdict:** Hold (CI green, 1 real finding). The resolver, PSL guard, filtering and new status surfaces are coherent and the generated docs/catalog changes track the new verb. But `test_a_host_only_cookie_kept_on_the_parent_is_not_sent_to_a_subdomain` calls `read_owned_site` on the child and asserts `count == 0`, while `read_owned_site` raises `CookieReadError` as soon as the filtered record list is empty, so that assertion cannot be reached as written. Either the implementation should return an empty source for a parent that has no applicable cookies, or the test should expect the exception; as it stands the two contradict.\n\n### Since `f17a958`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\n#### 🔴 real · `tests/test_session_cookies.py:346`\n\n**Issue:** `test_a_host_only_cookie_kept_on_the_parent_is_not_sent_to_a_subdomain` calls `read_owned_site(\"https://app.example.com\")` and asserts `child.count == 0` with `child.cookies == []`, but `read_owned_site` raises `CookieReadError` when the host-filtered record list is empty (\"no cookies match ... in the saved login for ...\"). The assertion is unreachable because the call throws first.\n\n**Fix:** later. Reconcile the two: either return an empty CookieSource (count 0, stored_host set) when a parent has no applicable cookies, or change the test to expect CookieReadError. Pick one and make kept()/decide() agree.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `60c1c51`\n- tests on `60c1c51`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-60c1c51[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI lint / version-sync / test (ubuntu-latest) / mcp2-compat / test (windows-latest) / typecheck / test (macos-latest) → green\n- CI read again when it finished (03:28 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 26,798 prompt + 4,290 answer + 3,885 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 19 s\n- graph: 29 files from the repo, 19,867 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
+    },
+    {
+     "at": "2026-10-25T09:53:27Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/429#pullrequestreview-5642608063",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "medium",
+     "cost": "27,544 prompt + 5,523 answer + 5,100 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 23 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 2,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nSubdomain login reuse with a real PSL, host-only vs domain cookies, and a new `login status` verb. Quiet, load-bearing change.\n\nCI on `b3ebfeb`: green.\n\nIntent: Let a kept login filed under a parent host serve its subdomains when no exact entry exists, using the real Public Suffix List, while keeping host-only cookies host-only and refusing public suffixes.\n\n**Verdict:** Ship (CI green, no real findings). The resolver walks parents only to the registrable domain and never across a suffix, filter_for_host still runs per read, and the guard blocks storing at suffixes. The host-only/domain distinction is the load-bearing bit and the tests were updated to match it. The lru-cached PSL and the bare-domain convention change for pre-existing stores are the main things to watch.\n\n### Since `60c1c51`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\n<details>\n<summary>🟡 2 skip findings</summary>\n\n#### 🟡 skip · `searchts/session_cookies.py:176`\n\n**Issue:** `_psl` is cached with `lru_cache(maxsize=1)` at module scope, so a test (or a long-lived process) cannot swap the suffix set, and an import failure silently disables the public-suffix guard.\n\n**Fix:** later. Make the cache injectable or accept an optional PSL instance in public_suffix/registrable so tests can substitute a small list.\n\n#### 🟡 skip · `searchts/session_cookies.py:272`\n\n**Issue:** A cookie stored with a bare domain (no leading dot) is now treated as host-only, so kept logins written by older versions that used bare domains for what was meant to be a domain cookie stop serving subdomains after upgrade.\n\n**Fix:** later. Document the convention change and, if feasible, treat a legacy bare domain as a domain cookie when it has a dot, or migrate on read.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `b3ebfeb`\n- tests on `b3ebfeb`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-b3ebfeb[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI version-sync / typecheck / test (windows-latest) / mcp2-compat / lint / test (ubuntu-latest) / test (macos-latest) → green\n- CI read again when it finished (09:55 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 27,544 prompt + 5,523 answer + 5,100 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 23 s\n- graph: 29 files from the repo, 19,942 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/session_cookies.py:178",
+     "sev": "skip",
+     "issue": "`_psl` is cached with `lru_cache(maxsize=1)` at module scope, so tests or a long-lived process cannot swap the list; a test that needs a different suffix set has to monkeypatch `_psl` itself.",
+     "fate": "open",
+     "first": "2026-10-25T02:28:08Z"
+    },
+    {
+     "loc": "tests/test_session_cookies.py:346",
+     "sev": "real",
+     "issue": "`test_a_host_only_cookie_kept_on_the_parent_is_not_sent_to_a_subdomain` calls `read_owned_site(\"https://app.example.com\")` and asserts `child.count == 0` with `child.cookies == []`, but `read_owned_site` raises `CookieReadError` when the host-filtered record list is empty (\"no cookies match ... in the saved login for ...\"). The assertion is unreachable because the call throws first.",
+     "fate": "open",
+     "first": "2026-10-25T03:26:41Z"
+    },
+    {
+     "loc": "searchts/session_cookies.py:176",
+     "sev": "skip",
+     "issue": "`_psl` is cached with `lru_cache(maxsize=1)` at module scope, so a test (or a long-lived process) cannot swap the suffix set, and an import failure silently disables the public-suffix guard.",
+     "fate": "open",
+     "first": "2026-10-25T09:53:27Z"
+    },
+    {
+     "loc": "searchts/session_cookies.py:272",
+     "sev": "skip",
+     "issue": "A cookie stored with a bare domain (no leading dot) is now treated as host-only, so kept logins written by older versions that used bare domains for what was meant to be a domain cookie stop serving subdomains after upgrade.",
+     "fate": "open",
+     "first": "2026-10-25T09:53:27Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 471,
+   "title": "fix(read): leave the site header's sign-in and promo links out of the recall fallback",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-25T03:29:29Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/471#pullrequestreview-5641350185",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "medium",
+     "cost": "16,751 prompt + 6,208 answer + 6,075 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 25 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nHeader chrome joins the nav fallback; short account/promo links in a site header now get dropped while its headlines stay.\n\nCI on `e13ef8f`: green.\n\nIntent: Extend the recall fallback so a site header's short account/promo links are stripped like nav, without removing the header or its headlines.\n\n**Verdict:** Ship (CI green, no real findings). The change is well-scoped and matches the stated intent: a new helper isolates short links/buttons in site headers outside content sections, tail text is preserved, and the 25% guard still applies via the existing caller. Tests cover the header/banner cases, headings, nested content headers, and tail survival.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `e13ef8f`\n- tests on `e13ef8f`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-e13ef8f[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI test (macos-latest) / test (ubuntu-latest) / test (windows-latest) / version-sync / typecheck / mcp2-compat / lint → green\n- CI read again when it finished (03:31 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 16,751 prompt + 6,208 answer + 6,075 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 25 s\n- graph: 27 files from the repo, 19,970 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 475,
+   "title": "chore(hare): ledger 2026-10-25",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-10-25T08:09:58Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/475#pullrequestreview-5642188553",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "36,682 prompt + 1,921 answer + 1,849 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 19 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nDocs-only ledger rebuild. No code or behavior change.\n\nCI on `e9e3867`: still running.\n\nIntent: Regenerate the findings ledger and HARE.md rules block from Hare notes and scores.\n\n**Verdict:** Wait (CI still running, no real findings). The diff is generated ledger data only, and its stated counts match the PR body. Nothing in it changes runtime behavior or contracts.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `e9e3867`\n- tests on `e9e3867`: not run (no affected test file in this diff)\n- CI no non-Hare checks yet\n- test-full / wheel-gate skipped by design\n- cost: 36,682 prompt + 1,921 answer + 1,849 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 19 s\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
   {
    "pr": 469,
    "title": "chore(main): release 0.23.0",
@@ -114,29 +806,6 @@
    "needed": 0
   },
   {
-   "pr": 471,
-   "title": "fix(read): leave the site header's sign-in and promo links out of the recall fallback",
-   "state": "open",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-25T03:29:29Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/471#pullrequestreview-5641350185",
-     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
-     "effort": "medium",
-     "cost": "16,751 prompt + 6,208 answer + 6,075 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 25 s",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nHeader chrome joins the nav fallback; short account/promo links in a site header now get dropped while its headlines stay.\n\nCI on `e13ef8f`: green.\n\nIntent: Extend the recall fallback so a site header's short account/promo links are stripped like nav, without removing the header or its headlines.\n\n**Verdict:** Ship (CI green, no real findings). The change is well-scoped and matches the stated intent: a new helper isolates short links/buttons in site headers outside content sections, tail text is preserved, and the 25% guard still applies via the existing caller. Tests cover the header/banner cases, headings, nested content headers, and tail survival.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `e13ef8f`\n- tests on `e13ef8f`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-e13ef8f[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI test (macos-latest) / test (ubuntu-latest) / test (windows-latest) / version-sync / typecheck / mcp2-compat / lint → green\n- CI read again when it finished (03:31 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 16,751 prompt + 6,208 answer + 6,075 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 25 s\n- graph: 27 files from the repo, 19,970 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
    "pr": 470,
    "title": "fix(mcp): clamp web_search max_results=0 to 1, scope update_available docs",
    "state": "merged",
@@ -156,80 +825,6 @@
     }
    ],
    "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 429,
-   "title": "feat(login): reuse a kept login across subdomains of the same site",
-   "state": "open",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-24T11:45:15Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/429#pullrequestreview-5638122249",
-     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
-     "effort": "high",
-     "cost": "23,889 prompt + 5,586 answer + 5,416 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 22 s",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nSubdomain login reuse with a real Public Suffix List. Clean, bounded, fail-closed.\n\nCI on `1188335`: green.\n\nIntent: Let a login kept for a parent host serve its subdomains when no exact entry exists, scoped by real cookie domain rules and the Public Suffix List, and expose the resolution in CLI and MCP status.\n\n**Verdict:** Ship (CI green, no real findings). The diff is internally consistent: parent walk stops at the registrable domain, host-only cookies stay host-only, public suffixes are refused for storage and resolution, exact host wins, and the new dependency is pinned in both pyproject and constraints. The implementation fails closed when the PSL cannot classify a host. Nothing in the diff looks like wrong behavior or a broken contract; the main risk (PSL API correctness) is covered by the new tests.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `1188335`\n- tests on `1188335`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-1188335[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI typecheck / test (macos-latest) / test (ubuntu-latest) / lint / test (windows-latest) / version-sync / mcp2-compat → green\n- CI read again when it finished (11:47 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 23,889 prompt + 5,586 answer + 5,416 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 22 s\n- graph: 27 files from the repo, 19,910 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | high |\n"
-    },
-    {
-     "at": "2026-10-25T02:10:40Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/429#pullrequestreview-5641094862",
-     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
-     "effort": "medium",
-     "cost": "26,766 prompt + 5,188 answer + 5,063 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 24 s",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nLogin reuse across subdomains landed, with PSL boundaries and a status surface. No defects found in review.\n\nCI on `a79f72e`: green.\n\nIntent: Let a kept login for a parent host serve its subdomains, filtered by cookie scope and bounded by the Public Suffix List, and expose resolution in CLI and MCP status.\n\n**Verdict:** Ship (CI green, no real findings). The diff carries the resolver, PSL guard, CLI/MCP status, and tests together, and the behavior is consistent with the PR's stated constraints: exact host wins, host-only cookies stay host-only, and public suffixes are not shared.\n\n### Since `1188335`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `a79f72e`\n- tests on `a79f72e`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-a79f72e[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI test (macos-latest) / test (ubuntu-latest) / version-sync / mcp2-compat / lint / typecheck / test (windows-latest) → green\n- CI read again when it finished (02:12 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 26,766 prompt + 5,188 answer + 5,063 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 24 s\n- graph: 28 files from the repo, 19,983 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
-    },
-    {
-     "at": "2026-10-25T02:28:08Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/429#pullrequestreview-5641168274",
-     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
-     "effort": "low",
-     "cost": "26,765 prompt + 4,606 answer + 4,346 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 21 s",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 1,
-     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nSubdomain login reuse with a real Public Suffix List. Quiet, useful, and the suffix logic is the part worth checking.\n\nCI on `f17a958`: green.\n\nIntent: Let a login kept for a parent host serve its subdomains while keeping host-only cookies host-only and never crossing a public suffix.\n\n**Verdict:** Ship (CI green, no real findings). The suffix handling is the risky part and it checks out: github.io, vercel.app and co.uk are treated as real boundaries, the parent walk stops at the registrable domain, and host-only cookies no longer ride along to children. The dependency is justified and pinned, and the CLI/MCP/docs surfaces agree. Ship.\n\n### Since `a79f72e`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `searchts/session_cookies.py:178`\n\n**Issue:** `_psl` is cached with `lru_cache(maxsize=1)` at module scope, so tests or a long-lived process cannot swap the list; a test that needs a different suffix set has to monkeypatch `_psl` itself.\n\n**Fix:** later. Expose a small reset hook or accept the list as a parameter if a test ever needs a different one.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `f17a958`\n- tests on `f17a958`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-f17a958[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI test (ubuntu-latest) / lint / test (windows-latest) / test (macos-latest) / version-sync / mcp2-compat / typecheck → green\n- CI read again when it finished (02:30 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 26,765 prompt + 4,606 answer + 4,346 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 21 s\n- graph: 28 files from the repo, 19,983 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
-    },
-    {
-     "at": "2026-10-25T03:26:41Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/429#pullrequestreview-5641341607",
-     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
-     "effort": "medium",
-     "cost": "26,798 prompt + 4,290 answer + 3,885 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 19 s",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 1,
-     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nSubdomain login reuse via the real Public Suffix List, plus a `login status` verb. One real seam where a test and the code disagree.\n\nCI on `60c1c51`: green.\n\nIntent: Let a login kept for a parent host serve its subdomains, bounded by the registrable domain and never crossing a public suffix, with host-only cookies staying host-only.\n\n**Verdict:** Hold (CI green, 1 real finding). The resolver, PSL guard, filtering and new status surfaces are coherent and the generated docs/catalog changes track the new verb. But `test_a_host_only_cookie_kept_on_the_parent_is_not_sent_to_a_subdomain` calls `read_owned_site` on the child and asserts `count == 0`, while `read_owned_site` raises `CookieReadError` as soon as the filtered record list is empty, so that assertion cannot be reached as written. Either the implementation should return an empty source for a parent that has no applicable cookies, or the test should expect the exception; as it stands the two contradict.\n\n### Since `f17a958`\n\nHistory was rewritten since that note, so this is a full review. The old note stays.\n\n### Findings\n\n#### 🔴 real · `tests/test_session_cookies.py:346`\n\n**Issue:** `test_a_host_only_cookie_kept_on_the_parent_is_not_sent_to_a_subdomain` calls `read_owned_site(\"https://app.example.com\")` and asserts `child.count == 0` with `child.cookies == []`, but `read_owned_site` raises `CookieReadError` when the host-filtered record list is empty (\"no cookies match ... in the saved login for ...\"). The assertion is unreachable because the call throws first.\n\n**Fix:** later. Reconcile the two: either return an empty CookieSource (count 0, stored_host set) when a parent has no applicable cookies, or change the test to expect CookieReadError. Pick one and make kept()/decide() agree.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `60c1c51`\n- tests on `60c1c51`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-60c1c51[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI lint / version-sync / test (ubuntu-latest) / mcp2-compat / test (windows-latest) / typecheck / test (macos-latest) → green\n- CI read again when it finished (03:28 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 26,798 prompt + 4,290 answer + 3,885 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 19 s\n- graph: 29 files from the repo, 19,867 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | medium |\n"
-    }
-   ],
-   "findings": [
-    {
-     "loc": "searchts/session_cookies.py:178",
-     "sev": "skip",
-     "issue": "`_psl` is cached with `lru_cache(maxsize=1)` at module scope, so tests or a long-lived process cannot swap the list; a test that needs a different suffix set has to monkeypatch `_psl` itself.",
-     "fate": "open",
-     "first": "2026-10-25T02:28:08Z"
-    },
-    {
-     "loc": "tests/test_session_cookies.py:346",
-     "sev": "real",
-     "issue": "`test_a_host_only_cookie_kept_on_the_parent_is_not_sent_to_a_subdomain` calls `read_owned_site(\"https://app.example.com\")` and asserts `child.count == 0` with `child.cookies == []`, but `read_owned_site` raises `CookieReadError` when the host-filtered record list is empty (\"no cookies match ... in the saved login for ...\"). The assertion is unreachable because the call throws first.",
-     "fate": "open",
-     "first": "2026-10-25T03:26:41Z"
-    }
-   ],
    "scores": [],
    "needed": 0
   },
@@ -10903,413 +11498,6 @@
    "findings": [],
    "scores": [],
    "needed": 0
-  },
-  {
-   "pr": 222,
-   "title": "ci(hare): review like Hare Bot, with R1e cadence",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 5
-  },
-  {
-   "pr": 218,
-   "title": "docs(plan): fold the 2026-10-02 live checks; split 0.14 and 0.15",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 2
-  },
-  {
-   "pr": 221,
-   "title": "docs: spell the PR shape from #103 and #115",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-01T21:22:47Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/221#pullrequestreview-5385703123",
-     "hop": "nous:stealth/space-bunny-alpha",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `nous:stealth/space-bunny-alpha` · effort low\n\nExpands the contribution guidance with concrete PR title, body, model attribution, co-author, and single-change conventions.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| - | - | no line findings | - |\n\n\nChecks: `ok`\n"
-    },
-    {
-     "at": "2026-10-01T21:25:01Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/221#pullrequestreview-5385728572",
-     "hop": "nous:meituan/longcat-2.5-preview:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `nous:meituan/longcat-2.5-preview:free` · effort low\n\nDocumentation-only change to AGENTS.md that spells out the PR shape from #103 and #115, covering title format, body sections, and the Models table.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| - | - | no line findings | - |\n\n\nChecks: `ok`\n"
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 198,
-   "title": "chore(main): release 0.13.0",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-09-30T00:42:03Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5360177603",
-     "hop": "openrouter:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `openrouter:poolside/laguna-s-2.1:free` · effort low\n\nRelease 0.13.0 bumps version strings across manifest, changelog, pyproject, package init, and server.json via Release Please.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| skip | pyproject.toml:4 | Version bump from 0.12.0 to 0.13.0 is consistent with release automation. | no |\n\n\nChecks: `ok`\n"
-    },
-    {
-     "at": "2026-09-30T11:13:03Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5365389944",
-     "hop": "openrouter:qwen/qwen3.8-27b:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `openrouter:qwen/qwen3.8-27b:free` · effort low\n\nBumps the package, manifest, changelog, and MCP server metadata to 0.13.0 for the release.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| skip | CHANGELOG.md:7 | Extra blank line between the new release heading and the Added section is a style nit. | no |\n\n\nChecks: `ok`\n"
-    },
-    {
-     "at": "2026-09-30T13:25:08Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5366799906",
-     "hop": "openrouter:qwen/qwen3.8-27b:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `openrouter:qwen/qwen3.8-27b:free` · effort low\n\nBumps the release version from 0.12.0 to 0.13.0 across manifest, changelog, pyproject, package init, and server metadata.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| - | - | no line findings | - |\n\n\nChecks: `ok`\n"
-    },
-    {
-     "at": "2026-09-30T13:46:53Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5367063052",
-     "hop": "openrouter:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `openrouter:poolside/laguna-s-2.1:free` · effort low\n\nRelease Please generated version bump from 0.12.0 to 0.13.0 across manifest, changelog, pyproject, package init, and server.json.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| - | - | no line findings | - |\n\n\nChecks: `ok`\n"
-    },
-    {
-     "at": "2026-10-01T00:51:54Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5373676975",
-     "hop": "openrouter:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `openrouter:poolside/laguna-s-2.1:free` · effort low\n\nRelease 0.13.0 bump: version strings, changelog, and manifest updated by Release Please.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| skip | pyproject.toml:4 | Version bumped to 0.13.0 as part of release automation, consistent with release-please manifest. | no |\n| skip | searchts/__init__.py:5 | Version string updated to 0.13.0, matching release-please convention. | no |\n| skip | CHANGELOG.md:5 | Changelog entry for 0.13.0 added, summarizing prior merged work. | no |\n\n\nChecks: `ok`\n"
-    },
-    {
-     "at": "2026-10-01T01:17:20Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5373825807",
-     "hop": "openrouter:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `openrouter:poolside/laguna-s-2.1:free` · effort low\n\nRelease-please generated version bump from 0.12.0 to 0.13.0 across manifest, changelog, pyproject, init, and server.json.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| skip | pyproject.toml:4 | Version bumped to 0.13.0 as part of release automation, consistent with release-please workflow. | no |\n\n\nChecks: `ok`\n"
-    },
-    {
-     "at": "2026-10-01T01:20:53Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5373844854",
-     "hop": "openrouter:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `openrouter:poolside/laguna-s-2.1:free` · effort low\n\nRelease Please bumps the version from 0.12.0 to 0.13.0 across manifest, pyproject, package init, and server.json, and appends the 0.13.0 changelog entry.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| - | - | no line findings | - |\n\n\nChecks: `ok`\n"
-    },
-    {
-     "at": "2026-10-02T00:51:36Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/198#pullrequestreview-5387217684",
-     "hop": "nous:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `nous:poolside/laguna-s-2.1:free` · effort low\n\nRelease Please bumps the version from 0.12.0 to 0.13.0 across manifest, changelog, pyproject, package init, and server.json with no code logic changes.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| - | - | no line findings | - |\n\n\nChecks: `ok`\n"
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 4
-  },
-  {
-   "pr": 220,
-   "title": "fix: a short article is never replaced by a related list (F23f)",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-01T20:56:52Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/220#pullrequestreview-5385417531",
-     "hop": "nous:stealth/space-bunny-alpha",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `nous:stealth/space-bunny-alpha` · effort low\n\nAdds a guard that preserves nonempty extracts without measurable paragraphs and covers both short-post and empty-extract behavior.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| - | - | no line findings | - |\n\n\nChecks: `ok`\n"
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 219,
-   "title": "fix: doctor skips its own launcher on Windows; links pasted in [ ] or < > read (F11a, F22c)",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 1
-  },
-  {
-   "pr": 217,
-   "title": "fix: Bing redirect decoding checks the exact host; MCP saves refuse Windows device names",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 2
-  },
-  {
-   "pr": 212,
-   "title": "feat: Reddit HTML reads show post type, flair, time, links and media (F5e)",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 3
-  },
-  {
-   "pr": 215,
-   "title": "docs: Hare cadence and HareBot split",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 2
-  },
-  {
-   "pr": 216,
-   "title": "chore: refresh Hare free catalogs",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-01T16:16:30Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/216#pullrequestreview-5382199773",
-     "hop": "nous:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `nous:poolside/laguna-s-2.1:free` · effort low\n\nRefreshes the Hare R1c free-model catalog across the workflow, script, tests, and docs, switching paid Nous ids to :free, adding Space Bunny and LongCat, and dropping Nex.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| skip | scripts/hare_r1.py:30 | The comment says 'Live 2026-10-01' but the date is hardcoded in prose rather than derived from a constant or git tag, so it will silently go stale. | later |\n| skip | tests/test_hare_r1.py:192 | The test asserts on exact model ordering and membership but does not assert that the catalog is non-empty or that every entry is a string, so a future empty default would still pass. | later |\n| skip | .github/workflows/hare.yml:91 | The workflow still references the old comma-separated HARE_NOUS_MODEL default inline rather than importing from scripts/hare_r1.py, so the two can drift. | later |\n\n\nChecks: `ok`\n"
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 213,
-   "title": "feat: rebuild list pages the extractor lost as an index (F23f)",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 4
-  },
-  {
-   "pr": 214,
-   "title": "docs: note 0.13's read changes in README and PLAN",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-01T01:32:09Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/214#pullrequestreview-5373911285",
-     "hop": "openrouter:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `openrouter:poolside/laguna-s-2.1:free` · effort low\n\nAdds two docs notes for 0.13: a README line about read completeness signals and a PLAN.md freeze-log entry marking 0.13 ready on main.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| skip | README.md:26 | The new bullet about saying when a page has more than it returned is a bit dense and could be clearer about what 'rebuilds search results and feeds the extractor mangles' means. | no |\n\n\nChecks: `ok`\n"
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 211,
-   "title": "fix: Hacker News \"More\" is the next page; plan 0.13 after the comparison run",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 1
-  },
-  {
-   "pr": 209,
-   "title": "fix: accordion buttons inside a heading read as that heading (F23a)",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-09-30T16:34:39Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/209#pullrequestreview-5369157767",
-     "hop": "openrouter:poolside/laguna-s-2.1:free",
-     "effort": "medium",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**ship** · `openrouter:poolside/laguna-s-2.1:free` · effort medium\n\nFixes F23a so accordion buttons inside headings read as that heading, skips nav-based toggles, and tidies Trafilatura's indented/glued code fences and headings in markdown output.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| skip | searchts/more.py:212 | The `_heading_around` docstring says 'up to three levels up' but the loop runs exactly three iterations, which is correct but the wording could be clearer about inclusive bounds. | no |\n| skip | searchts/more.py:240 | The `_is_link_list` docstring mentions 'nearly all the text' but the threshold is 80%, which is a reasonable heuristic but not explicitly stated in the docstring. | no |\n| skip | searchts/more.py:345 | The `_GLUED_FENCE_RE` regex matches any line ending with triple backticks, which could theoretically match a line that is intentionally glued in a code block, though the `standalone` check mitigates this. | no |\n| skip | searchts/more.py:360 | The `tidy_markdown` function uses a closure `_own_line` that mutates the outer `out` list, which is a common Python pattern but could be confusing to readers unfamiliar with closures. | no |\n| skip | tests/test_more.py:160 | The `BOOTSTRAP_ACCORDION` constant is defined at module level but only used in one test, which is fine for readability but slightly unusual. | no |\n\n\nChecks: `ok`\n"
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 2
-  },
-  {
-   "pr": 208,
-   "title": "docs(plan): fold the side-panel case into F21 (F21a, F21b)",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 1
-  },
-  {
-   "pr": 207,
-   "title": "fix: next-page notes for Bing-style Next links, not WordPress next posts (F23a)",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 1
-  },
-  {
-   "pr": 206,
-   "title": "feat: say when a page has more than the read returned (F23a)",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 1
-  },
-  {
-   "pr": 204,
-   "title": "fix: code review hardening (SSRF, MCP saves, fail loud)",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 2
-  },
-  {
-   "pr": 205,
-   "title": "docs(plan): fold F23 (more than the first window), F5e and F24",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 1
-  },
-  {
-   "pr": 203,
-   "title": "docs(plan): fold distribution verdict (F22, P3.7c, X7/LI1)",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 1
-  },
-  {
-   "pr": 202,
-   "title": "fix(cli): ship install --browser as plain source",
-   "state": "merged",
-   "files": [],
-   "notes": [],
-   "findings": [],
-   "scores": [],
-   "needed": 4
-  },
-  {
-   "pr": 199,
-   "title": "docs(plan): fold distribution verdict (F22, P3.7c, X7/LI1)",
-   "state": "closed",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-09-30T11:15:01Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/199#pullrequestreview-5365410751",
-     "hop": "openrouter:poolside/laguna-s-2.1:free",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 0,
-     "body": "<!-- searchts-r1-review -->\n\n**hold** · `openrouter:poolside/laguna-s-2.1:free` · effort low\n\nPR claims to fold distribution verdict into PLAN.md but the diff deletes the entire 417-line file and replaces it with a single character 'x'.\n\n| Sev | File:line | Issue | Fix? |\n|---|---|---|---|\n| real | PLAN.md:1 | The PR title and body describe folding F22, P3.7c, X7/LI1, and comms verdict into PLAN.md, but the diff replaces the entire 417-line file with just 'x' (no newline). This is a PLAN intent miss: the stated purpose does not match the actual change, and the master plan is destroyed rather than updated. | yes |\n\n\nChecks: `ok`\n"
-    }
-   ],
-   "findings": [],
-   "scores": [],
-   "needed": 7
   }
  ]
 }
