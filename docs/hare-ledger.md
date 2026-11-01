@@ -2,19 +2,18 @@
 
 Every finding Hare posted here, what became of it, and what the owner said. Built by `scripts/hare_ledger.py` from the notes, the Since lines, resolved threads, `/hare score` and `/hare fate` comments; a PR closed unmerged drops its open findings. PLAN R2b.
 
-Built 2026-10-25. 245 PRs, 464 notes, 81 real and 279 skip findings, 35 notes cut at the budget, 65 runs where no hop answered.
+Built 2026-11-01. 243 PRs, 472 notes, 83 real and 291 skip findings, 35 notes cut at the budget, 26 runs where no hop answered.
 
-**Hit rate:** 20 of 81 real findings fixed or resolved (24%); 37 judged, 6 wrong, 2 wontfix, 3 dropped with a closed PR.
+**Hit rate:** 20 of 83 real findings fixed or resolved (24%); 37 judged, 6 wrong, 2 wontfix, 3 dropped with a closed PR.
 **Owner scores:** 46 given, average 3.67 of 5.
 
 | Hop | Notes |
 | --- | --- |
-| `nous:poolside/laguna-s-2.1:free` | 150 |
-| `nous:reflection/beam-1.0-501b-a23b:free` | 140 |
-| `openrouter:qwen/qwen3.8-27b:free` | 57 |
-| `nous:meituan/longcat-2.5-preview:free` | 56 |
+| `nous:reflection/beam-1.0-501b-a23b:free` | 163 |
+| `nous:poolside/laguna-s-2.1:free` | 148 |
+| `nous:meituan/longcat-2.5-preview:free` | 55 |
+| `openrouter:qwen/qwen3.8-27b:free` | 55 |
 | `groq:openai/gpt-oss-120b` | 15 |
-| `openrouter:poolside/laguna-s-2.1:free` | 10 |
 | `openrouter:nvidia/nemotron-3.5-lightning:free` | 8 |
 | `openrouter:stealth/space-bunny-alpha` | 7 |
 | `gemini:gemini-3.1-flash-lite` | 4 |
@@ -22,7 +21,7 @@ Built 2026-10-25. 245 PRs, 464 notes, 81 real and 279 skip findings, 35 notes cu
 | `openrouter:nvidia/nemotron-3-super-120b-a12b:free` | 2 |
 | `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free` | 2 |
 | `openrouter:nex-agi/nex-n2.5-pro:free` | 2 |
-| `nous:stealth/space-bunny-alpha` | 2 |
+| `openrouter:poolside/laguna-s-2.1:free` | 2 |
 | `nous:poolside/laguna-s-2.1:free · deep` | 1 |
 | `groq:openai/gpt-oss-120b · deep` | 1 |
 | `nous:inclusionai/ling-3.0-flash-sante:free` | 1 |
@@ -32,8 +31,8 @@ Built 2026-10-25. 245 PRs, 464 notes, 81 real and 279 skip findings, 35 notes cu
 
 ## Caps
 
-- caps that fired: 31 across 464 notes (reasoning retry 29, rate limit 2)
-- median reasoning tokens per note: 569.5
+- caps that fired: 31 across 472 notes (reasoning retry 29, rate limit 2)
+- median reasoning tokens per note: 715
 
 Sources for each default are in `docs/hare-next.md`. `0` is uncapped for the reasoning
 budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
@@ -42,6 +41,26 @@ budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
 
 | PR | Notes | Real | Skip | Fates of real | Scores |
 | --- | --- | --- | --- | --- | --- |
+| #502 | 0 | 0 | 0 |  |  |
+| #501 | 0 | 0 | 0 |  |  |
+| #500 | 0 | 0 | 0 |  |  |
+| #499 | 0 | 0 | 0 |  |  |
+| #498 | 0 | 0 | 0 |  |  |
+| #497 | 1 | 0 | 1 |  |  |
+| #496 | 1 | 0 | 0 |  |  |
+| #494 | 1 | 0 | 1 |  |  |
+| #493 | 1 | 0 | 0 |  |  |
+| #492 | 1 | 0 | 0 |  |  |
+| #491 | 3 | 0 | 2 |  |  |
+| #490 | 1 | 0 | 0 |  |  |
+| #489 | 1 | 0 | 0 |  |  |
+| #485 | 1 | 0 | 1 |  |  |
+| #484 | 1 | 0 | 0 |  |  |
+| #482 | 1 | 0 | 1 |  |  |
+| #481 | 1 | 0 | 0 |  |  |
+| #479 | 3 | 0 | 3 |  |  |
+| #478 | 4 | 2 | 1 | open 2 |  |
+| #475 | 1 | 0 | 0 |  |  |
 | #471 | 1 | 0 | 0 |  |  |
 | #470 | 1 | 0 | 0 |  |  |
 | #469 | 3 | 0 | 2 |  |  |
@@ -66,7 +85,7 @@ budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
 | #434 | 2 | 0 | 2 |  |  |
 | #433 | 1 | 0 | 0 |  |  |
 | #432 | 5 | 0 | 3 |  |  |
-| #429 | 4 | 1 | 1 | open 1 |  |
+| #429 | 5 | 1 | 3 | open 1 |  |
 | #427 | 1 | 0 | 0 |  |  |
 | #426 | 2 | 1 | 0 | wrong 1 |  |
 | #425 | 1 | 0 | 1 |  |  |
@@ -264,29 +283,7 @@ budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
 | #225 | 0 | 0 | 0 |  |  |
 | #224 | 1 | 0 | 0 |  |  |
 | #223 | 1 | 0 | 0 |  |  |
-| #222 | 0 | 0 | 0 |  |  |
-| #221 | 2 | 0 | 0 |  |  |
-| #220 | 1 | 0 | 0 |  |  |
-| #219 | 0 | 0 | 0 |  |  |
-| #218 | 0 | 0 | 0 |  |  |
-| #217 | 0 | 0 | 0 |  |  |
-| #216 | 1 | 0 | 0 |  |  |
-| #215 | 0 | 0 | 0 |  |  |
-| #214 | 1 | 0 | 0 |  |  |
-| #213 | 0 | 0 | 0 |  |  |
-| #212 | 0 | 0 | 0 |  |  |
-| #211 | 0 | 0 | 0 |  |  |
 | #210 | 0 | 0 | 0 |  |  |
-| #209 | 1 | 0 | 0 |  |  |
-| #208 | 0 | 0 | 0 |  |  |
-| #207 | 0 | 0 | 0 |  |  |
-| #206 | 0 | 0 | 0 |  |  |
-| #205 | 0 | 0 | 0 |  |  |
-| #204 | 0 | 0 | 0 |  |  |
-| #203 | 0 | 0 | 0 |  |  |
-| #202 | 0 | 0 | 0 |  |  |
-| #199 | 1 | 0 | 0 |  |  |
-| #198 | 8 | 0 | 0 |  |  |
 | #126 | 1 | 0 | 0 |  |  |
 | #125 | 1 | 0 | 0 |  |  |
 | #124 | 1 | 0 | 0 |  |  |
