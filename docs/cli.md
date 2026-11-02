@@ -434,11 +434,11 @@ CLI-only flags: `--json`.
 ### `install`
 
 First-pass setup: one list, one approval; --system-deps for system packages.
-Shows one list with sizes: Chromium for the stealth browser and the site tools (X, Reddit, LinkedIn, mcporter, GitHub), all checked by default. A terminal asks once; uncheck by id. Without a terminal nothing on the list is installed unless --yes is passed. --skip ids unchecks items. --dry-run --json prints the list as searchts.setup.v1. Site logins are not part of this approval. It also writes the agent skill files (~/.agents/skills/searchts, or each OpenClaw/Claude Code skills dir that exists) and the user-scope memory rule; both are listed up front, and --dry-run lists them and writes nothing. --browser installs only the stealth browser; --system-deps also installs system packages instead of printing the commands.
+Shows one list with sizes: Chromium for the stealth browser and the site tools (X, Reddit, mcporter, GitHub), all checked by default. A terminal asks once; uncheck by id. Without a terminal nothing on the list is installed unless --yes is passed. --skip ids unchecks items. --only ids installs just those items and what they need; it reaches the optional LinkedIn fallback (linkedin-scraper-mcp, for the feed and write/inbox tools) that native reads no longer require. --dry-run --json prints the list as searchts.setup.v1. Site logins are not part of this approval. It also writes the agent skill files (~/.agents/skills/searchts, or each OpenClaw/Claude Code skills dir that exists) and the user-scope memory rule; both are listed up front, and --dry-run lists them and writes nothing. --browser installs only the stealth browser; --system-deps also installs system packages instead of printing the commands.
 - --safe is a deprecated no-op; non-mutating is now the default.
 
 ```bash
-searchts install [--verbose] [--env {local,server,auto}] [--proxy PROXY] [--system-deps] [--safe] [--dry-run] [--channels CHANNELS] [--browser] [--yes] [--skip IDS] [--json]
+searchts install [--verbose] [--env {local,server,auto}] [--proxy PROXY] [--system-deps] [--safe] [--dry-run] [--channels CHANNELS] [--browser] [--yes] [--skip IDS] [--only IDS] [--json]
 ```
 
 | Flag | Description |
@@ -451,15 +451,17 @@ searchts install [--verbose] [--env {local,server,auto}] [--proxy PROXY] [--syst
 | `--dry-run` | Show what would be done without making any changes |
 | `--channels` CHANNELS | Comma-separated optional channels to install (twitter,reddit,opencli,linkedin,all) |
 | `--browser` | Install Chromium for the stealth browser into this CLI's environment (patchright itself is already in the base install; same interpreter as the running searchts). Refuses ephemeral uvx. |
-| `--yes`, `-y` | Approve the first-pass list without a prompt: Chromium and the site tools (X, Reddit, LinkedIn, mcporter, GitHub), minus any --skip. Without it and without a terminal, nothing on the list is installed |
-| `--skip` IDS | Uncheck first-pass items, comma-separated: chromium,twitter,reddit,linkedin,mcporter,gh |
+| `--yes`, `-y` | Approve the first-pass list without a prompt: Chromium and the site tools (X, Reddit, mcporter, GitHub), minus any --skip. Without it and without a terminal, nothing on the list is installed |
+| `--skip` IDS | Uncheck first-pass items, comma-separated: chromium,twitter,reddit,mcporter,gh |
+| `--only` IDS | Install only these items and what they need, even optional ones like linkedin (the LinkedIn fallback). Implies --yes. Example: --only linkedin |
 | `--json` | With --dry-run: print the first-pass list as searchts.setup.v1 JSON (sizes, installed state, approve command) and change nothing |
 
 Examples:
 
 ```bash
 searchts install
-searchts install --yes --skip linkedin,mcporter
+searchts install --yes --skip mcporter,gh
+searchts install --only linkedin
 searchts install --dry-run --json
 searchts install --browser
 searchts install --system-deps --channels twitter,reddit

@@ -30,10 +30,13 @@ wall, not which account is signed in.
 
 ## Optional: LinkedIn scraper (MCP)
 
-If you have a LinkedIn scraper MCP configured (and a logged-in session), it can
-return structured profiles/jobs. This is an optional enhancement, not required.
+`searchts read` already reads profiles, companies, posts and people search
+natively with a kept login. The `linkedin-scraper-mcp` bridge is an optional
+fallback for the feed and for write/inbox tools; it is not part of the
+first-pass install.
 
 ```bash
+searchts install --only linkedin
 mcporter call 'linkedin-scraper.get_person_profile(linkedin_url: "https://linkedin.com/in/username")'
 mcporter call 'linkedin-scraper.search_jobs(keyword: "software engineer", limit: 10)'
 ```

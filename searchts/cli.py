@@ -224,13 +224,19 @@ def build_parser() -> argparse.ArgumentParser:
     p_install.add_argument(
         "--yes", "-y", action="store_true",
         help="Approve the first-pass list without a prompt: Chromium and the site "
-             "tools (X, Reddit, LinkedIn, mcporter, GitHub), minus any --skip. "
+             "tools (X, Reddit, mcporter, GitHub), minus any --skip. "
              "Without it and without a terminal, nothing on the list is installed",
     )
     p_install.add_argument(
         "--skip", default="", metavar="IDS",
         help="Uncheck first-pass items, comma-separated: "
-             "chromium,twitter,reddit,linkedin,mcporter,gh",
+             "chromium,twitter,reddit,mcporter,gh",
+    )
+    p_install.add_argument(
+        "--only", default="", metavar="IDS",
+        help="Install only these items and what they need, even optional ones "
+             "like linkedin (the LinkedIn fallback). Implies --yes. "
+             "Example: --only linkedin",
     )
     p_install.add_argument(
         "--json", action="store_true",
@@ -886,26 +892,37 @@ def main():
 # ── Command handlers ────────────────────────────────
 
 
-def _first_pass(args, *, dry_run: bool) -> None:
+def _first_pass(args, *, dry_run: bool, only: Optional[List[str]] = None) -> None:
     """#442: show the one up-front list and install what was approved.
 
     Human at a terminal: one prompt, everything pre-checked, uncheck by id.
     No terminal: nothing is installed without --yes; the list and the exact
     approve command are printed instead. Logins are never part of this.
+
+    ``only`` is ``--only``: the named items (plus their requirements), even
+    ones that are not first-pass, like the optional LinkedIn fallback.
     """
     from searchts import setup_plan
 
-    skip = list(getattr(args, "skip_ids", []) or [])
+    skip = [] if only else list(getattr(args, "skip_ids", []) or [])
+    approved = bool(only) or bool(getattr(args, "yes", False))
     print()
-    print("First-pass setup (one approval; uncheck anything with --skip):")
-    for line in setup_plan.render(skip):
-        print(line)
-    doc = setup_plan.plan(skip)
+    if only:
+        # Do not show first-pass marks for items the caller just declined.
+        print(f"Only these items were asked for: {', '.join(only)}")
+    else:
+        print("First-pass setup (one approval; uncheck anything with --skip):")
+        for line in setup_plan.render(skip):
+            print(line)
+    doc = setup_plan.plan(skip, only)
     pending = doc["pending"]
     if not pending:
         print("  Everything checked is already installed.")
-        if getattr(args, "yes", False) and not dry_run:
-            setup_plan.ensure_mcporter_setup(skip)
+        if approved and not dry_run:
+            if only:
+                setup_plan.ensure_mcporter_setup(skip, only)
+            else:
+                setup_plan.ensure_mcporter_setup(skip)
         return
     size = setup_plan.human_size(doc["pending_size_bytes"], estimate=True)
     print(f"  To install now: {', '.join(pending)} ({size}). "
@@ -913,7 +930,7 @@ def _first_pass(args, *, dry_run: bool) -> None:
     if dry_run:
         print(f"  Dry run: nothing installed. Approve with: {doc['approve_command']}")
         return
-    if not getattr(args, "yes", False):
+    if not approved:
         if not (sys.stdin.isatty() and sys.stdout.isatty()):
             print(f"  Not installed: no terminal to ask. Approve with: {doc['approve_command']}")
             return
@@ -923,8 +940,11 @@ def _first_pass(args, *, dry_run: bool) -> None:
             return
         skip = chosen
     print()
-    results = setup_plan.run_install(skip)
-    setup_plan.ensure_mcporter_setup(skip)
+    results = setup_plan.run_install(skip, only=only)
+    if only:
+        setup_plan.ensure_mcporter_setup(skip, only)
+    else:
+        setup_plan.ensure_mcporter_setup(skip)
     failed = [k for k, ok in results.items() if not ok]
     if failed:
         print(f"  Not installed: {', '.join(failed)}. Re-run `searchts install --yes` "
@@ -949,10 +969,15 @@ def _cmd_install(args):
     dry_run = args.dry_run
     try:
         skip = setup_plan.parse_skip(getattr(args, "skip", "") or "")
+        only = setup_plan.parse_only(getattr(args, "only", "") or "")
     except ValueError as e:
         print(f"searchts install: {e}", file=sys.stderr)
         raise SystemExit(2)
     args.skip_ids = skip
+    if only:
+        # --only names the items, so it is the approval; a prompt would ask
+        # about the rest of the list the caller just declined.
+        args.yes = True
     if getattr(args, "json", False):
         if not dry_run:
             print("searchts install: --json needs --dry-run (it only describes the list)",
@@ -960,7 +985,7 @@ def _cmd_install(args):
             raise SystemExit(2)
         import json
 
-        print(json.dumps(setup_plan.plan(skip), ensure_ascii=False, indent=2))
+        print(json.dumps(setup_plan.plan(skip, only or None), ensure_ascii=False, indent=2))
         return
     # Non-invasive by default: the keyless core (read/search/transcribe) needs no
     # system mutation. Only --system-deps/--apply opts in to apt/npm/NodeSource/
@@ -1014,7 +1039,7 @@ def _cmd_install(args):
         "twitter":     _install_twitter_deps,
         "reddit":      _install_reddit_deps,
         "opencli":     _install_opencli_deps,  # cross-channel backend, desktop only
-        # linkedin: manual setup, no auto-install
+        "linkedin":    _install_linkedin_channel,  # optional fallback, not first-pass
     }
     COOKIE_CHANNELS = {"twitter"}
 
@@ -1022,7 +1047,7 @@ def _cmd_install(args):
     if args.channels:
         raw = [c.strip().lower() for c in args.channels.split(",") if c.strip()]
         if "all" in raw:
-            requested_channels = set(CHANNEL_INSTALLERS.keys()) | {"linkedin"}
+            requested_channels = set(CHANNEL_INSTALLERS.keys())
         else:
             requested_channels = set(raw)
 
@@ -1045,7 +1070,7 @@ def _cmd_install(args):
         for item in writes:
             row(item, label_w=6)
 
-    _first_pass(args, dry_run=dry_run)
+    _first_pass(args, dry_run=dry_run, only=only or None)
 
     # Apply explicit flags
     if args.proxy:
@@ -1065,18 +1090,20 @@ def _cmd_install(args):
         _install_system_deps()
 
     # ── mcporter (for Exa search) ──
-    print()
-    if dry_run:
-        row(receipts.Row(
-            progress.ROW_SKIP,
-            "mcporter",
-            "would install mcporter and configure Exa search",
-        ))
-    elif safe_mode:
-        _install_mcporter_safe()
-    elif "mcporter" not in skip:
-        _install_mcporter()
-        setup_plan.ensure_mcporter_setup(skip)
+    # --only installed and registered exactly what it named.
+    if not only:
+        print()
+        if dry_run:
+            row(receipts.Row(
+                progress.ROW_SKIP,
+                "mcporter",
+                "would install mcporter and configure Exa search",
+            ))
+        elif safe_mode:
+            _install_mcporter_safe()
+        elif "mcporter" not in skip:
+            _install_mcporter()
+            setup_plan.ensure_mcporter_setup(skip)
 
     # ── Install optional channels (only if --channels specified) ──
     if requested_channels and not dry_run and not safe_mode:
@@ -1874,6 +1901,18 @@ def _install_system_deps():
     # NOTE: twitter-cli etc. are optional.
     # They are installed via --channels flag, not here.
     # See CHANNEL_INSTALLERS in _cmd_install().
+
+
+def _install_linkedin_channel():
+    """Optional LinkedIn fallback: linkedin-scraper-mcp plus its mcporter entry.
+
+    Not first-pass any more: searchts reads LinkedIn natively with a kept login.
+    This is the feed/write-tools fallback, kept for callers that ask for it by
+    name with ``--channels linkedin``.
+    """
+    from searchts import setup_plan
+
+    setup_plan.install_item("linkedin")
 
 
 def _install_twitter_deps():

@@ -229,6 +229,42 @@ def test_strip_chrome_is_a_no_op_on_empty_text():
     assert linkedin.strip_chrome("Just a post.\n") == "Just a post."
 
 
+def test_strip_chrome_drops_the_browser_skip_links_and_keeps_the_entries():
+    """A section page rendered in the browser opens with five skip links."""
+    text = (
+        "Skip to search\n"
+        "Skip to main content\n"
+        "Skip to primary content\n"
+        "Skip to aside\n"
+        "Skip to footer\n"
+        "Someone Example | LinkedIn\n"
+        "[Someone Example](https://www.linkedin.com/in/someone/)\n"
+        "\n"
+        "Education\n"
+        "\n"
+        "BSc, Somewhere\n"
+        "2016 - 2020\n"
+    )
+    out = linkedin.strip_chrome(text)
+    for gone in (
+        "Skip to search",
+        "Skip to main content",
+        "Skip to primary content",
+        "Skip to aside",
+        "Skip to footer",
+    ):
+        assert gone not in out
+    assert "BSc, Somewhere" in out
+    assert "2016 - 2020" in out
+
+
+def test_strip_chrome_leaves_an_ordinary_sentence_that_starts_with_skip():
+    text = "Skip to the good part.\n\nA real post.\n"
+    out = linkedin.strip_chrome(text)
+    assert "Skip to the good part." in out
+    assert "A real post." in out
+
+
 #: The real picker lines as they came back on 2026-11-02, combining marks and
 #: all. `हिंदी (Hindi)` lost its anusvara, `తెలుగు (Telugu)` and
 #: `ਪੰਜਾਬੀ (Punjabi)` lost marks too. Fixed 2026-11-02 on 0.26.0.
@@ -322,6 +358,34 @@ def test_assemble_names_a_failed_section_and_keeps_the_rest():
     assert "Engineer at Acme" in text
     assert len(notes) == 1
     assert "Education section could not be read (curl_cffi: http-429)" in notes[0]
+
+
+def test_assemble_drops_the_repeated_title_profile_link_and_label():
+    """A detail page repeats the profile header and its own heading."""
+    section = (
+        "Someone Example | LinkedIn\n"
+        "[Someone Example](https://www.linkedin.com/in/someone/)\n"
+        "\n"
+        "Education\n"
+        "\n"
+        "BSc, Somewhere\n"
+        "2016 - 2020\n"
+    )
+    text, notes = linkedin.assemble(
+        "Someone Example\nBuilds small tools",
+        [("Education", section, "")],
+    )
+    assert notes == []
+    assert text.count("LinkedIn") == 0
+    assert "linkedin.com/in/" not in text
+    assert text.count("Education") == 1
+    assert text.endswith("## Education\n\nBSc, Somewhere\n2016 - 2020")
+
+
+def test_assemble_keeps_a_later_line_that_matches_the_label():
+    section = "Education\nBSc, Somewhere\nEducation\n2016 - 2020"
+    text, _ = linkedin.assemble("Someone Example", [("Education", section, "")])
+    assert text.endswith("## Education\n\nBSc, Somewhere\nEducation\n2016 - 2020")
 
 
 def test_assemble_with_no_sections_returns_the_base_unchanged():

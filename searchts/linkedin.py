@@ -153,7 +153,15 @@ _PREMIUM_BOARD_LINE = re.compile(
 #: UI labels that are unmistakably LinkedIn's own, wherever they appear. Short
 #: ordinary words ("Resources", "Open to") are deliberately not here: those
 #: need a neighbouring button before they count, see :func:`_button_context`.
+#: The five skip links are the first lines of a section page rendered in the
+#: browser (measured 2026-11-02); a signed-in page read over HTTP does not have
+#: them, so they are no-ops there.
 _CHROME_EXACT = frozenset({
+    "Skip to search",
+    "Skip to main content",
+    "Skip to primary content",
+    "Skip to aside",
+    "Skip to footer",
     "Enhance profile",
     "Enhance cover image",
     "Visit our Help Center.",
@@ -382,13 +390,33 @@ def has_section_content(text: str) -> bool:
     return False
 
 
-def _without_heading(text: str, label: str) -> str:
-    """Drop the section page's own leading heading, which becomes a Markdown one."""
-    body = (text or "").strip()
-    first, _, rest = body.partition("\n")
-    if first.strip().lower() == label.lower():
-        return rest.strip()
-    return body
+def _trim_section(text: str, label: str) -> str:
+    """Drop a section page's repeated header and its own section label.
+
+    A detail page arrives with the same shell as the profile: the browser's
+    ``<Name> | LinkedIn`` title, a link back to the profile, and then the
+    section label that :func:`assemble` already writes as a Markdown heading.
+    Only *leading* lines of those known shapes are removed; the first real
+    entry stops the trim, so an employer called "Experience" midway through the
+    list is untouched.
+    """
+    lines = (text or "").strip().split("\n")
+    i = 0
+    while i < len(lines):
+        clean = lines[i].strip()
+        if not clean:
+            i += 1
+            continue
+        heading = clean.lstrip("#").strip().lower()
+        if (
+            _SHELL_TITLE.match(clean)
+            or _SHELL_PROFILE_LINK.match(clean)
+            or heading == label.lower()
+        ):
+            i += 1
+            continue
+        break
+    return "\n".join(lines[i:]).strip()
 
 
 def assemble(
@@ -412,5 +440,5 @@ def assemble(
                 f"the rest of the profile is here]"
             )
             continue
-        parts.append(f"## {label}\n\n{_without_heading(text, label)}")
+        parts.append(f"## {label}\n\n{_trim_section(text, label)}")
     return "\n\n".join(p for p in parts if p), notes

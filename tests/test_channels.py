@@ -232,61 +232,87 @@ class TestGitHubChannel:
 
 
 class TestLinkedInChannel:
-    def test_reports_error_with_reinstall_hint_when_broken(self, monkeypatch):
-        """mcporter which hits but exec fails -> error + npm reinstall prescription."""
-        monkeypatch.setattr(shutil, "which", lambda _: "/usr/local/bin/mcporter")
+    """Native read and a kept login; the MCP bridge is an optional fallback."""
 
-        def fake_run(cmd, **kwargs):
-            raise FileNotFoundError(cmd[0])
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
+    def test_ok_with_a_live_kept_login(self, monkeypatch):
+        from searchts import login_store
         from searchts.channels.linkedin import LinkedInChannel
-        ch = LinkedInChannel()
-        status, msg = ch.check()
-        assert status == "error"
-        assert "npm install -g mcporter" in msg
-        assert ch.active_backend is None
 
-    def test_active_backend_set_when_linkedin_configured(self, monkeypatch):
-        monkeypatch.setattr(shutil, "which", lambda _: "/usr/local/bin/mcporter")
-
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 0, "linkedin  http://localhost:3000/mcp", "")
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
-        from searchts.channels.linkedin import LinkedInChannel
+        monkeypatch.setattr(login_store, "list_kept", lambda: {
+            "linkedin.com": {
+                "cookies": 3,
+                "browser": "firefox",
+                "expiry": "expires in 300 days",
+                "expired": False,
+            },
+        })
         ch = LinkedInChannel()
         status, msg = ch.check()
         assert status == "ok"
-        assert ch.active_backend == "linkedin-scraper-mcp"
+        assert ch.active_backend == "native read"
+        assert "kept login" in msg
+        assert "expires in 300 days" in msg
+        assert "searchts install --only linkedin" in msg
 
-    def test_off_without_backend_when_linkedin_not_configured(self, monkeypatch):
-        monkeypatch.setattr(shutil, "which", lambda _: "/usr/local/bin/mcporter")
-
-        def fake_run(cmd, **kwargs):
-            return subprocess.CompletedProcess(cmd, 0, "exa  https://mcp.exa.ai/mcp", "")
-
-        monkeypatch.setattr(subprocess, "run", fake_run)
+    def test_warn_without_a_login_and_names_the_login_commands(self, monkeypatch):
+        from searchts import login_store
         from searchts.channels.linkedin import LinkedInChannel
+
+        monkeypatch.setattr(login_store, "list_kept", lambda: {})
         ch = LinkedInChannel()
         status, msg = ch.check()
-        assert status == "off"
+        assert status == "warn"
         assert ch.active_backend is None
-        assert "mcporter config add linkedin --command linkedin-scraper-mcp" in msg
-        assert "--arg --transport --arg stdio --scope home" in msg
-        assert "localhost:3000" not in msg
+        assert "searchts login signin https://www.linkedin.com" in msg
+        assert "searchts login keep https://www.linkedin.com" in msg
+        assert "searchts install --only linkedin" in msg
 
-    def test_missing_mcporter_hint_keeps_mcporter_in_the_agent_command(
-        self, monkeypatch
-    ):
-        monkeypatch.setattr(shutil, "which", lambda _: None)
+    def test_an_expired_login_is_a_warn_not_an_ok(self, monkeypatch):
+        from searchts import login_store
         from searchts.channels.linkedin import LinkedInChannel
+
+        monkeypatch.setattr(login_store, "list_kept", lambda: {
+            "linkedin.com": {
+                "cookies": 1,
+                "expiry": "expired",
+                "expired": True,
+            },
+        })
         ch = LinkedInChannel()
         status, msg = ch.check()
-        assert status == "off"
-        assert "searchts install --yes --skip chromium,twitter,reddit,gh" in msg
-        assert "mcporter config add linkedin --command linkedin-scraper-mcp" in msg
-        assert "--arg --transport --arg stdio --scope home" in msg
+        assert status == "warn"
+        assert ch.active_backend is None
+        assert "searchts login signin" in msg
+
+    def test_check_runs_no_subprocess_and_needs_no_mcporter(self, monkeypatch):
+        from searchts import login_store
+        from searchts.channels.linkedin import LinkedInChannel
+
+        monkeypatch.setattr(login_store, "list_kept", lambda: {
+            "linkedin.com": {"cookies": 2, "expiry": "expires soon", "expired": False},
+        })
+
+        def no_run(*a, **k):
+            raise AssertionError("the LinkedIn probe must not run a command")
+
+        monkeypatch.setattr(subprocess, "run", no_run)
+        ch = LinkedInChannel()
+        status, _ = ch.check()
+        assert status == "ok"
+        assert ch.backends == ["native read", "linkedin-scraper-mcp"]
+
+    def test_a_broken_store_is_a_warn_not_an_error(self, monkeypatch):
+        from searchts import login_store
+        from searchts.channels.linkedin import LinkedInChannel
+
+        def boom():
+            raise OSError("unreadable store")
+
+        monkeypatch.setattr(login_store, "list_kept", boom)
+        ch = LinkedInChannel()
+        status, msg = ch.check()
+        assert status == "warn"
+        assert "searchts login signin" in msg
         assert "localhost:3000" not in msg
 
 
