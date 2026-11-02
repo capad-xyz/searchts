@@ -11,6 +11,7 @@ decision the loop makes and a live feed would make it non-deterministic.
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
@@ -95,6 +96,66 @@ def test_a_token_verifies_with_the_key_a_later_process_would_read(tmp_path, monk
     token = resume.mint(URL, keys=keys_for(range(2)))
     resume._KEY = None
     assert resume.read(URL, token).keys == tuple(keys_for(range(2)))
+
+
+def test_a_newline_in_the_key_still_verifies_after_the_cache_is_cleared(tmp_path, monkeypatch):
+    # Windows text mode rewrites 0x0a to CRLF. The key file is random bytes,
+    # so the open has to pass O_BINARY or the next process reads a different
+    # key. Linux has no O_BINARY and no translation: the stand-in flag is
+    # checked on every open, and a write that omits it is translated here.
+    from searchts.config import Config
+
+    key = bytes(range(32))  # includes 0x0a
+    real_urandom = os.urandom
+    monkeypatch.setattr(os, "urandom", lambda n: key if n == 32 else real_urandom(n))
+    monkeypatch.setattr(Config, "CONFIG_DIR", tmp_path)
+
+    had_binary = hasattr(os, "O_BINARY")
+    binary = getattr(os, "O_BINARY", 0x8000)
+    if not had_binary:
+        monkeypatch.setattr(os, "O_BINARY", binary, raising=False)
+
+    real_open = os.open
+    real_write = os.write
+    real_close = os.close
+    seen = []
+    text_fds = set()
+
+    def open_tracked(path, flags, mode=0o777, *args, **kwargs):
+        if not str(path).endswith("resume.key"):
+            return real_open(path, flags, mode, *args, **kwargs)
+        seen.append(flags)
+        call_flags = flags if had_binary else flags & ~binary
+        fd = real_open(path, call_flags, mode, *args, **kwargs)
+        if not had_binary and (flags & os.O_WRONLY) and not (flags & binary):
+            text_fds.add(fd)
+        return fd
+
+    def write_tracked(fd, data):
+        if fd in text_fds:
+            data = data.replace(b"\n", b"\r\n")
+        return real_write(fd, data)
+
+    def close_tracked(fd):
+        text_fds.discard(fd)
+        return real_close(fd)
+
+    monkeypatch.setattr(os, "open", open_tracked)
+    if not had_binary:
+        monkeypatch.setattr(os, "write", write_tracked)
+        monkeypatch.setattr(os, "close", close_tracked)
+
+    resume._KEY = None
+    try:
+        token = resume.mint(URL, keys=keys_for(range(2)))
+        assert (tmp_path / "resume.key").read_bytes() == key
+        resume._KEY = None
+        assert resume.read(URL, token).keys == tuple(keys_for(range(2)))
+    finally:
+        resume._KEY = None
+
+    assert seen, "the key file was never opened"
+    assert all(flags & binary for flags in seen)
 
 
 def test_the_token_is_not_mintable_from_page_text():
