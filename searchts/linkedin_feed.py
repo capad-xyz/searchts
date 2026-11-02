@@ -1222,15 +1222,20 @@ def read_feed(
     """
     from searchts import login_store
 
-    if not login_store.kept("linkedin.com"):
+    chosen = profile or profile_path()
+    endpoint = (cdp or os.environ.get("SEARCHTS_LINKEDIN_CDP", "")).strip()
+    # Pointing searchts at the signed-in browser (a profile or a debugging
+    # port) is the consent for this read: the feed runs in that browser and
+    # never copies its cookies. Without either, a kept login is required.
+    if not (chosen or endpoint) and not login_store.kept("linkedin.com"):
         raise FeedUnavailable(
             "the LinkedIn feed is read in the browser signed in to LinkedIn, "
             "and searchts has no kept LinkedIn login. Keep one with "
-            "`searchts login keep linkedin.com` after a signed-in read. Until "
-            "then, linkedin-scraper-mcp remains the fallback for the feed."
+            "`searchts login keep linkedin.com` after a signed-in read, or "
+            "set SEARCHTS_LINKEDIN_PROFILE to that browser's user-data "
+            "directory. Until then, linkedin-scraper-mcp remains the fallback "
+            "for the feed."
         )
-    chosen = profile or profile_path()
-    endpoint = (cdp or os.environ.get("SEARCHTS_LINKEDIN_CDP", "")).strip()
     # A CDP attach is the expected answer to "that profile is already open":
     # the lock is the user's own running Chrome, and we join it instead of
     # starting a second client on the same session.

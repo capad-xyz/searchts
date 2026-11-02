@@ -528,6 +528,8 @@ def test_profile_problem_allows_a_stale_lock(tmp_path):
 
 def test_read_feed_refuses_without_a_kept_login(monkeypatch):
     monkeypatch.setattr("searchts.login_store.kept", lambda _site: False)
+    monkeypatch.delenv("SEARCHTS_LINKEDIN_PROFILE", raising=False)
+    monkeypatch.delenv("SEARCHTS_LINKEDIN_CDP", raising=False)
     with pytest.raises(lf.FeedUnavailable) as ei:
         lf.read_feed()
     assert "no kept LinkedIn login" in str(ei.value)
@@ -846,3 +848,13 @@ def test_profile_problem_allows_a_released_windows_lockfile(tmp_path, monkeypatc
     (profile / "lockfile").write_text("", encoding="utf-8")
     monkeypatch.setattr(lf.os, "name", "nt")
     assert lf.profile_problem(str(profile)) == ""
+
+
+def test_read_feed_takes_an_explicit_profile_as_the_signed_in_browser(
+    monkeypatch, tmp_path,
+):
+    monkeypatch.setattr("searchts.login_store.kept", lambda _site: False)
+    monkeypatch.setattr(lf, "profile_problem", lambda _profile: "held")
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf.read_feed(profile=str(tmp_path))
+    assert str(ei.value) == "held"
