@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.26.1](https://github.com/capad-xyz/searchts/compare/v0.26.0...v0.26.1) (2026-11-02)
+
+
+### Added
+
+* **linkedin:** read Education, strip the language list, drop linkedin-scraper-mcp from the first pass ([#507](https://github.com/capad-xyz/searchts/issues/507)) ([7ef4955](https://github.com/capad-xyz/searchts/commit/7ef4955e2c751163c0f2a79a96239663151ae722))
+
 ## [0.26.0](https://github.com/capad-xyz/searchts/compare/v0.25.1...v0.26.0) (2026-11-02)
 
 
