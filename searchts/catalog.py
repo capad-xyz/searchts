@@ -393,9 +393,13 @@ _add(Command(
     name="login keep", group=_LOGIN,
     lead="Keep one site's login in the searchts store.",
     body=(
-        "Copies only that site's cookies from the named browser, then keeps",
-        "them. Copying is never silent: without a recorded yes for the site or",
-        "--yes in this run, the command exits 3 and explains what it needs.",
+        "Copies that site's cookies from the named browser, then keeps them.",
+        "The copy includes cookies the site set on its own subdomains (for",
+        "example `www.`), because those are often the session. Copying is never",
+        "silent: without a recorded yes for the site or --yes in this run, the",
+        "command exits 3 and explains what it needs. If the copy holds no",
+        "cookie that looks like a login session, the receipt says the login",
+        "may be missing instead of reporting a plain success.",
     ),
     examples=(
         "searchts login keep https://example.com --cookies-from-browser zen --yes",

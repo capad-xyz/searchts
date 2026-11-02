@@ -254,7 +254,7 @@ def test_vivaldi_cookies_reach_the_direct_read_after_yes(monkeypatch, capsys, tm
         count=1,
     )
 
-    def fake_cdp(site, browser, *, confirm):
+    def fake_cdp(site, browser, *, confirm, **kwargs):
         seen["source"] = (site, browser)
         seen["confirmed"] = confirm("Vivaldi CDP port 55123")
         return source

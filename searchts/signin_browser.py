@@ -30,7 +30,6 @@ from searchts.session_cookies import (
     CookieReadError,
     CookieRecord,
     CookieSource,
-    filter_for_host,
 )
 
 
@@ -370,14 +369,18 @@ def wait_for_window_close(
 
 
 def _read_after_signin(port: int, url: str, host: str) -> List[CookieRecord]:
-    """Read `host`'s cookies out of the signed-in browser over CDP.
+    """Read `host`'s site out of the signed-in browser over CDP.
 
     Uses the same Playwright-over-CDP route the rest of the cookie work uses,
     so a sign-in and a port read cannot disagree about how a cookie is found.
     The port comes from the caller that launched the browser rather than being
     rediscovered, because a second lookup is a second thing that can be wrong.
+
+    The whole site family is read, not just the host: a sign-in frequently
+    lands on ``www.`` and sets its session cookie there, and that is the one a
+    later read of the bare host needs kept (#504).
     """
     from searchts.cdp_profile import connect_existing_cdp
 
-    source = connect_existing_cdp(f"127.0.0.1:{port}", url)
-    return filter_for_host(source.cookies, host)
+    source = connect_existing_cdp(f"127.0.0.1:{port}", url, family=True)
+    return source.cookies

@@ -72,8 +72,8 @@ class FakeContext:
         self._log = log
         self._boom = boom
 
-    def cookies(self, urls):
-        self._log["cookie_calls"].append(list(urls))
+    def cookies(self, urls=None):
+        self._log["cookie_calls"].append([] if urls is None else list(urls))
         if self._boom is not None:
             raise self._boom
         return self._jar
@@ -578,6 +578,42 @@ class TestOneHostOnly:
         run_read(tmp_path, log=log)
         assert log["cookie_calls"] == [[SITE]], "one site, never a list, never a wildcard"
 
+    def test_keeping_a_site_keeps_its_www_session_cookies(self, tmp_path):
+        """#504: LinkedIn keeps li_at on .www.linkedin.com.
+
+        Asking CDP for `https://linkedin.com` would never return it, so the
+        keep call asks for the jar and filters it to the one registrable
+        domain. A foreign host is still outside the fence.
+        """
+        jar = [
+            {"name": "li_at", "value": SID, "domain": ".www.linkedin.com",
+             "httpOnly": True},
+            {"name": "JSESSIONID", "value": "ajax:123", "domain": ".www.linkedin.com"},
+            {"name": "bcookie", "value": "guest", "domain": ".linkedin.com"},
+            {"name": "evil", "value": MAIL, "domain": ".notlinkedin.com"},
+        ]
+        log = new_log()
+        src = run_read(
+            tmp_path, log=log, site="https://linkedin.com", family=True,
+            pw=FakePlaywrightModule(log, jar=jar),
+        )
+        assert {c.name for c in src.cookies} == {"li_at", "JSESSIONID", "bcookie"}
+        assert log["cookie_calls"] == [[]], "the keeper asks for the jar and filters it"
+        assert all(c.domain.endswith(".linkedin.com") for c in src.cookies)
+
+    def test_a_read_of_the_bare_host_does_not_receive_the_www_session(self, tmp_path):
+        """Keeping is wider than sending: a read still follows the browser rule."""
+        jar = [
+            {"name": "li_at", "value": SID, "domain": ".www.linkedin.com"},
+            {"name": "bcookie", "value": "guest", "domain": ".linkedin.com"},
+        ]
+        log = new_log()
+        src = run_read(
+            tmp_path, log=log, site="https://linkedin.com",
+            pw=FakePlaywrightModule(log, jar=jar),
+        )
+        assert {c.name for c in src.cookies} == {"bcookie"}
+
     def test_a_lookalike_host_does_not_ride_along(self, tmp_path):
         """notexample.com must not receive example.com's cookies."""
         jar = [
@@ -909,19 +945,22 @@ class TestReadSiteCookies:
     def test_named_firefox_browser_reads_its_own_profile(self, monkeypatch):
         seen = {}
 
-        def fake_read(browser, site):
+        def fake_read(browser, site, **kwargs):
             seen["args"] = (site, browser)
+            seen["family"] = kwargs.get("family")
             return "sentinel"
 
         monkeypatch.setattr(cdp_profile, "read_firefox_family", fake_read)
         assert cdp_profile.read_site_cookies("https://a.example/", "zen") == "sentinel"
         assert seen["args"] == ("https://a.example/", "zen")
+        assert seen["family"] is False
 
     def test_named_chromium_browser_uses_cdp_and_forwards_consent(self, monkeypatch):
         seen = {}
 
-        def fake_cdp(site, browser, *, confirm):
+        def fake_cdp(site, browser, *, confirm, **kwargs):
             seen["args"] = (site, browser)
+            seen["family"] = kwargs.get("family")
             seen["approved"] = confirm("local debugger port")
             return "sentinel"
 
@@ -929,7 +968,22 @@ class TestReadSiteCookies:
         assert cdp_profile.read_site_cookies(
             "https://a.example/", "vivaldi", confirm=lambda prompt: prompt == "local debugger port"
         ) == "sentinel"
-        assert seen == {"args": ("https://a.example/", "vivaldi"), "approved": True}
+        assert seen == {"args": ("https://a.example/", "vivaldi"), "approved": True,
+                        "family": False}
+
+    def test_keeping_asks_every_reader_for_the_site_family(self, monkeypatch):
+        """#504: a keep copy includes www. (and other subdomains), not just the host."""
+        seen = {}
+
+        def fake_read(browser, site, *, family=False):
+            seen["family"] = family
+            return "sentinel"
+
+        monkeypatch.setattr(cdp_profile, "read_firefox_family", fake_read)
+        assert cdp_profile.read_site_cookies(
+            "https://linkedin.com", "zen", family=True
+        ) == "sentinel"
+        assert seen["family"] is True
 
     def test_defaults_to_no_browser(self, monkeypatch):
         seen = {}

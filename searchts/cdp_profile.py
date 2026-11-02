@@ -15,8 +15,9 @@ So this module runs a SECOND instance of the user's own browser:
     2. copy the profile into a throwaway scratch directory, so the running
        browser is never disturbed and the real profile is never written to.
     3. launch that browser with ``--remote-debugging-port`` and
-       ``--user-data-dir=<scratch>``, connect over CDP, read the cookies for
-       ONE host, close it.
+       ``--user-data-dir=<scratch>``, connect over CDP, read the cookies of
+       ONE site (a keep copy also takes that site's subdomain cookies, so a
+       session set on ``www.`` is not left behind), close it.
     4. delete the scratch copy in a ``finally``. This is not tidiness. A
        leftover scratch profile is a second jar of every login the user has,
        readable by anything running as them.
@@ -62,6 +63,7 @@ from searchts.session_cookies import (
     CookieSource,
     family_of,
     filter_for_host,
+    filter_for_site_family,
     for_site,
     read_firefox_family,
 )
@@ -151,7 +153,8 @@ def consent_prompt(browser: str, host: str, port: int) -> str:
         f"{browser} has locked its cookie file (App-Bound Encryption), so "
         f"searchts cannot read it from disk.\n"
         f"Instead searchts can open a second {browser} window with a debugger "
-        f"port on 127.0.0.1:{port}, and ask that window for {host} only.\n"
+        f"port on 127.0.0.1:{port}, and keep only {host}'s site cookies from "
+        f"it.\n"
         f"Two things to know first:\n"
         f"  - {browser} will show a bar saying it is being controlled by "
         f"automated software.\n"
@@ -554,13 +557,18 @@ class NoSiteCookies(CookieReadError):
     """
 
 
-def _read_one_site(browser_obj: Any, site: str, host: str, source: CookieSource) -> CookieSource:
+def _read_one_site(
+    browser_obj: Any, site: str, host: str, source: CookieSource, *, family: bool = False
+) -> CookieSource:
     """Ask the connected browser for `host`'s cookies, and nothing else.
 
-    Two independent narrowings, on purpose. The CDP call is already scoped to
-    one URL, but a browser that has decided to serve us everything would be
-    believed too readily, so the result is filtered through the same
-    ``filter_for_host`` every other reader in searchts uses.
+    With ``family`` false this is the read path: the CDP call is scoped to one
+    URL and the result is filtered through the same ``filter_for_host`` every
+    other reader uses. With ``family`` true it is the keep path: the browser is
+    asked for its jar and the result is filtered to one registrable domain,
+    because a session cookie set on ``.www.linkedin.com`` is not sent to
+    ``linkedin.com`` and asking for that one URL would hide it. Either way the
+    module scopes the result itself rather than trusting what it was handed.
     """
     contexts = list(getattr(browser_obj, "contexts", None) or [])
     if not contexts:
@@ -569,12 +577,16 @@ def _read_one_site(browser_obj: Any, site: str, host: str, source: CookieSource)
             "try starting it with --remote-debugging-address=127.0.0.1"
         )
     try:
-        raw = contexts[0].cookies([site])
+        raw = contexts[0].cookies() if family else contexts[0].cookies([site])
     except Exception as e:  # noqa: BLE001 - any client error, reported as one line
         raise CookieReadError(
             f"could not read cookies over CDP ({type(e).__name__})"
         ) from None
-    scoped = filter_for_host(_records_from(raw), host)
+    records = _records_from(raw)
+    scoped = (
+        filter_for_site_family(records, host) if family
+        else filter_for_host(records, host)
+    )
     if not scoped:
         raise NoSiteCookies(
             f"no cookies for {host} in that browser. Log in to the site there "
@@ -658,6 +670,7 @@ def cdp_read_site(
     executable: Optional[str] = None,
     profile_src: Optional[str] = None,
     port: Optional[int] = None,
+    family: bool = False,
 ) -> CookieSource:
     """Read `url`'s cookies from `browser`, opening a debugger port to do it.
 
@@ -669,6 +682,10 @@ def cdp_read_site(
     `confirm` receives the full question (debugger bar, port open to other
     programs, one site) and returns a bool. With no `confirm` there is no way
     to ask, so this raises ConsentRequired instead of guessing yes.
+
+    ``family=True`` is the keep path: every cookie of the site's registrable
+    domain is returned, subdomains included. The default is the read path and
+    returns only the cookies the requested host would receive.
 
     The remaining parameters are injection seams so tests never launch a real
     browser, or read the user's real profile: `playwright_module`,
@@ -713,6 +730,7 @@ def cdp_read_site(
                         url,
                         host,
                         CookieSource(site=url, browser=browser, via="debugger port"),
+                        family=family,
                     )
                 finally:
                     _close_quietly(connected)
@@ -801,6 +819,7 @@ def connect_existing_cdp(
     site: str,
     *,
     playwright_module: Optional[Any] = None,
+    family: bool = False,
 ) -> CookieSource:
     """Read `site`'s cookies from a debugger port the USER already opened.
 
@@ -811,6 +830,10 @@ def connect_existing_cdp(
 
     The browser is not closed on the way out. It is not ours to close, and
     ``Browser.close()`` on a CDP connection tears down the browser itself.
+
+    ``family=True`` is the keep/sign-in scope: the site's subdomain cookies
+    are returned too, because a session cookie set on ``www.`` is part of the
+    login (#504).
     """
     host, number = parse_endpoint(port)
     target_host = _host_of(site)
@@ -819,7 +842,8 @@ def connect_existing_cdp(
         connected = _connect(pw, endpoint_url(host, number), number)
         try:
             return _read_one_site(
-                connected, site, target_host, CookieSource(site=site, via="cdp port")
+                connected, site, target_host,
+                CookieSource(site=site, via="cdp port"), family=family,
             )
         finally:
             _disconnect_quietly(connected)
@@ -851,6 +875,7 @@ def read_site_cookies(
     browser: str = "",
     *,
     confirm: Optional[Callable[[str], bool]] = None,
+    family: bool = False,
 ) -> CookieSource:
     """Read `site` from the named browser, or use the owned store by default.
 
@@ -859,9 +884,13 @@ def read_site_cookies(
     and read through CDP after ``confirm`` approves opening the local port.
     Naming a browser means that profile is the requested source; with no
     browser name, ``for_site`` gives the searchts-owned store precedence.
+
+    ``family=True`` is the keep path: the copy includes every cookie of the
+    site's registrable domain, so a session cookie set on ``www.`` is kept
+    too. A read uses the default, host-scoped copy.
     """
     if not browser:
         return for_site(site)
     if family_of(browser) == "chromium":
-        return cdp_read_site(site, browser, confirm=confirm)
-    return read_firefox_family(browser, site)
+        return cdp_read_site(site, browser, confirm=confirm, family=family)
+    return read_firefox_family(browser, site, family=family)

@@ -50,9 +50,11 @@ from searchts.session_cookies import (
     CookieSource,
     describe_expiry,
     entry_expiry,
+    filter_for_site_family,
     is_expired,
     read_owned_site,
     read_owned_store,
+    registrable,
     resolve_owned_host,
     save_owned_site,
 )
@@ -460,7 +462,9 @@ def refresh_kept(site: str, *, browser: str = "", force: bool = False) -> Cookie
         )
     from searchts.cdp_profile import read_site_cookies
 
-    source = read_site_cookies(site, source_browser, confirm=lambda _prompt: True)
+    source = read_site_cookies(
+        site, source_browser, confirm=lambda _prompt: True, family=True
+    )
     if not source.cookies:
         raise CookieReadError(f"re-copying {host} from {source_browser} returned no cookies")
     save_owned_site(site, source.cookies, browser=source_browser, consent=None)
@@ -628,6 +632,50 @@ def note_copied(site: str) -> None:
 # ── keep ────────────────────────────────────────────────────────────────────
 
 
+#: The cookie that proves a signed-in session on a site, by registrable
+#: domain. A guest jar is set before anyone types a password, so counting
+#: host-matching cookies as a login is how `keep` used to report success with
+#: only the tracking cookies (#504). Named per site because there is no
+#: universal session-cookie name; a site not listed falls back to the simple
+#: httpOnly heuristic in :func:`looks_like_login`.
+LOGIN_COOKIE_NAMES: Dict[str, Tuple[str, ...]] = {
+    "linkedin.com": ("li_at",),
+    "reddit.com": ("reddit_session",),
+    "github.com": ("user_session", "__Host-user_session_same_site"),
+    "x.com": ("auth_token",),
+    "twitter.com": ("auth_token",),
+}
+
+#: Guest, consent and analytics cookies. Set before a sign-in, so a generic
+#: site is not called signed in just because one of these is httpOnly.
+_NOT_A_LOGIN = frozenset({
+    "bcookie", "lang", "sdui_ver", "lidc", "dfpfpt", "fptctx2", "__cf_bm",
+    "cf_clearance", "_ga", "_gid", "_gat", "_fbp", "_gcl_au", "guest_id",
+    "personalization_id", "ct0", "OptanonConsent", "CookieConsent",
+})
+
+
+def login_cookie_names(site: str) -> Tuple[str, ...]:
+    """The cookie names that would prove a login on `site`, when known."""
+    host = host_of(site) or site
+    return LOGIN_COOKIE_NAMES.get(registrable(host) or host, ())
+
+
+def looks_like_login(records: List[CookieRecord], site: str) -> bool:
+    """True when the copy holds something a browser would call a session.
+
+    This does not prove a login works; only a read can. It stops `keep` from
+    calling a jar of guest cookies a success, which is what left a LinkedIn
+    login looking kept while every read still hit a login wall.
+    """
+    wanted = login_cookie_names(site)
+    if wanted:
+        return any(c.name in wanted for c in records)
+    return any(
+        c.http_only and c.name.lower() not in _NOT_A_LOGIN for c in records
+    )
+
+
 @dataclass
 class Kept:
     """The outcome of the once-per-read question: keep this site's login?"""
@@ -636,6 +684,9 @@ class Kept:
     kept: bool
     count: int = 0
     why: str = ""
+    #: False when the kept copy held no cookie that looks like a session, so
+    #: the receipt has to say the login may be missing rather than "kept".
+    has_login: bool = True
     #: Set when the user also asked to remove the browser's own copy.
     also_kill_browser: bool = False
 
@@ -649,23 +700,48 @@ def keep(
 ) -> Kept:
     """Save exactly one site's login into the store. A yes to the keep question.
 
-    Only the requested site is written. The scratch copy the read just used is
-    not promoted and not referenced: keeping copies the values out of the
-    records in hand, so the two files can never be the same file.
+    Only the requested site is written, including cookies it set on its own
+    subdomains. The scratch copy the read just used is not promoted and not
+    referenced: keeping copies the values out of the records in hand, so the
+    two files can never be the same file.
 
     A login kept from a browser records per-site consent, because that copy was
     the approval. A sign-in passes ``consent=False``: it has no browser source
     to re-copy later.
+
+    A copy with no cookie that looks like a session is still kept, but the
+    receipt says it may not include the login instead of reporting a plain
+    success (#504).
     """
     if consent is None:
         consent = bool(browser)
+    host = host_of(site)
     count = save_owned_site(site, records, browser=browser, consent=consent)
+    kept_records = filter_for_site_family(records, host)
+    has_login = looks_like_login(kept_records, site)
+    if has_login:
+        why = (
+            f"kept {host} in the searchts store ({count} cookies). "
+            f"The next read of that site can use the saved login."
+        )
+    else:
+        wanted = login_cookie_names(site)
+        proof = (
+            f" (no {', '.join(wanted)} for {registrable(host) or host})"
+            if wanted else ""
+        )
+        why = (
+            f"kept {host} in the searchts store ({count} cookies), but no "
+            f"cookie in the copy looks like a login session{proof}. The copy "
+            f"may not include the login: sign in to that site in the browser, "
+            f"then keep it again."
+        )
     return Kept(
         site=site,
         kept=True,
         count=count,
-        why=f"kept {host_of(site)} in the searchts store ({count} cookies). "
-            f"The next read of that site can use the saved login.",
+        why=why,
+        has_login=has_login,
     )
 
 
@@ -1011,7 +1087,10 @@ def check_login(
             ),
         )
     try:
-        source = read_owned_site(site)
+        # The target's host, not the login's key: a kept login is filed under
+        # linkedin.com but its session cookie may live on .www.linkedin.com,
+        # and that is the host the account page actually uses (#504).
+        source = read_owned_site(target)
     except CookieReadError as e:
         return LoginCheck(
             site=site,
@@ -1028,7 +1107,7 @@ def check_login(
             status="logged out",
             account_page=False,
             exit_code=1,
-            why=f"no live saved cookies for {host}.",
+            why=f"no live saved cookies for {host_of(target) or host}.",
         )
 
     from searchts import unlocker

@@ -311,6 +311,56 @@ def filter_for_host(records: List[CookieRecord], host: str) -> List[CookieRecord
     return [c for c in records if _domain_matches(c.domain, host) and not is_expired(c, now)]
 
 
+def _same_registrable_site(cookie_domain: str, host: str) -> bool:
+    """True when a cookie filed under `cookie_domain` belongs to `host`'s site.
+
+    This is the *keeping* rule, not the sending rule. A browser sends
+    ``.www.linkedin.com`` only to ``www.linkedin.com``, so a read of
+    ``linkedin.com`` must not receive it (that is :func:`_domain_matches`).
+    But keeping ``linkedin.com`` means keeping that site's login, and the
+    session cookie a site sets on its ``www`` host is exactly the one that
+    matters: dropping it leaves a jar of guest cookies and a login that cannot
+    read a signed-in page.
+
+    So this widens one level, to one registrable domain, and no further. A
+    cookie for ``notlinkedin.com``, for a public suffix, or for another
+    registrant under a shared suffix (``a.github.io`` vs ``b.github.io``) is
+    still not this site's.
+    """
+    cd = (cookie_domain or "").strip().lower().lstrip(".")
+    h = (host or "").lower().strip(".")
+    if not cd or not h:
+        return False
+    if cd == h:
+        return True
+    reg_c = registrable(cd)
+    reg_h = registrable(h)
+    if reg_c and reg_h:
+        return reg_c == reg_h
+    # No registrable domain to compare: a single-label host, an IP literal, or
+    # a cookie filed on a public suffix. Fall back to the browser rule, except
+    # for the suffix case, which must never become a family.
+    if _is_public_suffix_host(cd):
+        return False
+    return _domain_matches(cookie_domain, h)
+
+
+def filter_for_site_family(
+    records: List[CookieRecord], host: str
+) -> List[CookieRecord]:
+    """Keep every live cookie of `host`'s site, subdomains included.
+
+    The keep side of the fence. A saved login may hold ``.www.linkedin.com``
+    next to ``.linkedin.com``; a later read still filters those records with
+    :func:`filter_for_host`, so the browser's own rule decides what is sent.
+    """
+    now = int(time.time())
+    return [
+        c for c in records
+        if _same_registrable_site(c.domain, host) and not is_expired(c, now)
+    ]
+
+
 def build_header(records: List[CookieRecord]) -> str:
     """Render a Cookie header. The caller decides where this string goes."""
     return "; ".join(f"{c.name}={c.value}" for c in records)
@@ -410,17 +460,26 @@ def read_all_firefox(browser: str) -> List[CookieRecord]:
     return _read_all_firefox_records(browser)
 
 
-def read_firefox_family(browser: str, site: str) -> CookieSource:
+def read_firefox_family(
+    browser: str, site: str, *, family: bool = False
+) -> CookieSource:
     """Read `site`'s cookies from a Firefox-derived browser's own profile.
 
     Read-only: SQLite is opened with mode=ro and never written.
+
+    ``family=True`` is for keeping a login: it returns every cookie of the
+    site's registrable domain, subdomains included, so a session cookie set on
+    ``www.`` is not left behind. A read keeps the default, host-scoped result.
     """
     host = (urlparse(site if "://" in site else "https://" + site).hostname or "").lower()
     if not host:
         raise CookieReadError(f"cannot work out a host from {site!r}")
 
     records = _read_all_firefox_records(browser)
-    scoped = filter_for_host(records, host)
+    scoped = (
+        filter_for_site_family(records, host) if family
+        else filter_for_host(records, host)
+    )
     if scoped:
         return CookieSource(
             site=site,
@@ -505,8 +564,12 @@ def save_owned_site(
 ) -> int:
     """Persist one site's cookies to the owned store. Returns the count saved.
 
-    Only the site asked for is written. Values live in this file and nowhere
-    else; the caller owns the decision to call it at all.
+    Only the site asked for is written, and that includes cookies the site set
+    on its own subdomains (``.www.linkedin.com`` for ``linkedin.com``): keeping
+    the site is keeping its login. Every later read still filters these records
+    for the host being read, so a subdomain cookie is never sent to another
+    host. Values live in this file and nowhere else; the caller owns the
+    decision to call it at all.
 
     ``consent`` records that the user or agent allowed this site's cookies to
     be copied. It is what lets a later refresh or login-wall retry happen
@@ -521,9 +584,11 @@ def save_owned_site(
             f"not a site anyone owns. Keep the login for the registrable "
             f"domain instead (for example example.com, not com)."
         )
-    scoped = filter_for_host(records, host)
+    scoped = filter_for_site_family(records, host)
     if not scoped:
-        raise CookieReadError(f"refusing to save: no cookies match {host}")
+        raise CookieReadError(
+            f"refusing to save: no cookies match {host} or its subdomains"
+        )
 
     store = read_owned_store()
     existing = store.get(host)

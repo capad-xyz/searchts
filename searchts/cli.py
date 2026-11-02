@@ -3760,7 +3760,7 @@ def _cmd_login(args):
                 return True
 
             source = read_site_cookies(
-                args.url, browser, confirm=confirm_debugger
+                args.url, browser, confirm=confirm_debugger, family=True
             )
             note_copied(args.url)
         except (SessionConsentNeeded, ConsentRequired) as e:
@@ -3775,7 +3775,10 @@ def _cmd_login(args):
             print(str(e), file=sys.stderr)
             sys.exit(1)
         receipt(
-            [receipts.Row(progress.ROW_OK, "kept", out.why)],
+            [receipts.Row(
+                progress.ROW_OK if out.has_login else progress.ROW_WARN,
+                "kept", out.why,
+            )],
             subject=host,
         )
         sys.exit(0)
@@ -3813,7 +3816,10 @@ def _cmd_login(args):
             except CookieReadError as e:
                 print(str(e), file=sys.stderr)
                 sys.exit(1)
-            rows.append(receipts.Row(progress.ROW_OK, "kept", kept_login.why))
+            rows.append(receipts.Row(
+                progress.ROW_OK if kept_login.has_login else progress.ROW_WARN,
+                "kept", kept_login.why,
+            ))
         else:
             rows.append(receipts.Row(
                 progress.ROW_WARN,

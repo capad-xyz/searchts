@@ -80,22 +80,28 @@ def test_decide_does_not_use_a_host_only_parent_cookie_for_a_subdomain():
     assert ls.decide("app.example.com").state != ls.KEPT
 
 
-def test_a_sibling_domain_is_not_the_same_site():
-    """example.com must not pick up cookies scoped to a subdomain or a sibling.
+def test_a_kept_login_covers_the_sites_own_subdomains_but_not_a_sibling():
+    """Keeping example.com keeps sub.example.com's login and nothing else.
 
-    This is the fence, asserted rather than assumed: a kept login is written
-    once and then read on every future call, so a scoping mistake here repeats
-    forever instead of failing once.
+    The keep side is one registrable domain wide (#504), because a site's
+    session cookie is often set on ``www.``. The read side stays exact: a
+    host-only cookie for a subdomain is not sent to the parent, while a read
+    of that subdomain does get the kept login.
     """
-    ls.keep("example.com", [rec("mine", domain="example.com")])
-    out = ls.decide("example.com").source
-    assert {c.name for c in out.cookies} == {"mine"}
+    out = ls.keep(
+        "example.com",
+        [rec("mine", domain="example.com"), rec("sub", domain="sub.example.com")],
+    )
+    assert out.count == 2
+    assert {c.name for c in ls.decide("example.com").source.cookies} == {"mine"}
+    sub = ls.decide("https://sub.example.com/").source
+    assert sub is not None
+    assert {c.name for c in sub.cookies} == {"sub"}
 
-    # A subdomain's cookie is not readable as the parent, and keeping it is
-    # refused rather than quietly stored under the wrong host.
+    # Another registrant is still refused rather than quietly stored.
     with pytest.raises(CookieReadError):
-        ls.keep("parent.com", [rec("sub", domain="sub.parent.com")])
-    assert ls.decide("parent.com").state != ls.KEPT
+        ls.keep("parent.com", [rec("other", domain="notparent.com")])
+    assert "parent.com" not in ls.list_kept()
 
 
 def test_a_cookie_for_another_site_cannot_be_saved_under_this_one():
@@ -194,6 +200,54 @@ def test_keep_writes_exactly_one_site():
     ls.keep("example.com", [rec("a", domain="example.com")])
     ls.keep("other.com", [rec("b", domain="other.com")])
     assert sorted(ls.list_kept()) == ["example.com", "other.com"]
+
+
+def test_keep_keeps_the_sites_www_session_cookie():
+    """#504: LinkedIn's li_at lives on .www.linkedin.com, not .linkedin.com."""
+    out = ls.keep(
+        "https://linkedin.com",
+        [
+            rec("li_at", domain=".www.linkedin.com", secure=True),
+            rec("JSESSIONID", domain=".www.linkedin.com"),
+            rec("bcookie", domain=".linkedin.com"),
+        ],
+    )
+    assert out.has_login is True
+    assert out.count == 3
+    assert "may not include the login" not in out.why
+
+    www = ls.decide("https://www.linkedin.com/in/someone/").source
+    assert www is not None
+    assert {"li_at", "JSESSIONID"} <= {c.name for c in www.cookies}
+    # The read side is still exact: a www host-only cookie is not sent to the
+    # bare host.
+    root = ls.decide("https://linkedin.com").source
+    assert root is not None
+    assert {c.name for c in root.cookies} == {"bcookie"}
+
+
+def test_keep_says_when_the_copy_has_no_login_session():
+    """A jar of guest cookies is kept, but not reported as a plain success."""
+    out = ls.keep(
+        "https://linkedin.com",
+        [rec("bcookie", domain=".linkedin.com"), rec("lidc", domain=".linkedin.com")],
+    )
+    assert out.has_login is False
+    assert "may not include the login" in out.why
+    assert "li_at" in out.why
+    # The cookies still go in the store: a later sign-in can replace them, and
+    # refusing to keep would hide what was actually read.
+    assert ls.list_kept()["linkedin.com"]["cookies"] == 2
+
+
+def test_keep_calls_an_http_only_cookie_a_login_when_no_name_is_known():
+    def http_only(name, domain="example.com"):
+        return CookieRecord(name, "v", domain, http_only=True)
+
+    assert ls.looks_like_login([http_only("sid")], "example.com") is True
+    assert ls.looks_like_login([http_only("_ga")], "example.com") is False
+    assert ls.looks_like_login([http_only("bcookie")], "linkedin.com") is False
+    assert ls.looks_like_login([http_only("li_at")], "linkedin.com") is True
 
 
 def test_keep_question_states_both_answers_and_their_consequence():
@@ -345,7 +399,7 @@ def test_prepare_vivaldi_opens_a_confirmed_cdp_copy(monkeypatch, capsys):
 
     calls = []
 
-    def fake_cdp(site, browser, *, confirm):
+    def fake_cdp(site, browser, *, confirm, **kwargs):
         calls.append((site, browser, confirm("Vivaldi debugger")))
         return CookieSource(site=site, cookies=[rec()], count=1, via="debugger port")
 
