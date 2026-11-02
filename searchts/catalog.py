@@ -126,9 +126,27 @@ _add(Command(
         "A share link whose HTML is empty is still a read.",
         "A kept LinkedIn login reads a profile as one page: the top card plus "
         "its Experience and Education pages, two extra requests at most. A "
-        "section that fails is named in a note, not a failed read.",
-        "LinkedIn rate limiting (http-429) stops the ladder and says to wait; "
-        "it is not a login that expired.",
+        "section that fails is named in a note, not a failed read. Each of "
+        "those page loads waits out the LinkedIn gap below.",
+        "A direct http-429 stops the ladder for that host and cools it down "
+        "(SEARCHTS_429_COOLDOWN, default 300 s, 1800 at most, 0 off). "
+        "--ignore-cooldown reads during the cooldown. --wait-on-429 retries "
+        "that rung, capped at 180 s; a kept login gets one wait. The Jina "
+        "relay's own 429 is its quota and does not cool the host.",
+        "A kept login lowers --items to SEARCHTS_MAX_ITEMS_SIGNED_IN (default "
+        "50). The clamp note says signed-in items.",
+        "LinkedIn (linkedin.com and its subdomains) stops for 24 h after a "
+        "429, a 999, a too-many-pages page, a checkpoint, or a forced logout, "
+        "and until a person clears an account restriction. It is not an "
+        "expired login, and --wait-on-429 does not override the stop. "
+        "`searchts login resume linkedin.com` clears it. A checkpoint or "
+        "forced logout still needs a sign-in by hand, then `login keep`. "
+        "Page loads are one at a time, at least 20 s apart, at most "
+        "SEARCHTS_LINKEDIN_LOADS_PER_MINUTE (2), "
+        "SEARCHTS_LINKEDIN_LOADS_PER_HOUR (20) and "
+        "SEARCHTS_LINKEDIN_LOADS_PER_DAY (100; 0 turns the daily cap off). "
+        "SEARCHTS_LINKEDIN_FEED_GAP_MINUTES (default 30) is the gap between "
+        "LinkedIn feed reads; a later change enforces it.",
         "On failure `--json` prints `{\"url\", \"error\": {kind, message, exit_code, "
         "attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.",
         "An `--items` read returns a signed `resume` token in `--json` and in a "
@@ -361,7 +379,7 @@ _add(Command(
 ))
 _add(Command(
     name="login", group=_LOGIN, root="login <verb>",
-    lead="Site logins: list, status, keep, kill, signin, purge-scratch, sweep, check.",
+    lead="Site logins: list, status, keep, kill, signin, purge-scratch, sweep, check, resume.",
     body=(
         "Nothing is copied out of your browser without --yes. A kept login",
         "stays on this machine: direct requests and a temporary local browser",
@@ -498,6 +516,23 @@ _add(Command(
         ("0", "logged in: the signed-in page was read without a login wall"),
         ("1", "logged out: no live saved cookies, or the site showed its login page"),
         ("2", "unknown: a captcha, block, network error, or no page could be chosen"),
+    ),
+))
+_add(Command(
+    name="login resume", group=_LOGIN,
+    lead="Clear one site's local read stop so the next read may try it.",
+    body=(
+        "Clears that site's http-429 cooldown, and for LinkedIn the 24 h stop",
+        "after a 429, 999, too-many-pages page, checkpoint or forced logout,",
+        "or the restriction stop that otherwise lasts until a person clears",
+        "it. Sends no request and does not sign in. A checkpoint or forced",
+        "logout still needs a sign-in by hand in the browser, then",
+        "`searchts login keep`, before a read will be logged in again.",
+    ),
+    examples=("searchts login resume linkedin.com",),
+    exit_codes=(
+        ("0", "the local stop was cleared, or there was nothing to clear"),
+        ("2", "bad usage, or the site is not one searchts can file"),
     ),
 ))
 _add(Command(
@@ -653,6 +688,10 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "the user said yes to a `cookies_from_browser` copy.",
             "`resume` takes the signed token an `--items` read returned, so the "
             "next read starts after the rows it already gave back.",
+            "`wait_on_429` is CLI `--wait-on-429`: off by default, one wait when "
+            "the read carried a login, and never a way past a LinkedIn stop.",
+            "`ignore_cooldown` is CLI `--ignore-cooldown`. It does not lift a "
+            "LinkedIn stop; `searchts login resume linkedin.com` does.",
         ),
         mcp_only_params=("cursor", "page_items"),
         cli_only_flags=("--human", "--scrub", "--backend", "--json"),
@@ -772,6 +811,7 @@ CLI_ONLY: Dict[str, str] = {
     "login keep": "MCP reaches the same login through `login_signin` or `read_url` + `cookies_from_browser`",
     "login purge-scratch": "scratch copies are deleted at the end of every read",
     "login sweep": "expired cookies are swept on every MCP result; a tool would duplicate it",
+    "login resume": "clears a local 429 cooldown or LinkedIn stop; it sends no request",
     "update": "installing software is the user's act; MCP reports `update_available` instead",
     "check-update": "MCP results already carry `update_available`; the CLI verb is for scripts",
     "watch": "a scheduled shell check, not an agent tool",

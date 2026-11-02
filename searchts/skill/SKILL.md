@@ -39,7 +39,7 @@ covers the need.
 | `searchts install` | First-pass setup: one list, one approval; --system-deps for system packages. |
 | `searchts setup` | Walk through search, GitHub, Reddit, and Groq in one pass. |
 | `searchts configure` | List the keys, set one, or copy cookies from a browser. |
-| `searchts login` | Site logins: list, status, keep, kill, signin, purge-scratch, sweep, check. |
+| `searchts login` | Site logins: list, status, keep, kill, signin, purge-scratch, sweep, check, resume. |
 | `searchts uninstall` | Remove config, tokens and skill files. |
 | `searchts update` | Update to the latest release (`upgrade` is the same command). |
 | `searchts check-update` | Is there a newer version? |
@@ -59,12 +59,13 @@ covers the need.
 | `searchts login purge-scratch` | Delete every scratch copy now. |
 | `searchts login sweep` | Delete expired cookies now, offline. |
 | `searchts login check` | Read one signed-in-only page with the saved cookies. |
+| `searchts login resume` | Clear one site's local read stop so the next read may try it. |
 
 ### Flags
 
 | Command | Flags |
 |---|---|
-| `searchts read` | `--backend`, `--json`, `--human`, `--pages`, `--items`, `--resume`, `--media`, `--expand`, `--scrub`, `--cookies-from-browser`, `--yes`, `--cookies`, `--cdp-port`, `--proxy`, `--proxy-trusted` |
+| `searchts read` | `--backend`, `--json`, `--human`, `--pages`, `--items`, `--resume`, `--wait-on-429`, `--ignore-cooldown`, `--media`, `--expand`, `--scrub`, `--cookies-from-browser`, `--yes`, `--cookies`, `--cdp-port`, `--proxy`, `--proxy-trusted` |
 | `searchts grab` | `--out`, `--kinds`, `--scripts`, `--read`, `--max`, `--tokens`, `--json` |
 | `searchts search` | `-n`, `--json`, `--provider` |
 | `searchts transcribe` | `--provider`, `--model`, `--hint`, `--translate`, `--yes`, `--fresh`, `--json`, `--cleanup`, `--list-models`, `--remove-model`, `--dry-run`, `--no-subtitles`, `-o`, `--cookies-from-browser` |
@@ -105,6 +106,7 @@ MCP-only parameters and the deliberate CLI differences are listed in [docs/cli.m
 | `login purge-scratch` | `0` the scratch copies were deleted; `2` bad usage |
 | `login sweep` | `0` the sweep finished; `2` bad usage |
 | `login check` | `0` logged in: the signed-in page was read without a login wall; `1` logged out: no live saved cookies, or the site showed its login page; `2` unknown: a captcha, block, network error, or no page could be chosen |
+| `login resume` | `0` the local stop was cleared, or there was nothing to clear; `2` bad usage, or the site is not one searchts can file |
 | `update` | `0` up to date, or the update finished; `1` the update failed; `2` this install shape cannot be updated |
 | `check-update` | `0` the check finished (newer or current); `2` bad usage |
 | `watch` | `0` the check finished; `2` bad usage |

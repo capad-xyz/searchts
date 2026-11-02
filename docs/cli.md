@@ -19,13 +19,15 @@ Fetch a page as markdown, or fail and say why.
 Climbs the same three rungs the MCP server uses: curl_cffi with a browser TLS fingerprint, then the Jina reader relay, then a stealth browser. It stops at the first rung that returns real text. A wall, a login page, or a client-rendered shell is a failure, not a page.
 - A player page comes back as its captions, or the failure names transcribe.
 - A share link whose HTML is empty is still a read.
-- A kept LinkedIn login reads a profile as one page: the top card plus its Experience and Education pages, two extra requests at most. A section that fails is named in a note, not a failed read.
-- LinkedIn rate limiting (http-429) stops the ladder and says to wait; it is not a login that expired.
+- A kept LinkedIn login reads a profile as one page: the top card plus its Experience and Education pages, two extra requests at most. A section that fails is named in a note, not a failed read. Each of those page loads waits out the LinkedIn gap below.
+- A direct http-429 stops the ladder for that host and cools it down (SEARCHTS_429_COOLDOWN, default 300 s, 1800 at most, 0 off). --ignore-cooldown reads during the cooldown. --wait-on-429 retries that rung, capped at 180 s; a kept login gets one wait. The Jina relay's own 429 is its quota and does not cool the host.
+- A kept login lowers --items to SEARCHTS_MAX_ITEMS_SIGNED_IN (default 50). The clamp note says signed-in items.
+- LinkedIn (linkedin.com and its subdomains) stops for 24 h after a 429, a 999, a too-many-pages page, a checkpoint, or a forced logout, and until a person clears an account restriction. It is not an expired login, and --wait-on-429 does not override the stop. `searchts login resume linkedin.com` clears it. A checkpoint or forced logout still needs a sign-in by hand, then `login keep`. Page loads are one at a time, at least 20 s apart, at most SEARCHTS_LINKEDIN_LOADS_PER_MINUTE (2), SEARCHTS_LINKEDIN_LOADS_PER_HOUR (20) and SEARCHTS_LINKEDIN_LOADS_PER_DAY (100; 0 turns the daily cap off). SEARCHTS_LINKEDIN_FEED_GAP_MINUTES (default 30) is the gap between LinkedIn feed reads; a later change enforces it.
 - On failure `--json` prints `{"url", "error": {kind, message, exit_code, attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.
 - An `--items` read returns a signed `resume` token in `--json` and in a `[resume: ...]` note when it can name where to continue: the feed's own cursor, the rows it stopped after, or the next page in the URL. Pass it as `--resume TOKEN` (MCP `resume`) to read on after those rows instead of from the top. It says which method continued the read, and a tampered or 24 h old token is refused.
 
 ```bash
-searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages PAGES] [--items ITEMS] [--resume TOKEN] [--media MEDIA] [--expand] [--scrub] [--cookies-from-browser BROWSER] [--yes] [--cookies PATH] [--cdp-port PORT] [--proxy URL] [--proxy-trusted]
+searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages PAGES] [--items ITEMS] [--resume TOKEN] [--wait-on-429] [--ignore-cooldown] [--media MEDIA] [--expand] [--scrub] [--cookies-from-browser BROWSER] [--yes] [--cookies PATH] [--cdp-port PORT] [--proxy URL] [--proxy-trusted]
 ```
 
 | Argument | Description |
@@ -39,8 +41,10 @@ searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages 
 | `--json` | Print the result as JSON instead of raw text: url, final_url, fetched_at, backend, status, chars, text, next_url and more |
 | `--human` | If no tier gets clean content, open a headful browser to clear it by hand |
 | `--pages` PAGES | Follow the next page on the same site, curl only, up to this many (max 5) Default: `1`. |
-| `--items` ITEMS | Keep following next pages, then scroll if the list only grows that way, until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300) |
+| `--items` ITEMS | Keep following next pages, then scroll if the list only grows that way, until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300; a read carrying a kept login uses SEARCHTS_MAX_ITEMS_SIGNED_IN, default 50) |
 | `--resume` TOKEN | Continue a scroll read after the rows it already returned. Pass the `resume` token from a previous read (the JSON `resume` field or the [resume: ...] note). Refused when tampered with or older than 24 h |
+| `--wait-on-429` | When a host answers http-429, wait for its Retry-After (or back off exponentially) and retry that rung, capped at 180 s in all. Off by default; a read carrying a kept login gets one wait. A LinkedIn stop is never waited out this way. |
+| `--ignore-cooldown` | Read a host even while it is resting after an http-429. searchts records the cooldown locally (SEARCHTS_429_COOLDOWN, default 300 s, max 1800; 0 turns it off) and refuses before sending otherwise. |
 | `--media` MEDIA | How many image and video addresses the media note lists (default 4, ceiling 40). Does not download them; searchts grab saves the files. SEARCHTS_MAX_MEDIA or more.media in the config changes the default. |
 | `--expand` | Open the text the page is holding back: closed <details> and buttons labelled read/show/see more, and a known host's own controls (a Reddit thread's 'more replies'). Off by default. Never follows a link, a form or a sign-in; a 'continue reading' paywall is named, not opened (ceiling SEARCHTS_MAX_EXPAND_CLICKS) |
 | `--scrub` | Redact prompt-injection spans from the content (invisible-char stripping + indicator scanning always run regardless) |
@@ -73,6 +77,8 @@ CLI-only flags: `--human`, `--scrub`, `--backend`, `--json`.
 - The JSON has no `next_url`: a page-authored URL is not a safe next request. Use the signed `next_cursor`, or `searchts read --json` when a human wants the URL.
 - `approve_cookie_copy` is CLI `--yes` for one call: set it only after the user said yes to a `cookies_from_browser` copy.
 - `resume` takes the signed token an `--items` read returned, so the next read starts after the rows it already gave back.
+- `wait_on_429` is CLI `--wait-on-429`: off by default, one wait when the read carried a login, and never a way past a LinkedIn stop.
+- `ignore_cooldown` is CLI `--ignore-cooldown`. It does not lift a LinkedIn stop; `searchts login resume linkedin.com` does.
 
 ### `search`
 
@@ -543,11 +549,11 @@ No MCP tool: keys are the user's; MCP reads only what is already configured.
 
 ### `login`
 
-Site logins: list, status, keep, kill, signin, purge-scratch, sweep, check.
+Site logins: list, status, keep, kill, signin, purge-scratch, sweep, check, resume.
 Nothing is copied out of your browser without --yes. A kept login stays on this machine: direct requests and a temporary local browser context can use it; the Jina relay never receives it. A bare `searchts login` is the same as `searchts login list`.
 
 ```bash
-searchts login {list|status|keep|kill|signin|purge-scratch|sweep|check} [--verbose]
+searchts login {list|status|keep|kill|signin|purge-scratch|sweep|check|resume} [--verbose]
 ```
 
 | Flag | Description |
@@ -570,7 +576,7 @@ searchts login keep https://example.com --cookies-from-browser zen --yes
 | `3` | consent is needed for a cookie copy |
 
 No MCP tool: parent verb for the login tools and the CLI-only login verbs.
-Subcommands: `login list`, `login status`, `login keep`, `login kill`, `login signin`, `login purge-scratch`, `login sweep`, `login check`.
+Subcommands: `login list`, `login status`, `login keep`, `login kill`, `login signin`, `login purge-scratch`, `login sweep`, `login check`, `login resume`.
 
 ### `login list`
 
@@ -827,6 +833,36 @@ CLI-only flags: `--json`.
 - `check_url` mirrors CLI `--url`: a page only a signed-in account sees.
 - Without it, the known account pages for reddit.com, linkedin.com, github.com and x.com are used.
 - An invalid URL is a `bad_url` error envelope, not an `unknown` login.
+
+### `login resume`
+
+Clear one site's local read stop so the next read may try it.
+Clears that site's http-429 cooldown, and for LinkedIn the 24 h stop after a 429, 999, too-many-pages page, checkpoint or forced logout, or the restriction stop that otherwise lasts until a person clears it. Sends no request and does not sign in. A checkpoint or forced logout still needs a sign-in by hand in the browser, then `searchts login keep`, before a read will be logged in again.
+
+```bash
+searchts login resume <site> [--verbose]
+```
+
+| Argument | Description |
+|---|---|
+| `site` | The site to resume reads for, for example linkedin.com |
+
+| Flag | Description |
+|---|---|
+| `-v`, `--verbose` | Show debug logs |
+
+Examples:
+
+```bash
+searchts login resume linkedin.com
+```
+
+| Exit | Meaning |
+|---|---|
+| `0` | the local stop was cleared, or there was nothing to clear |
+| `2` | bad usage, or the site is not one searchts can file |
+
+No MCP tool: clears a local 429 cooldown or LinkedIn stop; it sends no request.
 
 ### `uninstall`
 

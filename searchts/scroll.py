@@ -507,6 +507,10 @@ def _wall(page) -> str:
         # The ladder's own name for this wall, so the two stop notes read the
         # same when one is printed by `read` and one by `scroll`.
         return "auth" if _wall_from_html(_content(page)) == "auth" else ""
+    if kind == "rate-limit":
+        # The in-page check says "rate-limit"; the classifier's kind is
+        # "ratelimit". Agreeing on those two names is what stops the walk.
+        return "rate-limit" if _wall_from_html(_content(page)) == "ratelimit" else ""
     return kind if _wall_from_html(_content(page)) == kind else ""
 
 
@@ -538,6 +542,26 @@ def _settle(page, url: str, budget_seconds: int) -> None:
             except Exception:  # noqa: BLE001
                 pass
             return
+
+
+def _cool_scroll(page, capture: Optional["resume_mod.Capture"]) -> None:
+    """Record the host cooldown for a 429 this scroll already stopped on.
+
+    ``record_for_url`` is the same write a ladder 429 uses, including the
+    LinkedIn 24 h stop when the host is LinkedIn. Nothing is requested here.
+    """
+    where = ""
+    if capture is not None and capture.rate_url:
+        where = capture.rate_url
+    elif capture is not None and capture.host:
+        where = "https://" + capture.host + "/"
+    else:
+        where = _page_url(page)
+    if not where:
+        return
+    from searchts import rate_limit
+
+    rate_limit.record_for_url(where, "")
 
 
 def collect(
@@ -707,6 +731,10 @@ def collect(
         if wall:
             rep.wall = wall
             stop = f"a {wall} wall replaced the page"
+            if wall == "rate-limit":
+                # Same fact as an http-429: the walk stops, and the caller
+                # records the host cooldown instead of opening another page.
+                rep.rate_limited = True
             break
         step = _collect_once(page)
         if resume is not None and not found:
@@ -773,6 +801,11 @@ def collect(
     rep.rows = list(store.get("rows") or [])
     rep.keys = list(store.get("order") or [])
     rep.html = _content(page)
+    if rep.rate_limited or rep.wall == "rate-limit":
+        # A cursor replay, a same-site data response, or a rate-limit wall.
+        # The cooldown (and, on LinkedIn, the 24 h stop) is the same one a
+        # ladder 429 writes, so the next read is refused before it asks.
+        _cool_scroll(page, capture)
     return rep
 
 
@@ -1016,6 +1049,15 @@ def collect_url(
     navigation this function makes on someone else's behalf, and the URL comes
     from the signed token, not from the page it is reading.
     """
+    # #509: a LinkedIn stop refuses the scroll before a browser is imported or
+    # started, and before a load slot is booked. A missing browser is a
+    # different answer and must not spend a LinkedIn load to discover it.
+    from searchts import linkedin as _linkedin_scroll
+
+    if _linkedin_scroll.matches(url):
+        stop = _linkedin_scroll.current_stop()
+        if stop is not None:
+            return None, "linkedin-stop: " + _linkedin_scroll.stop_hint(stop)
     if not browser_available():
         return None, "no-browser"
     try:
@@ -1025,6 +1067,14 @@ def collect_url(
         from searchts.unlocker import _UA_REAL, _profile_path, _use_persistent_profile
     except Exception:  # noqa: BLE001
         return None, "no-browser"
+    load_slot = None
+    if _linkedin_scroll.matches(url):
+        try:
+            load_slot = _linkedin_scroll.exclusive_load()
+            load_slot.__enter__()
+        except _linkedin_scroll.Paced as paced:
+            # __enter__ unlocks before raising, so this return holds no lock.
+            return None, "linkedin-paced: " + paced.hint
     try:
         with sync_playwright() as p:
             # One name for the thing that has to be closed, typed loosely on
@@ -1069,8 +1119,28 @@ def collect_url(
                     capture = None
 
                 say("scrolling: opening the page…")
-                page.goto(url, wait_until="domcontentloaded",
-                          timeout=int(budget_seconds * 1000))
+                response = page.goto(url, wait_until="domcontentloaded",
+                                     timeout=int(budget_seconds * 1000))
+                try:
+                    status = int(getattr(response, "status", 0) or 0)
+                except (TypeError, ValueError):
+                    status = 0
+                if status == 429:
+                    # #509: the host said slow down before the scroll started.
+                    # Record its cooldown and stop: scrolling is the second
+                    # mechanism for the same host, not a different request.
+                    from searchts import rate_limit
+
+                    retry_after = ""
+                    try:
+                        retry_after = str(
+                            (getattr(response, "headers", None) or {}).get("retry-after")
+                            or ""
+                        )
+                    except Exception:  # noqa: BLE001 - headers are a bonus here
+                        retry_after = ""
+                    rate_limit.record_for_url(url, retry_after)
+                    return None, "rate-limited"
                 say("scrolling: waiting for the page…")
                 _settle(page, url, budget_seconds)
                 rep = collect(
@@ -1092,22 +1162,79 @@ def collect_url(
                 ):
                     nxt = resume_mod.url_at_position(url, resume.position)
                     if nxt and nxt != url:
-                        try:
-                            say("scrolling: opening the next page the token names…")
-                            page.goto(nxt, wait_until="domcontentloaded",
-                                      timeout=int(budget_seconds * 1000))
-                            _settle(page, nxt, budget_seconds)
-                            nxt_rep = collect(
-                                page, want_rows=want_rows, max_clicks=max_clicks,
-                                budget_seconds=max(1, int(deadline - time.monotonic())),
-                                step_ms=step_ms, empty_steps=empty_steps,
-                                tick=tick, capture=capture,
-                            )
-                            nxt_rep.resume_method = "url-position"
-                            nxt_rep.resume_found = True
-                            rep = nxt_rep
-                        except Exception:  # noqa: BLE001 - keep what we had
-                            pass
+                        held = False
+                        if _linkedin_scroll.matches(nxt):
+                            # A second LinkedIn page is another load. The gap
+                            # and the windows apply, and a stop already on
+                            # disk refuses the navigation before it is sent.
+                            fresh = _linkedin_scroll.current_stop()
+                            if fresh is not None:
+                                held = True
+                                rep.stop = (
+                                    (rep.stop + "; " if rep.stop else "")
+                                    + "stopped before another LinkedIn request. "
+                                    + _linkedin_scroll.stop_hint(fresh)
+                                )
+                            else:
+                                try:
+                                    with _linkedin_scroll.exclusive_load():
+                                        pass
+                                except _linkedin_scroll.Paced as paced:
+                                    held = True
+                                    rep.stop = (
+                                        (rep.stop + "; " if rep.stop else "")
+                                        + "stopped before another LinkedIn "
+                                        "request. " + paced.hint
+                                    )
+                        if not held:
+                            try:
+                                say("scrolling: opening the next page the token names…")
+                                nxt_response = page.goto(
+                                    nxt, wait_until="domcontentloaded",
+                                    timeout=int(budget_seconds * 1000),
+                                )
+                                try:
+                                    nxt_status = int(
+                                        getattr(nxt_response, "status", 0) or 0
+                                    )
+                                except (TypeError, ValueError):
+                                    nxt_status = 0
+                                if nxt_status == 429:
+                                    # The page the token named is the request
+                                    # that was refused. Keep the rows in hand.
+                                    rep.rate_limited = True
+                                    if rep.resume_method == "changed":
+                                        rep.resume_method = ""
+                                    retry_after = ""
+                                    try:
+                                        retry_after = str(
+                                            (
+                                                getattr(nxt_response, "headers", None)
+                                                or {}
+                                            ).get("retry-after")
+                                            or ""
+                                        )
+                                    except Exception:  # noqa: BLE001
+                                        retry_after = ""
+                                    from searchts import rate_limit
+
+                                    rate_limit.record_for_url(nxt, retry_after)
+                                else:
+                                    _settle(page, nxt, budget_seconds)
+                                    nxt_rep = collect(
+                                        page, want_rows=want_rows,
+                                        max_clicks=max_clicks,
+                                        budget_seconds=max(
+                                            1, int(deadline - time.monotonic())
+                                        ),
+                                        step_ms=step_ms, empty_steps=empty_steps,
+                                        tick=tick, capture=capture,
+                                    )
+                                    nxt_rep.resume_method = "url-position"
+                                    nxt_rep.resume_found = True
+                                    rep = nxt_rep
+                            except Exception:  # noqa: BLE001 - keep what we had
+                                pass
                 rep.page_url = _page_url(page) or url
                 if capture is not None:
                     try:
@@ -1135,3 +1262,6 @@ def collect_url(
                 browser.close()
     except Exception as e:  # noqa: BLE001 - any browser failure is one reason
         return None, f"browser: {type(e).__name__}"
+    finally:
+        if load_slot is not None:
+            load_slot.__exit__(None, None, None)

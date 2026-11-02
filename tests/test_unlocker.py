@@ -1131,9 +1131,10 @@ def test_wait_settled_load_falls_back_to_networkidle():
 def test_fetch_stealth_nav_race_fails_loud(monkeypatch, stub_extract):
     """Ladder must not treat a navigation race as thin HTML (P3.11).
 
-    curl and jina get 429 here rather than 403, because a repeated refusal
-    stops the ladder before the browser is tried (#334), and a genuine crash
-    in the browser rung needs the ladder to actually reach it.
+    curl and jina get 503 here rather than 403, because a repeated refusal
+    stops the ladder before the browser is tried (#334), and a 429 now stops
+    the ladder on its own (#509). A genuine crash in the browser rung needs
+    the ladder to actually reach it.
     """
 
     def boom(url, timeout=60, progress=None):
@@ -1141,7 +1142,7 @@ def test_fetch_stealth_nav_race_fails_loud(monkeypatch, stub_extract):
             "Page.content: Unable to retrieve content because the page is navigating"
         )
 
-    _set(monkeypatch, curl=(429, "challenge"), jina=(429, "no"))
+    _set(monkeypatch, curl=(503, "challenge"), jina=(503, "no"))
     monkeypatch.setattr(unlocker, "_fetch_stealth", boom)
     with pytest.raises(UnlockerError) as ei:
         fetch("https://www.reddit.com/hot", use_memory=False)
@@ -1206,34 +1207,61 @@ def test_refusal_must_repeat_before_it_stops_anything(monkeypatch, stub_extract)
     assert "alpha" in r.text
 
 
-def test_404_and_429_still_escalate(monkeypatch, stub_extract):
-    """404 and 429 are excluded from the repeat rule, deliberately.
+def test_a_404_still_escalates_to_the_browser(monkeypatch, stub_extract):
+    """404 stays outside the repeat-refusal rule.
 
-    A path can exist only in the rendered app, and a rate limit can reset
-    between rungs. Neither is a statement about the request itself.
+    A path can exist only in the rendered app, so a 404 from curl is not a
+    statement about the request itself.
     """
-    for status in (404, 429):
-        monkeypatch.setattr(
-            unlocker, "_fetch_curl_cffi", lambda url, **kw: (status, "blocked", url, {})
-        )
-        monkeypatch.setattr(
-            unlocker, "_fetch_jina", lambda url, **kw: (status, "blocked", url, {})
-        )
-        monkeypatch.setattr(
-            unlocker, "_fetch_stealth",
-            lambda url, timeout=60, progress=None: (
-                200,
-                "<html><body><p>" + ("bravo " * 400) + "</p></body></html>",
-                url, {},
-            ),
-        )
-        r = fetch(
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi", lambda url, **kw: (404, "blocked", url, {})
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_jina", lambda url, **kw: (404, "blocked", url, {})
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_stealth",
+        lambda url, timeout=60, progress=None: (
+            200,
+            "<html><body><p>" + ("bravo " * 400) + "</p></body></html>",
+            url, {},
+        ),
+    )
+    r = fetch(
+        "https://example.test/u",
+        use_memory=False,
+        backends=["curl_cffi", "Jina Reader", "stealth-browser"],
+    )
+    assert r.backend == "stealth-browser"
+    assert "bravo" in r.text
+
+
+def test_a_429_stops_the_ladder_instead_of_escalating(monkeypatch, stub_extract):
+    """#509: a direct 429 is the host asking for fewer requests, so the ladder stops."""
+    calls = []
+
+    def curl(url, **kw):
+        calls.append("curl")
+        return 429, "blocked", url, {}
+
+    def later(name):
+        def rung(url, **kw):
+            calls.append(name)
+            return 200, "should not run", url, {}
+
+        return rung
+
+    monkeypatch.setattr(unlocker, "_fetch_curl_cffi", curl)
+    monkeypatch.setattr(unlocker, "_fetch_jina", later("jina"))
+    monkeypatch.setattr(unlocker, "_fetch_stealth", later("stealth"))
+    with pytest.raises(UnlockerError) as ei:
+        fetch(
             "https://example.test/u",
             use_memory=False,
             backends=["curl_cffi", "Jina Reader", "stealth-browser"],
         )
-        assert r.backend == "stealth-browser", f"{status} stopped the ladder"
-        assert "bravo" in r.text
+    assert calls == ["curl"]
+    assert any(why == "http-429" for _, why in ei.value.attempts)
 
 
 def test_await_hydration_is_bounded_by_budget():

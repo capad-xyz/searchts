@@ -514,6 +514,26 @@ def click_in_page(page, max_clicks: int) -> Report:
     more" and then says it again has stopped giving us text.
     """
     rep = Report()
+    seen_429: Dict[str, Any] = {"hit": False, "retry": ""}
+
+    def _on_response(response: Any) -> None:
+        try:
+            status = int(getattr(response, "status", 0) or 0)
+        except (TypeError, ValueError):
+            return
+        if status != 429:
+            return
+        seen_429["hit"] = True
+        try:
+            headers = getattr(response, "headers", None) or {}
+            seen_429["retry"] = str(headers.get("retry-after") or "")
+        except Exception:  # noqa: BLE001 - the status is enough to stop
+            seen_429["retry"] = ""
+
+    try:
+        page.on("response", _on_response)
+    except Exception:  # noqa: BLE001 - a page with no events still expands
+        pass
     found = find_in_page(page)
     paywall = [c for c in found if c.get("why") == "paywall"]
     wanted = [c for c in found if c.get("why") == "yes"]
@@ -530,7 +550,25 @@ def click_in_page(page, max_clicks: int) -> Report:
                 "button"
             )
         return rep
+
+    def _stop_for_429() -> None:
+        rep.stop = (
+            "stopped: the host answered http-429, so no further control was pressed"
+        )
+        try:
+            url = str(getattr(page, "url", "") or "")
+        except Exception:  # noqa: BLE001 - no url, no host to cool down
+            url = ""
+        if not url:
+            return
+        from searchts import rate_limit
+
+        rate_limit.record_for_url(url, str(seen_429.get("retry") or "") or None)
+
     for control in wanted:
+        if seen_429["hit"]:
+            _stop_for_429()
+            break
         if rep.clicks >= max_clicks:
             rep.stop = f"stopped at the ceiling of {max_clicks} press(es)"
             break
@@ -560,6 +598,11 @@ def click_in_page(page, max_clicks: int) -> Report:
             pass
         rep.clicks += 1
         rep.clicked.append(label)
+        # A 429 on the last control never reaches the next iteration, so the
+        # stop and the cooldown are recorded here as well as at the top.
+        if seen_429["hit"]:
+            _stop_for_429()
+            break
     return rep
 
 

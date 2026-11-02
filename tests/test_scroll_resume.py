@@ -14,7 +14,7 @@ import json
 
 import pytest
 
-from searchts import resume, scroll, unlocker
+from searchts import rate_limit, resume, scroll, unlocker
 
 URL = "https://example.org/feed"
 
@@ -434,6 +434,8 @@ def test_a_replayed_429_stops_and_keeps_the_rows_already_seen():
     assert rep.resume_method != "changed"
     assert page.scrolled == 0, "a 429 must not keep scrolling"
     assert len(rep.keys) == 5
+    # The replay is a request. Its 429 cools the host the same way a rung does.
+    assert rate_limit.remaining("example.org") > 0
 
 
 def test_a_rate_limited_data_response_stops_the_walk_and_keeps_rows():
@@ -453,6 +455,7 @@ def test_a_rate_limited_data_response_stops_the_walk_and_keeps_rows():
     assert "rate-limited the feed (429)" in rep.note()
     assert rep.stop == "the site rate-limited the feed (429)"
     assert len(rep.keys) == 5, "rows seen before the 429 are kept"
+    assert rate_limit.remaining("example.org") > 0
 
 
 # ── wiring: the token reaches the read and the surfaces ──────────────────────

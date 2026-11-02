@@ -10,6 +10,21 @@ same everywhere:
 | more rows     | ``--items N``   | ``max_items``   | ``SEARCHTS_MAX_ITEMS``  | ``more.items``
 | open the folds| ``--expand``    | ``expand``      | ``SEARCHTS_MAX_EXPAND_CLICKS`` | ``more.expand_clicks``
 
+Two of these have a second, lower ceiling for a read that carries a kept login:
+``items`` defaults to ``SEARCHTS_MAX_ITEMS_SIGNED_IN`` (50), because a list walk
+on a signed-in host spends the user's account, not an anonymous address.
+
+The 429 cooldown is not a read ceiling and is not in the table above: it is the
+default wait recorded after a host says http-429, ``SEARCHTS_429_COOLDOWN``
+(300 s, 1800 at most; 0 turns the cooldown off). It lives here because it is the
+same kind of policy: the user sets it, a read cannot.
+
+LinkedIn page-load pacing is not a knob here. The numbers live in
+``searchts.linkedin``: ``SEARCHTS_LINKEDIN_LOADS_PER_MINUTE`` (2),
+``SEARCHTS_LINKEDIN_LOADS_PER_HOUR`` (20), ``SEARCHTS_LINKEDIN_LOADS_PER_DAY``
+(100, and 0 turns that cap off) and ``SEARCHTS_LINKEDIN_FEED_GAP_MINUTES``
+(30; defined for a later change, not enforced by a read).
+
 plus the ceilings the loop itself runs under (``seconds``, ``step_ms``,
 ``empty_steps``), which are the same three layers and are never a flag: they
 are how the machine is allowed to spend time, not what the caller asked for.
@@ -62,10 +77,16 @@ INTENT_NAMES = ("pages", "items", "expand")
 _SPEC: Dict[str, Tuple[str, str, int, int, str]] = {
     "pages": ("SEARCHTS_MAX_PAGES", "pages", 5, 5, "page"),
     "items": ("SEARCHTS_MAX_ITEMS", "items", 300, 300, "row"),
+    "items_signed_in": (
+        "SEARCHTS_MAX_ITEMS_SIGNED_IN", "items_signed_in", 50, 300, "row",
+    ),
     "expand_clicks": ("SEARCHTS_MAX_EXPAND_CLICKS", "expand_clicks", 8, 40, "click"),
     "seconds": ("SEARCHTS_MORE_SECONDS", "seconds", 60, 300, "second"),
     "step_ms": ("SEARCHTS_MORE_STEP_MS", "step_ms", 1200, 8000, "ms"),
     "empty_steps": ("SEARCHTS_MORE_EMPTY_STEPS", "empty_steps", 2, 10, "step"),
+    # #509: the default wait after a host says http-429, when it sent no
+    # Retry-After. 0 is the off switch (no cooldown file is written).
+    "cooldown": ("SEARCHTS_429_COOLDOWN", "cooldown", 300, 1800, "second"),
 }
 
 #: ``step_ms`` is milliseconds and ``seconds`` is seconds. The note reads in the
@@ -83,6 +104,8 @@ class Limits:
     seconds: int
     step_ms: int
     empty_steps: int
+    #: The default wait after an http-429, for ``searchts.rate_limit``.
+    cooldown: int = 300
     #: ``(knob, asked, ceiling)`` for every request that came in over the line.
     clamped: Tuple[Tuple[str, int, int], ...] = ()
 
@@ -123,10 +146,12 @@ def _note(names) -> str:
 _LABEL = {
     "pages": "pages",
     "items": "items",
+    "items_signed_in": "signed-in items",
     "expand_clicks": "expand clicks",
     "seconds": "scroll seconds",
     "step_ms": "scroll step ms",
     "empty_steps": "empty steps",
+    "cooldown": "429 cooldown",
 }
 
 
@@ -162,7 +187,10 @@ def _read(name: str, yaml_block: Dict[str, Any]) -> Optional[int]:
     except (TypeError, ValueError):
         return None
     if value < 1:
-        return 1
+        # 0 is a real answer for the 429 cooldown: it turns the feature off.
+        # Every other knob keeps its floor of 1, because a read asking for zero
+        # rows or zero pages is not a request.
+        return 0 if name == "cooldown" else 1
     return min(value, hard_cap)
 
 
@@ -171,13 +199,26 @@ def hard_cap(name: str) -> int:
     return _SPEC[name][3]
 
 
-def resolve(**asked: Optional[int]) -> Limits:
+def _signed_in_ceiling() -> int:
+    """The lower items ceiling for a read that carries a kept login."""
+    ceiling = _read("items_signed_in", _yaml_block())
+    if ceiling is None:
+        ceiling = _SPEC["items_signed_in"][2]
+    return ceiling
+
+
+def resolve(*, signed_in: bool = False, **asked: Optional[int]) -> Limits:
     """Resolve every ceiling and apply what the caller asked for.
 
     ``asked`` holds the caller's *intent* (``pages=3``, ``items=250``,
     ``expand_clicks=40``). Anything above the ceiling is clamped and the
     ceiling's name is recorded, so the caller can be told. A ``None`` or an
     absent name means "not asked for", which is not the same as zero.
+
+    ``signed_in`` applies the lower items ceiling (#509): a list walk that
+    carries a kept login spends the user's account on a host that can rate-limit
+    it, so it gets the same clamp machinery with its own name and its own env
+    var (``SEARCHTS_MAX_ITEMS_SIGNED_IN``).
     """
     yaml_block = _yaml_block()
     values: Dict[str, int] = {}
@@ -198,6 +239,24 @@ def resolve(**asked: Optional[int]) -> Limits:
         if want_i > ceiling:
             clamped.append((name, want_i, ceiling))
         values[name] = min(want_i, ceiling)
+    if signed_in:
+        signed = _signed_in_ceiling()
+        ordinary = values["items"]
+        if signed < ordinary:
+            asked_items = asked.get("items")
+            try:
+                shown = (
+                    max(1, int(asked_items)) if asked_items is not None else ordinary
+                )
+            except (TypeError, ValueError):
+                shown = ordinary
+            values["items"] = signed
+            if shown > signed:
+                # The signed-in ceiling is the one that applied, so it is the
+                # one the note must name; the ordinary items row, if any, was
+                # replaced by this lower ceiling.
+                clamped = [c for c in clamped if c[0] != "items"]
+                clamped.append(("items_signed_in", shown, signed))
     return Limits(
         pages=values["pages"],
         items=values["items"],
@@ -205,6 +264,7 @@ def resolve(**asked: Optional[int]) -> Limits:
         seconds=values["seconds"],
         step_ms=values["step_ms"],
         empty_steps=values["empty_steps"],
+        cooldown=values["cooldown"],
         clamped=tuple(clamped),
     )
 
