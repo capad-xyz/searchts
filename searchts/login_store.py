@@ -50,9 +50,13 @@ from searchts.session_cookies import (
     CookieSource,
     describe_expiry,
     entry_expiry,
+    filter_for_site_family,
     is_expired,
+    login_cookie_names,
+    looks_like_login,
     read_owned_site,
     read_owned_store,
+    registrable,
     resolve_owned_host,
     save_owned_site,
 )
@@ -408,7 +412,7 @@ def refresh_reason(site: str, now: Optional[int] = None) -> Optional[str]:
     now = int(time.time() if now is None else now)
     if entry.get("expired"):
         return "expired"
-    at, _known = entry_expiry(entry, now)
+    at, _known = entry_expiry(entry, now, host=host)
     if at is None:
         return None
     if at <= now:
@@ -428,7 +432,7 @@ def signin_reason(site: str, now: Optional[int] = None) -> Optional[str]:
     now = int(time.time() if now is None else now)
     if entry.get("expired"):
         return "expired"
-    at, _known = entry_expiry(entry, now)
+    at, _known = entry_expiry(entry, now, host=host)
     if at is None:
         return None
     if at <= now:
@@ -460,7 +464,9 @@ def refresh_kept(site: str, *, browser: str = "", force: bool = False) -> Cookie
         )
     from searchts.cdp_profile import read_site_cookies
 
-    source = read_site_cookies(site, source_browser, confirm=lambda _prompt: True)
+    source = read_site_cookies(
+        site, source_browser, confirm=lambda _prompt: True, family=True
+    )
     if not source.cookies:
         raise CookieReadError(f"re-copying {host} from {source_browser} returned no cookies")
     save_owned_site(site, source.cookies, browser=source_browser, consent=None)
@@ -636,6 +642,9 @@ class Kept:
     kept: bool
     count: int = 0
     why: str = ""
+    #: False when the kept copy held no cookie that looks like a session, so
+    #: the receipt has to say the login may be missing rather than "kept".
+    has_login: bool = True
     #: Set when the user also asked to remove the browser's own copy.
     also_kill_browser: bool = False
 
@@ -649,23 +658,48 @@ def keep(
 ) -> Kept:
     """Save exactly one site's login into the store. A yes to the keep question.
 
-    Only the requested site is written. The scratch copy the read just used is
-    not promoted and not referenced: keeping copies the values out of the
-    records in hand, so the two files can never be the same file.
+    Only the requested site is written, including cookies it set on its own
+    subdomains. The scratch copy the read just used is not promoted and not
+    referenced: keeping copies the values out of the records in hand, so the
+    two files can never be the same file.
 
     A login kept from a browser records per-site consent, because that copy was
     the approval. A sign-in passes ``consent=False``: it has no browser source
     to re-copy later.
+
+    A copy with no cookie that looks like a session is still kept, but the
+    receipt says it may not include the login instead of reporting a plain
+    success (#504).
     """
     if consent is None:
         consent = bool(browser)
+    host = host_of(site)
     count = save_owned_site(site, records, browser=browser, consent=consent)
+    kept_records = filter_for_site_family(records, host)
+    has_login = looks_like_login(kept_records, site)
+    if has_login:
+        why = (
+            f"kept {host} in the searchts store ({count} cookies). "
+            f"The next read of that site can use the saved login."
+        )
+    else:
+        wanted = login_cookie_names(site)
+        proof = (
+            f" (no {', '.join(wanted)} for {registrable(host) or host})"
+            if wanted else ""
+        )
+        why = (
+            f"kept {host} in the searchts store ({count} cookies), but no "
+            f"cookie in the copy looks like a login session{proof}. The copy "
+            f"may not include the login: sign in to that site in the browser, "
+            f"then keep it again."
+        )
     return Kept(
         site=site,
         kept=True,
         count=count,
-        why=f"kept {host_of(site)} in the searchts store ({count} cookies). "
-            f"The next read of that site can use the saved login.",
+        why=why,
+        has_login=has_login,
     )
 
 
@@ -899,11 +933,11 @@ def list_kept() -> Dict[str, dict]:
                 now,
             )
         ]
-        at, known = entry_expiry(entry, now)
+        at, known = entry_expiry(entry, now, host=host)
         out[host] = {
             "cookies": len(live),
             "browser": entry.get("browser", ""),
-            "expiry": describe_expiry(entry, now),
+            "expiry": describe_expiry(entry, now, host=host),
             "expires_at": at,
             "expiry_known": known,
             "expired": bool(entry.get("expired")) or bool(at is not None and at <= now),
@@ -1011,7 +1045,10 @@ def check_login(
             ),
         )
     try:
-        source = read_owned_site(site)
+        # The target's host, not the login's key: a kept login is filed under
+        # linkedin.com but its session cookie may live on .www.linkedin.com,
+        # and that is the host the account page actually uses (#504).
+        source = read_owned_site(target)
     except CookieReadError as e:
         return LoginCheck(
             site=site,
@@ -1028,7 +1065,7 @@ def check_login(
             status="logged out",
             account_page=False,
             exit_code=1,
-            why=f"no live saved cookies for {host}.",
+            why=f"no live saved cookies for {host_of(target) or host}.",
         )
 
     from searchts import unlocker
@@ -1044,9 +1081,26 @@ def check_login(
             use_memory=False,
             echo_attempts=False,
             progress=False,
+            details=False,
         )
     except unlocker.UnlockerError as e:
         attempts = list(getattr(e, "attempts", None) or [])
+        if any(why == "http-429" for _backend, why in attempts):
+            # A rate limit is not a verdict on the login. Saying "logged out or
+            # expired" here would send the user to re-copy a session that is
+            # probably fine, and the next copy is another request to the same
+            # host that just said no (#443).
+            from searchts import linkedin as _linkedin
+
+            if _linkedin.matches(target):
+                return LoginCheck(
+                    site=site,
+                    url=target,
+                    status="unknown",
+                    account_page=False,
+                    exit_code=2,
+                    why=_linkedin.rate_limit_hint(),
+                )
         if any("login-wall" in why for _backend, why in attempts):
             return LoginCheck(
                 site=site,

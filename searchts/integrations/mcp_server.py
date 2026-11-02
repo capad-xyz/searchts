@@ -492,7 +492,13 @@ def login_signin(url: str, browser: str = "chrome",
     except CookieReadError as e:
         return f"Error: {e}"
     return _with_update_info(json.dumps(
-        {"host": host, "kept": True, "cookies": out.count, "why": out.why},
+        {
+            "host": host,
+            "kept": True,
+            "cookies": out.count,
+            "login_session": out.has_login,
+            "why": out.why,
+        },
         ensure_ascii=False,
     ))
 

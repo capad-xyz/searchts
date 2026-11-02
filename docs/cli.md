@@ -19,6 +19,8 @@ Fetch a page as markdown, or fail and say why.
 Climbs the same three rungs the MCP server uses: curl_cffi with a browser TLS fingerprint, then the Jina reader relay, then a stealth browser. It stops at the first rung that returns real text. A wall, a login page, or a client-rendered shell is a failure, not a page.
 - A player page comes back as its captions, or the failure names transcribe.
 - A share link whose HTML is empty is still a read.
+- A kept LinkedIn login reads a profile as one page: the top card plus its Experience and Education pages, two extra requests at most. A section that fails is named in a note, not a failed read.
+- LinkedIn rate limiting (http-429) stops the ladder and says to wait; it is not a login that expired.
 - On failure `--json` prints `{"url", "error": {kind, message, exit_code, attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.
 
 ```bash
@@ -627,7 +629,7 @@ No MCP tool: the MCP `login_status` tool accepts `url` for the same lookup.
 ### `login keep`
 
 Keep one site's login in the searchts store.
-Copies only that site's cookies from the named browser, then keeps them. Copying is never silent: without a recorded yes for the site or --yes in this run, the command exits 3 and explains what it needs.
+Copies that site's cookies from the named browser, then keeps them. The copy includes cookies the site set on its own subdomains (for example `www.`), because those are often the session. Copying is never silent: without a recorded yes for the site or --yes in this run, the command exits 3 and explains what it needs. If the copy holds no cookie that looks like a login session, the receipt says the login may be missing instead of reporting a plain success.
 
 ```bash
 searchts login keep <url> [--verbose] [--cookies-from-browser BROWSER] [--yes]

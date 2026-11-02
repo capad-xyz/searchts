@@ -311,9 +311,105 @@ def filter_for_host(records: List[CookieRecord], host: str) -> List[CookieRecord
     return [c for c in records if _domain_matches(c.domain, host) and not is_expired(c, now)]
 
 
+def _same_registrable_site(cookie_domain: str, host: str) -> bool:
+    """True when a cookie filed under `cookie_domain` belongs to `host`'s site.
+
+    This is the *keeping* rule, not the sending rule. A browser sends
+    ``.www.linkedin.com`` only to ``www.linkedin.com``, so a read of
+    ``linkedin.com`` must not receive it (that is :func:`_domain_matches`).
+    But keeping ``linkedin.com`` means keeping that site's login, and the
+    session cookie a site sets on its ``www`` host is exactly the one that
+    matters: dropping it leaves a jar of guest cookies and a login that cannot
+    read a signed-in page.
+
+    So this widens one level, to one registrable domain, and no further. A
+    cookie for ``notlinkedin.com``, for a public suffix, or for another
+    registrant under a shared suffix (``a.github.io`` vs ``b.github.io``) is
+    still not this site's.
+    """
+    cd = (cookie_domain or "").strip().lower().lstrip(".")
+    h = (host or "").lower().strip(".")
+    if not cd or not h:
+        return False
+    if cd == h:
+        return True
+    reg_c = registrable(cd)
+    reg_h = registrable(h)
+    if reg_c and reg_h:
+        return reg_c == reg_h
+    # No registrable domain to compare: a single-label host, an IP literal, or
+    # a cookie filed on a public suffix. Fall back to the browser rule, except
+    # for the suffix case, which must never become a family.
+    if _is_public_suffix_host(cd):
+        return False
+    return _domain_matches(cookie_domain, h)
+
+
+def filter_for_site_family(
+    records: List[CookieRecord], host: str
+) -> List[CookieRecord]:
+    """Keep every live cookie of `host`'s site, subdomains included.
+
+    The keep side of the fence. A saved login may hold ``.www.linkedin.com``
+    next to ``.linkedin.com``; a later read still filters those records with
+    :func:`filter_for_host`, so the browser's own rule decides what is sent.
+    """
+    now = int(time.time())
+    return [
+        c for c in records
+        if _same_registrable_site(c.domain, host) and not is_expired(c, now)
+    ]
+
+
 def build_header(records: List[CookieRecord]) -> str:
     """Render a Cookie header. The caller decides where this string goes."""
     return "; ".join(f"{c.name}={c.value}" for c in records)
+
+
+# ── what a login looks like ────────────────────────────────────────────────
+
+#: The cookie that proves a signed-in session on a site, by registrable
+#: domain. A guest jar is set before anyone types a password, so counting
+#: host-matching cookies as a login is how `keep` used to report success with
+#: only the tracking cookies (#504). Named per site because there is no
+#: universal session-cookie name; a site not listed falls back to the simple
+#: httpOnly heuristic in :func:`looks_like_login`.
+LOGIN_COOKIE_NAMES: Dict[str, Tuple[str, ...]] = {
+    "linkedin.com": ("li_at",),
+    "reddit.com": ("reddit_session",),
+    "github.com": ("user_session", "__Host-user_session_same_site"),
+    "x.com": ("auth_token",),
+    "twitter.com": ("auth_token",),
+}
+
+#: Guest, consent and analytics cookies. Set before a sign-in, so a generic
+#: site is not called signed in just because one of these is httpOnly.
+_NOT_A_LOGIN = frozenset({
+    "bcookie", "lang", "sdui_ver", "lidc", "dfpfpt", "fptctx2", "__cf_bm",
+    "cf_clearance", "_ga", "_gid", "_gat", "_fbp", "_gcl_au", "guest_id",
+    "personalization_id", "ct0", "OptanonConsent", "CookieConsent",
+})
+
+
+def login_cookie_names(site: str) -> Tuple[str, ...]:
+    """The cookie names that would prove a login on `site`, when known."""
+    host = _host_from(site)
+    return LOGIN_COOKIE_NAMES.get(registrable(host) or host, ())
+
+
+def looks_like_login(records: List[CookieRecord], site: str) -> bool:
+    """True when the copy holds something a browser would call a session.
+
+    This does not prove a login works; only a read can. It stops `keep` from
+    calling a jar of guest cookies a success, which is what left a LinkedIn
+    login looking kept while every read still hit a login wall.
+    """
+    wanted = login_cookie_names(site)
+    if wanted:
+        return any(c.name in wanted for c in records)
+    return any(
+        c.http_only and c.name.lower() not in _NOT_A_LOGIN for c in records
+    )
 
 
 # ── Firefox-family reader (zero dependencies, read-only) ────────────────────
@@ -410,17 +506,26 @@ def read_all_firefox(browser: str) -> List[CookieRecord]:
     return _read_all_firefox_records(browser)
 
 
-def read_firefox_family(browser: str, site: str) -> CookieSource:
+def read_firefox_family(
+    browser: str, site: str, *, family: bool = False
+) -> CookieSource:
     """Read `site`'s cookies from a Firefox-derived browser's own profile.
 
     Read-only: SQLite is opened with mode=ro and never written.
+
+    ``family=True`` is for keeping a login: it returns every cookie of the
+    site's registrable domain, subdomains included, so a session cookie set on
+    ``www.`` is not left behind. A read keeps the default, host-scoped result.
     """
     host = (urlparse(site if "://" in site else "https://" + site).hostname or "").lower()
     if not host:
         raise CookieReadError(f"cannot work out a host from {site!r}")
 
     records = _read_all_firefox_records(browser)
-    scoped = filter_for_host(records, host)
+    scoped = (
+        filter_for_site_family(records, host) if family
+        else filter_for_host(records, host)
+    )
     if scoped:
         return CookieSource(
             site=site,
@@ -505,8 +610,12 @@ def save_owned_site(
 ) -> int:
     """Persist one site's cookies to the owned store. Returns the count saved.
 
-    Only the site asked for is written. Values live in this file and nowhere
-    else; the caller owns the decision to call it at all.
+    Only the site asked for is written, and that includes cookies the site set
+    on its own subdomains (``.www.linkedin.com`` for ``linkedin.com``): keeping
+    the site is keeping its login. Every later read still filters these records
+    for the host being read, so a subdomain cookie is never sent to another
+    host. Values live in this file and nowhere else; the caller owns the
+    decision to call it at all.
 
     ``consent`` records that the user or agent allowed this site's cookies to
     be copied. It is what lets a later refresh or login-wall retry happen
@@ -521,9 +630,11 @@ def save_owned_site(
             f"not a site anyone owns. Keep the login for the registrable "
             f"domain instead (for example example.com, not com)."
         )
-    scoped = filter_for_host(records, host)
+    scoped = filter_for_site_family(records, host)
     if not scoped:
-        raise CookieReadError(f"refusing to save: no cookies match {host}")
+        raise CookieReadError(
+            f"refusing to save: no cookies match {host} or its subdomains"
+        )
 
     store = read_owned_store()
     existing = store.get(host)
@@ -546,22 +657,54 @@ def save_owned_site(
     return len(scoped)
 
 
-def entry_expiry(entry: dict, now: Optional[int] = None) -> Tuple[Optional[int], bool]:
+def entry_expiry(
+    entry: dict, now: Optional[int] = None, *, host: str = ""
+) -> Tuple[Optional[int], bool]:
     """Earliest expiry in a store entry, and whether the entry recorded one.
 
     ``(None, True)`` means every cookie is a session cookie; ``(None, False)``
     means a legacy entry that has no expiry information at all. A marked
     expired entry reports the moment it was marked so callers can still sort it.
+
+    When ``host`` names a site whose login cookie is known (#443), that cookie
+    answers instead of the shortest tracker. LinkedIn's ``li_at`` lasts about a
+    year while ``__cf_bm`` lasts an hour; taking the minimum made `login list`
+    say a good login expired in an hour. A session login cookie means the
+    entry has no scheduled expiry. If the login cookie is absent (a guest copy
+    kept before sign-in), the whole entry is the answer, as before.
     """
     if not isinstance(entry, dict):
         return None, False
     known = bool(entry.get("expiry_known"))
-    values: List[int] = []
-    for cookie in entry.get("cookies") or []:
-        if not isinstance(cookie, dict):
-            continue
+    cookies = [c for c in (entry.get("cookies") or []) if isinstance(c, dict)]
+    for cookie in cookies:
         if "expiry" in cookie:
             known = True
+
+    wanted = set(login_cookie_names(host)) if host else set()
+    if wanted:
+        found = False
+        login_values: List[int] = []
+        session_login = False
+        for cookie in cookies:
+            if cookie.get("n") not in wanted:
+                continue
+            found = True
+            expiry = normalize_expiry(cookie.get("expiry"))
+            if expiry is None:
+                # A session cookie dies with the browser; in a kept copy it has
+                # no calendar expiry, which is not the same as "expired".
+                session_login = True
+            else:
+                login_values.append(expiry)
+        if found:
+            if session_login or not login_values:
+                return None, True
+            # The login lives as long as its longest-lived session cookie.
+            return max(login_values), True
+
+    values: List[int] = []
+    for cookie in cookies:
         expiry = normalize_expiry(cookie.get("expiry"))
         if expiry is not None:
             values.append(expiry)
@@ -572,14 +715,16 @@ def entry_expiry(entry: dict, now: Optional[int] = None) -> Tuple[Optional[int],
     return None, known
 
 
-def describe_expiry(entry: dict, now: Optional[int] = None) -> str:
+def describe_expiry(
+    entry: dict, now: Optional[int] = None, *, host: str = ""
+) -> str:
     """One short human phrase: expired, expires in N days, session, unknown."""
     if not isinstance(entry, dict):
         return "unknown"
     now = int(time.time() if now is None else now)
     if entry.get("expired"):
         return "expired"
-    at, known = entry_expiry(entry, now)
+    at, known = entry_expiry(entry, now, host=host)
     if at is None:
         return "session" if known else "unknown"
     if at <= now:
@@ -735,7 +880,7 @@ def read_owned_site(site: str) -> CookieSource:
             f"the saved login for {host} has expired; run "
             f"`searchts login signin {host}` to sign in again"
         )
-    at, known = entry_expiry(entry)
+    at, known = entry_expiry(entry, host=host)
     return CookieSource(
         site=site,
         cookies=scoped,

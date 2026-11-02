@@ -66,7 +66,11 @@ searchts read https://some-js-heavy-or-fingerprinted-site.com --scrub
 # Tier 1 (curl_cffi) -> 403 | Tier 2 (Jina) -> clean Markdown returned, injection scrubbed
 
 searchts read https://www.linkedin.com/in/someone/
-# Fails loudly: reports the exact tier and login-wall reason. stdout stays empty.
+# Signed out: fails loudly with the exact tier and login-wall reason, stdout empty.
+# With a kept login: the profile, and its Experience and Education, as one page.
+
+searchts read https://www.linkedin.com/company/acme/posts/
+# Company pages and their posts read natively; a rate limit says so instead of "expired".
 ```
 
 `--scrub` strips invisible and bidi characters and flags prompt-injection indicators before untrusted text reaches your model.

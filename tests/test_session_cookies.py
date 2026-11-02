@@ -24,6 +24,7 @@ import os
 import sqlite3
 import stat
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -38,6 +39,7 @@ from searchts.session_cookies import (
     build_header,
     family_of,
     filter_for_host,
+    filter_for_site_family,
     for_site,
     owned_store_path,
     public_suffix,
@@ -109,6 +111,91 @@ def _fake_firefox_profile(home: Path, browser: str, rows, profile="testprofile")
         dbs.append(db)
     return dbs
 
+
+# Chrome on Linux with --password-store=basic encrypts cookie values as
+# ``v10`` + AES-256-CBC with a key derived from the "peanuts" password. Schema
+# version 24 prepends the SHA-256 of the cookie's host to the plaintext, which
+# is the shape a real Chrome DB has today. The fixture is built that way on
+# purpose: `.www.linkedin.com` and `.linkedin.com` are the rows from #504.
+_CHROME_SCHEMA = """
+CREATE TABLE meta (key TEXT, value TEXT);
+CREATE TABLE cookies (
+    creation_utc INTEGER, host_key TEXT, top_frame_site_key TEXT,
+    name TEXT, value TEXT, encrypted_value BLOB, path TEXT,
+    expires_utc INTEGER, is_secure INTEGER, is_httponly INTEGER,
+    last_access_utc INTEGER, has_expires INTEGER, is_persistent INTEGER,
+    priority INTEGER, samesite INTEGER, source_scheme INTEGER,
+    source_port INTEGER, last_update_utc INTEGER, source_type INTEGER,
+    has_cross_site_ancestor INTEGER,
+    UNIQUE (host_key, name, path, top_frame_site_key)
+);
+"""
+
+
+def _chrome_encrypt(host: str, value: str) -> bytes:
+    """A Chrome-Linux v10 value, encrypted the way --password-store=basic does."""
+    import hashlib
+
+    from Cryptodome.Cipher import AES
+    from Cryptodome.Protocol.KDF import PBKDF2
+    from Cryptodome.Util.Padding import pad
+
+    key = PBKDF2(b"peanuts", b"saltysalt", 16, 1)
+    plain = hashlib.sha256(host.encode()).digest() + value.encode()
+    return b"v10" + AES.new(key, AES.MODE_CBC, b" " * 16).encrypt(pad(plain, 16))
+
+
+def _write_chrome_cookies(db: Path, rows) -> None:
+    """Create a Chrome-shaped Cookies DB. `rows` is (host_key, name, value, http_only)."""
+    db.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(str(db))
+    try:
+        con.executescript(_CHROME_SCHEMA)
+        con.execute("INSERT INTO meta VALUES ('version', '24')")
+        now = int(time.time() * 1_000_000) + 11644473600 * 1_000_000
+        future = now + 86400 * 1_000_000
+        con.executemany(
+            "INSERT INTO cookies VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [
+                (now, host, "", name, "", _chrome_encrypt(host, value), "/", future,
+                 1, http_only, now, 1, 1, 1, -1, 0, -1, now, 0, 0)
+                for host, name, value, http_only in rows
+            ],
+        )
+        con.commit()
+    finally:
+        con.close()
+
+
+def _read_chrome_cookies(db: Path):
+    """Read the fixture the way browser-cookie3 does for a readable Chrome DB.
+
+    The product's Chrome copy path is CDP (tested in test_cdp_profile.py); this
+    covers the other source shape, a cookie database whose rows carry Chrome's
+    host_key spelling of the session cookie.
+    """
+    import browser_cookie3
+
+    class _NoKeyring:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def get_password(self, name):
+            return b"unused"
+
+    old = browser_cookie3._LinuxPasswordManager
+    browser_cookie3._LinuxPasswordManager = _NoKeyring
+    try:
+        jar = browser_cookie3.chrome(cookie_file=str(db))
+    finally:
+        browser_cookie3._LinuxPasswordManager = old
+    return [
+        CookieRecord(
+            c.name, c.value, c.domain, c.path, bool(c.secure),
+            "HTTPOnly" in getattr(c, "_rest", {}), c.expires,
+        )
+        for c in jar
+    ]
 
 def _digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -213,6 +300,38 @@ def test_filter_for_host_keeps_only_cookies_this_host_would_receive():
 
 def test_host_property_drops_the_leading_dot():
     assert CookieRecord("a", "b", ".Amazon.COM").host == "amazon.com"
+
+
+def test_filter_for_site_family_keeps_subdomains_and_nothing_else():
+    """#504: keeping linkedin.com keeps li_at from .www.linkedin.com.
+
+    The widening is one registrable domain. A lookalike host, a deeper suffix
+    trick, a public suffix and an expired cookie all stay out.
+    """
+    records = [
+        CookieRecord("li_at", "session", ".www.linkedin.com", http_only=True),
+        CookieRecord("JSESSIONID", "ajax:1", ".www.linkedin.com"),
+        CookieRecord("bcookie", "guest", ".linkedin.com"),
+        CookieRecord("evil", "x", ".notlinkedin.com"),
+        CookieRecord("deeper", "x", ".linkedin.com.attacker.test"),
+        CookieRecord("suffix", "x", ".co.uk"),
+        CookieRecord("dead", "x", ".www.linkedin.com", expiry=1),
+    ]
+    kept = filter_for_site_family(records, "linkedin.com")
+    assert [c.name for c in kept] == ["li_at", "JSESSIONID", "bcookie"]
+    # The read rule did not move: the browser would not send either www cookie
+    # to the bare host.
+    assert [c.name for c in filter_for_host(records, "linkedin.com")] == ["bcookie"]
+
+
+def test_filter_for_site_family_treats_a_private_suffix_as_separate_sites():
+    records = [
+        CookieRecord("mine", "x", "a.github.io"),
+        CookieRecord("theirs", "x", "b.github.io"),
+    ]
+    assert [c.name for c in filter_for_site_family(records, "a.github.io")] == ["mine"]
+
+
     assert CookieRecord("a", "b", "amazon.com").host == "amazon.com"
 
 
@@ -501,6 +620,54 @@ def test_read_firefox_family_returns_only_the_targets_cookies(tmp_home):
 def test_read_firefox_family_matches_a_bare_hostname(tmp_home):
     _fake_firefox_profile(tmp_home, "zen", _ROWS)
     assert read_firefox_family("zen", "www.amazon.com").count == 2
+
+
+def test_read_firefox_family_keep_scope_includes_the_sites_subdomains(tmp_home):
+    """#504 on the cookie-DB path, not just the CDP one."""
+    rows = (
+        ("li_at", "session", ".www.linkedin.com", "/", 1, 1),
+        ("JSESSIONID", "ajax:1", ".www.linkedin.com", "/", 1, 0),
+        ("bcookie", "guest", ".linkedin.com", "/", 1, 1),
+        ("evil", "x", ".notlinkedin.com", "/", 1, 1),
+    )
+    _fake_firefox_profile(tmp_home, "zen", rows)
+
+    host_only = read_firefox_family("zen", "https://linkedin.com")
+    assert host_only.names == ["bcookie"], "a read still follows the browser rule"
+
+    kept = read_firefox_family("zen", "https://linkedin.com", family=True)
+    assert kept.names == ["JSESSIONID", "bcookie", "li_at"]
+    assert all(c.domain.endswith(".linkedin.com") for c in kept.cookies)
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="the --password-store=basic v10 key is the Linux Chrome layout",
+)
+def test_a_chrome_cookie_db_keeps_the_www_session_and_fences_a_foreign_host(tmp_home):
+    """The row shapes are Chrome's, built with the --password-store=basic key."""
+    db = tmp_home / "chrome" / "Default" / "Network" / "Cookies"
+    _write_chrome_cookies(db, [
+        (".linkedin.com", "bcookie", "guest", 1),
+        (".www.linkedin.com", "li_at", "SESSION-LI-AT", 1),
+        (".www.linkedin.com", "JSESSIONID", "ajax:123", 1),
+        (".notlinkedin.com", "evil", "OTHER-SITE", 1),
+    ])
+
+    records = _read_chrome_cookies(db)
+    by_name = {c.name: c for c in records}
+    assert by_name["li_at"].value == "SESSION-LI-AT"
+    assert by_name["li_at"].domain == ".www.linkedin.com"
+
+    assert save_owned_site("https://linkedin.com", records) == 3
+    assert "evil" not in Path(owned_store_path()).read_text()
+
+    www = read_owned_site("https://www.linkedin.com/in/someone")
+    assert {"li_at", "JSESSIONID", "bcookie"} <= {c.name for c in www.cookies}
+    assert "evil" not in {c.name for c in www.cookies}
+
+    root = read_owned_site("https://linkedin.com")
+    assert [c.name for c in root.cookies] == ["bcookie"]
 
 
 def test_read_firefox_family_does_not_write_to_the_profile(tmp_home):

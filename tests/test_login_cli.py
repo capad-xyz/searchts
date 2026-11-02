@@ -152,6 +152,63 @@ def test_keep_with_consent_writes_one_site(capsys, monkeypatch):
     assert sorted(ls.list_kept()) == ["example.com"]
 
 
+def test_keep_says_when_the_copy_has_no_login_session(capsys, monkeypatch):
+    """#504: 7 guest cookies kept is not a plain success."""
+    from searchts import cdp_profile
+    from searchts.session_cookies import CookieSource
+
+    guests = [
+        CookieRecord("bcookie", "SECRETVALUE", ".linkedin.com"),
+        CookieRecord("lidc", "SECRETVALUE", ".linkedin.com"),
+    ]
+    monkeypatch.setattr(
+        cdp_profile, "read_site_cookies",
+        lambda s, b="", **kw: CookieSource(
+            site=s, cookies=guests, count=len(guests), via="test",
+        ),
+    )
+    ls.grant_session_copy()
+    rc, out, _ = run(
+        ["login", "keep", "https://linkedin.com",
+         "--cookies-from-browser", "chrome"],
+        capsys, monkeypatch,
+    )
+    assert rc == 0
+    assert "kept linkedin.com" in out
+    assert "may not include the login" in out
+    assert "li_at" in out
+    assert "SECRETVALUE" not in out
+    assert ls.list_kept()["linkedin.com"]["cookies"] == 2
+
+
+def test_keep_through_the_cli_keeps_the_www_session(capsys, monkeypatch):
+    from searchts import cdp_profile
+    from searchts.session_cookies import CookieSource
+
+    cookies = [
+        CookieRecord("li_at", "SECRETVALUE", ".www.linkedin.com", http_only=True),
+        CookieRecord("bcookie", "SECRETVALUE", ".linkedin.com"),
+    ]
+    monkeypatch.setattr(
+        cdp_profile, "read_site_cookies",
+        lambda s, b="", **kw: CookieSource(
+            site=s, cookies=cookies, count=2, via="test",
+        ),
+    )
+    ls.grant_session_copy()
+    rc, out, _ = run(
+        ["login", "keep", "https://linkedin.com",
+         "--cookies-from-browser", "chrome"],
+        capsys, monkeypatch,
+    )
+    assert rc == 0
+    assert "may not include the login" not in out
+    assert ls.list_kept()["linkedin.com"]["cookies"] == 2
+    kept = ls.decide("https://www.linkedin.com/in/someone").source
+    assert kept is not None
+    assert "li_at" in {c.name for c in kept.cookies}
+
+
 def test_keep_vivaldi_with_yes_reads_profile_then_persists_it(capsys, monkeypatch):
     """The user's Vivaldi profile is the source, and only this host is kept."""
     from searchts import cdp_profile
@@ -159,10 +216,11 @@ def test_keep_vivaldi_with_yes_reads_profile_then_persists_it(capsys, monkeypatc
 
     seen = {}
 
-    def read_site(site, browser, *, confirm):
+    def read_site(site, browser, *, confirm, **kwargs):
         seen["site"] = site
         seen["browser"] = browser
         seen["approved"] = confirm("Vivaldi debugger approval")
+        seen["family"] = kwargs.get("family")
         return CookieSource(
             site=site, cookies=[rec()], browser=browser, count=1,
             via="debugger port",
@@ -180,6 +238,7 @@ def test_keep_vivaldi_with_yes_reads_profile_then_persists_it(capsys, monkeypatc
         "site": "https://example.com/profile",
         "browser": "vivaldi",
         "approved": True,
+        "family": True,
     }
     assert "Vivaldi debugger approval" in err
     assert "kept example.com" in out

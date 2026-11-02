@@ -299,7 +299,7 @@ def test_every_command_start_reports_a_sweep_without_being_asked(capsys, monkeyp
 
 def test_check_logged_in_reads_directly_with_host_cookies(capsys, monkeypatch):
     now = int(time.time())
-    seed("reddit.com", cookies=[entry_cookie(now + 3600, domain="reddit.com")])
+    seed("reddit.com", cookies=[entry_cookie(now + 3600, domain=".reddit.com")])
     seen = {}
 
     def fetch(url, **kwargs):
@@ -317,8 +317,26 @@ def test_check_logged_in_reads_directly_with_host_cookies(capsys, monkeypatch):
     assert "SECRET-VALUE" not in out + err
 
 
+def test_check_uses_the_www_subdomain_session_cookie(tmp_path, capsys, monkeypatch):
+    """#504: li_at lives on .www.linkedin.com; check must send it to the www page."""
+    seed("linkedin.com", cookies=[entry_cookie(domain=".www.linkedin.com")])
+    seen = {}
+
+    def fetch(url, **kwargs):
+        seen.update(kwargs, url=url)
+        return FetchResult("curl_cffi", "body", 200)
+
+    monkeypatch.setattr("searchts.unlocker.fetch", fetch)
+    rc, out, err = run(["login", "check", "linkedin.com"], capsys, monkeypatch)
+    assert rc == 0
+    assert "logged in" in out
+    assert seen["url"] == "https://www.linkedin.com/feed/"
+    assert [c.domain for c in seen["cookies"]] == [".www.linkedin.com"]
+    assert "SECRET-VALUE" not in out + err
+
+
 def test_check_a_login_wall_is_logged_out(capsys, monkeypatch):
-    seed("reddit.com", cookies=[entry_cookie(domain="reddit.com")])
+    seed("reddit.com", cookies=[entry_cookie(domain=".reddit.com")])
 
     def fetch(url, **kwargs):
         raise UnlockerError(url, [("curl_cffi", "login-wall")])
@@ -331,7 +349,7 @@ def test_check_a_login_wall_is_logged_out(capsys, monkeypatch):
 
 
 def test_check_a_block_is_unknown_not_logged_in(capsys, monkeypatch):
-    seed("reddit.com", cookies=[entry_cookie(domain="reddit.com")])
+    seed("reddit.com", cookies=[entry_cookie(domain=".reddit.com")])
 
     def fetch(url, **kwargs):
         raise UnlockerError(url, [("curl_cffi", "captcha")])
