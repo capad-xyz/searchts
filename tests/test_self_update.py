@@ -30,7 +30,7 @@ def _runtime(monkeypatch, *, kind="pipx", local="1.0.0", pypi="2.0.0", installed
     monkeypatch.setattr(su, "installed_extras", lambda: ())
     monkeypatch.setattr(su, "fetch_pypi_version", lambda timeout=15.0: pypi)
     monkeypatch.setattr(su, "inspect_repo", lambda: su.RepoState(None, False, "not a checkout"))
-    monkeypatch.setattr(su, "other_lock_pids", lambda: [])
+    monkeypatch.setattr(su, "running_searchts", lambda: [])
     monkeypatch.setattr(su, "path_launchers", lambda: [])
     monkeypatch.setattr(su, "primary_launcher", lambda *a, **k: Path("/usr/bin/searchts"))
     monkeypatch.setattr(su, "read_installed_version", lambda launcher: installed)
@@ -249,7 +249,11 @@ def test_second_step_does_not_run_after_the_first_fails(monkeypatch, capsys):
 def test_open_exes_are_named_and_not_killed(monkeypatch, capsys):
     _runtime(monkeypatch)
     _tools(monkeypatch)
-    monkeypatch.setattr(su, "other_lock_pids", lambda: [36744, 29700])
+    monkeypatch.setattr(
+        su,
+        "running_searchts",
+        lambda: [su.RunningSearchts(36744), su.RunningSearchts(29700)],
+    )
     assert su.cmd_update() == 0
     out = capsys.readouterr().out
     assert "PID 36744, PID 29700 still have" in out
@@ -259,7 +263,7 @@ def test_open_exes_are_named_and_not_killed(monkeypatch, capsys):
 def test_stale_version_after_installer_is_a_failure(monkeypatch, capsys):
     _runtime(monkeypatch, pypi="2.0.0", installed="1.0.0")
     _tools(monkeypatch)
-    monkeypatch.setattr(su, "other_lock_pids", lambda: [4242])
+    monkeypatch.setattr(su, "running_searchts", lambda: [su.RunningSearchts(4242)])
     assert su.cmd_update() == 1
     out = capsys.readouterr().out
     assert "did not take effect" in out
@@ -310,6 +314,7 @@ def test_park_and_restore_round_trip(tmp_path):
     assert parked
     assert not exe.exists()
     parked_path, original = parked[0]
+    assert parked_path.name == "searchts.exe.old-99"
     assert parked_path.exists()
     assert su.settle_parked(parked) == []
     assert exe.read_text(encoding="utf-8") == "old"
@@ -334,7 +339,7 @@ def test_windows_lock_refuses_without_running_the_installer(monkeypatch, tmp_pat
     monkeypatch.setattr(su, "process_image", lambda: exe)
     monkeypatch.setattr(su, "launcher_candidates", lambda *a, **k: [exe])
     monkeypatch.setattr(su, "park_files", lambda paths, pid=None: [])
-    monkeypatch.setattr(su, "other_lock_pids", lambda: [4242])
+    monkeypatch.setattr(su, "running_searchts", lambda: [su.RunningSearchts(4242)])
     assert su.cmd_update() == 2
     assert calls == []
     out = capsys.readouterr().out
@@ -462,3 +467,329 @@ def test_update_help_mentions_force_and_dry_run(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "--force" in out
     assert "--dry-run" in out
+
+
+def _completed(stdout, code=0):
+    return SimpleNamespace(returncode=code, stdout=stdout, stderr="")
+
+
+def test_running_searchts_skips_posix(monkeypatch):
+    def run(*_args, **_kwargs):
+        raise AssertionError("posix must not spawn tasklist")
+
+    monkeypatch.setattr(su.subprocess, "run", run)
+    monkeypatch.setattr(su.sys, "platform", "linux")
+    monkeypatch.setattr(su.os, "name", "posix")
+    assert su.running_searchts() == []
+    assert su.running_searchts(platform="linux", os_name="posix") == []
+
+
+def test_os_name_nt_is_enough_to_list_searchts(monkeypatch):
+    """A Linux test can pretend to be Windows with os.name alone."""
+    monkeypatch.setattr(su.sys, "platform", "linux")
+    monkeypatch.setattr(su.os, "name", "nt")
+    monkeypatch.setattr(su, "_skip_pids", lambda: set())
+
+    def run(argv, **_kwargs):
+        if list(argv)[0] == "tasklist":
+            return _completed('"searchts.exe","9","Console","1","1 K"\n')
+        return _completed("")
+
+    monkeypatch.setattr(su.subprocess, "run", run)
+    assert su.running_searchts() == [su.RunningSearchts(9, "")]
+
+
+def test_running_searchts_excludes_this_process_and_reads_command_lines(monkeypatch):
+    monkeypatch.setattr(su.sys, "platform", "win32")
+    monkeypatch.setattr(su.os, "name", "nt")
+    monkeypatch.setattr(su.os, "getpid", lambda: 111)
+    monkeypatch.setattr(su.os, "getppid", lambda: 222)
+    monkeypatch.setattr(
+        "searchts.doctor._windows_parent_map",
+        lambda: {111: 222, 222: 333},
+    )
+
+    def run(argv, **_kwargs):
+        argv = list(argv)
+        if argv[0] == "tasklist":
+            assert argv == [
+                "tasklist",
+                "/FO",
+                "CSV",
+                "/NH",
+                "/FI",
+                "IMAGENAME eq searchts.exe",
+            ]
+            return _completed(
+                "\n".join(
+                    [
+                        '"searchts.exe","111","Console","1","9 K"',
+                        '"searchts.exe","222","Console","1","9 K"',
+                        '"searchts.exe","333","Console","1","9 K"',
+                        '"searchts.exe","4242","Console","1","20,000 K"',
+                    ]
+                )
+            )
+        if argv[0] == "powershell":
+            assert "Get-CimInstance Win32_Process" in argv[-1]
+            return _completed(
+                "\n".join(
+                    [
+                        '"ProcessId","CommandLine"',
+                        '"4242","C:\\tools\\searchts.exe mcp"',
+                        '"111","C:\\tools\\searchts.exe upgrade"',
+                    ]
+                )
+            )
+        raise AssertionError(argv)
+
+    monkeypatch.setattr(su.subprocess, "run", run)
+    assert su.running_searchts() == [
+        su.RunningSearchts(4242, "C:\\tools\\searchts.exe mcp")
+    ]
+
+
+def test_running_searchts_falls_back_to_wmic(monkeypatch):
+    monkeypatch.setattr(su.sys, "platform", "win32")
+    monkeypatch.setattr(su.os, "name", "nt")
+    monkeypatch.setattr(su, "_skip_pids", lambda: set())
+
+    def run(argv, **_kwargs):
+        argv = list(argv)
+        if argv[0] == "tasklist":
+            return _completed('"searchts.exe","7","Console","1","1 K"\n')
+        if argv[0] == "powershell":
+            raise OSError("powershell is missing")
+        if argv[0] == "wmic":
+            return _completed("Node,CommandLine,ProcessId\nHOST,searchts.exe mcp,7\n")
+        raise AssertionError(argv)
+
+    monkeypatch.setattr(su.subprocess, "run", run)
+    assert su.running_searchts() == [su.RunningSearchts(7, "searchts.exe mcp")]
+
+
+def test_uv_tool_bin_dir_reads_uv_stdout(monkeypatch, tmp_path):
+    def run(argv, **_kwargs):
+        assert list(argv)[1:] == ["tool", "dir", "--bin"]
+        return _completed(str(tmp_path) + "\n")
+
+    monkeypatch.setattr(su.subprocess, "run", run)
+    assert su.uv_tool_bin_dir("/usr/bin/uv") == tmp_path
+
+
+def test_sharing_violation_names_the_process_and_the_retry():
+    text = su.sharing_violation_message(
+        "failed to copy file: os error 32",
+        [su.RunningSearchts(4242, r"C:\bin\searchts.exe mcp")],
+        "searchts upgrade",
+    )
+    assert text is not None
+    assert "os error 32" in text
+    assert "PID 4242" in text
+    assert "searchts.exe mcp" in text
+    assert "close the agent app or restart its MCP" in text
+    assert "Retry: searchts upgrade" in text
+    assert su.sharing_violation_message("ordinary failure", [], "searchts upgrade") is None
+
+
+def test_sweep_old_entry_points_removes_only_our_leftovers(tmp_path):
+    stale = tmp_path / "searchts.exe.old-12"
+    stale.write_text("old", encoding="utf-8")
+    extra = tmp_path / "searchts.exe.old-12-1"
+    extra.write_text("old", encoding="utf-8")
+    live = tmp_path / "searchts.exe"
+    live.write_text("live", encoding="utf-8")
+    other = tmp_path / "notes.old-1"
+    other.write_text("keep", encoding="utf-8")
+    removed = su.sweep_old_entry_points([tmp_path, tmp_path])
+    assert {path.name for path in removed} == {
+        "searchts.exe.old-12",
+        "searchts.exe.old-12-1",
+    }
+    assert live.read_text(encoding="utf-8") == "live"
+    assert other.read_text(encoding="utf-8") == "keep"
+    assert su.stale_exe_dirs() == []
+    assert su.sweep_stale_exes() == []
+
+
+def test_sweep_ignores_a_file_that_is_still_locked(tmp_path, monkeypatch):
+    old = tmp_path / "searchts.exe.old-3"
+    old.write_text("busy", encoding="utf-8")
+    real_unlink = Path.unlink
+
+    def boom(self, *args, **kwargs):
+        if self.name == "searchts.exe.old-3":
+            raise OSError("busy")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", boom)
+    assert su.sweep_old_entry_points([tmp_path]) == []
+    assert old.exists()
+
+
+def test_startup_sweeps_old_exes(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(su, "sweep_stale_exes", lambda: calls.append("sweep") or [])
+    monkeypatch.setattr(
+        "searchts.integrations.memory_rule.refresh_known_rules",
+        lambda *_a, **_k: [],
+    )
+    monkeypatch.setattr("searchts.config.load_dotenv_if_available", lambda: None)
+    monkeypatch.setattr(sys, "argv", ["searchts", "version"])
+    with pytest.raises(SystemExit) as exc:
+        cli_run()
+    assert exc.value.code == 0
+    assert calls == ["sweep"]
+    assert "v" in capsys.readouterr().out
+
+
+def _metadata(version):
+    return f"Name: searchts\nVersion: {version}\n"
+
+
+def _windows_uv_tree(tmp_path, *, env_version="0.22.0", bin_bytes=b"old-exe", scripts_bytes=b"old-exe"):
+    bin_dir = tmp_path / "bin"
+    scripts = tmp_path / "env" / "Scripts"
+    site = tmp_path / "env" / "Lib" / "site-packages" / "searchts-0.22.0.dist-info"
+    bin_dir.mkdir()
+    scripts.mkdir(parents=True)
+    site.mkdir(parents=True)
+    (site / "METADATA").write_text(_metadata(env_version), encoding="utf-8")
+    exe = bin_dir / "searchts.exe"
+    exe.write_bytes(bin_bytes)
+    (scripts / "searchts.exe").write_bytes(scripts_bytes)
+    (scripts / "python.exe").write_bytes(b"py")
+    return bin_dir, scripts, site, exe
+
+
+def _arm_windows_uv(monkeypatch, bin_dir, scripts, exe, run_step, *, installed="0.27.0"):
+    calls = _runtime(
+        monkeypatch,
+        kind="uv_tool",
+        local="0.22.0",
+        pypi="0.27.0",
+        installed=installed,
+    )
+    _tools(monkeypatch)
+    monkeypatch.setattr(
+        su,
+        "detect_env",
+        lambda: _env("uv_tool", python=str(scripts / "python.exe")),
+    )
+    # sys.platform, not os.name. CPython's Path() follows os.name, and a
+    # Linux interpreter refuses to construct WindowsPath. os.name is covered
+    # by the process-list test, which does not build paths.
+    monkeypatch.setattr(su.sys, "platform", "win32")
+    monkeypatch.setattr(su, "process_image", lambda: exe)
+    monkeypatch.setattr(su, "_uv_bin_dir_for_update", lambda _uv: bin_dir)
+
+    def wrapped(argv, cwd=None):
+        calls.append((tuple(argv), cwd))
+        return run_step(argv, cwd)
+
+    monkeypatch.setattr(su, "run_step", wrapped)
+    return calls
+
+
+def test_windows_uv_renames_before_uv_and_restores_when_the_copy_does_not_land(
+    monkeypatch, tmp_path, capsys
+):
+    bin_dir, scripts, _site, exe = _windows_uv_tree(tmp_path)
+    seen = {}
+
+    def run_step(argv, cwd=None):
+        seen["missing"] = not exe.exists()
+        seen["parked"] = list(bin_dir.glob("searchts.exe.old-*"))
+        return 1, (
+            "failed to copy file from Scripts\\searchts.exe "
+            "to bin\\searchts.exe: os error 32"
+        )
+
+    calls = _arm_windows_uv(monkeypatch, bin_dir, scripts, exe, run_step)
+    monkeypatch.setattr(
+        su,
+        "running_searchts",
+        lambda: [su.RunningSearchts(4242, r"C:\bin\searchts.exe mcp")],
+    )
+    assert su.cmd_update(command="upgrade") == 1
+    assert calls == [(("/usr/bin/uv", "tool", "upgrade", "searchts"), None)]
+    assert seen["missing"] is True
+    assert seen["parked"]
+    assert exe.read_bytes() == b"old-exe"
+    assert list(bin_dir.glob("searchts.exe.old-*")) == []
+    out = " ".join(capsys.readouterr().out.split())
+    assert "os error 32" in out
+    assert "PID 4242" in out
+    assert "searchts.exe mcp" in out
+    assert "close the agent app or restart its MCP" in out
+    assert "Retry: searchts upgrade" in out
+    assert "Half-finished" not in out
+
+
+def test_windows_uv_reports_a_half_finished_upgrade(monkeypatch, tmp_path, capsys):
+    bin_dir, scripts, site, exe = _windows_uv_tree(tmp_path)
+
+    def run_step(_argv, cwd=None):
+        (scripts / "searchts.exe").write_bytes(b"new-exe")
+        (site / "METADATA").write_text(_metadata("0.27.0"), encoding="utf-8")
+        return 1, "failed to copy file: os error 32"
+
+    _arm_windows_uv(monkeypatch, bin_dir, scripts, exe, run_step)
+    monkeypatch.setattr(
+        su,
+        "running_searchts",
+        lambda: [su.RunningSearchts(4242, r"C:\bin\searchts.exe mcp")],
+    )
+    assert su.cmd_update(command="upgrade") == 1
+    assert exe.read_bytes() == b"old-exe"
+    out = capsys.readouterr().out
+    assert "Half-finished upgrade" in out
+    assert "v0.27.0" in out
+    assert "searchts.exe was not replaced" in out
+    assert "Retry: searchts upgrade --force" in out
+    assert "PID 4242" in out
+
+
+def test_windows_uv_rename_lets_the_new_exe_land(monkeypatch, tmp_path, capsys):
+    bin_dir, scripts, _site, exe = _windows_uv_tree(tmp_path)
+    stale = bin_dir / "searchts.exe.old-5"
+    stale.write_bytes(b"leftover")
+    unrelated = bin_dir / "notes.old-1"
+    unrelated.write_text("keep", encoding="utf-8")
+
+    def run_step(_argv, cwd=None):
+        assert not exe.exists()
+        assert not stale.exists()
+        exe.write_bytes(b"new-exe")
+        (scripts / "searchts.exe").write_bytes(b"new-exe")
+        return 0, "Updated searchts v0.27.0"
+
+    calls = _arm_windows_uv(monkeypatch, bin_dir, scripts, exe, run_step)
+    assert su.cmd_update(command="upgrade") == 0
+    assert calls
+    assert exe.read_bytes() == b"new-exe"
+    assert list(bin_dir.glob("searchts.exe.old-*")) == []
+    assert unrelated.read_text(encoding="utf-8") == "keep"
+    assert "v0.27.0" in capsys.readouterr().out
+
+
+def test_nothing_to_upgrade_with_a_stale_exe_is_half_finished(monkeypatch, tmp_path, capsys):
+    bin_dir, scripts, site, exe = _windows_uv_tree(
+        tmp_path,
+        env_version="0.27.0",
+        bin_bytes=b"old-exe",
+        scripts_bytes=b"new-exe",
+    )
+
+    def run_step(_argv, cwd=None):
+        return 0, "Nothing to upgrade"
+
+    _arm_windows_uv(monkeypatch, bin_dir, scripts, exe, run_step, installed="0.27.0")
+    assert su.cmd_update(command="upgrade") == 1
+    assert exe.read_bytes() == b"old-exe"
+    out = capsys.readouterr().out
+    assert "Half-finished upgrade" in out
+    assert "v0.27.0" in out
+    assert "Retry: searchts upgrade --force" in out
+    assert "now on" not in out
+    assert site.joinpath("METADATA").is_file()

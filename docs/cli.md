@@ -900,7 +900,7 @@ No MCP tool: removing software is the user's act.
 ### `update`
 
 Update to the latest release (`upgrade` is the same command).
-Detects the install shape (pipx, uv tool, editable checkout) and runs that install's own upgrade command. It does not kill a running searchts.exe; stop it first on Windows.
+Detects the install shape (pipx, uv tool, editable checkout) and runs that install's own upgrade command. On Windows a running searchts.exe is renamed aside so the new file can be written. Other searchts processes are named and are not killed. Close them first. An MCP server: close the agent app or restart its MCP.
 Alias: `upgrade`.
 
 ```bash

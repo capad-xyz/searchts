@@ -713,6 +713,7 @@ def _run():
     exits instead of tracebacks.
     """
     _ensure_utf8_console()
+    _startup_old_exe_sweep()
     from searchts.config import load_dotenv_if_available
     load_dotenv_if_available()
     try:
@@ -879,6 +880,16 @@ def _report_cookie_action(args, action: dict) -> None:
         f"cookie: {verb} {count} {browser} cookie(s) for {site} ({reason})",
         file=sys.stderr,
     )
+
+
+def _startup_old_exe_sweep() -> None:
+    """Delete leftover ``searchts.exe.old-*`` files. Never breaks the command."""
+    try:
+        from searchts.self_update import sweep_stale_exes
+
+        sweep_stale_exes()
+    except Exception:  # noqa: BLE001 - a sweep must never break a command
+        return
 
 
 def _startup_cookie_sweep(args) -> None:
