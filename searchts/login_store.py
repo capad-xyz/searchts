@@ -52,6 +52,8 @@ from searchts.session_cookies import (
     entry_expiry,
     filter_for_site_family,
     is_expired,
+    login_cookie_names,
+    looks_like_login,
     read_owned_site,
     read_owned_store,
     registrable,
@@ -410,7 +412,7 @@ def refresh_reason(site: str, now: Optional[int] = None) -> Optional[str]:
     now = int(time.time() if now is None else now)
     if entry.get("expired"):
         return "expired"
-    at, _known = entry_expiry(entry, now)
+    at, _known = entry_expiry(entry, now, host=host)
     if at is None:
         return None
     if at <= now:
@@ -430,7 +432,7 @@ def signin_reason(site: str, now: Optional[int] = None) -> Optional[str]:
     now = int(time.time() if now is None else now)
     if entry.get("expired"):
         return "expired"
-    at, _known = entry_expiry(entry, now)
+    at, _known = entry_expiry(entry, now, host=host)
     if at is None:
         return None
     if at <= now:
@@ -630,50 +632,6 @@ def note_copied(site: str) -> None:
 
 
 # ── keep ────────────────────────────────────────────────────────────────────
-
-
-#: The cookie that proves a signed-in session on a site, by registrable
-#: domain. A guest jar is set before anyone types a password, so counting
-#: host-matching cookies as a login is how `keep` used to report success with
-#: only the tracking cookies (#504). Named per site because there is no
-#: universal session-cookie name; a site not listed falls back to the simple
-#: httpOnly heuristic in :func:`looks_like_login`.
-LOGIN_COOKIE_NAMES: Dict[str, Tuple[str, ...]] = {
-    "linkedin.com": ("li_at",),
-    "reddit.com": ("reddit_session",),
-    "github.com": ("user_session", "__Host-user_session_same_site"),
-    "x.com": ("auth_token",),
-    "twitter.com": ("auth_token",),
-}
-
-#: Guest, consent and analytics cookies. Set before a sign-in, so a generic
-#: site is not called signed in just because one of these is httpOnly.
-_NOT_A_LOGIN = frozenset({
-    "bcookie", "lang", "sdui_ver", "lidc", "dfpfpt", "fptctx2", "__cf_bm",
-    "cf_clearance", "_ga", "_gid", "_gat", "_fbp", "_gcl_au", "guest_id",
-    "personalization_id", "ct0", "OptanonConsent", "CookieConsent",
-})
-
-
-def login_cookie_names(site: str) -> Tuple[str, ...]:
-    """The cookie names that would prove a login on `site`, when known."""
-    host = host_of(site) or site
-    return LOGIN_COOKIE_NAMES.get(registrable(host) or host, ())
-
-
-def looks_like_login(records: List[CookieRecord], site: str) -> bool:
-    """True when the copy holds something a browser would call a session.
-
-    This does not prove a login works; only a read can. It stops `keep` from
-    calling a jar of guest cookies a success, which is what left a LinkedIn
-    login looking kept while every read still hit a login wall.
-    """
-    wanted = login_cookie_names(site)
-    if wanted:
-        return any(c.name in wanted for c in records)
-    return any(
-        c.http_only and c.name.lower() not in _NOT_A_LOGIN for c in records
-    )
 
 
 @dataclass
@@ -975,11 +933,11 @@ def list_kept() -> Dict[str, dict]:
                 now,
             )
         ]
-        at, known = entry_expiry(entry, now)
+        at, known = entry_expiry(entry, now, host=host)
         out[host] = {
             "cookies": len(live),
             "browser": entry.get("browser", ""),
-            "expiry": describe_expiry(entry, now),
+            "expiry": describe_expiry(entry, now, host=host),
             "expires_at": at,
             "expiry_known": known,
             "expired": bool(entry.get("expired")) or bool(at is not None and at <= now),
@@ -1123,9 +1081,26 @@ def check_login(
             use_memory=False,
             echo_attempts=False,
             progress=False,
+            details=False,
         )
     except unlocker.UnlockerError as e:
         attempts = list(getattr(e, "attempts", None) or [])
+        if any(why == "http-429" for _backend, why in attempts):
+            # A rate limit is not a verdict on the login. Saying "logged out or
+            # expired" here would send the user to re-copy a session that is
+            # probably fine, and the next copy is another request to the same
+            # host that just said no (#443).
+            from searchts import linkedin as _linkedin
+
+            if _linkedin.matches(target):
+                return LoginCheck(
+                    site=site,
+                    url=target,
+                    status="unknown",
+                    account_page=False,
+                    exit_code=2,
+                    why=_linkedin.rate_limit_hint(),
+                )
         if any("login-wall" in why for _backend, why in attempts):
             return LoginCheck(
                 site=site,

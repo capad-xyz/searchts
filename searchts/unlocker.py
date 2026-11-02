@@ -31,6 +31,7 @@ import re
 import stat
 import sys
 import threading
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
@@ -2500,6 +2501,78 @@ def _finalize(
     return result
 
 
+def _read_linkedin_section(url: str, **kwargs) -> "FetchResult":
+    """One extra request for a profile section.
+
+    Its own function so the assembly can be tested without a network: a test
+    replaces this name with a stub and keeps the ordinary ladder untouched.
+    The call is the ordinary :func:`fetch`, so a section gets the same backend
+    ladder, the same host-scoped cookies and the same fail-loud rules.
+    """
+    return fetch(url, **kwargs)
+
+
+def _linkedin_finish(
+    result: "FetchResult",
+    *,
+    site: str,
+    cookies: Optional[List["CookieRecord"]],
+    backends: Optional[List[str]],
+    proxy: Optional[str],
+    proxy_trusted: bool,
+    details: bool,
+    tick: Optional[Callable[[str], None]] = None,
+) -> "FetchResult":
+    """Strip LinkedIn's page furniture, and assemble a logged-in profile.
+
+    Runs on every LinkedIn win, before the final sanitizer, so the text the
+    caller receives is the content rather than the header, ad panel, language
+    picker and footer. A profile read that actually carried the login gets its
+    Experience and Education pages joined in, one request each, slowly: at most
+    two extra requests, and a failed section is a note rather than a failed
+    read (#443).
+
+    Anonymous reads are unchanged: ``result.authenticated`` is false, so no
+    section page is fetched and the profile is the top card it always was.
+    """
+    from searchts import linkedin as _linkedin
+
+    if not _linkedin.matches(site):
+        return result
+    result.text = _linkedin.strip_chrome(result.text or "")
+    if not (details and result.authenticated and _linkedin.is_profile(site)):
+        return result
+
+    sections: List[Tuple[str, Optional[str], str]] = []
+    for label, target in _linkedin.detail_urls(site):
+        if tick is not None:
+            tick(f"  linkedin: reading {label}, {len(sections) + 1} of 2")
+        time.sleep(_linkedin.SECTION_DELAY)
+        try:
+            page = _read_linkedin_section(
+                target,
+                backends=backends,
+                cookies=cookies,
+                proxy=proxy,
+                proxy_trusted=proxy_trusted,
+                use_memory=False,
+                progress=False,
+                echo_attempts=False,
+                details=False,
+            )
+        except UnlockerError as e:
+            why = ", ".join(f"{b}: {w}" for b, w in list(e.attempts)[:3]) or "no rung answered"
+            sections.append((label, None, why))
+            continue
+        if not (page.text or "").strip():
+            sections.append((label, None, "the page came back empty"))
+            continue
+        sections.append((label, page.text, ""))
+    result.text, notes = _linkedin.assemble(result.text, sections)
+    result.extra_notes = list(result.extra_notes or []) + notes
+    return result
+
+
 def fetch(url: str, backends: Optional[List[str]] = None,
           min_chars: int = _MIN_CHARS, use_memory: bool = True,
           allow_human: bool = False, scrub: bool = False,
@@ -2507,7 +2580,8 @@ def fetch(url: str, backends: Optional[List[str]] = None,
           cookies: Optional[List["CookieRecord"]] = None,
           proxy: Optional[str] = None, proxy_trusted: bool = False,
           expand: bool = False, echo_attempts: bool = True,
-          media: Optional[int] = None) -> FetchResult:
+          media: Optional[int] = None,
+          details: bool = True) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -2590,6 +2664,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         budget is comes from the ``expand_clicks`` knob, never from here. A known
         host keeps its own selectors - Reddit's "more replies" partials are its
         own, not the generic read/show/see-more words.
+    details:
+        #443. A LinkedIn profile keeps Experience and Education on their own
+        pages. When this read carried the login, the default (True) joins those
+        two pages into the profile, one request each, slowly. A failed section
+        is named in a trailing note and never fails the read. False keeps the
+        read to the URL it was given, which is what a caller paying per request
+        or holding its own rate-limit budget asks for. It has no effect on any
+        other site or on an anonymous read.
     """
     if progress is None:
         progress = os.environ.get("SEARCHTS_PROGRESS", "") in (
@@ -2629,6 +2711,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     except ValueError as e:
         raise UnlockerError(url, [("normalize", str(e))]) from e
 
+    from searchts import linkedin as _linkedin
     from searchts.known_hosts import reddit as _reddit_listing
     from searchts.ssrf import guard_mcp_url, private_hop
     blocked = guard_mcp_url(url, resolve_dns=True)
@@ -2716,6 +2799,16 @@ def fetch(url: str, backends: Optional[List[str]] = None,
 
     def _with_auth(result: FetchResult) -> FetchResult:
         result.authenticated = bool(scoped_cookies) and result.backend in cookie_backends
+        result = _linkedin_finish(
+            result,
+            site=url,
+            cookies=cookies,
+            backends=backends,
+            proxy=proxy,
+            proxy_trusted=proxy_trusted,
+            details=details,
+            tick=_tick,
+        )
         note = expand_sink.note()
         if note:
             result.extra_notes = list(result.extra_notes or []) + [note]
@@ -2804,6 +2897,15 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             order.remove(remembered)
             order.insert(0, remembered)
 
+    if _linkedin.browser_first(url) and "stealth-browser" in order:
+        # LinkedIn search results are built in the browser: measured
+        # 2026-11-02, curl_cffi failed on /search/results/people/ while the
+        # stealth browser returned 200. Asking the rung that works first saves
+        # a request the site has already shown it will not serve. The other
+        # rungs stay behind it, so a machine without a browser still reads.
+        order.remove("stealth-browser")
+        order.insert(0, "stealth-browser")
+
     attempts: List[Tuple[str, str]] = []
     # Curl refused a shell. A later rung wins only when its text has the
     # rows: the widget table, or the ranking above the related block.
@@ -2838,6 +2940,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     #: not the right home for it: nothing here was thin, we simply asked a
     #: second question.
     deferred: Optional[FetchResult] = None
+    #: A LinkedIn 429 from the direct rung stopped the ladder (#443). Raised
+    #: after the loop so the rung's own exception handler cannot swallow it.
+    rate_limited = False
 
     for backend in order:
         if refusal_count >= _REFUSAL_REPEAT_LIMIT and not (
@@ -2903,6 +3008,21 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         unpin(domain)
                         remembered = None
                     continue
+
+                if status == 429 and backend == "curl_cffi" and _linkedin.matches(url):
+                    # #443: LinkedIn rate-limits tightly (measured 2026-11-02:
+                    # seven reads in three minutes earned this). The ladder
+                    # normally escalates on 429 because another client can get
+                    # a different answer, but here the next rungs are a browser
+                    # launch and a relay request to the same site, which is how
+                    # one refusal becomes three. Stop and say what it is. The
+                    # raise is after the loop: an exception here would be caught
+                    # by the rung's own handler and counted as one more failure,
+                    # then the next rung would still run.
+                    attempts.append((backend, "http-429"))
+                    _tick(f"  {backend}: http-429, stopping: LinkedIn is rate limiting")
+                    rate_limited = True
+                    break
 
                 if status is not None and 400 <= status < 500 and status not in (404, 429):
                     # A refusal status that survives a change of TLS fingerprint and
@@ -3205,6 +3325,12 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     unpin(domain)
                     remembered = None
                 continue
+
+    if rate_limited:
+        # No other rung is asked: the site just said it is rate limiting this
+        # address, and a browser launch or a relay request from the same address
+        # only spends the next minute of its budget (#443).
+        raise UnlockerError(url, attempts, hint=_linkedin.rate_limit_hint())
 
     # Human-in-the-loop last resort. Runs BEFORE the `best` fallback below:
     # a soft wall (login page served as HTTP 200) leaves a thin `best`, and

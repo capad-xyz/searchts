@@ -123,6 +123,11 @@ _add(Command(
     notes=(
         "A player page comes back as its captions, or the failure names transcribe.",
         "A share link whose HTML is empty is still a read.",
+        "A kept LinkedIn login reads a profile as one page: the top card plus "
+        "its Experience and Education pages, two extra requests at most. A "
+        "section that fails is named in a note, not a failed read.",
+        "LinkedIn rate limiting (http-429) stops the ladder and says to wait; "
+        "it is not a login that expired.",
         "On failure `--json` prints `{\"url\", \"error\": {kind, message, exit_code, "
         "attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.",
     ),
