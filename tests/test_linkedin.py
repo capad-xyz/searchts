@@ -94,9 +94,16 @@ def test_is_profile_is_the_main_page_and_not_a_details_page():
     assert not linkedin.is_profile("https://www.linkedin.com/feed/")
 
 
-def test_browser_first_only_for_search_results():
+def test_browser_first_for_search_and_the_education_section():
     assert linkedin.browser_first(
         "https://www.linkedin.com/search/results/people/?keywords=cto"
+    )
+    assert linkedin.browser_first(
+        "https://www.linkedin.com/in/someone/details/education/"
+    )
+    assert linkedin.browser_first("https://www.linkedin.com/in/someone/details/education")
+    assert not linkedin.browser_first(
+        "https://www.linkedin.com/in/someone/details/experience/"
     )
     assert not linkedin.browser_first("https://www.linkedin.com/in/someone/")
     assert not linkedin.browser_first("https://www.linkedin.com/company/acme/")
@@ -220,6 +227,70 @@ def test_strip_chrome_stops_the_ad_block_at_the_first_unknown_line():
 def test_strip_chrome_is_a_no_op_on_empty_text():
     assert linkedin.strip_chrome("") == ""
     assert linkedin.strip_chrome("Just a post.\n") == "Just a post."
+
+
+#: The real picker lines as they came back on 2026-11-02, combining marks and
+#: all. `हिंदी (Hindi)` lost its anusvara, `తెలుగు (Telugu)` and
+#: `ਪੰਜਾਬੀ (Punjabi)` lost marks too. Fixed 2026-11-02 on 0.26.0.
+_LANGUAGE_SHELL = """Name | LinkedIn
+[Someone Example](https://www.linkedin.com/in/someone/)
+
+Select language
+हिदी (Hindi)
+తలుగు (Telugu)
+ਪਜਾਬੀ (Punjabi)
+简体中文 (Chinese (Simplified))
+English (English)
+
+[media: 1 image in the main content; media present, not resolved]
+[left out: a side panel headed "Profile language"]
+"""
+
+
+def test_strip_chrome_drops_the_language_list_even_when_marks_are_missing():
+    out = linkedin.strip_chrome(_LANGUAGE_SHELL)
+    for gone in (
+        "Select language",
+        "हिदी (Hindi)",
+        "తలుగు (Telugu)",
+        "ਪਜਾਬੀ (Punjabi)",
+        "简体中文 (Chinese (Simplified))",
+        "English (English)",
+    ):
+        assert gone not in out
+    assert "Name | LinkedIn" in out
+    assert "Someone Example" in out
+
+
+def test_a_parenthesis_outside_the_language_block_is_content():
+    text = (
+        "Select language\n"
+        "English (English)\n"
+        "\n"
+        "Worked on search (Python)\n"
+        "German (German) is not a language here.\n"
+    )
+    out = linkedin.strip_chrome(text)
+    assert "Select language" not in out
+    assert "English (English)" not in out
+    assert "Worked on search (Python)" in out
+    assert "German (German) is not a language here." in out
+
+
+def test_has_section_content_is_false_for_the_javascript_shell():
+    assert linkedin.has_section_content(_LANGUAGE_SHELL) is False
+
+
+def test_has_section_content_is_true_for_real_entries():
+    assert linkedin.has_section_content(
+        "Education\n\nBSc, Somewhere\n2016 - 2020"
+    ) is True
+    assert linkedin.has_section_content("Engineer at Acme\n2020 - 2024") is True
+
+
+def test_has_section_content_is_false_for_an_empty_page():
+    assert linkedin.has_section_content("") is False
+    assert linkedin.has_section_content("\n\n") is False
 
 
 # ── assembly ────────────────────────────────────────────────────────────────
@@ -360,6 +431,23 @@ def test_a_linkedin_429_stops_the_ladder_and_says_rate_limit(monkeypatch):
     assert "expired" not in str(ei.value).lower()
 
 
+def test_a_linkedin_429_from_the_browser_also_stops(monkeypatch):
+    monkeypatch.setattr(
+        unlocker, "_fetch_stealth",
+        lambda url, timeout=60, progress=None, **k: (429, "Too Many Requests", url, {}),
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi", tripwire("curl must not run after a browser 429")
+    )
+    with pytest.raises(UnlockerError) as ei:
+        unlocker.fetch(
+            "https://www.linkedin.com/in/someone/details/education/",
+            use_memory=False,
+        )
+    assert ei.value.attempts == [("stealth-browser", "http-429")]
+    assert "rate limiting" in ei.value.hint
+
+
 def test_linkedin_search_asks_the_browser_before_the_direct_request(monkeypatch):
     monkeypatch.setattr(unlocker, "html_to_text", lambda body, url=None: body)
     monkeypatch.setattr(
@@ -456,3 +544,68 @@ def test_a_failed_section_is_a_note_not_a_failed_read(monkeypatch):
     assert "Synthetic line" in r.text
     assert "the Education section could not be read" in r.text
     assert "http-429" in r.text
+
+
+def test_education_detail_asks_the_browser_before_the_direct_request(monkeypatch):
+    monkeypatch.setattr(unlocker, "html_to_text", lambda body, url=None: body)
+    monkeypatch.setattr(
+        unlocker, "_fetch_curl_cffi", tripwire("curl must not run for education")
+    )
+    monkeypatch.setattr(
+        unlocker, "_fetch_stealth",
+        lambda url, timeout=60, progress=None, **k: (
+            200, "Education\n\nBSc, Somewhere\n" + ("x" * 600), url, {},
+        ),
+    )
+    r = unlocker.fetch(
+        "https://www.linkedin.com/in/someone/details/education/",
+        use_memory=False,
+    )
+    assert r.backend == "stealth-browser"
+    assert "BSc, Somewhere" in r.text
+
+
+def test_a_shell_section_is_asked_once_more_with_the_browser(monkeypatch):
+    _stub_profile(monkeypatch)
+    calls = []
+
+    def section(url, **kwargs):
+        calls.append((url, kwargs.get("backends")))
+        if "education" in url:
+            return FetchResult("stealth-browser", "Education\n\nBSc, Somewhere", 200)
+        if kwargs.get("backends") == ["stealth-browser"]:
+            return FetchResult("stealth-browser", "Experience\n\nEngineer at Acme", 200)
+        return FetchResult("curl_cffi", _LANGUAGE_SHELL, 200)
+
+    monkeypatch.setattr(unlocker, "_read_linkedin_section", section)
+    r = unlocker.fetch(
+        "https://www.linkedin.com/in/someone/",
+        cookies=[CookieRecord("li_at", "SECRET-VALUE", ".www.linkedin.com")],
+        use_memory=False,
+    )
+    experience = [b for u, b in calls if "experience" in u]
+    assert experience == [None, ["stealth-browser"]]
+    assert len([u for u, _ in calls if "education" in u]) == 1
+    assert "Engineer at Acme" in r.text
+    assert "BSc, Somewhere" in r.text
+
+
+def test_a_shell_from_the_browser_is_named_and_not_assembled(monkeypatch):
+    _stub_profile(monkeypatch)
+    calls = []
+
+    def section(url, **kwargs):
+        calls.append(url)
+        if "education" in url:
+            return FetchResult("stealth-browser", _LANGUAGE_SHELL, 200)
+        return FetchResult("curl_cffi", "Experience\n\nEngineer at Acme", 200)
+
+    monkeypatch.setattr(unlocker, "_read_linkedin_section", section)
+    r = unlocker.fetch(
+        "https://www.linkedin.com/in/someone/",
+        cookies=[CookieRecord("li_at", "SECRET-VALUE", ".www.linkedin.com")],
+        use_memory=False,
+    )
+    assert "the Education section could not be read" in r.text
+    assert "## Education" not in r.text
+    assert len(calls) == 2
