@@ -142,13 +142,44 @@ _PROCESS_KEY = os.urandom(32)
 _KEY: Optional[bytes] = None
 
 
+def _binary_flag() -> int:
+    """``O_BINARY`` where the OS has a text mode, else 0.
+
+    Windows ``os.open`` translates ``\\n`` to ``\\r\\n`` unless this flag is
+    set. The key is random bytes, so that rewrite changes the key the next
+    process reads and the token no longer verifies.
+    """
+    return getattr(os, "O_BINARY", 0)
+
+
+def _read_key_file(path: Path) -> Optional[bytes]:
+    """The 32 key bytes, or None when the file is missing or short."""
+    try:
+        fd = os.open(str(path), os.O_RDONLY | _binary_flag())
+    except OSError:
+        return None
+    try:
+        got = bytearray()
+        while len(got) < 32:
+            part = os.read(fd, 32 - len(got))
+            if not part:
+                break
+            got.extend(part)
+    finally:
+        os.close(fd)
+    if len(got) < 32:
+        return None
+    return bytes(got)
+
+
 def _signing_key() -> bytes:
     """The HMAC key for resume tokens.
 
     Read from ``~/.searchts/resume.key``, created once. Two CLI processes
     then agree on a token for the 24 h it stays valid. A failure to read or
     write the file falls back to a process key so a read still works; that
-    token simply will not survive the process.
+    token simply will not survive the process. The file is opened in binary
+    mode on every OS: a ``\\n`` byte in the key must be stored unchanged.
     """
     global _KEY
     if _KEY is not None:
@@ -159,17 +190,18 @@ def _signing_key() -> bytes:
         path = Path(Config.CONFIG_DIR) / "resume.key"
     except Exception:  # noqa: BLE001 - a broken config import still signs
         path = Path.home() / ".searchts" / "resume.key"
-    try:
-        raw = path.read_bytes()
-        if len(raw) >= 32:
-            _KEY = raw[:32]
-            return _KEY
-    except OSError:
-        pass
+    raw = _read_key_file(path)
+    if raw is not None:
+        _KEY = raw
+        return _KEY
     fresh = os.urandom(32)
     try:
         path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        fd = os.open(str(path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        fd = os.open(
+            str(path),
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY | _binary_flag(),
+            0o600,
+        )
         try:
             os.write(fd, fresh)
         finally:
@@ -177,13 +209,10 @@ def _signing_key() -> bytes:
         _KEY = fresh
         return _KEY
     except FileExistsError:
-        try:
-            raw = path.read_bytes()
-            if len(raw) >= 32:
-                _KEY = raw[:32]
-                return _KEY
-        except OSError:
-            pass
+        raw = _read_key_file(path)
+        if raw is not None:
+            _KEY = raw
+            return _KEY
     except OSError:
         pass
     _KEY = _PROCESS_KEY
