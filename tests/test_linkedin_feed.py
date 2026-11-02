@@ -822,3 +822,27 @@ def test_the_driver_never_calls_linkedin_or_fetches_in_page():
         "requests.get",
     ):
         assert banned not in source, banned
+
+
+def test_profile_problem_refuses_a_windows_profile_held_open(tmp_path, monkeypatch):
+    profile = tmp_path / "User Data"
+    profile.mkdir()
+    (profile / "lockfile").write_text("", encoding="utf-8")
+    monkeypatch.setattr(lf.os, "name", "nt")
+    real_open = open
+
+    def held(path, *args, **kwargs):
+        if str(path).endswith("lockfile"):
+            raise PermissionError(13, "in use")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", held)
+    assert "already open" in lf.profile_problem(str(profile))
+
+
+def test_profile_problem_allows_a_released_windows_lockfile(tmp_path, monkeypatch):
+    profile = tmp_path / "User Data"
+    profile.mkdir()
+    (profile / "lockfile").write_text("", encoding="utf-8")
+    monkeypatch.setattr(lf.os, "name", "nt")
+    assert lf.profile_problem(str(profile)) == ""

@@ -789,7 +789,12 @@ def profile_path() -> Optional[str]:
 
 
 def chrome_executable() -> Optional[str]:
-    """An explicit Chrome binary, or None to let ``channel="chrome"`` find it."""
+    """An explicit Chromium-family binary, or None to let ``channel="chrome"`` find it.
+
+    Any Chromium browser that minted the session works here (Chrome, Vivaldi,
+    Edge, Brave): set ``SEARCHTS_LINKEDIN_CHROME`` to its executable and
+    ``SEARCHTS_LINKEDIN_PROFILE`` to its user-data directory.
+    """
     raw = os.environ.get("SEARCHTS_LINKEDIN_CHROME", "").strip()
     return os.path.expanduser(raw) if raw else None
 
@@ -806,6 +811,28 @@ def _pid_alive(pid: int) -> bool:
     except OSError:
         return False
     return True
+
+
+def _windows_profile_locked(profile: str) -> bool:
+    """True when a running Chromium on Windows holds the profile's ``lockfile``.
+
+    Windows Chromium has no ``SingletonLock`` symlink. It keeps ``lockfile``
+    in the user-data directory open without sharing, so opening it fails
+    while the browser runs and succeeds once it has exited.
+    """
+    if os.name != "nt":
+        return False
+    lock = os.path.join(profile, "lockfile")
+    if not os.path.exists(lock):
+        return False
+    try:
+        with open(lock, "a"):
+            pass
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return False
 
 
 def profile_problem(profile: Optional[str]) -> str:
@@ -828,6 +855,14 @@ def profile_problem(profile: Optional[str]) -> str:
             f"SEARCHTS_LINKEDIN_PROFILE points at {profile}, which is not a "
             "directory. Point it at the Chrome user-data directory that holds "
             "the kept LinkedIn login."
+        )
+    if _windows_profile_locked(profile):
+        return (
+            f"the browser profile at {profile} is already open. Close that "
+            "browser (all its windows), or start it with "
+            "--remote-debugging-port and set SEARCHTS_LINKEDIN_CDP to that "
+            "address. The same LinkedIn session is never used by two clients "
+            "at once."
         )
     lock = os.path.join(profile, "SingletonLock")
     if os.path.lexists(lock):
@@ -933,9 +968,10 @@ def _browser_page(
         raise
     except Exception as exc:  # noqa: BLE001 - name the browser fault, not a stack
         raise FeedUnavailable(
-            f"could not open the signed-in Chrome profile ({type(exc).__name__}). "
+            f"could not open the signed-in browser profile ({type(exc).__name__}). "
             "Close other windows using that profile, or set "
-            "SEARCHTS_LINKEDIN_CHROME to the installed Chrome binary."
+            "SEARCHTS_LINKEDIN_CHROME to the browser's executable (Chrome, "
+            "Vivaldi, Edge or Brave)."
         ) from exc
 
 

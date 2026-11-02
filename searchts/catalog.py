@@ -147,6 +147,8 @@ _add(Command(
         "SEARCHTS_LINKEDIN_LOADS_PER_DAY (100; 0 turns the daily cap off).",
         "The LinkedIn home feed (/feed/) is read natively in the Chrome "
         "profile that holds the kept login (SEARCHTS_LINKEDIN_PROFILE), "
+        "or another Chromium browser's (Vivaldi, Edge, Brave) with "
+        "SEARCHTS_LINKEDIN_CHROME set to its executable, "
         "headed, by capturing the page's own responses. One document load "
         "is booked, then one bounded scroll; a scroll step is not another "
         "page load. SEARCHTS_LINKEDIN_FEED_GAP_MINUTES (default 30) is the "
