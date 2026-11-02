@@ -220,6 +220,10 @@ class FetchResult:
     #: what ``--expand`` opened, a named paywall). Appended inside ``_finalize``,
     #: so they are sanitized with the rest of the text rather than after it.
     extra_notes: List[str] = field(default_factory=list, repr=False, compare=False)
+    #: #510: a signed token that resumes this feed after the rows this read
+    #: returned. Set only when a scroll ran and stopped with rows to continue
+    #: from; None on every other read, which is not a promise of nothing more.
+    resume: Optional[str] = field(default=None, repr=False, compare=False)
     #: One identity per index row this read added, when the producer can name
     #: them (a known-host feed knows the post id on every card). ``--items``
     #: dedupes on these because a site's own cursor can hand back a row the
@@ -4069,8 +4073,57 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
     own page, and scrolling page 3 of a static list adds nothing.
     """
     from searchts import knobs
+    from searchts import resume as resume_mod
     from searchts.progress import note as progress_note
     from searchts.progress import wanted as progress_wanted
+
+    # #510: a resume token is checked before the walk, not folded into the
+    # first fetch. A tampered, expired or foreign token is refused with the
+    # reason, because silently reading from the top would answer a different
+    # question than the caller asked and call it a success.
+    resume_token = str(kwargs.pop("resume", "") or "")
+    resume_state: Optional[resume_mod.ResumeState] = None
+    if resume_token:
+        try:
+            resume_state = resume_mod.read(url, resume_token)
+        except resume_mod.ResumeError as e:
+            raise UnlockerError(
+                url, [("resume", str(e))],
+                hint="Read the URL again without the resume token to start a "
+                     "fresh scroll.",
+            ) from e
+
+    # #510 resume order, and it is an order: (a) replay the captured cursor
+    # in the page, (b) fast-skip to the last row the token saw, (c) bump the
+    # URL position. (a) and (b) need the browser and the original page. (c) is
+    # what is left when those cannot run, and it is also what a token that
+    # only knows a next page (a list, no cursor, no row tail) does: the next
+    # page is fetched directly and the old rows are never requested.
+    origin_url = url
+    force_scroll = False
+    resume_from_position = False
+    if resume_state is not None:
+        from searchts import scroll as scroll_mod
+
+        in_page = bool(
+            (resume_state.cursor and resume_state.replay) or resume_state.keys
+        )
+        can_scroll = (
+            not kwargs.get("proxy")
+            and not kwargs.get("cookies")
+            and scroll_mod.browser_available()
+        )
+        if can_scroll and in_page:
+            force_scroll = True
+        elif resume_state.position is not None:
+            url = resume_mod.url_at_position(url, resume_state.position)
+            resume_from_position = True
+        elif in_page:
+            # No URL to bump, and the browser cannot run (it is missing, or
+            # this read carries a proxy or cookies). Force the scroll path so
+            # its note says why, instead of returning the old top as if the
+            # token had been applied.
+            force_scroll = True
 
     # `pages` is the user's ceiling here, never something the caller asked
     # for: passing the product cap as a request made any lower ceiling look
@@ -4174,6 +4227,11 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         nxt = result.next_url
         if got >= want or not nxt:
             break
+        if force_scroll:
+            # The page just fetched is the window the token already covered.
+            # Following its next link would read those rows again before the
+            # scroll gets to resume past them.
+            break
         # No pre-check on nxt, same as read_pages: fetch guards it and raises.
         current = nxt
     else:
@@ -4226,14 +4284,17 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
         )
     if (
         not broke
-        and got < want
+        and (force_scroll or got < want)
         # The scroll is the *second* mechanism, so it is tried whenever the
         # first one did not deliver: the walk ended with no next URL, or it ran
         # out of pages with rows still coming. A page that has both (Discourse's
         # `latest` scrolls and also links `?page=N`) gets both, and asking for
         # more than the page cap can carry is exactly the case where the
-        # second mechanism is the answer.
-        and (not last.next_url or fetched >= limits.pages)
+        # second mechanism is the answer. A resume that still has a cursor or
+        # a row tail forces the scroll even when page one already held enough
+        # rows: those rows are the previous read, and counting them would
+        # answer a different question than the token asked.
+        and (force_scroll or not last.next_url or fetched >= limits.pages)
     ):
         # F23c: the list did not fill by following URLs, so try the other
         # mechanism. The probe inside decides whether this page even is a feed,
@@ -4266,11 +4327,31 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
                 url, want, limits,
                 relay_only=not _has_markup(out[0]),
                 progress=kwargs.get("progress"),
+                resume=None if resume_from_position else resume_state,
+                positioned=resume_from_position,
             )
         if note:
             extra += f"\n\n{note}"
         if rep is not None and rep.stop != "not-a-feed" and rep.html:
             out[0] = _scrolled(out[0], rep, url, kwargs)
+            # #510: the token names this feed, the tail of rows this read
+            # returned, the cursor the page served while scrolling, and the
+            # URL position of the next page when the page names one.
+            # A stand-in report from a test, or a scroll that kept no rows,
+            # has nothing to continue from. getattr: the rows are optional on
+            # a report that only exists to hand HTML back.
+            if getattr(rep, "rows", None):
+                position = resume_mod.next_position(
+                    getattr(rep, "page_url", None) or url, out[0].next_url,
+                )
+                extra += _resume_note(
+                    out[0], origin_url,
+                    keys=getattr(rep, "keys", None) or [],
+                    cursor=getattr(rep, "cursor", "") or "",
+                    replay=getattr(rep, "replay", None),
+                    position=position,
+                    method=getattr(rep, "resume_method", "") or "",
+                )
             # The scrolled page one is the feed from the top, so the later
             # pages of the walk (the same feed, a window further down) repeat
             # its rows. Each row is returned once, in the place it came first.
@@ -4278,11 +4359,63 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
             for later in out[1:]:
                 later.text = _drop_repeated_rows(later.text, seen)
                 seen |= _row_keys(later.text)
+    # A rows read that never scrolled can still name where it stopped: the
+    # next page's position (``?p=2``, ``?after=``). That is the token a list
+    # like Hacker News resumes with. It is not minted when the scroll already
+    # issued one, and not minted from a guess: only from a next link that
+    # itself carries a position.
+    if out and not getattr(out[0], "resume", None):
+        last = out[-1]
+        position = (
+            resume_mod.url_position(last.next_url) if last.next_url else None
+        )
+        if position is not None:
+            how = "url-position" if resume_from_position else ""
+            extra += _resume_note(
+                out[0], origin_url, keys=[], position=position, method=how,
+            )
+        elif resume_from_position:
+            extra += "\n\n[scroll: resumed at the next page in the URL]"
     if extra:
         first = out[0]
         first.text = (first.text or "").rstrip() + extra
     _note_knobs(out[0], limits)
     return out
+
+
+def _resume_note(
+    page: "FetchResult",
+    origin: str,
+    *,
+    keys,
+    cursor: str = "",
+    replay=None,
+    position=None,
+    method: str = "",
+) -> str:
+    """Mint a resume token onto ``page`` and return the note that carries it.
+
+    ``method`` is how *this* read continued (empty on the read that first
+    issued the token). The sentence is the same one the scroll report uses,
+    so the note and the scroll line cannot drift apart.
+    """
+    from searchts import resume as resume_mod
+    from searchts.scroll import ScrollReport
+
+    token = resume_mod.mint(
+        origin, keys=list(keys or []), cursor=cursor or "",
+        replay=replay, position=position,
+    )
+    page.resume = token
+    lead = ""
+    if method:
+        sentence = ScrollReport(resume_method=method)._resume_sentence()
+        lead = sentence[0].upper() + sentence[1:] + ". "
+    return (
+        "\n\n[resume: "
+        f"{lead}this feed stopped after the rows above. Pass "
+        f"--resume {token} (MCP resume) to read on from here]"
+    )
 
 
 def _scrolled(old: "FetchResult", rep, url: str, kwargs: Dict[str, Any]) -> "FetchResult":
@@ -4350,7 +4483,9 @@ def _has_markup(page: "FetchResult") -> bool:
 
 def _scroll_feed(url: str, want: int, limits, *,
                   relay_only: bool = False,
-                  progress: Optional[bool] = None) -> Tuple[str, Any]:
+                  progress: Optional[bool] = None,
+                  resume=None,
+                  positioned: bool = False) -> Tuple[str, Any]:
     """Scroll ``url`` for ``want`` more rows: ``(note, report)``.
 
     Every outcome is a note, including "this is not a feed": the caller asked
@@ -4389,7 +4524,7 @@ def _scroll_feed(url: str, want: int, limits, *,
             url, want_rows=want, max_clicks=limits.expand_clicks,
             budget_seconds=limits.seconds, step_ms=limits.step_ms,
             empty_steps=limits.empty_steps, persistent=True,
-            tick=say if show else None,
+            tick=say if show else None, resume=resume,
         )
     if rep is None:
         if why == "no-browser":
@@ -4398,4 +4533,9 @@ def _scroll_feed(url: str, want: int, limits, *,
     if rep.stop == "not-a-feed":
         return ("[scroll: the page did not grow when scrolled, so it has no "
                 "more rows behind a scroll]"), None
+    if positioned:
+        # The walk started at the page the token named, so every row in the
+        # store is new by construction. Say which method, as the issue asks.
+        rep.resume_method = "url-position"
+        rep.resume_found = True
     return rep.note(), rep

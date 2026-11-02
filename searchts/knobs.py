@@ -13,6 +13,15 @@ same everywhere:
 plus the ceilings the loop itself runs under (``seconds``, ``step_ms``,
 ``empty_steps``), which are the same three layers and are never a flag: they
 are how the machine is allowed to spend time, not what the caller asked for.
+Every scroll path (CLI ``--items``, MCP ``max_items``, the library's
+``read_items``) resolves both through :func:`resolve`, so a user's ceiling
+applies to a resumed read exactly as it does to a first one:
+
+| loop ceiling    | env                       | ``~/.searchts/config.yaml``
+|-----------------|---------------------------|--------------------------
+| scroll budget   | ``SEARCHTS_MORE_SECONDS`` | ``more.seconds``
+| scroll step gap | ``SEARCHTS_MORE_STEP_MS`` | ``more.step_ms``
+| empty steps     | ``SEARCHTS_MORE_EMPTY_STEPS`` | ``more.empty_steps``
 
 ## The rule: the agent asks, the user caps
 

@@ -22,9 +22,10 @@ Climbs the same three rungs the MCP server uses: curl_cffi with a browser TLS fi
 - A kept LinkedIn login reads a profile as one page: the top card plus its Experience and Education pages, two extra requests at most. A section that fails is named in a note, not a failed read.
 - LinkedIn rate limiting (http-429) stops the ladder and says to wait; it is not a login that expired.
 - On failure `--json` prints `{"url", "error": {kind, message, exit_code, attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.
+- An `--items` read returns a signed `resume` token in `--json` and in a `[resume: ...]` note when it can name where to continue: the feed's own cursor, the rows it stopped after, or the next page in the URL. Pass it as `--resume TOKEN` (MCP `resume`) to read on after those rows instead of from the top. It says which method continued the read, and a tampered or 24 h old token is refused.
 
 ```bash
-searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages PAGES] [--items ITEMS] [--media MEDIA] [--expand] [--scrub] [--cookies-from-browser BROWSER] [--yes] [--cookies PATH] [--cdp-port PORT] [--proxy URL] [--proxy-trusted]
+searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages PAGES] [--items ITEMS] [--resume TOKEN] [--media MEDIA] [--expand] [--scrub] [--cookies-from-browser BROWSER] [--yes] [--cookies PATH] [--cdp-port PORT] [--proxy URL] [--proxy-trusted]
 ```
 
 | Argument | Description |
@@ -39,6 +40,7 @@ searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages 
 | `--human` | If no tier gets clean content, open a headful browser to clear it by hand |
 | `--pages` PAGES | Follow the next page on the same site, curl only, up to this many (max 5) Default: `1`. |
 | `--items` ITEMS | Keep following next pages, then scroll if the list only grows that way, until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300) |
+| `--resume` TOKEN | Continue a scroll read after the rows it already returned. Pass the `resume` token from a previous read (the JSON `resume` field or the [resume: ...] note). Refused when tampered with or older than 24 h |
 | `--media` MEDIA | How many image and video addresses the media note lists (default 4, ceiling 40). Does not download them; searchts grab saves the files. SEARCHTS_MAX_MEDIA or more.media in the config changes the default. |
 | `--expand` | Open the text the page is holding back: closed <details> and buttons labelled read/show/see more, and a known host's own controls (a Reddit thread's 'more replies'). Off by default. Never follows a link, a form or a sign-in; a 'continue reading' paywall is named, not opened (ceiling SEARCHTS_MAX_EXPAND_CLICKS) |
 | `--scrub` | Redact prompt-injection spans from the content (invisible-char stripping + indicator scanning always run regardless) |
@@ -55,6 +57,7 @@ Examples:
 searchts read example.com
 searchts read https://x.com/jack/status/20 --json
 searchts read example.com --pages 3 --expand
+searchts read https://news.ycombinator.com/newest --resume TOKEN
 ```
 
 | Exit | Meaning |
@@ -69,6 +72,7 @@ CLI-only flags: `--human`, `--scrub`, `--backend`, `--json`.
 - Same unlocker path as `searchts read`.
 - The JSON has no `next_url`: a page-authored URL is not a safe next request. Use the signed `next_cursor`, or `searchts read --json` when a human wants the URL.
 - `approve_cookie_copy` is CLI `--yes` for one call: set it only after the user said yes to a `cookies_from_browser` copy.
+- `resume` takes the signed token an `--items` read returned, so the next read starts after the rows it already gave back.
 
 ### `search`
 

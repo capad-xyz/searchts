@@ -279,6 +279,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_read.add_argument("--items", type=int, default=0,
                         help="Keep following next pages, then scroll if the list only grows that way, "
                              "until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300)")
+    p_read.add_argument("--resume", metavar="TOKEN", default="",
+                        help="Continue a scroll read after the rows it already returned. Pass the "
+                             "`resume` token from a previous read (the JSON `resume` field or the "
+                             "[resume: ...] note). Refused when tampered with or older than 24 h")
     p_read.add_argument(
         "--media", type=int, default=0,
         help="How many image and video addresses the media note lists "
@@ -3042,19 +3046,30 @@ def _cmd_read(args):
     while True:
         try:
             with tracker:
-                if getattr(args, "items", 0):
+                resume = str(getattr(args, "resume", "") or "")
+                if getattr(args, "items", 0) or resume:
                     if getattr(args, "pages", 1) > 1:
                         # --items counts rows and --pages counts hops; together the
                         # first silently won. Say it rather than drop one.
                         print("--items and --pages are mutually exclusive; using --items.",
                               file=sys.stderr)
-                    pages = unlocker.read_items(
-                        args.url, args.items, backends=backends, allow_human=args.human,
+                    # --resume alone still walks the feed: the token says where
+                    # to start, and the ceiling says how far a read may go.
+                    want_items = getattr(args, "items", 0)
+                    if not want_items:
+                        from searchts.knobs import hard_cap
+
+                        want_items = hard_cap("items")
+                    call = dict(
+                        backends=backends, allow_human=args.human,
                         scrub=args.scrub, progress=tracker.wants(), cookies=cookies,
                         expand=expand,
                         proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
                         **_media_kw(args),
                     )
+                    if resume:
+                        call["resume"] = resume
+                    pages = unlocker.read_items(args.url, want_items, **call)
                 elif getattr(args, "pages", 1) > 1:
                     pages = unlocker.read_pages(
                         args.url, args.pages, backends=backends, allow_human=args.human,
@@ -3151,6 +3166,10 @@ def _cmd_read(args):
             "text": result.text,
             "next_url": result.next_url,
             "more": result.more,
+            # #510: the token that continues this scroll after the rows above.
+            # Absent on a read that did not scroll, because there is nothing to
+            # continue from.
+            **({"resume": result.resume} if getattr(result, "resume", None) else {}),
             "pages": [
                 {"url": p.final_url or args.url, "text": p.text, "next_url": p.next_url}
                 for p in pages
