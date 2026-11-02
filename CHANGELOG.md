@@ -2,6 +2,19 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.27.0](https://github.com/capad-xyz/searchts/compare/v0.26.1...v0.27.0) (2026-11-02)
+
+
+### Added
+
+* **scroll:** resume a feed or SPA read with a signed token ([#512](https://github.com/capad-xyz/searchts/issues/512)) ([1cc36e9](https://github.com/capad-xyz/searchts/commit/1cc36e98b9842c459e4a4fb69ef9a9e0d259b259)), closes [#510](https://github.com/capad-xyz/searchts/issues/510)
+
+
+### Fixed
+
+* **read:** stop on any http-429 and cool down the host ([#514](https://github.com/capad-xyz/searchts/issues/514)) ([52620f3](https://github.com/capad-xyz/searchts/commit/52620f3b975adc965bcfa47dd0edddb9ea69fe7a)), closes [#509](https://github.com/capad-xyz/searchts/issues/509)
+* **scroll:** write the resume key in binary mode on Windows ([#516](https://github.com/capad-xyz/searchts/issues/516)) ([168ab37](https://github.com/capad-xyz/searchts/commit/168ab379f7bbb9a0106d200c85038c5b252d7fa5)), closes [#515](https://github.com/capad-xyz/searchts/issues/515)
+
 ## [0.26.1](https://github.com/capad-xyz/searchts/compare/v0.26.0...v0.26.1) (2026-11-02)
 
 
