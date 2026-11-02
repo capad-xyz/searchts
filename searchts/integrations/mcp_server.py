@@ -139,6 +139,12 @@ READ_URL_DESCRIPTION = (
     "the files, and the note says so when it stopped early. A request over 40 "
     "is clamped and the note names the ceiling. SEARCHTS_MAX_MEDIA or more.media "
     "in the config changes the default for a read that does not pass max_media. "
+    "A direct rung's http-429 stops the ladder and cools that host "
+    "(SEARCHTS_429_COOLDOWN, default 300 s, 1800 at most, 0 off). The next "
+    "read is refused until then. 'wait_on_429' waits and retries that rung "
+    "(off by default; a signed-in read gets one wait; a LinkedIn stop is "
+    "never overridden). 'ignore_cooldown' reads during the cooldown. A "
+    "signed-in list walk uses SEARCHTS_MAX_ITEMS_SIGNED_IN (default 50). "
     "Returns an 'Error: ...' "
     "string (not an exception) when every tier fails."
     + UPDATE_CHECK_DESCRIPTION
@@ -235,6 +241,8 @@ def create_server():
         proxy_trusted: bool = False,
         max_media: int = 0,
         approve_cookie_copy: bool = False,
+        wait_on_429: bool = False,
+        ignore_cooldown: bool = False,
     ) -> str:
         # The stealth-browser rung is sync Playwright work that refuses to run
         # on a running asyncio loop. ``asyncio.to_thread`` runs it in a worker
@@ -249,6 +257,8 @@ def create_server():
             expand, cookies, cookies_from_browser, cdp_port, proxy,
             proxy_trusted, max_media, update_info=info,
             approve_cookie_copy=approve_cookie_copy,
+            wait_on_429=wait_on_429,
+            ignore_cooldown=ignore_cooldown,
         )
 
     @mcp.tool(name="web_search", description=WEB_SEARCH_DESCRIPTION)
@@ -879,6 +889,8 @@ def read_url(
     *,
     update_info: Any = _UPDATE_UNSET,
     approve_cookie_copy: bool = False,
+    wait_on_429: bool = False,
+    ignore_cooldown: bool = False,
 ) -> str:
     """Fetch `url` via the unlocker and return a JSON source-receipt + markdown.
 
@@ -1051,6 +1063,14 @@ def read_url(
 
         max_items = max_items or hard_cap("items")
         extra["resume"] = resume
+    if wait_on_429:
+        # #509: opt-in. Passed only when asked, for the same reason as every
+        # other key here: a stub written against the old signature must not
+        # start receiving a keyword it never declared.
+        extra["wait_on_429"] = True
+    if ignore_cooldown:
+        # #509: read a host that is resting after an http-429 anyway.
+        extra["ignore_cooldown"] = True
     try:
         if max_items:
             pages = unlocker.read_items(url, max_items, **extra)

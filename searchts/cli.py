@@ -278,11 +278,27 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Follow the next page on the same site, curl only, up to this many (max 5)")
     p_read.add_argument("--items", type=int, default=0,
                         help="Keep following next pages, then scroll if the list only grows that way, "
-                             "until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300)")
+                             "until this many list rows (ceiling SEARCHTS_MAX_ITEMS, max 300; a read "
+                             "carrying a kept login uses SEARCHTS_MAX_ITEMS_SIGNED_IN, default 50)")
     p_read.add_argument("--resume", metavar="TOKEN", default="",
                         help="Continue a scroll read after the rows it already returned. Pass the "
                              "`resume` token from a previous read (the JSON `resume` field or the "
                              "[resume: ...] note). Refused when tampered with or older than 24 h")
+    p_read.add_argument(
+        "--wait-on-429",
+        action="store_true",
+        help="When a host answers http-429, wait for its Retry-After (or back "
+             "off exponentially) and retry that rung, capped at 180 s in all. "
+             "Off by default; a read carrying a kept login gets one wait. "
+             "A LinkedIn stop is never waited out this way.",
+    )
+    p_read.add_argument(
+        "--ignore-cooldown",
+        action="store_true",
+        help="Read a host even while it is resting after an http-429. searchts "
+             "records the cooldown locally (SEARCHTS_429_COOLDOWN, default 300 s, "
+             "max 1800; 0 turns it off) and refuses before sending otherwise.",
+    )
     p_read.add_argument(
         "--media", type=int, default=0,
         help="How many image and video addresses the media note lists "
@@ -531,6 +547,26 @@ def build_parser() -> argparse.ArgumentParser:
         "For any other site (or a custom page) a no-wall result is "
         "reported as unknown, because a public page proves nothing about "
         "your account.",
+    )
+
+    p_login_resume = login_sub.add_parser(
+        "resume",
+        parents=[_verbose],
+        help="Clear a site's local read stop (and its 429 cooldown) so reads "
+             "may start again",
+        description=(
+            "Reads of a site can be paused locally: an http-429 cools the host "
+            "down for SEARCHTS_429_COOLDOWN (5 minutes by default), and "
+            "LinkedIn stops for 24 h after a 429, 999 or too-many-pages page, "
+            "a checkpoint or a forced logout, or until a person clears an "
+            "account restriction. This clears that state for one site. It "
+            "sends no request and does not sign in; it only says searchts may "
+            "try the site again."
+        ),
+    )
+    p_login_resume.add_argument(
+        "site",
+        help="The site to resume reads for, for example linkedin.com",
     )
 
     # ── check-update ──
@@ -3065,6 +3101,8 @@ def _cmd_read(args):
                         scrub=args.scrub, progress=tracker.wants(), cookies=cookies,
                         expand=expand,
                         proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                        wait_on_429=getattr(args, "wait_on_429", False),
+                        ignore_cooldown=getattr(args, "ignore_cooldown", False),
                         **_media_kw(args),
                     )
                     if resume:
@@ -3076,6 +3114,8 @@ def _cmd_read(args):
                         scrub=getattr(args, "scrub", False), progress=tracker.wants(),
                         cookies=cookies, expand=expand,
                         proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                        wait_on_429=getattr(args, "wait_on_429", False),
+                        ignore_cooldown=getattr(args, "ignore_cooldown", False),
                         **_media_kw(args),
                     )
                 else:
@@ -3084,6 +3124,8 @@ def _cmd_read(args):
                         scrub=getattr(args, "scrub", False), progress=tracker.wants(),
                         cookies=cookies, expand=expand,
                         proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
+                        wait_on_429=getattr(args, "wait_on_429", False),
+                        ignore_cooldown=getattr(args, "ignore_cooldown", False),
                         **_media_kw(args),
                     )]
                 result = pages[0]
@@ -3702,6 +3744,39 @@ def _cmd_login(args):
         ]
         receipt(rows, subject=checked.site)
         sys.exit(checked.exit_code)
+
+    if action == "resume":
+        from searchts import linkedin, rate_limit
+        from searchts.unlocker import registrable_domain
+
+        site = getattr(args, "site", "")
+        host = registrable_domain(site) or host_of(site)
+        if not host:
+            print(
+                f"searchts login resume: {site!r} is not a site searchts can file",
+                file=sys.stderr,
+            )
+            sys.exit(2)
+        stopped = linkedin.clear_stop() if linkedin.matches(host) else False
+        cooled = rate_limit.forget(host)
+        rows = []
+        if stopped:
+            rows.append(receipts.Row(
+                progress.ROW_OK, "cleared", "LinkedIn read stop (429, checkpoint, logout or restriction)",
+            ))
+        if cooled:
+            rows.append(receipts.Row(
+                progress.ROW_OK, "cleared", "429 cooldown",
+            ))
+        if not rows:
+            rows.append(receipts.Row(
+                progress.ROW_SKIP, "clear", "no local stop or 429 cooldown to clear",
+            ))
+        rows.append(receipts.Row(
+            progress.ROW_SKIP, "next", "the next read may request this site again",
+        ))
+        receipt(rows, subject=host)
+        sys.exit(0)
 
     if action == "list":
         a = audit()

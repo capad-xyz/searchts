@@ -209,6 +209,18 @@ def isolate_unlocker_cache(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
+def linkedin_loads_do_not_sleep(monkeypatch):
+    """A LinkedIn page load waits 20 s in production. Tests must not.
+
+    ``take_load`` still books the gap on its own clock when this returns at
+    once, so pacing tests that need to see the wait pass ``sleep=`` themselves.
+    """
+    from searchts import linkedin
+
+    monkeypatch.setattr(linkedin, "_sleep", lambda _seconds: None)
+
+
+@pytest.fixture(autouse=True)
 def isolate_whisper_models(monkeypatch, tmp_path):
     """No test sees, or downloads into, the real ~/.searchts/models (#439).
 

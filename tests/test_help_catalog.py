@@ -68,7 +68,8 @@ def test_a_subcommand_does_not_reuse_the_parent_screen():
     parent = catalog.meta_for("login")
     assert parent is not None
     for verb in (
-        "list", "status", "keep", "kill", "signin", "purge-scratch", "sweep", "check",
+        "list", "status", "keep", "kill", "signin", "purge-scratch", "sweep",
+        "check", "resume",
     ):
         child = catalog.meta_for(["login", verb])
         assert child is not None
@@ -112,7 +113,8 @@ def test_json_help_for_one_command_includes_its_verbs():
     assert "login" in names
     assert "login check" in names
     assert "login sweep" in names
-    assert len(names) == 9
+    assert "login resume" in names
+    assert len(names) == 10
 
 
 def test_unknown_help_path_is_a_clean_exit_2():
@@ -178,9 +180,12 @@ def test_no_help_screen_has_an_empty_heading():
     assert not problems, "\n".join(problems)
 
 
-def test_login_help_lists_all_seven_verbs_with_descriptions():
+def test_login_help_lists_every_verb_with_a_description():
     stdout = ANSI.sub("", _run("login", "--help").stdout)
-    for verb in ("list", "keep", "kill", "signin", "purge-scratch", "sweep", "check"):
+    for verb in (
+        "list", "keep", "kill", "signin", "purge-scratch", "sweep", "check",
+        "resume",
+    ):
         assert re.search(rf"^\s+{re.escape(verb)}\s{{2,}}\S", stdout, re.M), verb
     assert "Delete expired cookies now, offline." in stdout
 
