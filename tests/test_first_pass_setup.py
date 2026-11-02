@@ -32,8 +32,13 @@ def test_plan_is_versioned_and_complete(nothing_installed):
             assert key in item
         assert item["size_bytes"] > 0
     by_id = {i["id"]: i for i in doc["items"]}
-    # The browser and every site tool are checked by default.
-    assert all(by_id[i]["default_selected"] for i in ids[:-1])
+    # The browser and every site tool still read natively are checked by default.
+    first_pass = ["chromium", "twitter", "reddit", "mcporter", "gh"]
+    assert all(by_id[i]["default_selected"] for i in first_pass)
+    # #443: native LinkedIn reads need a kept login, so the MCP bridge is opt-in.
+    assert by_id["linkedin"]["when"] == "first_use"
+    assert by_id["linkedin"]["default_selected"] is False
+    assert "searchts install --yes --only linkedin" == by_id["linkedin"]["approve_command"]
     # The Whisper model is listed, never installed by this approval.
     assert by_id["whisper-model"]["when"] == "first_use"
     assert "whisper-model" not in doc["pending"]
@@ -117,13 +122,13 @@ def test_ffmpeg_falls_back_to_the_bundled_binary(monkeypatch, tmp_path):
 def test_missing_tool_hints_point_at_the_setup_command():
     hint = setup_plan.missing_tool_hint("twitter")
     assert "searchts install" in hint
-    assert "--skip chromium,reddit,linkedin,mcporter,gh" in hint
+    assert "--skip chromium,reddit,mcporter,gh" in hint
 
 
-def test_linkedin_agent_command_keeps_its_mcporter_dependency():
+def test_linkedin_agent_command_is_the_opt_in_form():
     linkedin = next(i for i in setup_plan.items() if i.id == "linkedin")
     assert setup_plan.approve_command_for(linkedin) == (
-        "searchts install --yes --skip chromium,twitter,reddit,gh"
+        "searchts install --yes --only linkedin"
     )
 
 
@@ -168,6 +173,20 @@ def test_ensure_registers_tools_that_were_already_present(monkeypatch):
     )
 
     setup_plan.ensure_mcporter_setup([])
+    assert calls == ["exa"]
+
+
+def test_ensure_registers_the_linkedin_fallback_only_when_asked(monkeypatch):
+    calls = []
+    monkeypatch.setattr(setup_plan, "_which", lambda *names: True)
+    monkeypatch.setattr(
+        setup_plan, "register_exa_search", lambda: calls.append("exa") or True
+    )
+    monkeypatch.setattr(
+        setup_plan, "register_linkedin_mcp", lambda: calls.append("linkedin") or True
+    )
+
+    setup_plan.ensure_mcporter_setup(only=["linkedin"])
     assert calls == ["exa", "linkedin"]
 
 
@@ -213,7 +232,7 @@ def test_yes_reconciles_even_when_everything_is_already_installed(
         yes = True
 
     monkeypatch.setattr(setup_plan, "render", lambda skip: [])
-    monkeypatch.setattr(setup_plan, "plan", lambda skip: {"pending": []})
+    monkeypatch.setattr(setup_plan, "plan", lambda skip, only=None: {"pending": []})
     called = []
     monkeypatch.setattr(
         setup_plan, "ensure_mcporter_setup", lambda skip: called.append(list(skip))
@@ -232,7 +251,7 @@ def test_without_yes_an_all_installed_plan_changes_nothing(monkeypatch):
         yes = False
 
     monkeypatch.setattr(setup_plan, "render", lambda skip: [])
-    monkeypatch.setattr(setup_plan, "plan", lambda skip: {"pending": []})
+    monkeypatch.setattr(setup_plan, "plan", lambda skip, only=None: {"pending": []})
     called = []
     monkeypatch.setattr(
         setup_plan, "ensure_mcporter_setup", lambda skip: called.append(list(skip))
@@ -240,3 +259,28 @@ def test_without_yes_an_all_installed_plan_changes_nothing(monkeypatch):
 
     cli._first_pass(Args(), dry_run=False)
     assert called == []
+
+
+def test_only_installs_the_optional_fallback_and_its_requirement(
+    monkeypatch, capsys, nothing_installed
+):
+    """#443: --only linkedin is the way to the opt-in MCP bridge."""
+    from searchts import cli
+
+    class Args:
+        skip_ids = []
+        yes = False  # --only is the approval
+
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False, raising=False)
+    cli._first_pass(Args(), dry_run=False, only=["mcporter", "linkedin"])
+    assert "_install_linkedin" in nothing_installed
+    assert "_install_mcporter" in nothing_installed
+    assert "_install_chromium" not in nothing_installed
+    out = capsys.readouterr().out
+    assert "To install now: linkedin, mcporter" in out
+
+
+def test_only_requires_its_requirements():
+    assert setup_plan.parse_only("linkedin") == ["linkedin", "mcporter"]
+    with pytest.raises(ValueError, match="unknown setup item"):
+        setup_plan.parse_only("myspace")

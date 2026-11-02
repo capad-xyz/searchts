@@ -2543,31 +2543,60 @@ def _linkedin_finish(
     if not (details and result.authenticated and _linkedin.is_profile(site)):
         return result
 
-    sections: List[Tuple[str, Optional[str], str]] = []
-    for label, target in _linkedin.detail_urls(site):
+    def _ask(target: str, rungs: Optional[List[str]], note: str) -> FetchResult:
+        """One polite request for a section, with the rung choice said out loud."""
         if tick is not None:
-            tick(f"  linkedin: reading {label}, {len(sections) + 1} of 2")
+            tick(note)
         time.sleep(_linkedin.SECTION_DELAY)
+        return _read_linkedin_section(
+            target,
+            backends=rungs,
+            cookies=cookies,
+            proxy=proxy,
+            proxy_trusted=proxy_trusted,
+            use_memory=False,
+            progress=False,
+            echo_attempts=False,
+            details=False,
+        )
+
+    sections: List[Tuple[str, Optional[str], str]] = []
+    detail_pages = _linkedin.detail_urls(site)
+    total = len(detail_pages)
+    for number, (label, target) in enumerate(detail_pages, 1):
         try:
-            page = _read_linkedin_section(
-                target,
-                backends=backends,
-                cookies=cookies,
-                proxy=proxy,
-                proxy_trusted=proxy_trusted,
-                use_memory=False,
-                progress=False,
-                echo_attempts=False,
-                details=False,
+            page = _ask(
+                target, backends,
+                f"  linkedin: reading {label}, {number} of {total}",
             )
+            text = (page.text or "").strip()
+            if text and not _linkedin.has_section_content(text):
+                # A 200 that carries only the page shell. Education is rendered
+                # in the browser (2026-11-02); when the winning rung was not the
+                # browser and the caller allows it, ask the browser once for the
+                # same section. No other retry: the counter above already spent
+                # one request on this section.
+                can_browser = (
+                    backends is None or "stealth-browser" in backends
+                )
+                if (
+                    page.backend != "stealth-browser"
+                    and can_browser
+                    and not _linkedin.browser_first(target)
+                ):
+                    page = _ask(
+                        target, ["stealth-browser"],
+                        f"  linkedin: {label} came back as a shell, asking the browser",
+                    )
+                    text = (page.text or "").strip()
         except UnlockerError as e:
             why = ", ".join(f"{b}: {w}" for b, w in list(e.attempts)[:3]) or "no rung answered"
             sections.append((label, None, why))
             continue
-        if not (page.text or "").strip():
-            sections.append((label, None, "the page came back empty"))
+        if not text or not _linkedin.has_section_content(text):
+            sections.append((label, None, "the page came back without its entries"))
             continue
-        sections.append((label, page.text, ""))
+        sections.append((label, text, ""))
     result.text, notes = _linkedin.assemble(result.text, sections)
     result.extra_notes = list(result.extra_notes or []) + notes
     return result
@@ -3009,16 +3038,23 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                         remembered = None
                     continue
 
-                if status == 429 and backend == "curl_cffi" and _linkedin.matches(url):
+                if (
+                    status == 429
+                    and backend != "Jina Reader"
+                    and _linkedin.matches(url)
+                ):
                     # #443: LinkedIn rate-limits tightly (measured 2026-11-02:
                     # seven reads in three minutes earned this). The ladder
                     # normally escalates on 429 because another client can get
                     # a different answer, but here the next rungs are a browser
                     # launch and a relay request to the same site, which is how
-                    # one refusal becomes three. Stop and say what it is. The
-                    # raise is after the loop: an exception here would be caught
-                    # by the rung's own handler and counted as one more failure,
-                    # then the next rung would still run.
+                    # one refusal becomes three. Stop and say what it is. This
+                    # covers the browser rung too, because Education asks it
+                    # first, but not the relay: a 429 from r.jina.ai is that
+                    # service's own quota, not LinkedIn's answer. The raise is
+                    # after the loop: an exception here would be caught by the
+                    # rung's own handler and counted as one more failure, then
+                    # the next rung would still run.
                     attempts.append((backend, "http-429"))
                     _tick(f"  {backend}: http-429, stopping: LinkedIn is rate limiting")
                     rate_limited = True

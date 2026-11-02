@@ -231,18 +231,22 @@ def register_linkedin_mcp() -> bool:
     return False
 
 
-def ensure_mcporter_setup(skip: Iterable[str] = ()) -> None:
-    """Register what the approved, non-skipped items promise.
+def ensure_mcporter_setup(
+    skip: Iterable[str] = (), only: Optional[Iterable[str]] = None,
+) -> None:
+    """Register what the approved items promise.
 
     Called after an approved install even when the tools were already on PATH,
     so a user who installed before this fix still ends with home-scope entries.
-    A skipped item is never registered.
+    Exa is registered whenever mcporter is present (it is a first-pass item).
+    The LinkedIn fallback is not first-pass any more: it is registered only
+    when it was explicitly picked with ``--only``/``--channels linkedin``.
     """
     skipped = set(skip)
     if "mcporter" in skipped or not _which("mcporter"):
         return
     register_exa_search()
-    if "linkedin" not in skipped:
+    if "linkedin" in set(expand_only(only or ())):
         register_linkedin_mcp()
 
 
@@ -326,17 +330,27 @@ def items() -> List[SetupItem]:
         ),
         SetupItem(
             id="linkedin",
-            title="linkedin-scraper-mcp (LinkedIn)",
-            what_it_unlocks="LinkedIn profiles, posts and jobs (through mcporter)",
+            title="linkedin-scraper-mcp (LinkedIn fallback)",
+            what_it_unlocks=(
+                "the LinkedIn feed and write/inbox tools; profiles, companies, "
+                "posts and people search already read natively"
+            ),
             size_bytes=214 * _MB, size_is_estimate=True,
-            needs_login=True, needs_system_change=False, default_selected=True,
-            when="now", installed=_linkedin_installed, install=_install_linkedin,
+            needs_login=True, needs_system_change=False, default_selected=False,
+            when="first_use", installed=_linkedin_installed, install=_install_linkedin,
             requires=("mcporter",),
+            note=(
+                "optional: native LinkedIn reads need a kept login, not this. "
+                "Install with `searchts install --only linkedin`"
+            ),
         ),
         SetupItem(
             id="mcporter",
-            title="mcporter (MCP bridge for LinkedIn and Exa search)",
-            what_it_unlocks="the LinkedIn tool and Exa as an extra search provider",
+            title="mcporter (MCP bridge for Exa search)",
+            what_it_unlocks=(
+                "Exa as an extra search provider (also the bridge for the "
+                "optional LinkedIn fallback)"
+            ),
             size_bytes=77 * _MB, size_is_estimate=True,
             needs_login=False, needs_system_change=True, default_selected=True,
             when="now", installed=lambda: _which("mcporter"), install=_install_mcporter,
@@ -379,9 +393,39 @@ def parse_skip(raw: str) -> List[str]:
     return wanted
 
 
+def parse_only(raw: str) -> List[str]:
+    """``--only linkedin`` -> known ids, with their requirements. Refuses junk."""
+    wanted = [p.strip().lower() for p in (raw or "").split(",") if p.strip()]
+    if not wanted:
+        return []
+    known = set(ids())
+    unknown = [w for w in wanted if w not in known]
+    if unknown:
+        raise ValueError(
+            f"unknown setup item(s): {', '.join(unknown)}; known: {', '.join(ids())}"
+        )
+    return expand_only(wanted)
+
+
+def expand_only(only: Iterable[str]) -> List[str]:
+    """The asked-for ids plus everything they require, in list order.
+
+    ``--only linkedin`` must install mcporter too, or the fallback would be on
+    PATH with no MCP registration. Requirements only ever pull in another
+    setup item, so this cannot loop.
+    """
+    wanted = set(only)
+    for item in items():
+        if item.id in wanted:
+            wanted.update(item.requires)
+    return [i.id for i in items() if i.id in wanted]
+
+
 def approve_command_for(item: SetupItem) -> str:
     if item.when == "first_use":
-        return ""
+        if item.install is None:
+            return ""
+        return f"{APPROVE_COMMAND} --only {item.id}"
     required = set(item.requires)
     others = [
         i.id for i in items()
@@ -391,9 +435,14 @@ def approve_command_for(item: SetupItem) -> str:
     return f"{APPROVE_COMMAND} --skip {','.join(others)}"
 
 
-def selected(skip: Iterable[str] = ()) -> List[SetupItem]:
+def selected(
+    skip: Iterable[str] = (), only: Optional[Iterable[str]] = None,
+) -> List[SetupItem]:
     """Items an approval installs now: default-selected, not skipped, missing."""
     skipped = set(skip)
+    if only is not None:
+        wanted = set(expand_only(only))
+        return [i for i in items() if i.id in wanted and not i.installed()]
     return [
         i for i in items()
         if i.when == "now" and i.default_selected and i.id not in skipped
@@ -401,12 +450,23 @@ def selected(skip: Iterable[str] = ()) -> List[SetupItem]:
     ]
 
 
-def plan(skip: Iterable[str] = ()) -> dict:
+def plan(skip: Iterable[str] = (), only: Optional[Iterable[str]] = None) -> dict:
     """The ``searchts.setup.v1`` document."""
     skip = list(skip)
+    wanted = set(expand_only(only)) if only is not None else None
     rows = [i.as_dict(skip) for i in items()]
-    pending = [r for r in rows if r["selected"] and not r["installed"] and r["when"] == "now"]
-    approve = APPROVE_COMMAND + (f" --skip {','.join(skip)}" if skip else "")
+    if wanted is not None:
+        for row in rows:
+            row["selected"] = row["id"] in wanted
+    pending = [
+        r for r in rows
+        if r["selected"] and not r["installed"]
+        and (r["when"] == "now" or wanted is not None)
+    ]
+    if wanted is not None:
+        approve = f"{APPROVE_COMMAND} --only {','.join(only or [])}" if pending else ""
+    else:
+        approve = APPROVE_COMMAND + (f" --skip {','.join(skip)}" if skip else "")
     return {
         "schema": SCHEMA,
         "items": rows,
@@ -457,10 +517,14 @@ def missing_tool_hint(item_id: str) -> str:
     return f"  {SETUP_COMMAND}\n  (agents: {approve_command_for(item)})"
 
 
-def run_install(skip: Iterable[str] = (), out: Callable[[str], None] = print) -> Dict[str, bool]:
+def run_install(
+    skip: Iterable[str] = (),
+    out: Callable[[str], None] = print,
+    only: Optional[Iterable[str]] = None,
+) -> Dict[str, bool]:
     """Install every selected, missing item. Returns ``{id: ok}``."""
     results: Dict[str, bool] = {}
-    for item in selected(skip):
+    for item in selected(skip, only):
         if item.install is None:
             continue
         try:
@@ -469,6 +533,20 @@ def run_install(skip: Iterable[str] = (), out: Callable[[str], None] = print) ->
             out(f"  !  {item.id}: {type(e).__name__}: {e}")
             results[item.id] = False
     return results
+
+
+def install_item(item_id: str) -> bool:
+    """Install one item by id, plus its requirements, and register what it promises.
+
+    The picker behind ``--only`` and ``--channels linkedin``. The tool comes from
+    the same :func:`items` table, so a caller cannot install something the list
+    does not describe.
+    """
+    if item_id not in ids():
+        raise ValueError(f"unknown setup item: {item_id}")
+    results = run_install(only=[item_id])
+    ensure_mcporter_setup(only=[item_id])
+    return bool(results.get(item_id))
 
 
 def interactive_choice(

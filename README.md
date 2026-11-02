@@ -252,11 +252,12 @@ pip install "searchts[mcp]"
 
 A plain install already includes the stealth browser library (patchright), browser cookies, the MCP server, a bundled ffmpeg and the JavaScript runtime YouTube needs (deno, through `yt-dlp[deno]`). Nothing needs a system install. The `[mcp]`, `[browser]` and `[cookies]` extras still resolve, as empty aliases, so existing specs keep working.
 
-First-pass setup. One list with sizes, one approval, and every item checked by default: Chromium for the stealth browser (~170 MB), twitter-cli for X (~39 MB), rdt-cli for Reddit (~15 MB), linkedin-scraper-mcp (~214 MB), mcporter (~77 MB, needs Node.js) and gh for GitHub (~13 MB). The local Whisper model is listed with its size and asked for the first time you transcribe locally. Site logins aren't part of this approval; each site asks when a read needs one.
+First-pass setup. One list with sizes, one approval, and every item checked by default: Chromium for the stealth browser (~170 MB), twitter-cli for X (~39 MB), rdt-cli for Reddit (~15 MB), mcporter (~77 MB, needs Node.js) and gh for GitHub (~13 MB). LinkedIn reads natively once a login is kept, so linkedin-scraper-mcp is now an optional fallback (feed and write/inbox tools, ~214 MB) that `--only linkedin` installs. The local Whisper model is listed with its size and asked for the first time you transcribe locally. Site logins aren't part of this approval; each site asks when a read needs one.
 
 ```bash
 searchts install                                 # a terminal asks once; type ids to uncheck
-searchts install --yes --skip linkedin,mcporter  # agents: no prompt, nothing outside the list
+searchts install --yes --skip mcporter,gh        # agents: no prompt, nothing outside the list
+searchts install --only linkedin                 # the optional LinkedIn fallback and mcporter
 searchts install --dry-run --json                # the list as searchts.setup.v1, changes nothing
 ```
 

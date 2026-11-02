@@ -38,6 +38,7 @@ __all__ = [
     "browser_first",
     "detail_urls",
     "strip_chrome",
+    "has_section_content",
     "assemble",
     "rate_limit_hint",
     "SECTION_DELAY",
@@ -62,6 +63,12 @@ _PROFILE_PATH = re.compile(r"^/in/[^/]+/?$")
 #: that is known to lose; the remaining rungs stay in place.
 _BROWSER_FIRST_PREFIX = "/search/results/"
 
+#: The Education section is the same: measured 2026-11-02, curl_cffi returned
+#: HTTP 200 with only the page shell (title, profile link, language list), and
+#: the school entries are rendered in the browser. Experience still renders in
+#: the markup, so only this one section moves ahead of the direct rung.
+_BROWSER_FIRST_SECTION = re.compile(r"^/in/[^/]+/details/education/?$")
+
 
 def _host(url: str) -> str:
     """Lower-case host of `url` (a bare host is accepted), no trailing dot."""
@@ -83,11 +90,19 @@ def is_profile(url: str) -> bool:
 
 
 def browser_first(url: str) -> bool:
-    """True for a LinkedIn route only the browser renders (search results)."""
+    """True for a LinkedIn route only the browser renders.
+
+    Search results and a profile's Education section. Every other route keeps
+    the ordinary ladder, so a page whose markup carries the content still gets
+    the cheap direct request first.
+    """
     if not matches(url):
         return False
     path = urlparse(url if "://" in url else "https://" + url).path or ""
-    return path.startswith(_BROWSER_FIRST_PREFIX)
+    return bool(
+        path.startswith(_BROWSER_FIRST_PREFIX)
+        or _BROWSER_FIRST_SECTION.fullmatch(path)
+    )
 
 
 def detail_urls(url: str) -> List[Tuple[str, str]]:
@@ -138,7 +153,15 @@ _PREMIUM_BOARD_LINE = re.compile(
 #: UI labels that are unmistakably LinkedIn's own, wherever they appear. Short
 #: ordinary words ("Resources", "Open to") are deliberately not here: those
 #: need a neighbouring button before they count, see :func:`_button_context`.
+#: The five skip links are the first lines of a section page rendered in the
+#: browser (measured 2026-11-02); a signed-in page read over HTTP does not have
+#: them, so they are no-ops there.
 _CHROME_EXACT = frozenset({
+    "Skip to search",
+    "Skip to main content",
+    "Skip to primary content",
+    "Skip to aside",
+    "Skip to footer",
     "Enhance profile",
     "Enhance cover image",
     "Visit our Help Center.",
@@ -164,47 +187,28 @@ _AD_BLOCK = frozenset({
     "Report this ad",
 })
 
-#: The language picker, exactly as LinkedIn writes it. Fixed product strings,
-#: so an exact set is both smaller and safer than a shape that could match a
-#: line of prose.
-_LANGUAGE_LINES = frozenset({
-    "العربية (Arabic)",
-    "বাংলা (Bangla)",
-    "Čeština (Czech)",
-    "Dansk (Danish)",
-    "Deutsch (German)",
-    "Ελληνικά (Greek)",
-    "English (English)",
-    "Español (Spanish)",
-    "فارسی (Persian)",
-    "Suomi (Finnish)",
-    "Français (French)",
-    "हिदी (Hindi)",
-    "Magyar (Hungarian)",
-    "Bahasa Indonesia (Indonesian)",
-    "Italiano (Italian)",
-    "עברית (Hebrew)",
-    "日本語 (Japanese)",
-    "한국어 (Korean)",
-    "मराठी (Marathi)",
-    "Bahasa Malaysia (Malay)",
-    "Nederlands (Dutch)",
-    "Norsk (Norwegian)",
-    "ਪਜਾਬੀ (Punjabi)",
-    "Polski (Polish)",
-    "Português (Portuguese)",
-    "Română (Romanian)",
-    "Русский (Russian)",
-    "Svenska (Swedish)",
-    "తలుగు (Telugu)",
-    "ภาษาไทย (Thai)",
-    "Tagalog (Tagalog)",
-    "Türkçe (Turkish)",
-    "Українська (Ukrainian)",
-    "Tiếng Việt (Vietnamese)",
-    "简体中文 (Chinese (Simplified))",
-    "正體中文 (Chinese (Traditional))",
-})
+#: The English name of every language LinkedIn offers, which is the stable part
+#: of its picker line. The text before the parenthesis is NOT stable: LinkedIn's
+#: own extraction drops combining marks in some scripts, so `हिंदी (Hindi)`
+#: arrives as `हिदी (Hindi)` and `తెలుగు (Telugu)` as `తలుగు (Telugu)` (measured
+#: 2026-11-02). Matching the exact line stopped at Hindi and left the rest of
+#: the list in the read. Only the block after "Select language" is filtered;
+#: outside it a line ending in a parenthesis is content.
+_LANGUAGE_NAMES = (
+    "Arabic", "Bangla", "Czech", "Danish", "German", "Greek", "English",
+    "Spanish", "Persian", "Finnish", "French", "Hindi", "Hungarian",
+    "Indonesian", "Italian", "Hebrew", "Japanese", "Korean", "Marathi",
+    "Malay", "Dutch", "Norwegian", "Punjabi", "Polish", "Portuguese",
+    "Romanian", "Russian", "Swedish", "Telugu", "Thai", "Tagalog", "Turkish",
+    "Ukrainian", "Vietnamese", "Chinese (Simplified)",
+    "Chinese (Traditional)",
+)
+
+#: ``<anything> (<English name>)``, e.g. `English (English)`. Anchored at both
+#: ends so prose that merely mentions a language keeps its line.
+_LANGUAGE_LINE = re.compile(
+    r"^.+ \((?:" + "|".join(re.escape(n) for n in _LANGUAGE_NAMES) + r")\)$"
+)
 
 #: Owner-only buttons. Only dropped when another one sits next to them, so a
 #: single line that says "Resources" in a post survives.
@@ -282,7 +286,7 @@ def strip_chrome(text: str) -> str:
             in_ad = False
 
         if in_language:
-            if not clean or clean in _LANGUAGE_LINES:
+            if not clean or _LANGUAGE_LINE.match(clean):
                 i += 1
                 continue
             in_language = False
@@ -352,14 +356,67 @@ def strip_chrome(text: str) -> str:
 
 # ── assembly ────────────────────────────────────────────────────────────────
 
+#: The shell a JavaScript-rendered section page comes back as: a title, a link
+#: to the profile itself, and bracketed notes. Nothing here can be a school,
+#: employer, date or sentence, so ignoring these lines cannot drop content.
+_SHELL_TITLE = re.compile(r".*\|\s*LinkedIn\s*$")
+_SHELL_PROFILE_LINK = re.compile(
+    r"^\[[^\]]*\]\(https?://(?:[a-z]{2,3}\.)?linkedin\.com/in/[^)]*\)$"
+)
+_SHELL_NOTE = re.compile(r"^\[(?:media|left out|linkedin)\b.*\]$")
 
-def _without_heading(text: str, label: str) -> str:
-    """Drop the section page's own leading heading, which becomes a Markdown one."""
-    body = (text or "").strip()
-    first, _, rest = body.partition("\n")
-    if first.strip().lower() == label.lower():
-        return rest.strip()
-    return body
+
+def has_section_content(text: str) -> bool:
+    """True when a section page holds more than its own header and notes.
+
+    LinkedIn's Education page renders its entries in JavaScript. Measured
+    2026-11-02: curl_cffi returned HTTP 200 with the title line
+    ``Name | LinkedIn``, a link to the profile, the language picker and
+    bracketed notes, and no schools. Joining that shell as the Education
+    section would claim an empty education.
+
+    Conservative by construction: a line counts as content unless it is one of
+    the three known shell shapes, so any unexpected line keeps the section.
+    """
+    for line in strip_chrome(text).splitlines():
+        clean = line.strip()
+        if not clean:
+            continue
+        if _SHELL_TITLE.match(clean) or _SHELL_NOTE.match(clean):
+            continue
+        if _SHELL_PROFILE_LINK.match(clean):
+            continue
+        return True
+    return False
+
+
+def _trim_section(text: str, label: str) -> str:
+    """Drop a section page's repeated header and its own section label.
+
+    A detail page arrives with the same shell as the profile: the browser's
+    ``<Name> | LinkedIn`` title, a link back to the profile, and then the
+    section label that :func:`assemble` already writes as a Markdown heading.
+    Only *leading* lines of those known shapes are removed; the first real
+    entry stops the trim, so an employer called "Experience" midway through the
+    list is untouched.
+    """
+    lines = (text or "").strip().split("\n")
+    i = 0
+    while i < len(lines):
+        clean = lines[i].strip()
+        if not clean:
+            i += 1
+            continue
+        heading = clean.lstrip("#").strip().lower()
+        if (
+            _SHELL_TITLE.match(clean)
+            or _SHELL_PROFILE_LINK.match(clean)
+            or heading == label.lower()
+        ):
+            i += 1
+            continue
+        break
+    return "\n".join(lines[i:]).strip()
 
 
 def assemble(
@@ -383,5 +440,5 @@ def assemble(
                 f"the rest of the profile is here]"
             )
             continue
-        parts.append(f"## {label}\n\n{_without_heading(text, label)}")
+        parts.append(f"## {label}\n\n{_trim_section(text, label)}")
     return "\n\n".join(p for p in parts if p), notes
