@@ -101,7 +101,13 @@ READ_URL_DESCRIPTION = (
     "mechanics: 'max_pages' asks for more of a paginated list, 'max_items' asks "
     "for more list rows (next-page links first, then scrolling when that is the "
     "only way the list grows), and 'expand' opens closed <details> and buttons "
-    "labelled read/show/see more. Each is capped by the user's own ceiling "
+    "labelled read/show/see more. An items read returns a signed 'resume' "
+    "token when it can name where to continue (the feed's own cursor, the "
+    "rows it stopped after, or the next page in the URL): pass it back as "
+    "'resume' with the same URL to read on after the rows already returned "
+    "instead of starting the feed from the top. It says which method "
+    "continued the read, and is refused when tampered with or older than 24 "
+    "hours. Each is capped by the user's own ceiling "
     "(SEARCHTS_MAX_PAGES, SEARCHTS_MAX_ITEMS, SEARCHTS_MAX_EXPAND_CLICKS), "
     "which you cannot raise; ask for less than the ceiling, and a request over "
     "it comes back clamped with a note saying so. 'expand' never follows a "
@@ -220,6 +226,7 @@ def create_server():
         max_items: int = 0,
         cursor: str = "",
         page_items: int = 0,
+        resume: str = "",
         expand: bool = False,
         cookies: str = "",
         cookies_from_browser: str = "",
@@ -238,7 +245,7 @@ def create_server():
         # the answer instead of checking again.
         info = await asyncio.to_thread(_update_lookup)
         return await asyncio.to_thread(
-            read_url, url, max_pages, max_items, cursor, page_items,
+            read_url, url, max_pages, max_items, cursor, page_items, resume,
             expand, cookies, cookies_from_browser, cdp_port, proxy,
             proxy_trusted, max_media, update_info=info,
             approve_cookie_copy=approve_cookie_copy,
@@ -861,6 +868,7 @@ def read_url(
     max_items: int = 0,
     cursor: str = "",
     page_items: int = 0,
+    resume: str = "",
     expand: bool = False,
     cookies: str = "",
     cookies_from_browser: str = "",
@@ -1035,6 +1043,14 @@ def read_url(
         # 0 is "not asked", same as max_items. fetch reads the config default
         # when the key is absent, and clamps a request over 40.
         extra["media"] = max_media
+    if resume:
+        # #510: a resume token implies the rows-first path; without max_items
+        # the old branch would read one page from the top and ignore the token.
+        # The ceiling is still the user's: ``resolve`` clamps this ask.
+        from searchts.knobs import hard_cap
+
+        max_items = max_items or hard_cap("items")
+        extra["resume"] = resume
     try:
         if max_items:
             pages = unlocker.read_items(url, max_items, **extra)
@@ -1120,6 +1136,10 @@ def read_url(
             # stdout, and the CLI's plain-text path prints the note itself.
             # That is the same split cli.py already uses for findings.
             "more": _more_without_urls(last.more),
+            # #510: a signed token that resumes this feed after the rows this
+            # read returned. Opaque, cannot be minted by the page, and absent
+            # when the read did not scroll (there is nothing to continue from).
+            **({"resume": result.resume} if getattr(result, "resume", None) else {}),
             # #345: `pages` only when the walk read more than one page. With one
             # page it was a second, unfenced copy of `text`, and a fence only
             # works if it is on every copy. Each page is fenced on its own

@@ -45,7 +45,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+from html import escape
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from urllib.parse import urljoin
+
+from searchts import resume as resume_mod
 
 __all__ = ["ScrollReport", "collect", "NO_BROWSER", "LoadMore"]
 
@@ -84,6 +88,23 @@ class ScrollReport:
     wall: str = ""
     #: Milliseconds spent.
     elapsed_ms: int = 0
+    #: Row keys the store held, in first-seen order. The resume token keeps a
+    #: tail of these so the next walk can recognise the seam.
+    keys: List[str] = field(default_factory=list)
+    #: The page's own pagination cursor, captured passively from its JSON data
+    #: responses while scrolling (never requested).
+    cursor: str = ""
+    #: The data request that produced :attr:`cursor`, as ``{u, m, b, f}``.
+    replay: Optional[Dict[str, str]] = None
+    #: The URL the walk actually read, after any position bump.
+    page_url: str = ""
+    #: How a resumed walk picked up: ``cursor``, ``fast-skip``,
+    #: ``url-position`` or ``changed``. Empty on a first read.
+    resume_method: str = ""
+    #: True when a resumed walk recognised at least one key from its token.
+    resume_found: bool = False
+    #: A same-site data response said 429 (#509 applies to scroll too).
+    rate_limited: bool = False
 
     def note(self) -> str:
         """The trailing line for the read, or ``""`` when nothing happened."""
@@ -95,8 +116,23 @@ class ScrollReport:
             bits.append(f"{self.clicks} \"Load more\" press(es)")
         if self.wall:
             bits.append(f"a {self.wall} wall stopped the scroll")
+        if self.resume_method:
+            bits.append(self._resume_sentence())
+        if self.rate_limited:
+            bits.append("the site rate-limited the feed (429); rows so far are kept")
         bits.append(self.stop)
         return "[scroll: " + "; ".join(b for b in bits if b) + "]"
+
+    def _resume_sentence(self) -> str:
+        if self.resume_method == "cursor":
+            return "resumed at the feed's own captured cursor"
+        if self.resume_method == "fast-skip":
+            return "resumed after the last row this token had"
+        if self.resume_method == "url-position":
+            return "resumed at the next page in the URL"
+        return (
+            "the feed changed; resumed from the top of what is there now"
+        )
 
 
 # ── in-page helpers (JS, evaluated against the live DOM) ──────────────────────
@@ -202,9 +238,10 @@ _FIND_LIST_JS = "() => {\n" + _SHOWN_JS + _DEEP_LINK_JS + r"""
 _COLLECT_JS = r"""
 () => {
   if (!window.__searchtsStore) {
-    window.__searchtsStore = {key: new Map(), order: []};
+    window.__searchtsStore = {key: new Map(), order: [], start: 0};
   }
   const store = window.__searchtsStore;
+  if (typeof store.start !== 'number') store.start = 0;
 """ + _SHOWN_JS + _DEEP_LINK_JS + r"""
   const findBest = () => {
     let best = null, bestN = 0;
@@ -232,7 +269,7 @@ _COLLECT_JS = r"""
   // See the note on _COLLECT_JS: re-found every step, no first-container lock.
   const best = findBest();
   if (!best || best.length < 3) {
-    return {rows: 0, total: store.order.length, added: 0, found: false};
+    return {rows: 0, total: store.order.length - store.start, added: 0, found: false};
   }
   const parent = best[0].parentElement;
   if (!parent.hasAttribute('data-searchts-list')) parent.setAttribute('data-searchts-list', '1');
@@ -254,7 +291,7 @@ _COLLECT_JS = r"""
     store.order.push(key);
     added++;
   }
-  return {rows: best.length, total: store.order.length,
+  return {rows: best.length, total: store.order.length - store.start,
           added: added, found: true};
 }
 """
@@ -281,7 +318,8 @@ _REBUILD_JS = r"""
   const holder = document.createElement('div');
   holder.setAttribute('data-searchts-collected', '1');
   let n = 0;
-  for (const key of store.order) {
+  const start = typeof store.start === 'number' ? store.start : 0;
+  for (const key of store.order.slice(start)) {
     const html = store.key.get(key);
     if (!html) continue;
     const tpl = document.createElement('template');
@@ -328,7 +366,95 @@ _READ_STORE_JS = r"""
 () => {
   const s = window.__searchtsStore;
   if (!s) return {order: [], rows: []};
-  return {order: s.order, rows: s.order.map((k) => s.key.get(k))};
+  const start = typeof s.start === 'number' ? s.start : 0;
+  const order = s.order.slice(start);
+  // `s.order.map` is the shape the loop has always returned. Slicing after
+  // the map keeps a resume's hidden head out of the report and still lets a
+  // stand-in page recognise this script.
+  return {order: order, rows: s.order.map((k) => s.key.get(k)).slice(start)};
+}
+"""
+
+#: Drop everything up to and including the last row a resume token already
+#: has. The feed is fresh at the top, so the walk has to recognise the seam
+#: before it can call anything new. Rows before the seam are the old read.
+_TRIM_JS = r"""
+(keys) => {
+  const s = window.__searchtsStore;
+  if (!s || !keys || !keys.length) {
+    return {dropped: 0, total: s ? s.order.length - (s.start || 0) : 0, found: false};
+  }
+  if (typeof s.start !== 'number') s.start = 0;
+  let last = -1;
+  for (let i = 0; i < s.order.length; i++) {
+    if (keys.indexOf(s.order[i]) >= 0) last = i;
+  }
+  if (last < 0) {
+    return {dropped: 0, total: s.order.length - s.start, found: false};
+  }
+  // Keep the old keys in the store, so a row that scrolls back is deduped
+  // instead of counted twice. Only the *report* starts after the seam.
+  if (last + 1 > s.start) s.start = last + 1;
+  return {dropped: s.start, total: s.order.length - s.start, found: true};
+}
+"""
+
+#: A cursor replay is an exact continuation, so the top-of-feed rows the page
+#: rendered on arrival are not part of the report. Their keys stay in the
+#: store, so a later scroll step dedupes them instead of counting them again.
+#: Only the report's start moves, which is what the trim below does too.
+_HIDE_SEEN_JS = r"""
+() => {
+  const s = window.__searchtsStore;
+  if (!s) return 0;
+  if (typeof s.start !== 'number') s.start = 0;
+  const hidden = s.order.length - s.start;
+  s.start = s.order.length;
+  return hidden;
+}
+"""
+
+#: Rows recovered by replaying the feed's own captured cursor, put where the
+#: extractor will see them: the same page-side store the scroll loop uses.
+_INJECT_JS = r"""
+(rows) => {
+  if (!window.__searchtsStore) {
+    window.__searchtsStore = {key: new Map(), order: [], start: 0};
+  }
+  const s = window.__searchtsStore;
+  if (typeof s.start !== 'number') s.start = 0;
+  let added = 0;
+  for (const row of rows || []) {
+    if (!row || !row.key || !row.html) continue;
+    if (s.key.has(row.key)) continue;
+    s.key.set(row.key, row.html);
+    s.order.push(row.key);
+    added++;
+  }
+  return {added: added, total: s.order.length};
+}
+"""
+
+#: Replay one captured data request from the page, so the site's own session
+#: (credentials, CSRF, GraphQL operation headers) is what makes the call. This
+#: is the only request a resume makes, and it is the site's own request shape
+#: with the cursor moved, not a new one invented here.
+_REPLAY_JS = r"""
+async (req) => {
+  const init = {method: req.m || 'GET', credentials: 'include', headers: {}};
+  if (init.method !== 'GET' && init.method !== 'HEAD') {
+    init.headers['content-type'] = 'application/json';
+    if (req.b) init.body = req.b;
+  }
+  try {
+    const r = await fetch(req.u, init);
+    const text = await r.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch (e) { json = null; }
+    return {status: r.status, url: r.url, json: json};
+  } catch (e) {
+    return {status: 0, error: String(e)};
+  }
 }
 """
 
@@ -423,12 +549,23 @@ def collect(
     step_ms: int = 1200,
     empty_steps: int = 2,
     tick: Optional[Callable[[str], None]] = None,
+    resume: Optional[resume_mod.ResumeState] = None,
+    capture: Optional[resume_mod.Capture] = None,
 ) -> ScrollReport:
     """Drive ``page`` down a feed and return every row it showed.
 
     ``page`` is a live Playwright page already at the URL. The loop is: probe
     once, then step, copying rows after each step. It ends for exactly one of
     five reasons, and :attr:`ScrollReport.stop` names which.
+
+    ``resume`` is a verified token's state (#510). A resumed walk tries the
+    site's captured cursor first, then skips to the seam where the old read
+    stopped, and only reports "the feed changed" when neither works. The loop
+    still never navigates; moving to a URL position is the caller's job.
+
+    ``capture`` is the passive response listener. It is optional because a
+    unit test drives a fake page, and a feed with no JSON data responses has
+    nothing to capture either.
 
     The loop never navigates. Every URL on the page goes through the caller,
     which guards it (Q: SSRF on every hop), and the "Load more" press is on a
@@ -443,6 +580,13 @@ def collect(
             try:
                 tick(msg)
             except Exception:  # noqa: BLE001 - narration never breaks a walk
+                pass
+
+    def drain() -> None:
+        if capture is not None:
+            try:
+                capture.drain()
+            except Exception:  # noqa: BLE001 - a capture never fails a walk
                 pass
 
     def probe() -> Optional[Dict[str, Any]]:
@@ -469,18 +613,72 @@ def collect(
     if first is None or first.get("rows", 0) < 3:
         rep.stop = "not-a-feed"
         rep.html = _content(page)
+        if capture is not None:
+            rep.rate_limited = bool(capture.rate_limited)
         return rep
     say(f"  scroll: probe found {first['rows']} list row(s)")
+    drain()
     got = _collect_once(page)
     rep.start_rows = got.get("rows", 0)
+    found = False
+    halted = False
+    stop = "the scroll budget ran out"  # pessimistic default; every exit sets it
+    # A data response already said 429 before the first step. Stop here: the
+    # rows copied above are the ones this read has, and another request would
+    # only spend more of a limit the site just named.
+    if capture is not None and capture.rate_limited:
+        rep.rate_limited = True
+        halted = True
+        stop = "the site rate-limited the feed (429)"
+    if resume is not None and not halted:
+        # (a) replay the site's own data request when the token captured one.
+        # It is the most exact continuation, but only if the request shape can
+        # be replayed from this page at all. The old keys stay in the store so
+        # a later step can keep scrolling without counting them again.
+        outcome = _replay_cursor(page, resume)
+        if outcome.rate_limited:
+            rep.rate_limited = True
+            halted = True
+            stop = "the site rate-limited the feed (429)"
+            # The page may already be showing rows past the seam. Drop the
+            # ones the token has, and do not scroll any further.
+            trimmed = _trim_to_new(page, resume.keys)
+            if trimmed.get("found"):
+                rep.resume_method = "fast-skip"
+                found = True
+                got = _collect_once(page)
+        elif outcome.added:
+            rep.resume_method = "cursor"
+            found = True
+            # The next token must carry the cursor the replay *returned*.
+            # The one on this token was just spent; putting it back would
+            # read the same batch again.
+            rep.cursor = outcome.cursor
+            rep.replay = outcome.replay
+            got = {"rows": outcome.added, "total": outcome.added, "added": outcome.added}
+            say(f"  scroll: resumed at the feed's own captured cursor "
+                f"({outcome.added} row(s))")
+        # (b) fast-skip: walk until the seam the token remembers, keeping only
+        # what comes after it. A cursor replay that produced nothing falls
+        # through to here.
+        if not found and not halted:
+            trimmed = _trim_to_new(page, resume.keys)
+            if trimmed.get("found"):
+                rep.resume_method = "fast-skip"
+                found = True
+                got = _collect_once(page)
+                say(f"  scroll: resumed after the last row this token had "
+                    f"({trimmed.get('dropped', 0)} already seen)")
     empty = 0
     clicks = 0
-    stop = "the scroll budget ran out"  # pessimistic default; every exit sets it
 
-    while True:
-        if int(got.get("total") or 0) >= want_rows:
-            stop = f"reached the {want_rows} rows asked for"
-            break
+    while not halted:
+        # While the seam is still missing, the store holds the top of the
+        # feed, and calling that "rows read" would be a lie about the resume.
+        if resume is None or found:
+            if int(got.get("total") or 0) >= want_rows:
+                stop = f"reached the {want_rows} rows asked for"
+                break
         if time.monotonic() >= deadline:
             stop = f"the {budget_seconds}s scroll budget ran out"
             break
@@ -495,6 +693,14 @@ def collect(
             stop = "the page navigated away mid-scroll"
             break
         rep.steps += 1
+        drain()
+        if capture is not None and capture.rate_limited:
+            # #509 says a 429 stops the walk. The status came from a data
+            # response already in hand, so the rows collected so far are real
+            # and are kept rather than thrown away.
+            rep.rate_limited = True
+            stop = "the site rate-limited the feed (429)"
+            break
         if rep.steps == 1:
             say(f"  scroll: step 1 -> {_page_rows(page)} live row(s)")
         wall = _wall(page)
@@ -503,6 +709,16 @@ def collect(
             stop = f"a {wall} wall replaced the page"
             break
         step = _collect_once(page)
+        if resume is not None and not found:
+            trimmed = _trim_to_new(page, resume.keys)
+            if trimmed.get("found"):
+                rep.resume_method = "fast-skip"
+                found = True
+                empty = 0
+                got = _collect_once(page)
+                say(f"  scroll: found the seam after {trimmed.get('dropped', 0)} "
+                    "row(s) this token already had")
+                continue
         added = step.get("added", 0)
         if added:
             empty = 0
@@ -526,11 +742,173 @@ def collect(
 
     rep.stop = stop
     rep.elapsed_ms = int((time.monotonic() - started) * 1000)
+    rep.resume_found = found
+    # A 429 is not a feed that moved. Saying "changed" there would claim we
+    # looked at the whole window and did not know it, which we did not.
+    if (
+        resume is not None
+        and not found
+        and not rep.resume_method
+        and not rep.rate_limited
+    ):
+        rep.resume_method = "changed"
+    if capture is not None:
+        drain()
+        rep.rate_limited = rep.rate_limited or bool(capture.rate_limited)
+        if rep.rate_limited and rep.resume_method == "changed":
+            rep.resume_method = ""
+        spent = resume.cursor if resume is not None else ""
+        if rep.resume_method == "cursor":
+            # Prefer the cursor the replay body named. The listener's value is
+            # often the one this read just sent, and replaying it repeats the
+            # batch. Take the listener only when it saw a different cursor.
+            if not rep.cursor and capture.cursor and capture.cursor != spent:
+                rep.cursor = capture.cursor
+                rep.replay = capture.replay or rep.replay
+        elif not rep.cursor:
+            rep.cursor = capture.cursor
+            rep.replay = capture.replay
     _rebuild(page)
     store = _read_store(page)
     rep.rows = list(store.get("rows") or [])
+    rep.keys = list(store.get("order") or [])
     rep.html = _content(page)
     return rep
+
+
+def _trim_to_new(page, keys: Tuple[str, ...]) -> Dict[str, Any]:
+    """Drop the store up to the last row ``keys`` already has."""
+    if not keys:
+        return {"found": False, "dropped": 0}
+    try:
+        out = page.evaluate(_TRIM_JS, list(keys))
+    except Exception:  # noqa: BLE001 - a page that will not answer keeps its store
+        return {"found": False, "dropped": 0}
+    return out if isinstance(out, dict) else {"found": False, "dropped": 0}
+
+
+@dataclass
+class _ReplayOutcome:
+    """What one in-page replay of the feed's own cursor produced."""
+
+    added: int = 0
+    rate_limited: bool = False
+    #: The cursor the response named, when it is not the one just sent.
+    cursor: str = ""
+    replay: Optional[Dict[str, str]] = None
+
+
+def _replay_cursor(page, state: resume_mod.ResumeState) -> _ReplayOutcome:
+    """Replay the feed's captured cursor once and inject what it returns.
+
+    ``added == 0`` and not rate-limited means "not replayable here", and the
+    walk falls through to fast-skip. The request is the site's own, with its
+    cursor moved; nothing is invented here and the host has to be the one the
+    token was issued for. A 429 is returned as a stop, not as a miss: falling
+    through would scroll a feed the site just refused.
+    """
+    request = resume_mod.replay_request(state)
+    if not request:
+        return _ReplayOutcome()
+    try:
+        here = str(getattr(page, "url", "") or "")
+    except Exception:  # noqa: BLE001
+        here = ""
+    if here and not resume_mod.same_site(request["u"], here):
+        return _ReplayOutcome()
+    try:
+        out = page.evaluate(_REPLAY_JS, request)
+    except Exception:  # noqa: BLE001 - a replay the page refuses is not a failure
+        return _ReplayOutcome()
+    if not isinstance(out, dict):
+        return _ReplayOutcome()
+    if out.get("status") == 429:
+        return _ReplayOutcome(rate_limited=True)
+    rows = _json_rows(out.get("json"), base=str(out.get("url") or request["u"]))
+    if not rows:
+        return _ReplayOutcome()
+    try:
+        page.evaluate(_HIDE_SEEN_JS)
+        injected = page.evaluate(_INJECT_JS, rows)
+    except Exception:  # noqa: BLE001
+        return _ReplayOutcome()
+    if not isinstance(injected, dict):
+        return _ReplayOutcome()
+    added = int(injected.get("added") or 0)
+    if not added:
+        return _ReplayOutcome()
+    # The response's cursor is the next window. The field name stays the one
+    # the request used: the response often names the cursor differently
+    # (``endCursor`` in the body, ``after`` in the request), and the next
+    # replay has to move the request's field, not the response's.
+    found = resume_mod.find_cursor(out.get("json"))
+    cursor = ""
+    replay = None
+    if found and found[0] and found[0] != state.cursor and state.replay:
+        cursor = found[0]
+        replay = {
+            "u": str(state.replay.get("u") or ""),
+            "m": str(state.replay.get("m") or "GET"),
+            "b": str(state.replay.get("b") or ""),
+            "f": str(state.replay.get("f") or ""),
+        }
+    return _ReplayOutcome(added=added, cursor=cursor, replay=replay)
+
+
+#: Keys a JSON row object may use for its address and its words. Deliberately
+#: small: a replay is a recovery path, not a second extractor. When the JSON
+#: does not look like a list of linked rows, nothing is invented.
+_ROW_URL_KEYS = ("url", "href", "permalink", "link", "uri", "web_url", "canonical_url")
+_ROW_TEXT_KEYS = ("title", "headline", "name", "text", "caption", "label")
+
+
+def _json_rows(data: Any, base: str = "") -> List[Dict[str, str]]:
+    """Row-shaped objects in a replayed JSON body, as store records.
+
+    Each record is ``{key, html}`` using the same ``L<url>`` key the scroll
+    store uses, so a row that later appears in the DOM is the same row. The
+    walk is bounded; a body with no linked objects yields nothing.
+    """
+    rows: List[Dict[str, str]] = []
+    seen: set = set()
+
+    def walk(node: Any, depth: int) -> None:
+        if depth > 6 or len(rows) >= 100:
+            return
+        if isinstance(node, dict):
+            url = ""
+            for key in _ROW_URL_KEYS:
+                value = node.get(key)
+                if isinstance(value, str) and value.strip():
+                    url = value.strip()
+                    break
+            title = ""
+            for key in _ROW_TEXT_KEYS:
+                value = node.get(key)
+                if isinstance(value, str) and len(value.strip()) >= 3:
+                    title = value.strip()
+                    break
+            if url and title:
+                absolute = urljoin(base, url)
+                key = "L" + absolute
+                if key not in seen:
+                    seen.add(key)
+                    rows.append({
+                        "key": key,
+                        "html": (
+                            '<div class="searchts-resumed-row">'
+                            f'<a href="{escape(absolute, quote=True)}">'
+                            f"{escape(title)}</a></div>"
+                        ),
+                    })
+            for value in node.values():
+                walk(value, depth + 1)
+        elif isinstance(node, list):
+            for item in node[:100]:
+                walk(item, depth + 1)
+
+    walk(data, 0)
+    return rows
 
 
 def _page_rows(page) -> int:
@@ -596,6 +974,13 @@ def _content(page) -> str:
         return ""
 
 
+def _page_url(page) -> str:
+    try:
+        return str(getattr(page, "url", "") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def browser_available() -> bool:
     """True when the stealth rung's driver is importable."""
     try:
@@ -616,6 +1001,7 @@ def collect_url(
     empty_steps: int = 2,
     persistent: bool = False,
     tick: Optional[Callable[[str], None]] = None,
+    resume: Optional[resume_mod.ResumeState] = None,
 ) -> Tuple[Optional[ScrollReport], str]:
     """Open ``url`` in the stealth Chromium and collect its rows.
 
@@ -623,6 +1009,12 @@ def collect_url(
     could not be opened at all. The caller decides what to do with a reason:
     ``read_items`` folds it into its own stop note, because a scroll that
     cannot start is not a read that failed.
+
+    ``resume`` is the verified token state from #510. The walk tries the
+    captured cursor and the seam first; when neither produces a new row and
+    the URL has a next position, it opens that page instead. That is the one
+    navigation this function makes on someone else's behalf, and the URL comes
+    from the signed token, not from the page it is reading.
     """
     if not browser_available():
         return None, "no-browser"
@@ -657,6 +1049,7 @@ def collect_url(
             try:
                 guard_browser_page(page, url)
                 started = time.monotonic()
+                deadline = started + max(1, int(budget_seconds))
 
                 def say(msg: str) -> None:
                     if tick is None:
@@ -666,6 +1059,15 @@ def collect_url(
                     except Exception:  # noqa: BLE001 - narration never breaks a walk
                         pass
 
+                # The listener is attached before the first request so the
+                # feed's own first data response is captured too. It adds no
+                # request of its own.
+                capture: Optional[resume_mod.Capture] = resume_mod.Capture(url)
+                try:
+                    page.on("response", capture)
+                except Exception:  # noqa: BLE001 - a page with no events still reads
+                    capture = None
+
                 say("scrolling: opening the page…")
                 page.goto(url, wait_until="domcontentloaded",
                           timeout=int(budget_seconds * 1000))
@@ -673,9 +1075,60 @@ def collect_url(
                 _settle(page, url, budget_seconds)
                 rep = collect(
                     page, want_rows=want_rows, max_clicks=max_clicks,
-                    budget_seconds=budget_seconds, step_ms=step_ms,
-                    empty_steps=empty_steps, tick=tick,
+                    budget_seconds=max(1, int(deadline - time.monotonic())),
+                    step_ms=step_ms, empty_steps=empty_steps, tick=tick,
+                    resume=resume, capture=capture,
                 )
+                # (c) Cursor replay and fast-skip produced nothing new. When the
+                # token knows the next position, open it: one exact page beats
+                # scrolling a list that will never grow (a static front page
+                # with ?p= paging). A 429 already stopped the walk; opening
+                # another page would spend a limit the site just named.
+                if (
+                    resume is not None
+                    and resume.position
+                    and not rep.rate_limited
+                    and (not rep.resume_found or not rep.rows)
+                ):
+                    nxt = resume_mod.url_at_position(url, resume.position)
+                    if nxt and nxt != url:
+                        try:
+                            say("scrolling: opening the next page the token names…")
+                            page.goto(nxt, wait_until="domcontentloaded",
+                                      timeout=int(budget_seconds * 1000))
+                            _settle(page, nxt, budget_seconds)
+                            nxt_rep = collect(
+                                page, want_rows=want_rows, max_clicks=max_clicks,
+                                budget_seconds=max(1, int(deadline - time.monotonic())),
+                                step_ms=step_ms, empty_steps=empty_steps,
+                                tick=tick, capture=capture,
+                            )
+                            nxt_rep.resume_method = "url-position"
+                            nxt_rep.resume_found = True
+                            rep = nxt_rep
+                        except Exception:  # noqa: BLE001 - keep what we had
+                            pass
+                rep.page_url = _page_url(page) or url
+                if capture is not None:
+                    try:
+                        capture.drain()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    spent = resume.cursor if resume is not None else ""
+                    if rep.resume_method == "cursor":
+                        if (
+                            not rep.cursor
+                            and capture.cursor
+                            and capture.cursor != spent
+                        ):
+                            rep.cursor = capture.cursor
+                            rep.replay = rep.replay or capture.replay
+                    else:
+                        rep.cursor = rep.cursor or capture.cursor
+                        rep.replay = rep.replay or capture.replay
+                    rep.rate_limited = rep.rate_limited or capture.rate_limited
+                    if rep.rate_limited and rep.resume_method == "changed":
+                        rep.resume_method = ""
                 rep.elapsed_ms = int((time.monotonic() - started) * 1000)
                 return rep, ""
             finally:

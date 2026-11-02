@@ -114,6 +114,7 @@ _add(Command(
         "searchts read example.com",
         "searchts read https://x.com/jack/status/20 --json",
         "searchts read example.com --pages 3 --expand",
+        "searchts read https://news.ycombinator.com/newest --resume TOKEN",
     ),
     exit_codes=(
         ("0", "the page was read"),
@@ -130,6 +131,12 @@ _add(Command(
         "it is not a login that expired.",
         "On failure `--json` prints `{\"url\", \"error\": {kind, message, exit_code, "
         "attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.",
+        "An `--items` read returns a signed `resume` token in `--json` and in a "
+        "`[resume: ...]` note when it can name where to continue: the feed's own "
+        "cursor, the rows it stopped after, or the next page in the URL. Pass it "
+        "as `--resume TOKEN` (MCP `resume`) to read on after those rows instead "
+        "of from the top. It says which method continued the read, and a tampered "
+        "or 24 h old token is refused.",
     ),
 ))
 _add(Command(
@@ -644,6 +651,8 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "when a human wants the URL.",
             "`approve_cookie_copy` is CLI `--yes` for one call: set it only after "
             "the user said yes to a `cookies_from_browser` copy.",
+            "`resume` takes the signed token an `--items` read returned, so the "
+            "next read starts after the rows it already gave back.",
         ),
         mcp_only_params=("cursor", "page_items"),
         cli_only_flags=("--human", "--scrub", "--backend", "--json"),
