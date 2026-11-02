@@ -30,10 +30,12 @@ wall, not which account is signed in.
 
 ## Optional: LinkedIn scraper (MCP)
 
-`searchts read` already reads profiles, companies, posts and people search
-natively with a kept login. The `linkedin-scraper-mcp` bridge is an optional
-fallback for the feed and for write/inbox tools; it is not part of the
-first-pass install.
+`searchts read` already reads profiles, companies, posts, people search and
+the home feed natively with a kept login. The feed also needs
+`SEARCHTS_LINKEDIN_PROFILE`, the Chrome user-data directory that holds that
+login, and reads it headed in that same Chrome. The `linkedin-scraper-mcp`
+bridge remains an optional fallback for write/inbox tools, and for the feed
+when that profile is not available; it is not part of the first-pass install.
 
 ```bash
 searchts install --only linkedin

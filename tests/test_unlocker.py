@@ -72,7 +72,7 @@ def test_fetch_escalates_on_login_shell(monkeypatch, stub_extract):
         "By continuing you agree to the User Agreement.\n"
     )
     _set(monkeypatch, curl=(200, login), jina=(200, "J" * 700), stealth=(200, login))
-    r = fetch("https://www.linkedin.com/feed/", use_memory=False)
+    r = fetch("https://www.linkedin.com/in/someone/", use_memory=False)
     assert r.backend == "Jina Reader"
     assert r.text == "J" * 700
 
@@ -81,7 +81,7 @@ def test_fetch_login_shell_all_rungs_fails(monkeypatch, stub_extract):
     login = "Sign in\nNew to LinkedIn?\nJoin now\n" + ("x" * 200)
     _set(monkeypatch, curl=(200, login), jina=(200, login), stealth=(200, login))
     with pytest.raises(UnlockerError) as ei:
-        fetch("https://www.linkedin.com/feed/", use_memory=False)
+        fetch("https://www.linkedin.com/in/someone/", use_memory=False)
     assert any(reason == "login-wall" for _, reason in ei.value.attempts)
 
 

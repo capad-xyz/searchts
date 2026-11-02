@@ -144,9 +144,19 @@ _add(Command(
         "Page loads are one at a time, at least 20 s apart, at most "
         "SEARCHTS_LINKEDIN_LOADS_PER_MINUTE (2), "
         "SEARCHTS_LINKEDIN_LOADS_PER_HOUR (20) and "
-        "SEARCHTS_LINKEDIN_LOADS_PER_DAY (100; 0 turns the daily cap off). "
-        "SEARCHTS_LINKEDIN_FEED_GAP_MINUTES (default 30) is the gap between "
-        "LinkedIn feed reads; a later change enforces it.",
+        "SEARCHTS_LINKEDIN_LOADS_PER_DAY (100; 0 turns the daily cap off).",
+        "The LinkedIn home feed (/feed/) is read natively in the Chrome "
+        "profile that holds the kept login (SEARCHTS_LINKEDIN_PROFILE), "
+        "headed, by capturing the page's own responses. One document load "
+        "is booked, then one bounded scroll; a scroll step is not another "
+        "page load. SEARCHTS_LINKEDIN_FEED_GAP_MINUTES (default 30) is the "
+        "gap between those feed reads. Each post has its author, text, "
+        "relative time and activity permalink. A 429, a 999, a checkpoint, "
+        "an authwall or a forced logout stops the feed for 24 h with no "
+        "retry; a restriction stops until a person clears it. "
+        "--wait-on-429 does not apply. Without a kept login or that Chrome "
+        "profile, the read names the reason and linkedin-scraper-mcp "
+        "remains the fallback.",
         "On failure `--json` prints `{\"url\", \"error\": {kind, message, exit_code, "
         "attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.",
         "An `--items` read returns a signed `resume` token in `--json` and in a "
@@ -334,8 +344,8 @@ _add(Command(
         "terminal asks once; uncheck by id. Without a terminal nothing on the",
         "list is installed unless --yes is passed. --skip ids unchecks items.",
         "--only ids installs just those items and what they need; it reaches",
-        "the optional LinkedIn fallback (linkedin-scraper-mcp, for the feed and",
-        "write/inbox tools) that native reads no longer require. --dry-run",
+        "the optional LinkedIn fallback (linkedin-scraper-mcp, now for",
+        "write/inbox tools) that native reads and the feed no longer require. --dry-run",
         "--json prints the list as searchts.setup.v1.",
         "Site logins are not part of this approval. It also writes the agent",
         "skill files (~/.agents/skills/searchts, or each OpenClaw/Claude Code",

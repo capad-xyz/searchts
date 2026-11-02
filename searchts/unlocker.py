@@ -2638,7 +2638,9 @@ def fetch(url: str, backends: Optional[List[str]] = None,
           media: Optional[int] = None,
           details: bool = True,
           wait_on_429: bool = False,
-          ignore_cooldown: bool = False) -> FetchResult:
+          ignore_cooldown: bool = False,
+          *,
+          resume: str = "") -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -2893,6 +2895,47 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     from searchts import more as _more_mod
 
     media_limit, media_clamp = _more_mod.resolve_media_limit(media)
+
+    # #511: the LinkedIn home feed is not a page the ladder can fetch. It is
+    # read by the browser already signed in to it, from the profile that minted
+    # the session, and only passively (the page's own responses plus the DOM).
+    # This is still the one read path: `searchts read` and MCP read_url both
+    # arrive here. A feed read that cannot start says why instead of spending
+    # the ladder's requests on a page that would answer 429 or a login wall.
+    if _linkedin.is_feed(url):
+        from searchts import linkedin_feed as _linkedin_feed
+
+        try:
+            # The signed token is scrolled on this page. The captured
+            # request is not replayed.
+            feed = _linkedin_feed.read_feed(
+                url, tick=_tick, resume_token=resume or "",
+            )
+        except _linkedin_feed.FeedUnavailable as e:
+            raise UnlockerError(url, [("linkedin-feed", str(e))]) from e
+        result = FetchResult("linkedin-feed", feed.text, 200, final_url=url)
+        result.authenticated = True
+        if feed.posts:
+            from searchts import resume as _resume_mod
+
+            method = ""
+            if resume:
+                try:
+                    prior = _resume_mod.read(url, resume)
+                except _resume_mod.ResumeError:
+                    prior = None
+                if prior is not None:
+                    method = "cursor" if prior.cursor else "fast-skip"
+            result.text = (result.text or "").rstrip() + _resume_note(
+                result, url,
+                keys=[f"urn:li:activity:{post.activity}" for post in feed.posts],
+                cursor=feed.cursor or "",
+                method=method,
+            )
+        return _finalize(
+            result, scrub, tick=_tick,
+            media_limit=media_limit, media_clamp=media_clamp,
+        )
 
     def _with_auth(result: FetchResult) -> FetchResult:
         result.authenticated = bool(scoped_cookies) and result.backend in cookie_backends
@@ -4341,6 +4384,16 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
                 hint="Read the URL again without the resume token to start a "
                      "fresh scroll.",
             ) from e
+
+    from searchts import linkedin as _linkedin_mod
+    if _linkedin_mod.is_feed(url):
+        # The home feed is one document load plus an in-page scroll. The
+        # generic scroll below would replay a captured request, which this
+        # feed does not do. Scroll steps are not extra page loads.
+        call = dict(kwargs)
+        if resume_token:
+            call["resume"] = resume_token
+        return [fetch(url, **call)]
 
     # #510 resume order, and it is an order: (a) replay the captured cursor
     # in the page, (b) fast-skip to the last row the token saw, (c) bump the

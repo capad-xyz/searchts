@@ -4,8 +4,10 @@
 searchts reads LinkedIn profiles, companies, posts and people search itself,
 through the same unlocker as every other site. A kept login is what makes those
 reads complete; without one, public pages still read, but the signed-in
-sections do not. The old ``linkedin-scraper-mcp`` bridge is an optional
-fallback for the feed and for write/inbox tools, not part of the first pass.
+sections do not. The feed is read in the signed-in Chrome profile when
+``SEARCHTS_LINKEDIN_PROFILE`` is set. The old ``linkedin-scraper-mcp`` bridge
+is an optional fallback for write/inbox tools, and for the feed when that
+profile is not available. It is not part of the first pass.
 """
 
 from searchts import login_store
@@ -20,8 +22,10 @@ _KEEP = (
     "--cookies-from-browser firefox --yes"
 )
 _FALLBACK = (
-    "The LinkedIn feed and write/inbox tools are the optional "
-    "linkedin-scraper-mcp fallback: `searchts install --only linkedin`."
+    "The feed is read in the signed-in Chrome (SEARCHTS_LINKEDIN_PROFILE) "
+    "when that profile is free. linkedin-scraper-mcp remains the fallback "
+    "for write/inbox tools, and for the feed when no profile is set: "
+    "`searchts install --only linkedin`."
 )
 
 
