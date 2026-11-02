@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.26.0](https://github.com/capad-xyz/searchts/compare/v0.25.1...v0.26.0) (2026-11-02)
+
+
+### Added
+
+* **linkedin:** native reader and kept-login fixes ([#505](https://github.com/capad-xyz/searchts/issues/505)) ([dcb05f2](https://github.com/capad-xyz/searchts/commit/dcb05f2ecd854b588c58ca0e7bc9337305599dee))
+
 ## [0.25.1](https://github.com/capad-xyz/searchts/compare/v0.25.0...v0.25.1) (2026-10-30)
 
 
