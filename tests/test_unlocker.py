@@ -401,6 +401,49 @@ def test_connection_pin_locks_a_public_address(monkeypatch):
     ]
 
 
+def test_connection_pin_keeps_ipv6_brackets_for_chromium(monkeypatch):
+    """#519: a bare IPv6 replacement made Chromium's resolver rule unparseable."""
+    from searchts.ssrf import chromium_pin_args, connection_pin
+
+    def _v6_only(*args, **kwargs):
+        return [(None, None, None, None, ("2a04:4e42::396", 443, 0, 0))]
+
+    monkeypatch.setattr("searchts.ssrf.socket.getaddrinfo", _v6_only)
+    entry, err = connection_pin("https://reddit.com/")
+    assert err is None
+    assert entry == "reddit.com:443:[2a04:4e42::396]"
+    assert chromium_pin_args("https://reddit.com/") == [
+        "--host-resolver-rules=MAP reddit.com [2a04:4e42::396]"
+    ]
+
+
+def test_connection_pin_prefers_ipv4_and_still_checks_every_answer(monkeypatch):
+    """An IPv6-first answer must not hide a private IPv4 from the rebind check."""
+    from searchts.ssrf import connection_pin
+
+    def _v6_then_private_v4(*args, **kwargs):
+        return [
+            (None, None, None, None, ("2a04:4e42::396", 443, 0, 0)),
+            (None, None, None, None, ("127.0.0.1", 443)),
+        ]
+
+    monkeypatch.setattr("searchts.ssrf.socket.getaddrinfo", _v6_then_private_v4)
+    entry, err = connection_pin("https://reddit.com/")
+    assert entry is None
+    assert err and "private-rebind" in err and "127.0.0.1" in err
+
+    def _both_public(*args, **kwargs):
+        return [
+            (None, None, None, None, ("2a04:4e42::396", 443, 0, 0)),
+            (None, None, None, None, ("151.101.1.140", 443)),
+        ]
+
+    monkeypatch.setattr("searchts.ssrf.socket.getaddrinfo", _both_public)
+    entry, err = connection_pin("https://reddit.com/")
+    assert err is None
+    assert entry == "reddit.com:443:151.101.1.140"
+
+
 def test_connection_pin_refuses_a_private_answer(monkeypatch):
     from searchts.ssrf import connection_pin
 

@@ -713,6 +713,7 @@ def _run():
     exits instead of tracebacks.
     """
     _ensure_utf8_console()
+    _startup_old_exe_sweep()
     from searchts.config import load_dotenv_if_available
     load_dotenv_if_available()
     try:
@@ -879,6 +880,16 @@ def _report_cookie_action(args, action: dict) -> None:
         f"cookie: {verb} {count} {browser} cookie(s) for {site} ({reason})",
         file=sys.stderr,
     )
+
+
+def _startup_old_exe_sweep() -> None:
+    """Delete leftover ``searchts.exe.old-*`` files. Never breaks the command."""
+    try:
+        from searchts.self_update import sweep_stale_exes
+
+        sweep_stale_exes()
+    except Exception:  # noqa: BLE001 - a sweep must never break a command
+        return
 
 
 def _startup_cookie_sweep(args) -> None:
@@ -3066,6 +3077,10 @@ def _cmd_read(args):
             _print_read_json_error(args.url, "bad_url", problem, 2)
         sys.exit(2)
 
+    quote_hint = ux.url_quoting_hint(args.url)
+    if quote_hint:
+        print(f"searchts read: hint: {quote_hint}", file=sys.stderr)
+
     cookies = _read_command_cookies(args)
     proxy = _read_command_proxy(args)
 
@@ -4643,7 +4658,8 @@ def _cmd_setup():
 
     # Step 3: Reddit — rdt-cli (a channel; `read` does not need a login, F5f)
     print("[Info] Reddit -- no login needed to `searchts read` a public page (that is the "
-          "known-host ring; it needs searchts install --browser and a profile Reddit knows). "
+          "known-host ring; it tries the .json document, old.reddit.com and the .rss feed "
+          "before the browser, so a fresh machine can read a public listing or thread). "
           "These CHANNEL backends do need one:")
     print(f"  Install: pipx install '{_RDT_GIT_SOURCE}'")
     print("  Then run: rdt login (you must log into reddit.com in the browser first)")

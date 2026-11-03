@@ -269,6 +269,21 @@ Update the copy that is running (`searchts upgrade` is the same command):
 searchts update
 ```
 
+### Windows: quote URLs (PowerShell and cmd)
+
+In PowerShell an unquoted `&` starts a background job, and in `cmd.exe` it ends
+the command. Either way the URL reaches searchts cut before the first `&`, so
+the read asks for the wrong page. Put the whole URL in quotes:
+
+```powershell
+searchts read "https://www.reddit.com/r/LocalLLaMA/comments/abc/title/?solution=xyz&js_challenge=1"
+searchts read 'https://www.reddit.com/r/LocalLLaMA/hot/?sort=new&t=day'
+```
+
+PowerShell accepts single or double quotes; `cmd.exe` uses double quotes. If a
+read sees a dangling `?`, `&` or value-less query key, it prints a one-line
+hint to quote the URL. It does not change the read.
+
 ### Update checks, and the agent note
 
 At most once every 24 hours, searchts asks GitHub for the latest release of

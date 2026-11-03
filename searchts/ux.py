@@ -50,6 +50,43 @@ _BARE_LABEL = re.compile(r"^[A-Za-z0-9_-]+$")
 #: Schemes a web reader can actually fetch.
 _READABLE_SCHEMES = ("http", "https")
 
+#: What PowerShell and cmd.exe do to an unquoted ``&``: PowerShell starts a
+#: background job and cmd ends the command, so the URL arrives cut before it.
+#: The hint is one line, on stderr, and never changes the read.
+_QUOTE_URL_HINT = (
+    "this URL looks cut at an '&'. In Windows PowerShell and cmd.exe, put the "
+    "whole URL in quotes: searchts read \"https://…?a=1&b=2\""
+)
+
+
+def url_quoting_hint(url: str) -> Optional[str]:
+    """A hint when *url* looks like a shell cut it at ``&``, else None.
+
+    Deliberately conservative: it only fires on shapes a complete URL would
+    not normally have, and even then it is advice, not a refusal. A dangling
+    ``?``/``&``/``=``, an empty pair, or a value-less key is what a URL cut at
+    the first ``&`` leaves behind. A normal ``?a=1&b=2`` never fires.
+    """
+    raw = (url or "").strip()
+    if not raw:
+        return None
+    try:
+        parts = urlsplit(raw)
+    except ValueError:
+        return None
+    query = parts.query
+    if not query:
+        return _QUOTE_URL_HINT if raw.endswith(("?", "&")) else None
+    if query.endswith(("&", "=")):
+        return _QUOTE_URL_HINT
+    for segment in query.split("&"):
+        if not segment or "=" not in segment:
+            return _QUOTE_URL_HINT
+        key, value = segment.split("=", 1)
+        if not key or not value:
+            return _QUOTE_URL_HINT
+    return None
+
 
 def check_url(url: str) -> Optional[str]:
     """A message if *url* cannot be read, else None.

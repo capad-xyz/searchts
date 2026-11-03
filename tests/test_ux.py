@@ -75,6 +75,42 @@ class TestCheckUrl:
         assert ux.check_url("   ") == "no URL given"
 
 
+class TestUrlQuotingHint:
+    """#522: PowerShell/cmd cut an unquoted URL at '&'. Advise, never refuse."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://example.com/path?",
+            "https://example.com/path?a=1&",
+            "https://example.com/path?a=1&b=",
+            "https://example.com/path?a=1&&b=2",
+            "https://example.com/path?a=1&b",
+            "https://example.com/path?a=1&b=&c=2",
+            "https://example.com/path?=value",
+        ],
+    )
+    def test_a_url_that_looks_cut_at_an_ampersand_gets_a_hint(self, url):
+        hint = ux.url_quoting_hint(url)
+        assert hint is not None
+        assert "quote" in hint.lower()
+        assert "PowerShell" in hint
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://example.com/",
+            "https://example.com/path?a=1&b=2",
+            "https://example.com/path?a=1&b=2#frag",
+            "https://example.com/path?q=a%26b",
+            "https://example.com/path",
+            "",
+        ],
+    )
+    def test_a_complete_url_never_gets_the_hint(self, url):
+        assert ux.url_quoting_hint(url) is None
+
+
 class TestTidyReason:
     """Library debugging help is for the integrator, not the person who mistyped."""
 

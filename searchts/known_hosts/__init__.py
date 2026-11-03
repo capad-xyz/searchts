@@ -40,10 +40,24 @@ from typing import Callable, List, Optional, Tuple
 
 @dataclass
 class KnownResult:
-    """Result of a known-host extractor."""
+    """Result of a known-host extractor.
+
+    ``route`` is the no-login path that produced the read, when the host has
+    more than one (Reddit: ``json``, ``old`` or ``rss``). It is reported in the
+    result's backend, the same place every other rung names itself, so a caller
+    can tell which route worked without reading the markdown.
+
+    ``status`` is the HTTP status of that route. Extractors only set it when
+    the answer is a stop the ladder must respect rather than a miss; today that
+    is ``429``, which #509 turns into a host cooldown. ``retry_after`` is the
+    header of that answer, if the host sent one.
+    """
     provider: str
     title: Optional[str]
     markdown: str
+    route: str = ""
+    status: int = 200
+    retry_after: str = ""
 
 
 # ── registry (auto-discovered from the package's modules) ────────────────────
