@@ -4,8 +4,17 @@
 The caller passes a **page**, not an API URL (same as share extractors).
 HTML listing/thread/profile/search URLs (www / old / no-www, hot/new/top/rising,
 ``comments/<id>/…``, ``/user/<name>/``, ``/search/?q=…``) are read from the page
-Reddit itself served; the ``.json`` ring still rewrites listing and thread URLs to
-the public ``.json`` document first, then fails open to curl/Jina/stealth.
+Reddit itself served; the no-login ring rewrites listing and thread URLs through
+three public routes in order — the ``.json`` document, ``old.reddit.com``, and
+the Atom feed (``.rss``) — and keeps the first that returns a readable document.
+Then it fails open to curl/Jina/stealth. The route that won is reported in the
+result's backend (``known-host:reddit:json`` / ``:old`` / ``:rss``).
+
+Measured on a fresh machine with no cookies, 2026-11-03: ``www`` ``.json``
+answered ``403`` with the network-security page, ``old.reddit.com`` answered the
+"Welcome to Reddit" login shell, and ``.rss`` answered ``200`` with the entries.
+The order still matters on a machine where one of the first two is served: the
+JSON document has scores and comment counts the feed does not.
 
 Also matches already-JSON shapes: ``/r/sub.json``, ``/r/sub/hot.json``,
 ``/r/sub/comments/<id>.json``, and ``/.json``.
@@ -30,10 +39,12 @@ tests): what works, what each wall is called, and the two cursors.
   own reason instead of handing back navigation chrome as if it were the
   community.
 
-The ``.json`` ring is still fail-open and still unreachable from a datacenter IP
-(measured 2026-10-17: ``www.reddit.com/r/x/hot.json`` and ``api.reddit.com``
+The ``.json`` route is still fail-open and still unreachable from a datacenter
+IP (measured 2026-10-17: ``www.reddit.com/r/x/hot.json`` and ``api.reddit.com``
 both answer ``403`` with Reddit's "blocked by network security" page, in the
-browser too). Nothing here claims every Reddit URL reads (**N7**).
+browser too). The feed is the route that still reads there, which is why the
+ring falls back instead of treating the 403 as the answer. Nothing here claims
+every Reddit URL reads (**N7**).
 """
 
 from __future__ import annotations
@@ -42,6 +53,7 @@ import html as html_lib
 import json
 import re
 import urllib.parse
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from html.parser import HTMLParser
@@ -92,23 +104,150 @@ def _to_json_url(url: str) -> str:
 #: Safety-interstitial signal from Reddit's JSON endpoint.
 _BLOCK_SIGNALS = frozenset({"error", "message"})
 
+#: The public JSON API host. ``old.reddit.com`` answers a ``.json`` path with its
+#: HTML app instead of the document, so the JSON route always asks www.
+_JSON_HOST = "www.reddit.com"
+
+
+class _Fetched(str):
+    """Response body that also carries the HTTP status and headers.
+
+    A ``str`` subclass on purpose: every existing test replaces :func:`_fetch`
+    with a plain fixture string, and an unannotated stub reads as HTTP 200,
+    which is exactly what a saved page is. The real call carries the status
+    because a 429 has to stop the route ladder (#509) instead of looking like a
+    miss and spending the next route's request.
+    """
+
+    status: int = 200
+    headers: Dict[str, str]
+
+    def __new__(
+        cls,
+        text: str,
+        status: int = 200,
+        headers: Optional[Dict[str, str]] = None,
+    ) -> "_Fetched":
+        obj = super().__new__(cls, text or "")
+        obj.status = int(status)
+        obj.headers = {
+            str(k).lower(): str(v) for k, v in (headers or {}).items()
+        }
+        return obj
+
+
+def _header(raw: str, name: str) -> str:
+    """One response header from a :class:`_Fetched`, or ``""`` for a plain stub."""
+    headers = getattr(raw, "headers", None) or {}
+    return str(headers.get(name.lower(), "") or "")
+
 
 def _fetch(url: str, timeout: int = 30) -> str:
-    """Chrome-impersonated GET against the Reddit JSON API.
+    """Chrome-impersonated GET for one no-login Reddit route.
 
-    Appends ``?raw_json=1`` to avoid Reddit's HTML interstitial on JSON requests.
-    Uses the same impersonation and headers as the unlocker's ``_fetch_curl_cffi``.
+    The Accept header follows the document the route asked for: JSON for the
+    ``.json`` document (with ``raw_json=1``, so Reddit does not answer with its
+    HTML interstitial), Atom for ``.rss``, HTML for ``old.reddit.com``.
+
+    One request, no retry: :func:`extract_known` walks the routes in order and
+    a 429 from any of them ends the read for the host rather than sending the
+    next request (#509). Uses the same impersonation as the unlocker's
+    ``_fetch_curl_cffi``.
     """
     from curl_cffi import requests as cr
 
-    base, frag = urllib.parse.urldefrag(url)
-    if "raw_json=1" not in base:
-        sep = "&" if "?" in base else "?"
-        base = base + sep + "raw_json=1"
-    r = cr.get(base, impersonate="chrome", timeout=timeout,
-                headers={"Accept-Language": "en-US,en;q=0.9",
-                         "Accept": "application/json"})
-    return r.text
+    base, _frag = urllib.parse.urldefrag(url)
+    path = urllib.parse.urlsplit(base).path.lower()
+    headers = {"Accept-Language": "en-US,en;q=0.9"}
+    if path.endswith((".rss", ".atom")):
+        headers["Accept"] = "application/atom+xml,application/xml;q=0.9,*/*;q=0.8"
+    elif path.endswith(".json"):
+        if "raw_json=1" not in base:
+            sep = "&" if "?" in base else "?"
+            base = base + sep + "raw_json=1"
+        headers["Accept"] = "application/json"
+    else:
+        headers["Accept"] = "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8"
+    r = cr.get(base, impersonate="chrome", timeout=timeout, headers=headers)
+    return _Fetched(
+        r.text,
+        r.status_code,
+        {str(k): str(v) for k, v in (r.headers or {}).items()},
+    )
+
+
+def _json_route_url(url: str) -> str:
+    """The public ``.json`` document for ``url``, always on the JSON API host."""
+    parts = urllib.parse.urlsplit(_to_json_url(url))
+    host = (parts.hostname or "").lower().rstrip(".")
+    if host == "reddit.com" or host.endswith(".reddit.com"):
+        if host != _JSON_HOST:
+            parts = parts._replace(netloc=_JSON_HOST)
+    return urllib.parse.urlunsplit(parts)
+
+
+def _old_route_url(url: str) -> str:
+    """The same page on ``old.reddit.com``, never the ``.json`` path.
+
+    A ``.json`` URL is a document request; old Reddit serves HTML for it, so
+    the JSON suffix is dropped before asking the old host. The query is kept
+    (sorting, ``?q=``), and the fragment never leaves the machine.
+    """
+    parts = urllib.parse.urlsplit(url)
+    path = parts.path or "/"
+    if path.endswith(".json"):
+        path = path[:-5] or "/"
+    return urllib.parse.urlunsplit(
+        ("https", "old.reddit.com", path, parts.query, "")
+    )
+
+
+def _rss_route_url(url: str) -> str:
+    """The Atom feed for ``url``: ``/r/sub/hot`` → ``/r/sub/hot/.rss``.
+
+    A post feed is ``/r/sub/comments/<id>[/slug]/.rss``. The ``.json`` suffix,
+    when present, is not a feed path, so it is dropped first. The query
+    (sorting) is kept.
+    """
+    parts = urllib.parse.urlsplit(url)
+    path = parts.path or "/"
+    if path.endswith(".json"):
+        path = path[:-5]
+    path = path.rstrip("/")
+    if not path.lower().endswith((".rss", ".atom")):
+        path = path + "/.rss"
+    return urllib.parse.urlunsplit(
+        ("https", "www.reddit.com", path, parts.query, "")
+    )
+
+
+def route_urls(url: str) -> List[Tuple[str, str]]:
+    """The no-login routes to try for ``url``, in order, as ``(name, URL)``.
+
+    Measured on a fresh machine with no cookies, 2026-11-03: the ``.json``
+    document answers ``403`` with Reddit's network-security page, ``www`` and
+    ``old`` answer the "Welcome to Reddit" login shell, and ``.rss`` answers
+    ``200`` with the entries. The order is the one the issue names: the JSON
+    document first (it has scores and comment counts), old Reddit next, RSS
+    last. Duplicate URLs are dropped, so a URL that maps to itself is one
+    request, not two. A user page has no feed in the shape this reader renders,
+    so it gets the first two routes only.
+    """
+    candidates = [
+        ("json", _json_route_url(url)),
+        ("old", _old_route_url(url)),
+    ]
+    path = urllib.parse.urlsplit(url).path.lower()
+    if "/user/" not in path:
+        candidates.append(("rss", _rss_route_url(url)))
+    out: List[Tuple[str, str]] = []
+    seen = set()
+    for name, route_url in candidates:
+        if route_url in seen:
+            continue
+        seen.add(route_url)
+        out.append((name, route_url))
+    return out
 
 
 def _is_block_interstitial(data: Any) -> bool:
@@ -309,20 +448,8 @@ def _render_user(data: Dict[str, Any]) -> str:
     return "".join(lines).strip()
 
 
-def extract_known(url: str, match: "re.Match[str]") -> Optional[KnownResult]:
-    """Fetch and render a Reddit `.json` URL to markdown, or None on any failure.
-
-    Fail-open: returns None for any of: 403 JSON interstitial, malformed JSON,
-    missing expected structure, empty body. The ladder runs in all these cases.
-    """
-    try:
-        raw = _fetch(_to_json_url(url))
-    except Exception:  # noqa: BLE001 - network failure → ladder
-        return None
-
-    if not raw or not raw.strip():
-        return None
-
+def _from_json(raw: str, match: "re.Match[str]") -> Optional[KnownResult]:
+    """Render the public ``.json`` document, or None when it is not one."""
     try:
         data = json.loads(raw)
     except (json.JSONDecodeError, ValueError, TypeError):
@@ -386,6 +513,97 @@ def extract_known(url: str, match: "re.Match[str]") -> Optional[KnownResult]:
                 md = _render_user({**data[0], **udata})
                 if md:
                     return KnownResult(provider="reddit", title=f"/u/{user}", markdown=md)
+
+    return None
+
+
+def _first_heading(markdown: str) -> Optional[str]:
+    """The first ``# `` line of a read, which is the post title when there is one."""
+    for line in (markdown or "").splitlines():
+        if line.startswith("# "):
+            return line[2:].strip() or None
+    return None
+
+
+def _from_html(raw: str, url: str) -> Optional[KnownResult]:
+    """Render old Reddit's HTML (its shreddit app or its classic ``div.thing``)."""
+    page = extract_page(url, raw)
+    if page is not None and not page.failure and page.markdown:
+        return KnownResult(
+            provider="reddit",
+            title=_first_heading(page.markdown),
+            markdown=page.markdown,
+        )
+    # old.reddit.com still serves the classic theme to some callers. Its markup
+    # has no shreddit-post element, so the page above reads as empty; this is
+    # the same document in the older shape.
+    return _from_legacy_html(raw, url)
+
+
+def _from_rss(raw: str, url: str) -> Optional[KnownResult]:
+    """Render Reddit's Atom feed (``.rss``) as the same listing or thread read."""
+    feed = _parse_atom(raw)
+    if feed is None or not feed["entries"]:
+        return None
+    entries = feed["entries"]
+    path = urllib.parse.urlsplit(url).path.lower()
+    if "/comments/" in path:
+        return _rss_thread(entries, url, feed["title"])
+    if "/user/" in path:
+        return None
+    return _rss_listing(entries, url)
+
+
+def extract_known(url: str, match: "re.Match[str]") -> Optional[KnownResult]:
+    """Fetch and render a Reddit page through no-login routes, or None.
+
+    The routes are asked in order (JSON document, old Reddit, Atom feed) and the
+    first one that yields a readable document wins. A route that returns a wall,
+    an empty body, a 403 or a document this parser cannot read is a miss and
+    the next route is asked, which is the point of the ladder: on a fresh
+    machine the JSON document is refused while the feed is served.
+
+    Fail-open: returns None for any of those misses, so the browser ladder runs
+    unchanged. The one exception is a ``429``: that is the host saying stop, not
+    a miss, so it is returned with ``status=429`` for the caller to record as a
+    cooldown (#509) instead of spending the next route's request.
+    """
+    for route, route_url in route_urls(url):
+        try:
+            raw = _fetch(route_url)
+        except Exception:  # noqa: BLE001 - network failure → next route / ladder
+            continue
+
+        status = int(getattr(raw, "status", 200) or 200)
+        retry_after = _header(raw, "retry-after")
+        if status == 429:
+            # #509: one refusal, one stop. Asking old.reddit or the feed now is
+            # another request to a host that just asked for fewer.
+            return KnownResult(
+                provider="reddit",
+                title=None,
+                markdown="",
+                route=route,
+                status=429,
+                retry_after=retry_after,
+            )
+        if status >= 400 or not raw or not raw.strip():
+            continue
+
+        try:
+            if route == "json":
+                result = _from_json(raw, match)
+            elif route == "old":
+                result = _from_html(raw, route_url)
+            else:
+                result = _from_rss(raw, route_url)
+        except Exception:  # noqa: BLE001 - a malformed document is a miss
+            result = None
+
+        if result is not None and result.markdown:
+            result.route = route
+            result.status = status
+            return result
 
     return None
 
@@ -1774,9 +1992,11 @@ def page_state(url: str, html: str) -> str:
 def state_note(state: str, url: str = "") -> str:
     """The one sentence that says what this wall is, and the next step if any.
 
-    Only the two notices a *person* has to accept get the ``--human`` line: that
-    rung opens a browser for the caller to click through, and nothing else here
-    has a step a person can take.
+    The two notices a *person* has to accept get the ``--human`` line: that rung
+    opens a browser for the caller to click through. A humanity check gets the
+    feed URL first, because that is the no-login route measured to answer from a
+    fresh machine (#520), and ``--human`` after it for the pages with no feed
+    (a batch cursor, a profile). Every other wall has no step a person can take.
     """
     what = {
         "reddit-private": "this community is private; only members approved by its "
@@ -1801,6 +2021,14 @@ def state_note(state: str, url: str = "") -> str:
     }.get(state, "")
     if not what:
         return ""
+    if state == _STATE_CHALLENGE and url:
+        note = what
+        if page_kind(url) in ("listing", "thread"):
+            note += (
+                ". The no-login routes are tried first, and the feed is the one "
+                f"that still answers on a fresh machine: searchts read {_rss_route_url(url)}"
+            )
+        return f"{note}. Or run: searchts read {url} --human"
     if state in ("reddit-quarantined", _STATE_NSFW) and url:
         return f"{what}. Run: searchts read {url} --human"
     return what
@@ -2015,3 +2243,464 @@ def extract_from_html(url: str, html: str) -> Optional[Tuple[str, str]]:
     if page is None or page.failure or not page.markdown:
         return None
     return page.label, page.markdown
+
+
+# ── the fallback routes: old Reddit's classic HTML and the Atom feed ──────────
+#
+# Both exist for the same reason: on a machine with no warm Reddit profile the
+# JSON document is refused and the www app serves "Welcome to Reddit", while
+# old.reddit.com and the feed are still public pages. They render into the same
+# shapes the JSON and shreddit readers produce, so a caller sees one read
+# format whether the route was json, old or rss (the route is named in the
+# result's backend, not in the text).
+
+
+def _atom_text(fragment: str) -> str:
+    """Plain text from the small HTML fragment Reddit puts inside an Atom entry."""
+    text = fragment or ""
+    text = re.sub(r"(?is)<(?:script|style)\b.*?</(?:script|style)>", " ", text)
+    text = re.sub(r"(?i)<br\s*/?>", "\n", text)
+    text = re.sub(r"(?i)</p\s*>", "\n\n", text)
+    text = re.sub(r"(?i)</(?:div|li|tr|blockquote)\s*>", "\n", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html_lib.unescape(text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _clean_author(author: str) -> str:
+    """``/u/name`` and ``u/name`` as ``name``; anything else unchanged."""
+    author = (author or "").strip()
+    if author.startswith("/u/"):
+        return author[3:].strip()
+    if author.startswith("u/"):
+        return author[2:].strip()
+    return author
+
+
+def _parse_atom(raw: str) -> Optional[Dict[str, Any]]:
+    """The feed title and its entries, or None for a document that is not Atom."""
+    try:
+        root = ET.fromstring(raw)
+    except (ET.ParseError, ValueError, TypeError):
+        return None
+    atom = "{http://www.w3.org/2005/Atom}"
+    if not str(root.tag).endswith("feed"):
+        return None
+    feed_title = (root.findtext(atom + "title") or "").strip()
+    entries: List[Dict[str, str]] = []
+    for node in root.findall(atom + "entry"):
+        author = node.find(atom + "author")
+        name = ""
+        if author is not None:
+            name = (author.findtext(atom + "name") or "").strip()
+        link = node.find(atom + "link")
+        href = (link.get("href") or "").strip() if link is not None else ""
+        category = node.find(atom + "category")
+        label = ""
+        if category is not None:
+            label = (category.get("label") or category.get("term") or "").strip()
+        content = node.find(atom + "content")
+        entries.append(
+            {
+                "id": (node.findtext(atom + "id") or "").strip(),
+                "title": (node.findtext(atom + "title") or "").strip(),
+                "author": name,
+                "permalink": href,
+                "category": label,
+                "content": (content.text or "") if content is not None else "",
+            }
+        )
+    return {"title": feed_title, "entries": entries}
+
+
+def _rss_listing(entries: List[Dict[str, str]], url: str) -> Optional[KnownResult]:
+    """A feed of posts as the same compact index the other listing routes print."""
+    listing_sub = _url_subreddit(url)
+    rows: List[Dict[str, str]] = []
+    for entry in entries:
+        if entry["id"].startswith("t1_"):
+            continue
+        title = entry["title"]
+        if not title:
+            continue
+        permalink = _canonical_reddit_permalink(entry["permalink"])
+        category = entry["category"]
+        meta: List[str] = []
+        if category and category.lower() != listing_sub.lower():
+            meta.append(category)
+        rows.append(
+            {
+                "key": entry["id"] or permalink or title,
+                "title": title,
+                "permalink": permalink,
+                "cc": "",
+                "score": "",
+                "author": _clean_author(entry["author"]),
+                # Reddit's listing feed carries the post's own body in content,
+                # so the index keeps the snippet every other listing route prints.
+                # One line, like the shreddit card's: the index is a row per post.
+                "snippet": re.sub(r"\s+", " ", _rss_post_body(entry["content"])).strip(),
+                "meta": " · ".join(meta),
+                "outbound": "",
+                "media": "",
+            }
+        )
+    if not rows:
+        return None
+    return KnownResult(
+        provider="reddit",
+        title=listing_sub or None,
+        markdown=_render_listing_rows(rows),
+    )
+
+
+def _rss_post_body(fragment: str) -> str:
+    """A post entry's own text, without the ``submitted by`` table Reddit adds."""
+    text = _atom_text(fragment)
+    kept: List[str] = []
+    for line in text.splitlines():
+        line = line.strip()
+        # The listing feed ends the body with its own furniture, sometimes on
+        # the body's own last line: "… submitted by /u/x [link] [comments]".
+        line = re.sub(
+            r"\s*submitted by\s+/u/\S+.*$", "", line, flags=re.IGNORECASE
+        )
+        line = re.sub(
+            r"\s*\[link\]\s*\[comments\]\s*$", "", line, flags=re.IGNORECASE
+        )
+        low = line.lower()
+        if not low:
+            kept.append("")
+            continue
+        if (
+            low.startswith("submitted by")
+            or low in ("[link]", "link", "[comments]", "comments")
+            or re.fullmatch(r"-?\d+ points?", low)
+        ):
+            continue
+        kept.append(line)
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip()
+
+
+def _rss_thread(
+    entries: List[Dict[str, str]], url: str, feed_title: str = ""
+) -> Optional[KnownResult]:
+    """A post's comment feed as a thread: the OP when present, then its comments."""
+    post = next((e for e in entries if e["id"].startswith("t3_")), None)
+    comments = [
+        e
+        for e in entries
+        if e["id"].startswith("t1_")
+        or (not e["id"].startswith("t3_") and "/comment/" in e["permalink"])
+    ]
+    # A comments feed usually carries only the comments, and its own <title> is
+    # the post title (sometimes suffixed with the community); the URL slug is
+    # the last fallback, so a thread read still names what it is.
+    feed_title = re.sub(r"\s*[:\-]\s*r/[A-Za-z0-9_]+$", "", feed_title or "").strip()
+    title = (post or {}).get("title") or feed_title or _url_post_title(url)
+    author = _clean_author((post or {}).get("author", ""))
+    subreddit = (post or {}).get("category", "") or _url_subreddit(url)
+    body = _rss_post_body((post or {}).get("content", "")) if post else ""
+
+    lines: List[str] = [f"# {title}", ""] if title else []
+    if author:
+        lines.append(f"**OP:** /u/{author}")
+    if subreddit:
+        lines.append(f"**Subreddit:** {subreddit}")
+    lines.append(f"**Link:** {_canonical_reddit_permalink(_rss_page_url(url))}")
+    if body:
+        lines.extend(["", body])
+
+    cap = max(1, int(_row_ceiling()))
+    rendered: List[str] = []
+    shown = 0
+    with_body = 0
+    for entry in comments:
+        body_text = _atom_text(entry["content"])
+        if not body_text:
+            continue
+        with_body += 1
+        if shown >= cap:
+            continue
+        permalink = _canonical_reddit_permalink(entry["permalink"])
+        header = f"**/u/{_clean_author(entry['author']) or '[deleted]'}**"
+        if permalink:
+            header += f" · [permalink]({permalink})"
+        rendered.append(header)
+        rendered.append(body_text)
+        rendered.append("")
+        shown += 1
+    if rendered:
+        lines.extend(["", "## Comments", ""])
+        lines.extend(rendered)
+        if with_body > shown:
+            lines.append(
+                f"[truncated: {with_body - shown} more comments in the feed were cut "
+                f"at the {cap}-comment cap]"
+            )
+    if not body and not rendered and not title:
+        return None
+    return KnownResult(provider="reddit", title=title or None, markdown="\n".join(lines).strip())
+
+
+def _rss_page_url(url: str) -> str:
+    """The HTML page a feed URL describes: the ``.rss`` suffix dropped."""
+    parts = urllib.parse.urlsplit(url)
+    path = parts.path or "/"
+    if path.lower().endswith((".rss", ".atom")):
+        path = path.rsplit(".", 1)[0]
+    return urllib.parse.urlunsplit(("https", "www.reddit.com", path, "", ""))
+
+
+def _url_post_title(url: str) -> str:
+    """A readable fallback title from a thread's slug: ``how_list_comps_work``."""
+    parts = [p for p in urllib.parse.urlsplit(url).path.split("/") if p]
+    try:
+        idx = parts.index("comments")
+    except ValueError:
+        return ""
+    slug = parts[idx + 2] if len(parts) > idx + 2 else ""
+    return slug.replace("_", " ").replace("-", " ").strip()
+
+
+def _parse_legacy_things(html: str) -> List[Dict[str, Any]]:
+    """Every classic old-Reddit ``div.thing`` with its own title/body/score.
+
+    ``_depth`` is the thing nesting at its start, so a reply keeps its indent.
+    Only the element's *own* usertext body is collected: a reply's text sits in
+    a child thing and would otherwise be folded into its parent.
+    """
+    captures = (
+        ("_title", "title", "a"),
+        ("_body", "usertext-body", "div"),
+        ("_score", "score", "span"),
+    )
+
+    class _P(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.things: List[Dict[str, Any]] = []
+            self._active: List[Dict[str, Any]] = []
+            self._frames: List[Tuple[str, Optional[Dict[str, Any]], Optional[Dict[str, Any]], List[str]]] = []
+            self._skip = 0
+
+        def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
+            t = tag.lower()
+            if t in _SKIP_TAGS:
+                self._skip += 1
+                return
+            ad = {str(k).lower(): (v or "") for k, v in attrs}
+            classes = set((ad.get("class") or "").lower().split())
+            owner = self._active[-1] if self._active else None
+            if t == "br" and owner is not None and owner["_body_depth"]:
+                owner["_body"].append("\n")
+            if t in _VOID_TAGS:
+                return
+            rec = None
+            if t == "div" and "thing" in classes and ad.get("data-type") in ("link", "comment"):
+                rec = {
+                    "type": ad.get("data-type", ""),
+                    "fullname": ad.get("data-fullname", ""),
+                    "author": ad.get("data-author", ""),
+                    "subreddit": ad.get("data-subreddit", ""),
+                    "permalink": ad.get("data-permalink", ""),
+                    "score": ad.get("data-score", ""),
+                    "comments": ad.get("data-comments-count", ""),
+                    "_depth": len(self._active),
+                    "_title": [],
+                    "_body": [],
+                    "_score_text": [],
+                    "_title_depth": 0,
+                    "_body_depth": 0,
+                    "_score_depth": 0,
+                }
+                self.things.append(rec)
+            started: List[str] = []
+            if owner is not None:
+                for key, target_class, target_tag in captures:
+                    depth_key = f"{key}_depth"
+                    if owner[depth_key]:
+                        owner[depth_key] += 1
+                        started.append(key)
+                    elif t == target_tag and target_class in classes:
+                        owner[depth_key] = 1
+                        started.append(key)
+            if rec is not None:
+                self._active.append(rec)
+            self._frames.append((t, rec, owner, started))
+
+        def handle_endtag(self, tag: str) -> None:
+            t = tag.lower()
+            if t in _SKIP_TAGS:
+                self._skip = max(0, self._skip - 1)
+                return
+            if t in _VOID_TAGS:
+                return
+            idx = next(
+                (i for i in range(len(self._frames) - 1, -1, -1) if self._frames[i][0] == t),
+                None,
+            )
+            if idx is None:
+                return
+            _tag, rec, owner, started = self._frames.pop(idx)
+            if owner is not None:
+                for key in started:
+                    depth_key = f"{key}_depth"
+                    if owner[depth_key] > 0:
+                        owner[depth_key] -= 1
+            if rec is not None:
+                for i in range(len(self._active) - 1, -1, -1):
+                    if self._active[i] is rec:
+                        del self._active[i]
+                        break
+
+        def handle_data(self, data: str) -> None:
+            if not self._active or self._skip:
+                return
+            text = data.strip()
+            if not text:
+                return
+            rec = self._active[-1]
+            for key, depth_key in (
+                ("_title", "_title_depth"),
+                ("_body", "_body_depth"),
+                ("_score_text", "_score_depth"),
+            ):
+                if rec[depth_key]:
+                    rec[key].append(text)
+
+    parser = _P()
+    try:
+        parser.feed(html or "")
+    except Exception:  # noqa: BLE001 - malformed classic HTML must not explode
+        pass
+    out: List[Dict[str, Any]] = []
+    for rec in parser.things:
+        title = re.sub(r"\s+", " ", " ".join(rec.pop("_title"))).strip()
+        body = re.sub(r"\s+", " ", " ".join(rec.pop("_body"))).strip()
+        score_text = " ".join(rec.pop("_score_text"))
+        score = str(rec.get("score") or "").strip()
+        if not score:
+            match = re.search(r"-?\d+", score_text)
+            score = match.group(0) if match else ""
+        for key in ("_title_depth", "_body_depth", "_score_depth"):
+            rec.pop(key, None)
+        rec.update(title=title, body=body, score=score)
+        out.append(rec)
+    return out
+
+
+def _legacy_listing(
+    things: List[Dict[str, Any]], url: str
+) -> Optional[KnownResult]:
+    listing_sub = _url_subreddit(url)
+    rows: List[Dict[str, str]] = []
+    for thing in things:
+        if thing.get("type") != "link" or not thing.get("title"):
+            continue
+        permalink = _canonical_reddit_permalink(thing.get("permalink") or "")
+        author = _clean_author(thing.get("author") or "")
+        meta: List[str] = []
+        subreddit = thing.get("subreddit") or ""
+        if subreddit:
+            subreddit = f"r/{subreddit}" if not subreddit.startswith("r/") else subreddit
+            if subreddit.lower() != listing_sub.lower():
+                meta.append(subreddit)
+        rows.append(
+            {
+                "key": thing.get("fullname") or permalink or thing["title"],
+                "title": thing["title"],
+                "permalink": permalink,
+                "cc": str(thing.get("comments") or ""),
+                "score": str(thing.get("score") or ""),
+                "author": author,
+                "snippet": thing.get("body") or "",
+                "meta": " · ".join(meta),
+                "outbound": "",
+                "media": "",
+            }
+        )
+    if not rows:
+        return None
+    return KnownResult(
+        provider="reddit",
+        title=listing_sub or None,
+        markdown=_render_listing_rows(rows),
+    )
+
+
+def _legacy_thread(
+    op: Dict[str, Any], comments: List[Dict[str, Any]], url: str
+) -> KnownResult:
+    title = op.get("title") or ""
+    author = _clean_author(op.get("author") or "")
+    subreddit = op.get("subreddit") or ""
+    if subreddit and not subreddit.startswith("r/"):
+        subreddit = f"r/{subreddit}"
+    permalink = _canonical_reddit_permalink(op.get("permalink") or url)
+    lines: List[str] = [f"# {title}", ""]
+    if author:
+        lines.append(f"**OP:** /u/{author}")
+    if subreddit:
+        lines.append(f"**Subreddit:** {subreddit}")
+    if op.get("score"):
+        lines.append(f"**Score:** {op['score']}")
+    if op.get("comments"):
+        lines.append(f"**Comments:** {op['comments']}")
+    if permalink:
+        lines.append(f"**Link:** {permalink}")
+    if op.get("body"):
+        lines.extend(["", op["body"]])
+
+    cap = max(1, int(_row_ceiling()))
+    shown = 0
+    total = 0
+    block: List[str] = []
+    for comment in comments:
+        body = comment.get("body") or ""
+        if len(body) < _COMMENT_MIN_CHARS:
+            continue
+        total += 1
+        if shown >= cap:
+            continue
+        indent = "  " * max(0, int(comment.get("_depth") or 0))
+        comment_author = _clean_author(comment.get("author") or "") or "[deleted]"
+        header = f"{indent}**/u/{comment_author}**"
+        if comment.get("score"):
+            header += f" ({comment['score']} pts)"
+        block.append(header)
+        block.append(f"{indent}{body}")
+        block.append("")
+        shown += 1
+    if block:
+        lines.extend(["", "## Comments", ""])
+        lines.extend(block)
+        if total > shown:
+            lines.append(
+                f"[truncated: {total - shown} more comments in the page were cut at "
+                f"the {cap}-comment cap]"
+            )
+    return KnownResult(provider="reddit", title=title or None, markdown="\n".join(lines).strip())
+
+
+def _from_legacy_html(raw: str, url: str) -> Optional[KnownResult]:
+    """Old Reddit's classic markup as the same listing or thread shape."""
+    things = _parse_legacy_things(raw)
+    if not things:
+        return None
+    kind = page_kind(url)
+    if kind in ("listing", "batch"):
+        return _legacy_listing(things, url)
+    if kind == "thread":
+        op = next(
+            (t for t in things if t.get("type") == "link" and t.get("title")),
+            None,
+        )
+        if op is None:
+            return None
+        comments = [t for t in things if t.get("type") == "comment"]
+        return _legacy_thread(op, comments, url)
+    return None

@@ -409,7 +409,7 @@ def test_fetch_uses_known_host_ring_for_json_url(monkeypatch):
         "https://www.reddit.com/r/python/comments/abc123/title/.json",
         use_memory=False,
     )
-    assert res.backend == "known-host:reddit"
+    assert res.backend == "known-host:reddit:json"
     assert "list comprehensions" in res.text.lower()
 
 
@@ -437,7 +437,7 @@ def test_fetch_html_listing_hits_ring(monkeypatch):
         "https://www.reddit.com/r/python/hot/",
         use_memory=False,
     )
-    assert res.backend == "known-host:reddit"
+    assert res.backend == "known-host:reddit:json"
     assert seen
     assert seen[0].endswith("hot.json") or "hot.json" in seen[0]
     assert "list comprehensions" in res.text.lower()
@@ -461,7 +461,7 @@ def test_fetch_html_thread_hits_ring(monkeypatch):
         "https://old.reddit.com/r/python/comments/abc123/how_list_comps_work/",
         use_memory=False,
     )
-    assert res.backend == "known-host:reddit"
+    assert res.backend == "known-host:reddit:json"
     assert "list comprehensions" in res.text.lower()
 
 
@@ -552,7 +552,7 @@ def test_known_host_hit_ticks_stderr(monkeypatch, capsys):
     )
     captured = capsys.readouterr()
     assert "trying known-host:reddit" in captured.err
-    assert "known-host:reddit: ok" in captured.err
+    assert "known-host:reddit:json: ok" in captured.err
     assert captured.out == ""
 
 
@@ -1095,3 +1095,202 @@ def test_human_listing_beats_longer_thin_best(monkeypatch):
     assert "Bb" in res.text
     assert "ZZZ" not in res.text
     assert res.backend == "human-browser"
+
+
+# ── #520: no-login fallback routes (json → old → rss) ────────────────────────
+#
+# A fresh machine with no cookies is refused the JSON document and served a
+# login shell by the www app. These tests hold the ladder to three things: the
+# order, the first route with real content wins, and a 429 stops the ladder
+# instead of spending the next route's request. All documents are saved here.
+
+import pytest  # noqa: E402
+
+from searchts import rate_limit as rate_limit_mod  # noqa: E402
+
+
+def _rss(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def _html(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def test_route_urls_order_and_mapping():
+    routes = reddit.route_urls("https://www.reddit.com/r/python/hot/")
+    assert [name for name, _url in routes] == ["json", "old", "rss"]
+    assert dict(routes)["json"] == "https://www.reddit.com/r/python/hot.json"
+    assert dict(routes)["old"] == "https://old.reddit.com/r/python/hot/"
+    assert dict(routes)["rss"] == "https://www.reddit.com/r/python/hot/.rss"
+
+
+def test_route_urls_thread_drops_json_before_old_and_rss():
+    routes = dict(reddit.route_urls(
+        "https://www.reddit.com/r/python/comments/abc123/a_title/.json"
+    ))
+    assert routes["old"] == "https://old.reddit.com/r/python/comments/abc123/a_title/"
+    assert routes["rss"] == "https://www.reddit.com/r/python/comments/abc123/a_title/.rss"
+
+
+def test_route_urls_user_has_no_feed():
+    routes = reddit.route_urls("https://www.reddit.com/user/spez/")
+    assert [name for name, _url in routes] == ["json", "old"]
+
+
+def test_route_urls_never_asks_old_host_for_json():
+    # old.reddit.com answers `.json` with its HTML app; the JSON route goes to
+    # www even when the caller handed us an old.reddit URL.
+    routes = dict(reddit.route_urls("https://old.reddit.com/r/python/hot/"))
+    assert routes["json"] == "https://www.reddit.com/r/python/hot.json"
+
+
+def test_extract_falls_back_to_rss_when_json_and_old_are_walls(monkeypatch):
+    calls = []
+
+    def fake_fetch(url, timeout=30):
+        calls.append(url)
+        if ".json" in url:
+            # The block page, with a 403 as Reddit sends it.
+            return reddit._Fetched(
+                "<html><title>Reddit - blocked by network security</title></html>",
+                403,
+            )
+        if "old.reddit.com" in url:
+            # The login shell a fresh machine gets from the www app.
+            return reddit._Fetched("<html><title>Welcome to Reddit</title></html>", 200)
+        return _rss("reddit_listing.rss")
+
+    monkeypatch.setattr(reddit, "_fetch", fake_fetch)
+
+    res = extract("https://www.reddit.com/r/MachineLearning/hot/")
+    assert res is not None
+    assert res.route == "rss"
+    assert res.title == "r/MachineLearning"
+    assert "Self-Promotion Thread" in res.markdown
+    assert "submitted by" not in res.markdown
+    assert len(calls) == 3
+
+
+def test_extract_stops_at_old_reddit_when_it_has_content(monkeypatch):
+    calls = []
+
+    def fake_fetch(url, timeout=30):
+        calls.append(url)
+        if ".json" in url:
+            return reddit._Fetched('{"error": 403, "message": "blocked"}', 403)
+        if "old.reddit.com" in url:
+            return _html("reddit_listing_old.html")
+        raise Tripwire("rss asked after old.reddit answered")
+
+    monkeypatch.setattr(reddit, "_fetch", fake_fetch)
+
+    res = extract("https://www.reddit.com/r/python/hot/")
+    assert res is not None
+    assert res.route == "old"
+    assert "First old post" in res.markdown
+    assert "42 pts" in res.markdown
+    assert len(calls) == 2
+
+
+def test_extract_thread_from_rss_keeps_the_readable_shape(monkeypatch):
+    def fake_fetch(url, timeout=30):
+        if ".json" in url:
+            return reddit._Fetched('{"error": 403, "message": "blocked"}', 403)
+        if "old.reddit.com" in url:
+            return reddit._Fetched("<html><title>Welcome to Reddit</title></html>", 200)
+        return _rss("reddit_thread.rss")
+
+    monkeypatch.setattr(reddit, "_fetch", fake_fetch)
+
+    res = extract("https://www.reddit.com/r/MachineLearning/comments/1xmk8rx/")
+    assert res is not None
+    assert res.route == "rss"
+    assert res.title == "We turned 10 years of ML papers into one page per topic"
+    assert "**OP:** /u/latenticlabs" in res.markdown
+    assert "## Comments" in res.markdown
+    assert "**/u/ramani28**" in res.markdown
+    assert "grouped them into ~1,260 topics" in res.markdown
+    assert "/comments/1xmk8rx/" in res.markdown
+    assert ".rss" not in res.markdown.split("**Link:**", 1)[1].splitlines()[0]
+
+
+def test_extract_old_reddit_classic_thread(monkeypatch):
+    def fake_fetch(url, timeout=30):
+        if ".json" in url:
+            return reddit._Fetched('{"error": 403, "message": "blocked"}', 403)
+        return _html("reddit_thread_old.html")
+
+    monkeypatch.setattr(reddit, "_fetch", fake_fetch)
+
+    res = extract("https://www.reddit.com/r/python/comments/aaa/first_old_thread/")
+    assert res is not None
+    assert res.route == "old"
+    assert "Here is the post body" in res.markdown
+    assert "**/u/bob** (5 pts)" in res.markdown
+    assert "  **/u/carol** (3 pts)" in res.markdown
+
+
+def test_extract_429_stops_the_route_ladder(monkeypatch):
+    calls = []
+
+    def fake_fetch(url, timeout=30):
+        calls.append(url)
+        return reddit._Fetched("", 429, {"retry-after": "7"})
+
+    monkeypatch.setattr(reddit, "_fetch", fake_fetch)
+
+    res = extract("https://www.reddit.com/r/python/hot/")
+    assert res is not None
+    assert res.status == 429
+    assert res.route == "json"
+    assert res.retry_after == "7"
+    assert len(calls) == 1, "a 429 must not spend the next route's request"
+
+
+def test_fetch_429_records_cooldown_and_stops_before_the_ladder(monkeypatch):
+    def fake_fetch(url, timeout=30):
+        return reddit._Fetched("", 429, {"retry-after": "7"})
+
+    monkeypatch.setattr(reddit, "_fetch", fake_fetch)
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_curl_cffi",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("ladder ran after a 429")),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_jina",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("ladder ran after a 429")),
+    )
+    monkeypatch.setattr(
+        unlocker,
+        "_fetch_stealth",
+        lambda *a, **k: (_ for _ in ()).throw(Tripwire("ladder ran after a 429")),
+    )
+
+    with pytest.raises(unlocker.UnlockerError) as ei:
+        unlocker.fetch("https://www.reddit.com/r/python/hot/", use_memory=False)
+
+    assert any(why == "http-429" for _backend, why in ei.value.attempts)
+    assert "http-429" in (ei.value.hint or "")
+    assert rate_limit_mod.remaining("reddit.com") > 0
+
+
+def test_challenge_hint_names_the_feed_route_and_the_human_step():
+    note = reddit.state_note(
+        "reddit-challenge",
+        "https://www.reddit.com/r/python/comments/abc/a_title/",
+    )
+    assert ".rss" in note
+    assert "searchts read https://www.reddit.com/r/python/comments/abc/a_title/.rss" in note
+    assert "--human" in note
+
+
+def test_challenge_hint_does_not_invent_a_feed_for_a_batch_cursor():
+    note = reddit.state_note(
+        "reddit-challenge",
+        "https://www.reddit.com/svc/shreddit/community-more-posts/hot/?after=t3_abc",
+    )
+    assert ".rss" not in note
+    assert "--human" in note
