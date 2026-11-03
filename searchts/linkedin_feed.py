@@ -781,25 +781,30 @@ class FeedUnavailable(Exception):
 
 
 def profile_path() -> Optional[str]:
-    """The Chrome profile the kept LinkedIn login came from.
+    """The browser profile the kept LinkedIn login came from.
 
-    Set ``SEARCHTS_LINKEDIN_PROFILE`` to that user-data directory. It is
-    deliberately not discovered by copying a cookie store: the browser that
+    Set ``SEARCHTS_BROWSER_PROFILE`` to that user-data directory (the legacy
+    ``SEARCHTS_LINKEDIN_PROFILE`` still works when the new name is unset). It
+    is deliberately not discovered by copying a cookie store: the browser that
     minted the session is the browser that reads with it.
     """
-    raw = os.environ.get("SEARCHTS_LINKEDIN_PROFILE", "").strip()
-    return os.path.expanduser(raw) if raw else None
+    from searchts.browser_settings import browser_profile
+
+    return browser_profile()
 
 
 def chrome_executable() -> Optional[str]:
     """An explicit Chromium-family binary, or None to let ``channel="chrome"`` find it.
 
     Any Chromium browser that minted the session works here (Chrome, Vivaldi,
-    Edge, Brave): set ``SEARCHTS_LINKEDIN_CHROME`` to its executable and
-    ``SEARCHTS_LINKEDIN_PROFILE`` to its user-data directory.
+    Edge, Brave): set ``SEARCHTS_BROWSER`` to its executable or name and
+    ``SEARCHTS_BROWSER_PROFILE`` to its user-data directory. The legacy
+    ``SEARCHTS_LINKEDIN_CHROME`` / ``SEARCHTS_LINKEDIN_PROFILE`` names still
+    work when the new ones are unset.
     """
-    raw = os.environ.get("SEARCHTS_LINKEDIN_CHROME", "").strip()
-    return os.path.expanduser(raw) if raw else None
+    from searchts.browser_settings import browser_executable
+
+    return browser_executable()
 
 
 def _pid_alive(pid: int) -> bool:
@@ -847,17 +852,18 @@ def profile_problem(profile: Optional[str]) -> str:
     """
     if not profile:
         return (
-            "no Chrome profile is configured for the LinkedIn feed. Set "
-            "SEARCHTS_LINKEDIN_PROFILE to the user-data directory that holds "
+            "no browser profile is configured for the LinkedIn feed. Set "
+            "SEARCHTS_BROWSER_PROFILE to the user-data directory that holds "
             "the kept LinkedIn login (the profile the browser was signed in "
-            "with). The feed is not read by copying that profile's cookies "
-            "into another client."
+            "with; SEARCHTS_LINKEDIN_PROFILE still works as an alias). The "
+            "feed is not read by copying that profile's cookies into another "
+            "client."
         )
     if not os.path.isdir(profile):
         return (
-            f"SEARCHTS_LINKEDIN_PROFILE points at {profile}, which is not a "
-            "directory. Point it at the Chrome user-data directory that holds "
-            "the kept LinkedIn login."
+            f"the configured browser profile points at {profile}, which is not "
+            "a directory. Point SEARCHTS_BROWSER_PROFILE at the user-data "
+            "directory that holds the kept LinkedIn login."
         )
     if _windows_profile_locked(profile):
         return (
@@ -981,9 +987,9 @@ def _browser_page(
             ) from exc
         raise FeedUnavailable(
             f"could not open the signed-in browser profile ({type(exc).__name__}). "
-            "Close other windows using that profile, or set "
-            "SEARCHTS_LINKEDIN_CHROME to the browser's executable (Chrome, "
-            "Vivaldi, Edge or Brave)."
+            "Close other windows using that profile, or set SEARCHTS_BROWSER "
+            "to the browser's executable or name (Chrome, Vivaldi, Edge or "
+            "Brave; SEARCHTS_LINKEDIN_CHROME is the legacy alias)."
         ) from exc
 
 
@@ -1275,8 +1281,9 @@ def read_feed(
                 "the LinkedIn feed is read in the browser signed in to LinkedIn, "
                 "and searchts has no kept LinkedIn login. Keep one with "
                 "`searchts login keep linkedin.com` after a signed-in read, or "
-                "set SEARCHTS_LINKEDIN_PROFILE to that browser's user-data "
-                "directory. Until then, linkedin-scraper-mcp remains the fallback "
+                "set SEARCHTS_BROWSER_PROFILE to that browser's user-data "
+                "directory (SEARCHTS_LINKEDIN_PROFILE is the legacy alias). "
+                "Until then, linkedin-scraper-mcp remains the fallback "
                 "for the feed."
             )
         problem = profile_problem(chosen)

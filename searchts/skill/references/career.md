@@ -32,8 +32,9 @@ wall, not which account is signed in.
 
 `searchts read` already reads profiles, companies, posts, people search and
 the home feed natively with a kept login. The feed also needs
-`SEARCHTS_LINKEDIN_PROFILE`, the Chrome user-data directory that holds that
-login, and reads it headed in that same Chrome. The `linkedin-scraper-mcp`
+`SEARCHTS_BROWSER_PROFILE` (or the legacy `SEARCHTS_LINKEDIN_PROFILE`), the
+browser user-data directory that holds that login, and reads it headed in that
+same browser. The `linkedin-scraper-mcp`
 bridge remains an optional fallback for write/inbox tools, and for the feed
 when that profile is not available; it is not part of the first-pass install.
 
