@@ -19,6 +19,7 @@ Fetch a page as markdown, or fail and say why.
 Climbs the same three rungs the MCP server uses: curl_cffi with a browser TLS fingerprint, then the Jina reader relay, then a stealth browser. It stops at the first rung that returns real text. A wall, a login page, or a client-rendered shell is a failure, not a page.
 - A player page comes back as its captions, or the failure names transcribe.
 - A share link whose HTML is empty is still a read.
+- On Windows, quote URLs that contain '&': in PowerShell an unquoted '&' starts a background job, and in cmd.exe it ends the command, so searchts receives the URL cut at the first '&'. Example: searchts read "https://example.com/?a=1&b=2".
 - A kept LinkedIn login reads a profile as one page: the top card plus its Experience and Education pages, two extra requests at most. A section that fails is named in a note, not a failed read. Each of those page loads waits out the LinkedIn gap below.
 - A direct http-429 stops the ladder for that host and cools it down (SEARCHTS_429_COOLDOWN, default 300 s, 1800 at most, 0 off). --ignore-cooldown reads during the cooldown. --wait-on-429 retries that rung, capped at 180 s; a kept login gets one wait. The Jina relay's own 429 is its quota and does not cool the host.
 - A kept login lowers --items to SEARCHTS_MAX_ITEMS_SIGNED_IN (default 50). The clamp note says signed-in items.

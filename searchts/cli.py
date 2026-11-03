@@ -3077,6 +3077,10 @@ def _cmd_read(args):
             _print_read_json_error(args.url, "bad_url", problem, 2)
         sys.exit(2)
 
+    quote_hint = ux.url_quoting_hint(args.url)
+    if quote_hint:
+        print(f"searchts read: hint: {quote_hint}", file=sys.stderr)
+
     cookies = _read_command_cookies(args)
     proxy = _read_command_proxy(args)
 

@@ -234,6 +234,33 @@ class TestCLI:
         assert "curl_cffi" in captured.err          # status on stderr
         assert "curl_cffi" not in captured.out       # stdout stays clean/pipeable
 
+    def test_read_hints_to_quote_a_url_that_looks_cut_at_an_ampersand(self, capsys):
+        """#522: one line of advice on stderr; the read itself is unchanged."""
+        from searchts.unlocker import FetchResult
+        seen = {}
+
+        def fake_fetch(url, **kwargs):
+            seen["url"] = url
+            return FetchResult("curl_cffi", "page text", 200)
+
+        with patch("searchts.unlocker.fetch", side_effect=fake_fetch):
+            with patch("sys.argv", ["searchts", "read", "https://x.test/?a=1&"]):
+                main()
+        captured = capsys.readouterr()
+        assert seen["url"] == "https://x.test/?a=1&"
+        assert "page text" in captured.out
+        assert "quote" in captured.err.lower()
+        assert "PowerShell" in captured.err
+
+    def test_read_does_not_hint_for_a_complete_query(self, capsys):
+        from searchts.unlocker import FetchResult
+        with patch("searchts.unlocker.fetch",
+                   return_value=FetchResult("curl_cffi", "page text", 200)):
+            with patch("sys.argv", ["searchts", "read", "https://x.test/?a=1&b=2"]):
+                main()
+        assert "PowerShell" not in capsys.readouterr().err
+
+
     def test_read_command_json(self, capsys):
         from searchts.unlocker import FetchResult
         with patch("searchts.unlocker.fetch",
