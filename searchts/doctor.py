@@ -146,6 +146,57 @@ def _report_row(lines: list, style, status: str, name: str, message: str,
         lines.append("     " + style.dim(f"current backend: {active}"))
 
 
+#: The optional CLIs doctor probes, in words a person can act on. Keyed by the
+#: channel name: the tool to name, the site it helps with, what it adds, and
+#: the one command that installs it. A missing probe used to be printed as
+#: "3 not present: Twitter/X tweets, Reddit posts and comments, ..." which read
+#: like searchts could not read those sites. It can; these are extra tools.
+_OPTIONAL_TOOLS: Dict[str, tuple] = {
+    "twitter": (
+        "twitter-cli", "X", "X posts, threads, search and timelines",
+        "searchts install --channels twitter",
+    ),
+    "reddit": (
+        "rdt-cli", "Reddit", "Reddit posts, comments and search",
+        "searchts install --channels reddit",
+    ),
+    "linkedin": (
+        "linkedin-scraper-mcp", "LinkedIn",
+        "the LinkedIn feed and write/inbox tools",
+        "searchts install --only linkedin",
+    ),
+}
+
+
+def _optional_missing_lines(missing: Sequence[tuple]) -> list:
+    """The optional-tool note for channels that are not ready.
+
+    Names the tools, says searchts reads the sites without them, and says what
+    each adds and how to install it. Returned as logical lines so the plain
+    report can keep them unwrapped and the screen report can fold them.
+    """
+    tools = []
+    sites = []
+    details = []
+    for key, r in missing:
+        tool, site, adds, install = _OPTIONAL_TOOLS.get(
+            key, (r["name"], r["name"], "", "searchts install")
+        )
+        tools.append(tool)
+        if site not in sites:
+            sites.append(site)
+        line = f"{tool} ({site}) adds {adds}." if adds else f"{tool}."
+        details.append(f"{line} Install: {install}")
+    site_words = ", ".join(sites[:-1]) + f" and {sites[-1]}" if len(sites) > 1 else (
+        sites[0] if sites else "these sites"
+    )
+    return [
+        f"optional tools not ready: {', '.join(tools)}",
+        f"searchts still reads {site_words} natively without them.",
+        *details,
+    ]
+
+
 def format_plain(results: Dict[str, dict]) -> str:
     """The doctor report for an agent: one line per channel, never wrapped.
 
@@ -172,15 +223,14 @@ def format_plain(results: Dict[str, dict]) -> str:
         lines.extend("      " + p for p in parts[1:])
 
     probes = [r for r in results.values() if r["tier"] == 0]
-    optional = [r for r in results.values() if r["tier"] in (1, 2)]
-    for r in probes + [r for r in optional if r["status"] == "ok"]:
+    optional = [(key, r) for key, r in results.items() if r["tier"] in (1, 2)]
+    for r in probes + [r for _key, r in optional if r["status"] == "ok"]:
         add(r["status"], r["name"], r["message"], _active(r))
-    missing = [r["name"] for r in optional if r["status"] != "ok"]
+    missing = [(key, r) for key, r in optional if r["status"] != "ok"]
     if missing:
-        lines.append(
-            f"off   not present: {', '.join(missing)} (PATH checks, not "
-            "searchts platform readers)"
-        )
+        note = _optional_missing_lines(missing)
+        lines.append("off   " + note[0])
+        lines.extend("      " + line for line in note[1:])
 
     import stat
 
@@ -360,9 +410,9 @@ def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] =
             _report_row(lines, s, r["status"], r["name"], r["message"],
                         unicode_ok, active=_active(r))
 
-    optional = [r for r in results.values() if r["tier"] in (1, 2)]
-    present = [r for r in optional if r["status"] == "ok"]
-    missing = [r for r in optional if r["status"] != "ok"]
+    optional = [(key, r) for key, r in results.items() if r["tier"] in (1, 2)]
+    present = [r for _key, r in optional if r["status"] == "ok"]
+    missing = [(key, r) for key, r in optional if r["status"] != "ok"]
     if present:
         lines += ["", "  " + s.dim("OPTIONAL CLIS")]
         for r in present:
@@ -370,14 +420,11 @@ def format_report(results: Dict[str, dict], lock_pids: Optional[Sequence[int]] =
                         unicode_ok, active=_active(r))
 
     if missing:
-        names = ", ".join(r["name"] for r in missing)
+        optional_note = _optional_missing_lines(missing)
         lines.append("")
-        for chunk in _wrap_plain(
-            f"{len(missing)} not present: {names}. These are PATH checks, "
-            "not searchts platform readers.",
-            71,
-        ):
-            lines.append("  " + s.dim(chunk))
+        for logical in optional_note:
+            for chunk in _wrap_plain(logical, 71):
+                lines.append("  " + s.dim(chunk))
 
     import stat
 
