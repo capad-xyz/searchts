@@ -334,6 +334,7 @@ def connection_pin(url: str) -> tuple[Optional[str], Optional[str]]:
     except (socket.gaierror, UnicodeError, OSError, ValueError):
         return None, None
     chosen: Optional[str] = None
+    chosen_v6: Optional[str] = None
     for info in infos:
         sockaddr = info[4] if info and len(info) > 4 else None
         addr = sockaddr[0] if sockaddr else None
@@ -344,8 +345,13 @@ def connection_pin(url: str) -> tuple[Optional[str], Optional[str]]:
             return None, (
                 f"private-rebind: '{host}' resolves to {reason} ('{addr}')"
             )
-        if chosen is None:
+        if ":" in addr:
+            if chosen_v6 is None:
+                chosen_v6 = addr
+        elif chosen is None:
             chosen = addr
+    if chosen is None:
+        chosen = chosen_v6
     if chosen is None:
         return None, None
     literal = f"[{chosen}]" if ":" in chosen else chosen
@@ -368,12 +374,18 @@ def curl_resolve_options(url: str) -> dict:
 
 
 def chromium_pin_args(url: str) -> list[str]:
-    """Chromium ``--host-resolver-rules`` for the same pin. Raises on rebind."""
+    """Chromium ``--host-resolver-rules`` for the same pin. Raises on rebind.
+
+    Chromium parses the replacement as a *host:port* pair, so an IPv6 literal
+    keeps the brackets :func:`connection_pin` gave it. Stripping them made the
+    rule unparseable, Chromium fell back to its own resolver, and on Windows a
+    bare host then failed with ``ERR_NAME_NOT_RESOLVED`` even though the OS,
+    curl and the relay all resolved it (#519).
+    """
     entry, err = connection_pin(url)
     if err:
         raise RuntimeError(err)
     if not entry:
         return []
-    host, _port, ip = entry.split(":", 2)
-    ip = ip[1:-1] if ip.startswith("[") and ip.endswith("]") else ip
-    return [f"--host-resolver-rules=MAP {host} {ip}"]
+    host, _port, literal = entry.split(":", 2)
+    return [f"--host-resolver-rules=MAP {host} {literal}"]

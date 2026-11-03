@@ -2000,6 +2000,52 @@ def _browser_missing_reason(exc: BaseException) -> Optional[str]:
     return None
 
 
+#: Playwright/Chromium's name-resolution failures. Only these earn a retry:
+#: a timeout or a refusal is the server's answer about the same host, and
+#: retrying it under ``www.`` would be a second request for no reason.
+_NAME_RESOLUTION_MARKERS = (
+    "err_name_not_resolved",
+    "getaddrinfo failed",
+    "name or service not known",
+    "nodename nor servname provided",
+)
+
+
+def _is_name_resolution_failure(exc: BaseException) -> bool:
+    """Did the browser fail to resolve the host (not time out or refuse)?"""
+    text = str(exc).lower()
+    return any(marker in text for marker in _NAME_RESOLUTION_MARKERS)
+
+
+def _www_fallback(url: str) -> Optional[str]:
+    """The ``www.`` form of a bare registrable host, or None.
+
+    #519: ``https://reddit.com`` names the site, but the bare host can fail
+    name resolution in Chromium while ``www.reddit.com`` resolves. Only the
+    registrable host itself is rewritten, so ``old.reddit.com`` (a deliberate
+    subdomain) and ``www.reddit.com`` (already the canonical host) are left
+    alone. Path, query, fragment and port are preserved.
+    """
+    try:
+        parts = urllib.parse.urlsplit(url)
+    except ValueError:
+        return None
+    host = (parts.hostname or "").lower().rstrip(".")
+    if not host or "." not in host or host.startswith("www."):
+        return None
+    if host != registrable_domain(url):
+        return None
+    userinfo = ""
+    if "@" in parts.netloc:
+        userinfo = parts.netloc.rsplit("@", 1)[0] + "@"
+    netloc = f"{userinfo}www.{host}"
+    if parts.port is not None:
+        netloc += f":{parts.port}"
+    return urllib.parse.urlunsplit(
+        (parts.scheme or "https", netloc, parts.path, parts.query, parts.fragment)
+    )
+
+
 def _fetch_stealth_impl(
     url: str, timeout: int = 60, progress: Optional[bool] = None,
     proxy: Optional[Dict[str, Any]] = None,
@@ -3003,6 +3049,57 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         order.remove("stealth-browser")
         order.insert(0, "stealth-browser")
 
+    def _stealth_with_bare_host_retry(target: str):
+        """Run the stealth rung, retrying a bare host once on ``www.`` (#519).
+
+        The browser's resolver is not the OS resolver. On Windows a bare
+        registrable host (``https://reddit.com``) can fail with
+        ``ERR_NAME_NOT_RESOLVED`` even though ``www.reddit.com`` resolves and
+        the lighter rungs reached the site. One retry, named in the trace, is
+        enough; the path and query the user asked for are carried over.
+        """
+        def _run(host_url: str):
+            # Cookies enter a temporary local browser context. Playwright
+            # applies their normal domain and path rules, so redirects and
+            # page subrequests cannot carry them to an unrelated host.
+            # Jina never receives them. The browser may also carry the
+            # proxy, because it changes the address the challenge sees.
+            if scoped_cookies:
+                return _fetch_stealth(
+                    host_url, progress=progress, proxy=proxy_browser,
+                    expand=expand, expand_sink=expand_sink,
+                    cookies=scoped_cookies,
+                )
+            if proxy_browser or expand:
+                return _fetch_stealth(
+                    host_url, progress=progress, proxy=proxy_browser,
+                    expand=expand, expand_sink=expand_sink,
+                )
+            return _fetch_stealth(host_url, progress=progress)
+
+        try:
+            return _run(target)
+        except Exception as e:  # noqa: BLE001 - only a named failure is retried
+            fallback = _www_fallback(target) if _is_name_resolution_failure(e) else None
+            if not fallback:
+                raise
+            fallback_host = (urllib.parse.urlsplit(fallback).hostname or "").lower()
+            if fallback_host and fallback_host in str(e).lower():
+                # The failed request was already the www host (after a
+                # redirect, for example); asking it again says nothing new.
+                raise
+            host_name = urllib.parse.urlsplit(target).hostname or target
+            _tick(
+                f"  stealth-browser: {host_name} did not resolve; "
+                f"retrying on www.{host_name}"
+            )
+            try:
+                return _run(fallback)
+            except Exception as again:  # noqa: BLE001 - report both attempts
+                raise RuntimeError(
+                    f"{e}; the www retry also failed: {again}"
+                ) from again
+
     attempts: List[Tuple[str, str]] = []
     # Curl refused a shell. A later rung wins only when its text has the
     # rows: the widget table, or the ranking above the related block.
@@ -3120,21 +3217,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                             # page subrequests cannot carry them to an unrelated host.
                             # Jina never receives them. The browser may also carry the
                             # proxy, because it changes the address the challenge sees.
-                            if scoped_cookies:
-                                status, body, final_url, headers = _fetch_stealth(
-                                    url, progress=progress, proxy=proxy_browser,
-                                    expand=expand, expand_sink=expand_sink,
-                                    cookies=scoped_cookies,
-                                )
-                            elif proxy_browser or expand:
-                                status, body, final_url, headers = _fetch_stealth(
-                                    url, progress=progress, proxy=proxy_browser,
-                                    expand=expand, expand_sink=expand_sink,
-                                )
-                            else:
-                                status, body, final_url, headers = _fetch_stealth(
-                                    url, progress=progress,
-                                )
+                            status, body, final_url, headers = _stealth_with_bare_host_retry(url)
 
                         # #509: a 429 from a rung that talks to the host is the
                         # host's answer, not a fingerprint accident. Jina is the
