@@ -2,6 +2,15 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.27.1](https://github.com/capad-xyz/searchts/compare/v0.27.0...v0.27.1) (2026-11-03)
+
+
+### Fixed
+
+* **reddit:** read Reddit from a fresh machine without the humanity challenge ([#527](https://github.com/capad-xyz/searchts/issues/527)) ([e573c3d](https://github.com/capad-xyz/searchts/commit/e573c3df4c1ad6b4695c5638c7a64b561a322498)), closes [#520](https://github.com/capad-xyz/searchts/issues/520)
+* **update:** upgrade on Windows while searchts.exe is running ([#524](https://github.com/capad-xyz/searchts/issues/524)) ([3bc0324](https://github.com/capad-xyz/searchts/commit/3bc032469afa81383625977f8c1087bff267de63)), closes [#518](https://github.com/capad-xyz/searchts/issues/518)
+* **windows:** bare host reads, doctor wording, PowerShell URL quoting ([#526](https://github.com/capad-xyz/searchts/issues/526)) ([c70d122](https://github.com/capad-xyz/searchts/commit/c70d122f45311cc0e1a3719091db931f3c07715e)), closes [#519](https://github.com/capad-xyz/searchts/issues/519) [#521](https://github.com/capad-xyz/searchts/issues/521) [#522](https://github.com/capad-xyz/searchts/issues/522)
+
 ## [0.27.0](https://github.com/capad-xyz/searchts/compare/v0.26.1...v0.27.0) (2026-11-02)
 
 
