@@ -6,7 +6,7 @@ through the same unlocker as every other site. A kept login is what makes those
 reads complete; without one, public pages still read, but the signed-in
 sections do not. The feed attaches to a running Chromium browser when
 remote debugging is on for that instance, and otherwise is read in the
-signed-in Chrome profile when ``SEARCHTS_LINKEDIN_PROFILE`` is set. The old
+signed-in browser profile when ``SEARCHTS_LINKEDIN_PROFILE`` is set. The old
 ``linkedin-scraper-mcp`` bridge
 is an optional fallback for write/inbox tools, and for the feed when that
 profile is not available. It is not part of the first pass.
@@ -25,7 +25,7 @@ _KEEP = (
 )
 _FALLBACK = (
     "The feed attaches to a running Chromium browser, or is read in the "
-    "signed-in Chrome (SEARCHTS_LINKEDIN_PROFILE) when that browser is not "
+    "signed-in browser (SEARCHTS_LINKEDIN_PROFILE) when that browser is not "
     "already open. linkedin-scraper-mcp remains the fallback "
     "for write/inbox tools, and for the feed when no profile is set: "
     "`searchts install --only linkedin`."

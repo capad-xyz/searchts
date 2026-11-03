@@ -1973,6 +1973,7 @@ def _fetch_linkedin_attached(
     progress: Optional[bool] = None,
     expand: bool = False,
     expand_sink: Optional["_ExpandSink"] = None,
+    browser_name: str = "",
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     """Read one LinkedIn page in a new tab of a browser that is already open.
 
@@ -1983,7 +1984,7 @@ def _fetch_linkedin_attached(
     """
     return _call_sync_browser(
         lambda: _fetch_linkedin_attached_impl(
-            url, endpoint, timeout, progress, expand, expand_sink,
+            url, endpoint, timeout, progress, expand, expand_sink, browser_name,
         )
     )
 
@@ -1995,6 +1996,7 @@ def _fetch_linkedin_attached_impl(
     progress: Optional[bool] = None,
     expand: bool = False,
     expand_sink: Optional["_ExpandSink"] = None,
+    browser_name: str = "",
 ) -> Tuple[Optional[int], str, str, Dict[str, str]]:
     from searchts import linkedin as _linkedin
     from searchts.linkedin_attach import AttachError, open_tab
@@ -2002,7 +2004,7 @@ def _fetch_linkedin_attached_impl(
     ms = int(timeout * 1000)
     want_tick = _progress_wanted(progress)
     try:
-        with open_tab(endpoint) as page:
+        with open_tab(endpoint, browser_name=browser_name) as page:
             with _linkedin.exclusive_load():
                 from searchts.ssrf import guard_browser_page
 
@@ -3259,6 +3261,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
     # a loopback probe). Curl and the relay are not asked first: either would
     # be a request before the attach exists. A refusal here books no load.
     attach_endpoint = ""
+    attach_browser = ""
     if _linkedin.matches(url) and not _linkedin.is_feed(url):
         from searchts import linkedin_attach as _lia
 
@@ -3271,6 +3274,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         if _attach.action == "attach":
             order = ["stealth-browser"]
             attach_endpoint = _attach.endpoint
+            attach_browser = _attach.browser
 
     attempts: List[Tuple[str, str]] = []
     # Curl refused a shell. A later rung wins only when its text has the
@@ -3399,6 +3403,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                                 status, body, final_url, headers = _fetch_linkedin_attached(
                                     url, attach_endpoint, progress=progress,
                                     expand=expand, expand_sink=expand_sink,
+                                    browser_name=attach_browser,
                                 )
                             else:
                                 status, body, final_url, headers = _stealth_with_bare_host_retry(url)

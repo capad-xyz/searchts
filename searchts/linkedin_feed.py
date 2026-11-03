@@ -838,16 +838,60 @@ def _windows_profile_locked(profile: str) -> bool:
     return False
 
 
-def profile_problem(profile: Optional[str]) -> str:
+def _profile_label(browser: str) -> str:
+    """Display name for a known browser, or ``browser`` when it is not named."""
+    known = (browser or "").strip().lower()
+    if not known:
+        return "browser"
+    from searchts.linkedin_attach import _display
+
+    return _display(known)
+
+
+def _locked_profile_message(profile: str, *, pid: int = 0, browser: str = "") -> str:
+    """The profile is already open. Point at the inspect toggle, not a flag.
+
+    Chrome 136+ ignores ``--remote-debugging-port`` on the default profile.
+    The way to join the open browser is the per-instance checkbox.
+    """
+    from searchts.linkedin_attach import inspect_url
+
+    known = (browser or "").strip().lower()
+    label = _profile_label(known)
+    if known:
+        toggle = (
+            "tick \"Allow remote debugging for this browser instance\" at "
+            f"{inspect_url(known)}"
+        )
+    else:
+        toggle = (
+            "tick \"Allow remote debugging for this browser instance\" at "
+            "chrome://inspect/#remote-debugging (vivaldi://, edge:// or "
+            "brave:// on those browsers)"
+        )
+    where = f"the {label} profile at {profile} is already open"
+    if pid:
+        where += f" (process {pid})"
+    return (
+        f"{where}. Close that window, or leave it open, {toggle}, and leave "
+        "SEARCHTS_LINKEDIN_ATTACH on auto. Or set SEARCHTS_LINKEDIN_CDP to the "
+        "endpoint. The same LinkedIn session is never used by two clients at once."
+    )
+
+
+def profile_problem(profile: Optional[str], browser: str = "") -> str:
     """Why this profile cannot be opened, or ``""`` when it can.
 
     A ``SingletonLock`` whose pid is still running means the browser is open
     elsewhere. Using the same profile from a second client at the same time is
-    the two-clients-one-session pattern that clears ``li_at``.
+    the two-clients-one-session pattern that clears ``li_at``. ``browser``
+    names the browser that owns the profile, so a Vivaldi or Edge window is
+    not described as Chrome.
     """
+    label = _profile_label(browser)
     if not profile:
         return (
-            "no Chrome profile is configured for the LinkedIn feed. Set "
+            f"no {label} profile is configured for the LinkedIn feed. Set "
             "SEARCHTS_LINKEDIN_PROFILE to the user-data directory that holds "
             "the kept LinkedIn login (the profile the browser was signed in "
             "with). The feed is not read by copying that profile's cookies "
@@ -856,19 +900,11 @@ def profile_problem(profile: Optional[str]) -> str:
     if not os.path.isdir(profile):
         return (
             f"SEARCHTS_LINKEDIN_PROFILE points at {profile}, which is not a "
-            "directory. Point it at the Chrome user-data directory that holds "
+            f"directory. Point it at the {label} user-data directory that holds "
             "the kept LinkedIn login."
         )
     if _windows_profile_locked(profile):
-        return (
-            f"the browser profile at {profile} is already open. Close that "
-            "browser (all its windows), or start it with "
-            "--remote-debugging-port and set SEARCHTS_LINKEDIN_CDP to that "
-            "address, or tick \"Allow remote debugging for this browser "
-            "instance\" at chrome://inspect/#remote-debugging and leave "
-            "SEARCHTS_LINKEDIN_ATTACH on auto. The same LinkedIn session is "
-            "never used by two clients at once."
-        )
+        return _locked_profile_message(profile, browser=browser)
     lock = os.path.join(profile, "SingletonLock")
     if os.path.lexists(lock):
         target = ""
@@ -883,15 +919,7 @@ def profile_problem(profile: Optional[str]) -> str:
             except ValueError:
                 pid = 0
         if pid and _pid_alive(pid):
-            return (
-                f"the Chrome profile at {profile} is already open (process "
-                f"{pid}). Close that window, or start Chrome with "
-                "--remote-debugging-port and set SEARCHTS_LINKEDIN_CDP to that "
-                "address, or tick \"Allow remote debugging for this browser "
-                "instance\" at chrome://inspect/#remote-debugging and leave "
-                "SEARCHTS_LINKEDIN_ATTACH on auto. The same LinkedIn session "
-                "is never used by two clients at once."
-            )
+            return _locked_profile_message(profile, pid=pid, browser=browser)
     return ""
 
 
@@ -900,25 +928,29 @@ def _same_site(url: str) -> bool:
     return host == "linkedin.com" or host.endswith(".linkedin.com")
 
 
-def _cdp_page(browser: Any) -> Any:
-    """A new tab in the Chrome window already open on the debugging port.
+def _cdp_page(browser: Any, browser_name: str = "") -> Any:
+    """A new tab in the window already open on the debugging port.
 
     A fresh context would be a second client, with a different cookie jar
-    from the window that is already signed in. If Chrome has no window,
+    from the window that is already signed in. If that browser has no window,
     attaching is refused. The tab rule lives in
     :func:`searchts.linkedin_attach.new_tab`.
     """
     from searchts.linkedin_attach import AttachError, new_tab
 
     try:
-        return new_tab(browser)
+        return new_tab(browser, browser_name)
     except AttachError as exc:
         raise FeedUnavailable(str(exc)) from exc
 
 
 @contextmanager
 def _browser_page(
-    profile: str, executable: Optional[str], cdp: Optional[str], url: str
+    profile: str,
+    executable: Optional[str],
+    cdp: Optional[str],
+    url: str,
+    browser_name: str = "",
 ) -> Iterator[Any]:
     """Open (or attach to) the signed-in Chrome and yield its live page.
 
@@ -941,7 +973,7 @@ def _browser_page(
             if cdp:
                 endpoint = cdp if "://" in cdp else f"http://{cdp}"
                 browser = pw.chromium.connect_over_cdp(endpoint)
-                page = _cdp_page(browser)
+                page = _cdp_page(browser, browser_name)
                 try:
                     yield page
                 finally:
@@ -1021,6 +1053,7 @@ def walk(
     url: str = FEED_URL,
     tick: Any = None,
     load_checked: bool = False,
+    browser_name: str = "",
 ) -> FeedRead:
     """Drive one bounded scroll and return the posts the page showed.
 
@@ -1132,7 +1165,8 @@ def walk(
         # recorded stop refuses without opening anything. A direct call (the
         # offline tests) checks here, at the same seam.
         guard.before_load()
-    say("  linkedin: opening the feed in the signed-in Chrome")
+    who = (browser_name or "").strip() or "browser"
+    say(f"  linkedin: opening the feed in the signed-in {who}")
     page.goto(url, wait_until="domcontentloaded", timeout=limits.max_seconds * 1000)
     _settle(page, limits.settle_ms)
     accept(parse_html(_page_text(page)))
@@ -1279,7 +1313,7 @@ def read_feed(
                 "directory. Until then, linkedin-scraper-mcp remains the fallback "
                 "for the feed."
             )
-        problem = profile_problem(chosen)
+        problem = profile_problem(chosen, decision.browser)
         if problem:
             raise FeedUnavailable(problem)
     chosen = chosen or ""
@@ -1295,8 +1329,13 @@ def read_feed(
         raise FeedUnavailable(str(exc)) from exc
 
     try:
+        who = (
+            linkedin_attach._display(decision.browser)
+            if decision.browser else ""
+        )
         with _browser_page(
-            chosen, executable or chrome_executable(), endpoint, url
+            chosen, executable or chrome_executable(), endpoint, url,
+            browser_name=decision.browser,
         ) as page:
             read = walk(
                 page,
@@ -1306,6 +1345,7 @@ def read_feed(
                 url=url,
                 tick=tick,
                 load_checked=True,
+                browser_name=who,
             )
     except FeedUnavailable:
         raise
