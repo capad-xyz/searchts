@@ -8,7 +8,6 @@ dials 127.0.0.1 or asks linkedin.com for a page.
 
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -66,28 +65,44 @@ def test_inspect_urls_name_each_browser():
 
 
 def test_user_data_dirs_follow_the_platform(monkeypatch):
+    """Linux, macOS and Windows layouts, on whichever OS is running the test.
+
+    ``os.path`` is this machine's path module. On Windows ``expanduser("~")``
+    reads ``USERPROFILE``, not ``HOME``, and ``join`` uses backslashes, so a
+    patched ``HOME=/home/ada`` still came out as ``C:\\Users\\...\\.config``.
+    The posix cases use ``posixpath`` and the Windows case uses ``ntpath``,
+    which is what ``os.path`` is on those systems. The directory layout is
+    still the thing under test.
+    """
+    import ntpath
+    import posixpath
+
     monkeypatch.setenv("HOME", "/home/ada")
+    monkeypatch.delenv("USERPROFILE", raising=False)
     monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setattr(la.os, "path", posixpath)
     monkeypatch.setattr(la.os, "name", "posix")
     monkeypatch.setattr(la.sys, "platform", "linux")
-    linux = la.candidate_user_data_dirs("vivaldi")
-    assert linux[0] == "/home/ada/.config/vivaldi"
-    assert linux[1].endswith("/Library/Application Support/Vivaldi")
+    assert la.candidate_user_data_dirs("vivaldi") == [
+        "/home/ada/.config/vivaldi",
+        "/home/ada/Library/Application Support/Vivaldi",
+    ]
 
     monkeypatch.setattr(la.sys, "platform", "darwin")
-    mac = la.candidate_user_data_dirs("chrome")
-    assert mac[0] == "/home/ada/Library/Application Support/Google/Chrome"
+    assert la.candidate_user_data_dirs("chrome") == [
+        "/home/ada/Library/Application Support/Google/Chrome",
+        "/home/ada/.config/google-chrome",
+    ]
 
     monkeypatch.setattr(la.os, "name", "nt")
-    # ``os.path.join`` uses this machine's separator. The layout is what
-    # matters, and a Windows run joins with backslashes on its own.
-    local = os.path.join("C:", "Users", "ada", "AppData", "Local")
+    monkeypatch.setattr(la.os, "path", ntpath)
+    local = "C:\\Users\\ada\\AppData\\Local"
     monkeypatch.setenv("LOCALAPPDATA", local)
-    windows = la.candidate_user_data_dirs("edge")
-    assert windows == [os.path.join(local, "Microsoft", "Edge", "User Data")]
-    brave = la.candidate_user_data_dirs("brave")
-    assert brave == [
-        os.path.join(local, "BraveSoftware", "Brave-Browser", "User Data")
+    assert la.candidate_user_data_dirs("edge") == [
+        ntpath.join(local, "Microsoft", "Edge", "User Data")
+    ]
+    assert la.candidate_user_data_dirs("brave") == [
+        ntpath.join(local, "BraveSoftware", "Brave-Browser", "User Data")
     ]
 
 
