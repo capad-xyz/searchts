@@ -517,6 +517,7 @@ def test_profile_problem_refuses_a_profile_open_in_another_browser(tmp_path):
     problem = lf.profile_problem(str(profile))
     assert "already open" in problem
     assert "SEARCHTS_LINKEDIN_CDP" in problem
+    assert "--remote-debugging-port" not in problem
 
 
 def test_profile_problem_allows_a_stale_lock(tmp_path):
@@ -544,7 +545,7 @@ def test_read_feed_refuses_before_opening_a_browser_when_the_guard_says_no(
     monkeypatch, tmp_path,
 ):
     monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
-    monkeypatch.setattr(lf, "profile_problem", lambda _profile: "")
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "")
     opened = []
     monkeypatch.setattr(lf, "_browser_page", lambda *a, **k: opened.append(a))
 
@@ -565,7 +566,7 @@ def test_read_feed_walks_with_a_fake_page_and_checks_the_guard_once(
     monkeypatch, tmp_path,
 ):
     monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
-    monkeypatch.setattr(lf, "profile_problem", lambda _profile: "")
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "")
     page = FakePage([DOM_ONE], [
         FakeResponse("https://www.linkedin.com/graphql/feed", payload()),
     ])
@@ -591,7 +592,7 @@ def test_read_feed_attaches_over_cdp_when_the_profile_is_already_open(
     monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
     monkeypatch.setattr(
         lf, "profile_problem",
-        lambda _profile: (_ for _ in ()).throw(
+        lambda *_a, **_k: (_ for _ in ()).throw(
             AssertionError("a CDP attach is the allowed open-profile path")
         ),
     )
@@ -605,7 +606,7 @@ def test_read_feed_attaches_over_cdp_when_the_profile_is_already_open(
         def __exit__(self, *exc):
             return False
 
-    def open_page(profile, executable, cdp, url):
+    def open_page(profile, executable, cdp, url, browser_name=""):
         seen.update(profile=profile, cdp=cdp)
         return Opened()
 
@@ -619,7 +620,7 @@ def test_read_feed_attaches_over_cdp_when_the_profile_is_already_open(
 
 def test_read_feed_is_fail_loud_when_nothing_was_read(monkeypatch, tmp_path):
     monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
-    monkeypatch.setattr(lf, "profile_problem", lambda _profile: "")
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "")
     page = FakePage(["<p>nothing here</p>"])
 
     class Opened:
@@ -681,7 +682,7 @@ def test_a_feed_read_books_one_load_and_a_second_read_waits(monkeypatch, tmp_pat
     calls = []
     monkeypatch.setattr(linkedin, "take_load", lambda **_k: calls.append("load"))
     monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
-    monkeypatch.setattr(lf, "profile_problem", lambda _profile: "")
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "")
     page = FakePage([DOM_ONE, DOM_ONE, DOM_ONE], [
         FakeResponse("https://www.linkedin.com/graphql/feed", payload()),
     ])
@@ -724,7 +725,7 @@ def test_resume_from_token_is_an_in_page_hook():
 
 def test_resume_from_token_refuses_before_a_browser(monkeypatch, tmp_path):
     monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
-    monkeypatch.setattr(lf, "profile_problem", lambda _profile: "")
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "")
     opened = []
     monkeypatch.setattr(lf, "_browser_page", lambda *a, **k: opened.append(a))
     with pytest.raises(lf.FeedUnavailable) as ei:
@@ -767,7 +768,7 @@ def test_cdp_attach_opens_a_tab_in_the_existing_window():
     assert page is opened[0]
 
 
-def test_cdp_attach_refuses_when_chrome_has_no_window():
+def test_cdp_attach_refuses_when_the_browser_has_no_window():
     class Browser:
         contexts = []
 
@@ -775,9 +776,15 @@ def test_cdp_attach_refuses_when_chrome_has_no_window():
             raise AssertionError("a CDP attach must not open a new context")
 
     with pytest.raises(lf.FeedUnavailable) as ei:
-        lf._cdp_page(Browser())
-    assert "no open window" in str(ei.value)
-    assert "new browser context is not opened" in str(ei.value)
+        lf._cdp_page(Browser(), "edge")
+    message = str(ei.value)
+    assert "no open window" in message
+    assert "new browser context is not opened" in message
+    assert "Open a window in Edge" in message
+    assert "edge://inspect/#remote-debugging" in message
+    assert "the toggle at" in message and "is already on" in message
+    assert "Chrome" not in message
+    assert "--remote-debugging-port" not in message
 
 
 def test_a_resumed_feed_read_scrolls_and_does_not_replay(monkeypatch):
@@ -843,7 +850,15 @@ def test_profile_problem_refuses_a_windows_profile_held_open(tmp_path, monkeypat
         return real_open(path, *args, **kwargs)
 
     monkeypatch.setattr("builtins.open", held)
-    assert "already open" in lf.profile_problem(str(profile))
+    plain = lf.profile_problem(str(profile))
+    assert "already open" in plain
+    assert "--remote-debugging-port" not in plain
+    named = lf.profile_problem(str(profile), "vivaldi")
+    assert "the Vivaldi profile" in named
+    assert "vivaldi://inspect/#remote-debugging" in named
+    assert "Allow remote debugging for this browser instance" in named
+    assert "Chrome" not in named
+    assert "--remote-debugging-port" not in named
 
 
 def test_profile_problem_allows_a_released_windows_lockfile(tmp_path, monkeypatch):
@@ -858,7 +873,7 @@ def test_read_feed_takes_an_explicit_profile_as_the_signed_in_browser(
     monkeypatch, tmp_path,
 ):
     monkeypatch.setattr("searchts.login_store.kept", lambda _site: False)
-    monkeypatch.setattr(lf, "profile_problem", lambda _profile: "held")
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "held")
     with pytest.raises(lf.FeedUnavailable) as ei:
         lf.read_feed(profile=str(tmp_path))
     assert str(ei.value) == "held"

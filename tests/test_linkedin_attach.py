@@ -8,7 +8,6 @@ dials 127.0.0.1 or asks linkedin.com for a page.
 
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -66,28 +65,44 @@ def test_inspect_urls_name_each_browser():
 
 
 def test_user_data_dirs_follow_the_platform(monkeypatch):
+    """Linux, macOS and Windows layouts, on whichever OS is running the test.
+
+    ``os.path`` is this machine's path module. On Windows ``expanduser("~")``
+    reads ``USERPROFILE``, not ``HOME``, and ``join`` uses backslashes, so a
+    patched ``HOME=/home/ada`` still came out as ``C:\\Users\\...\\.config``.
+    The posix cases use ``posixpath`` and the Windows case uses ``ntpath``,
+    which is what ``os.path`` is on those systems. The directory layout is
+    still the thing under test.
+    """
+    import ntpath
+    import posixpath
+
     monkeypatch.setenv("HOME", "/home/ada")
+    monkeypatch.delenv("USERPROFILE", raising=False)
     monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setattr(la.os, "path", posixpath)
     monkeypatch.setattr(la.os, "name", "posix")
     monkeypatch.setattr(la.sys, "platform", "linux")
-    linux = la.candidate_user_data_dirs("vivaldi")
-    assert linux[0] == "/home/ada/.config/vivaldi"
-    assert linux[1].endswith("/Library/Application Support/Vivaldi")
+    assert la.candidate_user_data_dirs("vivaldi") == [
+        "/home/ada/.config/vivaldi",
+        "/home/ada/Library/Application Support/Vivaldi",
+    ]
 
     monkeypatch.setattr(la.sys, "platform", "darwin")
-    mac = la.candidate_user_data_dirs("chrome")
-    assert mac[0] == "/home/ada/Library/Application Support/Google/Chrome"
+    assert la.candidate_user_data_dirs("chrome") == [
+        "/home/ada/Library/Application Support/Google/Chrome",
+        "/home/ada/.config/google-chrome",
+    ]
 
     monkeypatch.setattr(la.os, "name", "nt")
-    # ``os.path.join`` uses this machine's separator. The layout is what
-    # matters, and a Windows run joins with backslashes on its own.
-    local = os.path.join("C:", "Users", "ada", "AppData", "Local")
+    monkeypatch.setattr(la.os, "path", ntpath)
+    local = "C:\\Users\\ada\\AppData\\Local"
     monkeypatch.setenv("LOCALAPPDATA", local)
-    windows = la.candidate_user_data_dirs("edge")
-    assert windows == [os.path.join(local, "Microsoft", "Edge", "User Data")]
-    brave = la.candidate_user_data_dirs("brave")
-    assert brave == [
-        os.path.join(local, "BraveSoftware", "Brave-Browser", "User Data")
+    assert la.candidate_user_data_dirs("edge") == [
+        ntpath.join(local, "Microsoft", "Edge", "User Data")
+    ]
+    assert la.candidate_user_data_dirs("brave") == [
+        ntpath.join(local, "BraveSoftware", "Brave-Browser", "User Data")
     ]
 
 
@@ -348,6 +363,9 @@ def test_open_tab_refuses_when_there_is_no_window_and_names_a_failed_connect():
             raise AssertionError("the body must not run")
     assert "no open window" in str(ei.value)
     assert "new browser context is not opened" in str(ei.value)
+    assert "--remote-debugging-port" not in str(ei.value)
+    assert "Open a window" in str(ei.value)
+    assert "read again" in str(ei.value)
 
     def boom(_endpoint):
         raise OSError("refused")
@@ -357,6 +375,33 @@ def test_open_tab_refuses_when_there_is_no_window_and_names_a_failed_connect():
             raise AssertionError("the body must not run")
     assert "allow remote debugging" in str(ei.value)
     assert "Nothing was requested from LinkedIn" in str(ei.value)
+
+
+def test_no_window_names_that_browser_and_its_inspect_toggle():
+    class Browser:
+        contexts = []
+
+        def new_context(self):
+            raise AssertionError("a CDP attach must not open a new context")
+
+    for name, label, url in (
+        ("vivaldi", "Vivaldi", "vivaldi://inspect/#remote-debugging"),
+        ("edge", "Edge", "edge://inspect/#remote-debugging"),
+        ("brave", "Brave", "brave://inspect/#remote-debugging"),
+    ):
+        with pytest.raises(la.AttachError) as ei:
+            with la.open_tab(
+                "ws://127.0.0.1:9/x",
+                connect=lambda _e: Browser(),
+                browser_name=name,
+            ):
+                raise AssertionError("the body must not run")
+        message = str(ei.value)
+        assert f"Open a window in {label}" in message
+        assert f"the toggle at {url} is already on" in message
+        assert "read again" in message
+        assert "Chrome" not in message
+        assert "--remote-debugging-port" not in message
 
 
 def test_attach_source_never_closes_the_browser_or_opens_a_context():
@@ -438,8 +483,9 @@ def test_read_feed_attach_books_the_guard_before_the_tab(monkeypatch, tmp_path):
         def __exit__(self, *_exc):
             return False
 
-    def open_page(profile, executable, cdp, url):
+    def open_page(profile, executable, cdp, url, browser_name=""):
         seen["cdp"] = cdp
+        seen["browser"] = browser_name
         return Opened()
 
     def walk(page, **_kwargs):
@@ -509,8 +555,9 @@ def test_a_profile_read_attaches_before_any_other_rung(monkeypatch, tmp_path):
     events = []
 
     @contextmanager
-    def fake_tab(endpoint, *, connect=None):
+    def fake_tab(endpoint, *, connect=None, browser_name=""):
         events.append(("connect", endpoint))
+        events.append(("named", browser_name))
         page = _page(events)
         try:
             yield page
@@ -552,6 +599,7 @@ def test_a_profile_read_attaches_before_any_other_rung(monkeypatch, tmp_path):
         )
     ]
     assert kinds == ["connect", "guard", "goto", "page.close"]
+    assert ("named", "vivaldi") in events
 
 
 def test_profile_attach_books_the_load_between_connect_and_goto(monkeypatch, tmp_path):
@@ -564,7 +612,7 @@ def test_profile_attach_books_the_load_between_connect_and_goto(monkeypatch, tmp
     order = []
 
     @contextmanager
-    def fake_tab(endpoint, *, connect=None):
+    def fake_tab(endpoint, *, connect=None, browser_name=""):
         order.append("connect")
         page = _page(order)
         try:
@@ -661,7 +709,7 @@ def test_an_attached_load_that_is_paced_is_the_pacing_refusal(monkeypatch, tmp_p
     order = []
 
     @contextmanager
-    def fake_tab(endpoint, *, connect=None):
+    def fake_tab(endpoint, *, connect=None, browser_name=""):
         order.append("connect")
         page = _page(order)
         try:

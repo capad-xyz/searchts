@@ -600,21 +600,43 @@ def decide(
     )
 
 
-def new_tab(browser: Any) -> Any:
+def _no_window(browser: str) -> str:
+    """The debugging port is up, and the browser has no window to attach to.
+
+    Chrome 136+ ignores ``--remote-debugging-port`` on the default profile,
+    so the message does not suggest that flag. The inspect toggle is already
+    on (that is why the port exists). What is missing is a window.
+    """
+    known = (browser or "").strip().lower()
+    if known:
+        label = _display(known)
+        url = inspect_url(known)
+        return (
+            f"{label} is listening on the debugging port, but it has no open "
+            f"window. Open a window in {label} (the toggle at {url} is already "
+            "on) and read again. A new browser context is not opened."
+        )
+    return (
+        "The browser is listening on the debugging port, but it has no open "
+        "window. Open a window in that browser (the toggle at "
+        "chrome://inspect/#remote-debugging, or vivaldi://, edge:// or "
+        "brave://, is already on) and read again. A new browser context is "
+        "not opened."
+    )
+
+
+def new_tab(browser: Any, browser_name: str = "") -> Any:
     """One new tab in the window the debugging port already has.
 
     A fresh context would be a second client, with a different cookie jar
     from the window that is already signed in. No window means attaching
-    is refused. This never calls ``new_context``.
+    is refused. This never calls ``new_context``. ``browser_name`` is the
+    browser that owns the port (``vivaldi``, ``edge``, ``brave``, …), so
+    the refusal names that browser and its inspect page.
     """
     contexts = list(getattr(browser, "contexts", []) or [])
     if not contexts:
-        raise AttachError(
-            "Chrome is listening on the debugging port, but it has no open "
-            "window. Start it on the signed-in profile with "
-            "--remote-debugging-port and leave that window open. A new "
-            "browser context is not opened."
-        )
+        raise AttachError(_no_window(browser_name))
     return contexts[0].new_page()
 
 
@@ -639,6 +661,7 @@ def open_tab(
     endpoint: str,
     *,
     connect: Optional[Callable[[str], Any]] = None,
+    browser_name: str = "",
 ) -> Iterator[Any]:
     """Connect to ``endpoint``, yield one new tab, and close only that tab.
 
@@ -654,7 +677,7 @@ def open_tab(
             raise
         except Exception as exc:  # noqa: BLE001 - the connection is the failure
             raise AttachError(_connect_failure(exc)) from exc
-        page = new_tab(browser)
+        page = new_tab(browser, browser_name)
         try:
             yield page
         finally:
@@ -680,7 +703,7 @@ def open_tab(
             raise
         except Exception as exc:  # noqa: BLE001 - name the attach fault, not a stack
             raise AttachError(_connect_failure(exc)) from exc
-        page = new_tab(browser)
+        page = new_tab(browser, browser_name)
         try:
             yield page
         finally:
