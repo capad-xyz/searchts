@@ -10,12 +10,13 @@ logged-in session: OpenCLI reuses the browser's, rdt-cli imports cookies.
 
 This is a **channel** probe and it says nothing about ``read`` (**Q1**).
 ``searchts read <reddit url>`` is the known-host ring (**F5b**/**F5f**) and
-reads anonymous public pages: a listing's own next-post cursor with ``--items``,
-deeper comments with ``--expand``, profiles and search as cards. What it needs
-is the browser (``searchts install --browser``) and a profile Reddit recognises
-— Reddit decides whether to answer with its "Prove your humanity" check from the
-profile's standing, so a brand-new profile is challenged page after page. Still
-no claim that every Reddit URL reads (**N7**).
+reads anonymous public pages with no login. It tries the no-login routes in
+order — the ``.json`` document, ``old.reddit.com``, then the Atom feed
+(``.rss``) — and keeps the first that answers, so a fresh machine with no warm
+profile reads a listing or thread through the feed (#520). The browser
+(``searchts install --browser``) is still what follows a listing's own
+next-post cursor with ``--items``, opens deeper comments with ``--expand``, and
+reads a page with no feed. Still no claim that every Reddit URL reads (**N7**).
 """
 
 import json
@@ -81,8 +82,11 @@ class RedditChannel(Channel):
             "have no zero-config path (anonymous .json is blocked, the official API "
             "requires manual approval), so a logged-in session is mandatory for them. "
             "To read Reddit pages instead: searchts read <url> -- this is the "
-            "known-host ring, anonymous, and it needs the browser tier "
-            "(searchts install --browser) and a profile Reddit recognises.\n"
+            "known-host ring, anonymous, and it tries the .json document, "
+            "old.reddit.com and the .rss feed before any browser rung, so a public "
+            "listing or thread reads on a fresh machine. The browser tier "
+            "(searchts install --browser) is still what follows a listing's own "
+            "cursor with --items and opens deeper comments with --expand.\n"
             "  Desktop: searchts install --channels opencli\n"
             "       (reuses your Chrome login session; works once you have logged into reddit.com)\n"
             "  Server/existing: rdt-cli through the first-pass setup:\n"

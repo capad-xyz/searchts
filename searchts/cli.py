@@ -4658,7 +4658,8 @@ def _cmd_setup():
 
     # Step 3: Reddit — rdt-cli (a channel; `read` does not need a login, F5f)
     print("[Info] Reddit -- no login needed to `searchts read` a public page (that is the "
-          "known-host ring; it needs searchts install --browser and a profile Reddit knows). "
+          "known-host ring; it tries the .json document, old.reddit.com and the .rss feed "
+          "before the browser, so a fresh machine can read a public listing or thread). "
           "These CHANNEL backends do need one:")
     print(f"  Install: pipx install '{_RDT_GIT_SOURCE}'")
     print("  Then run: rdt login (you must log into reddit.com in the browser first)")

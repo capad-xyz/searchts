@@ -3000,19 +3000,42 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             kh_name = _known_hosts.matching_name(url) or "known-host"
             with progress_phase(f"trying known-host:{kh_name}…", enabled=bool(progress)):
                 kh = _known_hosts.extract(url)
-            if kh is not None and kh.markdown:
-                _tick(
-                    f"  known-host:{kh.provider}: ok ({len(kh.markdown)} chars)"
+            if kh is not None and getattr(kh, "status", 200) == 429:
+                # #509: a route that answered 429 is the host saying stop, not
+                # a miss. Record the cooldown and stop before the next route or
+                # rung sends another request to the same host. A route that
+                # merely hit a wall returns None and the ring's route ladder
+                # carries on (or the browser ladder runs unchanged).
+                until = _rate_limit.record(host, getattr(kh, "retry_after", "") or None)
+                rest = max(0.0, (until or 0.0) - time.time())
+                backend = f"known-host:{kh.provider}"
+                if kh.route:
+                    backend += f":{kh.route}"
+                stop_attempts = [(backend, "http-429")]
+                _tick(f"  {backend}: http-429, stopping: {host} is rate limiting")
+                raise UnlockerError(
+                    url,
+                    stop_attempts,
+                    hint=_rate_limit.stop_hint(
+                        host, rest, signed_in=bool(scoped_cookies)
+                    ),
                 )
+            if kh is not None and kh.markdown:
+                backend = f"known-host:{kh.provider}"
+                if kh.route:
+                    backend += f":{kh.route}"
+                _tick(f"  {backend}: ok ({len(kh.markdown)} chars)")
                 return _with_auth(
                     FetchResult(
-                        f"known-host:{kh.provider}",
+                        backend,
                         kh.markdown,
                         200,
                         final_url=url,
                     )
                 )
             _tick(f"  known-host:{kh_name}: miss")
+    except UnlockerError:
+        raise
     except Exception:  # noqa: BLE001 - ring must never break the ladder
         pass
 
