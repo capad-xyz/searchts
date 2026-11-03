@@ -207,12 +207,71 @@ class TestDoctor:
         assert "searchts doctor" in report
         assert "Probes, not a routing table." in report
         assert "1/3 probes passed" in report
-        assert "2 not present:" in report
+        assert "optional tools not ready:" in report
+        assert "not present" not in report
+        assert "linkedin-scraper-mcp" in report
+        assert "searchts still reads" in report
         assert "Web-wide semantic search" in report
         assert "LinkedIn" in report
         # Plain text, not Rich markup: the report owns its own wrapping.
         assert "[green]" not in report
         assert "\x1b[" not in report
+
+    def test_missing_optional_tools_are_named_with_what_they_add(self):
+        """#521: '3 not present' read as missing site support, not extra tools."""
+        report = doctor.format_report(
+            {
+                "twitter": {
+                    "status": "off", "name": "Twitter/X tweets", "message": "",
+                    "tier": 1, "backends": ["twitter-cli"],
+                },
+                "reddit": {
+                    "status": "off", "name": "Reddit posts and comments",
+                    "message": "", "tier": 1, "backends": ["rdt-cli"],
+                },
+                "linkedin": {
+                    "status": "warn", "name": "LinkedIn professional network",
+                    "message": "", "tier": 2,
+                    "backends": ["native read", "linkedin-scraper-mcp"],
+                },
+            },
+            color=False,
+        )
+        assert "3 not present" not in report
+        assert "optional tools not ready:" in report
+        for tool in ("twitter-cli", "rdt-cli", "linkedin-scraper-mcp"):
+            assert tool in report
+        assert "searchts still reads X, Reddit and LinkedIn natively" in report
+        assert "searchts install --channels twitter" in report
+        assert "searchts install --channels reddit" in report
+        assert "searchts install --only linkedin" in report
+        assert "X posts, threads, search and timelines" in report
+        assert "Reddit posts, comments and search" in report
+        assert "the LinkedIn feed and write/inbox" in report
+        assert "tools. Install: searchts install --only linkedin" in report
+
+    def test_plain_report_uses_the_same_optional_tool_wording(self):
+        """The MCP `get_status` path must not keep the old alarming sentence."""
+        text = doctor.format_plain({
+            "twitter": {
+                "status": "off", "name": "Twitter/X tweets", "message": "",
+                "tier": 1, "backends": ["twitter-cli"],
+            },
+            "reddit": {
+                "status": "off", "name": "Reddit posts and comments",
+                "message": "", "tier": 1, "backends": ["rdt-cli"],
+            },
+            "linkedin": {
+                "status": "warn", "name": "LinkedIn professional network",
+                "message": "", "tier": 2,
+                "backends": ["native read", "linkedin-scraper-mcp"],
+            },
+        })
+        assert "not present" not in text
+        assert "optional tools not ready:" in text
+        assert "twitter-cli" in text and "rdt-cli" in text
+        assert "linkedin-scraper-mcp" in text
+        assert "natively without them" in text
 
     def test_format_report_wraps_a_long_sentence_under_its_name(self):
         report = doctor.format_report(

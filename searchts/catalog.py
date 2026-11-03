@@ -124,6 +124,10 @@ _add(Command(
     notes=(
         "A player page comes back as its captions, or the failure names transcribe.",
         "A share link whose HTML is empty is still a read.",
+        "On Windows, quote URLs that contain '&': in PowerShell an unquoted "
+        "'&' starts a background job, and in cmd.exe it ends the command, so "
+        "searchts receives the URL cut at the first '&'. Example: "
+        "searchts read \"https://example.com/?a=1&b=2\".",
         "A kept LinkedIn login reads a profile as one page: the top card plus "
         "its Experience and Education pages, two extra requests at most. A "
         "section that fails is named in a note, not a failed read. Each of "

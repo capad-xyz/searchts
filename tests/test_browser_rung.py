@@ -631,6 +631,89 @@ def _run_rung(
     return unlocker._fetch_stealth_impl("https://example.org/app", timeout=5)
 
 
+# ── #519: a bare host's browser resolver can fail where www resolves ─────────
+
+
+def test_www_fallback_only_rewrites_a_bare_registrable_host():
+    assert unlocker._www_fallback("https://reddit.com/") == "https://www.reddit.com/"
+    assert unlocker._www_fallback("https://reddit.com/r/x?q=1#top") == (
+        "https://www.reddit.com/r/x?q=1#top"
+    )
+    assert unlocker._www_fallback("http://example.co.uk:8443/a") == (
+        "http://www.example.co.uk:8443/a"
+    )
+    # A subdomain is deliberate, and the canonical host is already there.
+    assert unlocker._www_fallback("https://old.reddit.com/") is None
+    assert unlocker._www_fallback("https://www.reddit.com/") is None
+    assert unlocker._www_fallback("https://localhost/") is None
+
+
+def _bare_host_fetch(monkeypatch, stealth):
+    monkeypatch.setattr(unlocker, "_fetch_stealth", stealth)
+    return unlocker.fetch(
+        "https://bare.test/x?a=1&b=2", backends=["stealth-browser"],
+        use_memory=False, min_chars=200, progress=True,
+    )
+
+
+def test_a_bare_host_name_resolution_failure_retries_once_on_www(
+    monkeypatch, capsys
+):
+    seen: List[str] = []
+
+    def stealth(url, **kw):
+        seen.append(url)
+        if "www." not in url:
+            raise RuntimeError(
+                "Page.goto: net::ERR_NAME_NOT_RESOLVED at https://bare.test/x"
+            )
+        return 200, RENDERED, url, {}
+
+    result = _bare_host_fetch(monkeypatch, stealth)
+    assert result.backend == "stealth-browser"
+    assert seen == [
+        "https://bare.test/x?a=1&b=2",
+        "https://www.bare.test/x?a=1&b=2",
+    ]
+    err = capsys.readouterr().err
+    assert "bare.test did not resolve" in err
+    assert "retrying on www.bare.test" in err
+
+
+def test_www_retry_is_only_for_name_resolution_of_a_bare_host(monkeypatch):
+    timeout_calls: List[str] = []
+
+    def timeout(url, **kw):
+        timeout_calls.append(url)
+        raise RuntimeError("Page.goto: Timeout 5000ms exceeded")
+
+    with pytest.raises(unlocker.UnlockerError):
+        _bare_host_fetch(monkeypatch, timeout)
+    assert timeout_calls == ["https://bare.test/x?a=1&b=2"]
+
+    www_calls: List[str] = []
+
+    def already_www(url, **kw):
+        www_calls.append(url)
+        raise RuntimeError(
+            "Page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.bare.test/x"
+        )
+
+    monkeypatch.setattr(unlocker, "_fetch_stealth", already_www)
+    with pytest.raises(unlocker.UnlockerError):
+        unlocker.fetch(
+            "https://www.bare.test/x", backends=["stealth-browser"],
+            use_memory=False, progress=False,
+        )
+    assert www_calls == ["https://www.bare.test/x"]
+
+
+def test_a_scheme_less_bare_host_is_normalised_to_https_before_the_browser():
+    assert unlocker.normalize("reddit.com") == "https://reddit.com"
+    assert unlocker.normalize("reddit.com/r/x") == "https://reddit.com/r/x"
+    assert unlocker.normalize("https://reddit.com") == "https://reddit.com"
+
+
 @pytest.fixture
 def cache(monkeypatch, tmp_path):
     """The domain-memory cache in tmp, so a test never pins the real home."""
