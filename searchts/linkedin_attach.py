@@ -254,8 +254,9 @@ def _firefox_message(name: str) -> str:
     return (
         f"{name} is a Firefox-family browser. LinkedIn attach talks to a Chromium "
         "browser over the DevTools protocol; Firefox-family browsers "
-        f"({names}) stay on cookie copy only. Set SEARCHTS_LINKEDIN_CHROME to "
-        "Chrome, Vivaldi, Edge, Brave or Chromium, or set SEARCHTS_LINKEDIN_ATTACH=off."
+        f"({names}) stay on cookie copy only. Set SEARCHTS_BROWSER to Chrome, "
+        "Vivaldi, Edge, Brave or Chromium (SEARCHTS_LINKEDIN_CHROME is the "
+        "legacy alias), or set SEARCHTS_LINKEDIN_ATTACH=off."
     )
 
 
@@ -315,22 +316,38 @@ def browser_of(
     return "chrome", False
 
 
-def candidate_user_data_dirs(browser: str) -> list[str]:
+def candidate_user_data_dirs(
+    browser: str,
+    *,
+    platform: Optional[str] = None,
+    env: Optional[dict] = None,
+) -> list[str]:
     """User-data directories for ``browser``, this platform first.
 
-    Only the five attach browsers have directories here. The first entry
-    that exists is the one a discovery looks at. A configured profile is
-    never replaced by this list.
+    Every Chromium-family browser has directories here, including Opera and
+    Arc, so browser detection and the cookie-presence scan use the same list
+    the attach path does. ``platform`` and ``env`` exist for tests: by default
+    the current platform and environment are used. The first entry that
+    exists is the one a discovery looks at. A configured profile is never
+    replaced by this list.
     """
     key = (browser or "").strip().lower()
-    home = os.path.expanduser("~")
-    local = os.environ.get("LOCALAPPDATA") or os.path.join(home, "AppData", "Local")
+    environ = os.environ if env is None else env
+    home = (
+        environ.get("HOME")
+        or environ.get("USERPROFILE")
+        or os.path.expanduser("~")
+    )
+    local = environ.get("LOCALAPPDATA") or os.path.join(home, "AppData", "Local")
+    roaming = environ.get("APPDATA") or os.path.join(home, "AppData", "Roaming")
     linux = {
         "chrome": os.path.join(home, ".config", "google-chrome"),
         "chromium": os.path.join(home, ".config", "chromium"),
         "edge": os.path.join(home, ".config", "microsoft-edge"),
         "brave": os.path.join(home, ".config", "BraveSoftware", "Brave-Browser"),
         "vivaldi": os.path.join(home, ".config", "vivaldi"),
+        "opera": os.path.join(home, ".config", "opera"),
+        "arc": os.path.join(home, ".config", "Arc"),
     }
     mac = {
         "chrome": os.path.join(home, "Library", "Application Support", "Google", "Chrome"),
@@ -340,6 +357,10 @@ def candidate_user_data_dirs(browser: str) -> list[str]:
             home, "Library", "Application Support", "BraveSoftware", "Brave-Browser"
         ),
         "vivaldi": os.path.join(home, "Library", "Application Support", "Vivaldi"),
+        "opera": os.path.join(
+            home, "Library", "Application Support", "com.operasoftware.Opera"
+        ),
+        "arc": os.path.join(home, "Library", "Application Support", "Arc", "User Data"),
     }
     win = {
         "chrome": os.path.join(local, "Google", "Chrome", "User Data"),
@@ -347,12 +368,21 @@ def candidate_user_data_dirs(browser: str) -> list[str]:
         "edge": os.path.join(local, "Microsoft", "Edge", "User Data"),
         "brave": os.path.join(local, "BraveSoftware", "Brave-Browser", "User Data"),
         "vivaldi": os.path.join(local, "Vivaldi", "User Data"),
+        "opera": os.path.join(roaming, "Opera Software", "Opera Stable"),
+        "arc": os.path.join(local, "Arc", "User Data"),
     }
     if key not in linux:
         return []
-    if os.name == "nt":
+    chosen = platform
+    if chosen is None:
+        chosen = (
+            "windows" if os.name == "nt"
+            else "macos" if sys.platform == "darwin"
+            else "linux"
+        )
+    if chosen == "windows":
         return [win[key]]
-    if sys.platform == "darwin":
+    if chosen == "macos":
         return [mac[key], linux[key]]
     return [linux[key], mac[key]]
 
@@ -363,11 +393,6 @@ def default_user_data(browser: str) -> str:
         if os.path.isdir(path):
             return path
     return ""
-
-
-def _env_path(name: str) -> Optional[str]:
-    raw = os.environ.get(name, "").strip()
-    return os.path.expanduser(raw) if raw else None
 
 
 def browser_is_running(profile: str) -> bool:
@@ -499,9 +524,13 @@ def decide(
     """
     chosen_mode = parse_mode(mode)
     if profile is None:
-        profile = _env_path("SEARCHTS_LINKEDIN_PROFILE")
+        from searchts.browser_settings import browser_profile
+
+        profile = browser_profile()
     if executable is None:
-        executable = _env_path("SEARCHTS_LINKEDIN_CHROME")
+        from searchts.browser_settings import browser_executable
+
+        executable = browser_executable()
     if endpoint is None:
         endpoint = os.environ.get("SEARCHTS_LINKEDIN_CDP", "")
     endpoint = (endpoint or "").strip()

@@ -221,6 +221,22 @@ def linkedin_loads_do_not_sleep(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def browser_detection_is_stubbed(monkeypatch):
+    """No test lists, or scans, the real browsers on this machine.
+
+    Browser detection is paths only, but a test that reaches it would still
+    describe the developer's machine instead of its fixture. Tests that need
+    detection call ``browser_detect._detect_browsers`` with an injected
+    layout, and tests that need a presence answer pass ``browsers=``.
+    """
+    from searchts import browser_detect
+
+    monkeypatch.setattr(
+        browser_detect, "installed_browsers", lambda *args, **kwargs: []
+    )
+
+
+@pytest.fixture(autouse=True)
 def linkedin_attach_does_not_join_a_live_browser(monkeypatch):
     """Unit tests do not attach to a browser running on this machine.
 
@@ -234,6 +250,8 @@ def linkedin_attach_does_not_join_a_live_browser(monkeypatch):
     monkeypatch.delenv("SEARCHTS_LINKEDIN_CDP", raising=False)
     monkeypatch.delenv("SEARCHTS_LINKEDIN_PROFILE", raising=False)
     monkeypatch.delenv("SEARCHTS_LINKEDIN_CHROME", raising=False)
+    monkeypatch.delenv("SEARCHTS_BROWSER_PROFILE", raising=False)
+    monkeypatch.delenv("SEARCHTS_BROWSER", raising=False)
 
 
 @pytest.fixture(autouse=True)
