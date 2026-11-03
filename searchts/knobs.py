@@ -24,6 +24,9 @@ LinkedIn page-load pacing is not a knob here. The numbers live in
 ``SEARCHTS_LINKEDIN_LOADS_PER_HOUR`` (20), ``SEARCHTS_LINKEDIN_LOADS_PER_DAY``
 (100, and 0 turns that cap off) and ``SEARCHTS_LINKEDIN_FEED_GAP_MINUTES``
 (30; defined for a later change, not enforced by a read).
+``SEARCHTS_LINKEDIN_ATTACH`` (``auto``, ``on`` or ``off``; default ``auto``)
+chooses whether a LinkedIn read attaches to a Chromium browser that is
+already open.
 
 plus the ceilings the loop itself runs under (``seconds``, ``step_ms``,
 ``empty_steps``), which are the same three layers and are never a flag: they

@@ -342,6 +342,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Read this site's cookies from your localhost debugger port (opt-in)",
     )
     p_read.add_argument(
+        "--attach",
+        choices=["auto", "on", "off"],
+        default=None,
+        help="How a LinkedIn read uses a browser that is already open: auto "
+             "(default) attaches to Chrome, Vivaldi, Edge, Brave or Chromium "
+             "when remote debugging is on, on requires that attach, off "
+             "launches instead. Tick \"Allow remote debugging for this browser "
+             "instance\" at chrome://inspect/#remote-debugging (vivaldi://, "
+             "edge:// or brave:// on those browsers). "
+             "SEARCHTS_LINKEDIN_ATTACH sets the same.",
+    )
+    p_read.add_argument(
         "--proxy",
         metavar="URL",
         help="Route the read through a proxy (http/https/socks), e.g. "
@@ -3118,6 +3130,7 @@ def _cmd_read(args):
                         proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
                         wait_on_429=getattr(args, "wait_on_429", False),
                         ignore_cooldown=getattr(args, "ignore_cooldown", False),
+                        linkedin_attach=getattr(args, "attach", None),
                         **_media_kw(args),
                     )
                     if resume:
@@ -3131,6 +3144,7 @@ def _cmd_read(args):
                         proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
                         wait_on_429=getattr(args, "wait_on_429", False),
                         ignore_cooldown=getattr(args, "ignore_cooldown", False),
+                        linkedin_attach=getattr(args, "attach", None),
                         **_media_kw(args),
                     )
                 else:
@@ -3141,6 +3155,7 @@ def _cmd_read(args):
                         proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
                         wait_on_429=getattr(args, "wait_on_429", False),
                         ignore_cooldown=getattr(args, "ignore_cooldown", False),
+                        linkedin_attach=getattr(args, "attach", None),
                         **_media_kw(args),
                     )]
                 result = pages[0]

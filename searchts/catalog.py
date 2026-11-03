@@ -149,20 +149,40 @@ _add(Command(
         "SEARCHTS_LINKEDIN_LOADS_PER_MINUTE (2), "
         "SEARCHTS_LINKEDIN_LOADS_PER_HOUR (20) and "
         "SEARCHTS_LINKEDIN_LOADS_PER_DAY (100; 0 turns the daily cap off).",
-        "The LinkedIn home feed (/feed/) is read natively in the Chrome "
-        "profile that holds the kept login (SEARCHTS_LINKEDIN_PROFILE), "
-        "or another Chromium browser's (Vivaldi, Edge, Brave) with "
-        "SEARCHTS_LINKEDIN_CHROME set to its executable, "
-        "headed, by capturing the page's own responses. One document load "
-        "is booked, then one bounded scroll; a scroll step is not another "
-        "page load. SEARCHTS_LINKEDIN_FEED_GAP_MINUTES (default 30) is the "
-        "gap between those feed reads. Each post has its author, text, "
-        "relative time and activity permalink. A 429, a 999, a checkpoint, "
-        "an authwall or a forced logout stops the feed for 24 h with no "
-        "retry; a restriction stops until a person clears it. "
-        "--wait-on-429 does not apply. Without a kept login or that Chrome "
-        "profile, the read names the reason and linkedin-scraper-mcp "
-        "remains the fallback.",
+        "The LinkedIn home feed (/feed/) is read in the signed-in browser. "
+        "When Chrome, Vivaldi, Edge, Brave or Chromium is already running "
+        "with remote debugging on, the read attaches and opens one tab. "
+        "Otherwise it uses the headed profile SEARCHTS_LINKEDIN_PROFILE "
+        "(or SEARCHTS_LINKEDIN_CHROME for another Chromium executable) and "
+        "captures the page's own responses. One document load is booked, "
+        "then one bounded scroll; a scroll step is not another page load. "
+        "SEARCHTS_LINKEDIN_FEED_GAP_MINUTES (default 30) is the gap between "
+        "those feed reads. Each post has its author, text, relative time "
+        "and activity permalink. A 429, a 999, a checkpoint, an authwall "
+        "or a forced logout stops the feed for 24 h with no retry; a "
+        "restriction stops until a person clears it. --wait-on-429 does "
+        "not apply. Without a kept login or that browser, the read names "
+        "the reason and linkedin-scraper-mcp remains the fallback.",
+        "A LinkedIn page that uses the browser can attach to a Chromium "
+        "browser that is already open. Chrome 136+ blocks "
+        "--remote-debugging-port on the default profile. Tick \"Allow "
+        "remote debugging for this browser instance\" at "
+        "chrome://inspect/#remote-debugging (vivaldi://inspect/#remote-debugging, "
+        "edge://inspect/#remote-debugging, brave://inspect/#remote-debugging; "
+        "Chromium uses the chrome:// page). searchts reads the port and "
+        "websocket path from DevToolsActivePort in that browser's user-data "
+        "directory and connects to 127.0.0.1. It opens one tab, reads, and "
+        "closes only that tab. The browser and its other windows stay open. "
+        "Nothing is requested before that connection succeeds. If the "
+        "browser is running but the toggle is off, the read stops before "
+        "any request and names that page. If the browser is not running, "
+        "the existing launch path is used. SEARCHTS_LINKEDIN_ATTACH or "
+        "searchts read --attach is auto (default), on (attach or stop, "
+        "never launch) or off (never attach, unless SEARCHTS_LINKEDIN_CDP "
+        "is set). Firefox-family browsers (zen, firefox, librewolf, "
+        "waterfox, floorp, mullvad) stay on cookie copy; choosing one for "
+        "attach says so. The page gap, the per-minute/hour/day caps, and "
+        "the 24 h stop apply to an attached read too.",
         "On failure `--json` prints `{\"url\", \"error\": {kind, message, exit_code, "
         "attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.",
         "An `--items` read returns a signed `resume` token in `--json` and in a "
@@ -710,9 +730,11 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "the read carried a login, and never a way past a LinkedIn stop.",
             "`ignore_cooldown` is CLI `--ignore-cooldown`. It does not lift a "
             "LinkedIn stop; `searchts login resume linkedin.com` does.",
+            "`--attach` is CLI only. An MCP LinkedIn read follows "
+            "SEARCHTS_LINKEDIN_ATTACH (auto, on or off; default auto).",
         ),
         mcp_only_params=("cursor", "page_items"),
-        cli_only_flags=("--human", "--scrub", "--backend", "--json"),
+        cli_only_flags=("--human", "--scrub", "--backend", "--json", "--attach"),
         param_flags=(("max_pages", "--pages"), ("max_items", "--items"),
                      ("max_media", "--media"), ("approve_cookie_copy", "--yes")),
     ),

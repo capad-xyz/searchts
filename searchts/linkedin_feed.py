@@ -8,11 +8,14 @@ one place where the wrong client costs more than a failed read. Copying the
 user agent, a headless bundle) is the pattern that gets the session cleared,
 sometimes within seconds, and can log out the browser that minted it.
 
-So this module does one thing: it opens the user's own Chrome, headed, on the
-user's own profile directory, at the feed URL. The page itself makes its own
-requests; this module only listens to them (``page.on("response")``) and reads
-the DOM. It never calls an API, never pages with a request, and never touches
-or copies the cookie store. Everything below is passive.
+So this module does one thing: it reads the feed in the user's own browser.
+A Chromium browser that is already running with remote debugging allowed is
+attached, and one new tab is opened for the read (see
+:mod:`searchts.linkedin_attach`). Otherwise the user's own Chrome is launched,
+headed, on the user's own profile directory, at the feed URL. The page itself
+makes its own requests; this module only listens to them (``page.on("response")``)
+and reads the DOM. It never calls an API, never pages with a request, and never
+touches or copies the cookie store. Everything below is passive.
 
 What comes back is a post list:
 
@@ -861,8 +864,10 @@ def profile_problem(profile: Optional[str]) -> str:
             f"the browser profile at {profile} is already open. Close that "
             "browser (all its windows), or start it with "
             "--remote-debugging-port and set SEARCHTS_LINKEDIN_CDP to that "
-            "address. The same LinkedIn session is never used by two clients "
-            "at once."
+            "address, or tick \"Allow remote debugging for this browser "
+            "instance\" at chrome://inspect/#remote-debugging and leave "
+            "SEARCHTS_LINKEDIN_ATTACH on auto. The same LinkedIn session is "
+            "never used by two clients at once."
         )
     lock = os.path.join(profile, "SingletonLock")
     if os.path.lexists(lock):
@@ -882,8 +887,10 @@ def profile_problem(profile: Optional[str]) -> str:
                 f"the Chrome profile at {profile} is already open (process "
                 f"{pid}). Close that window, or start Chrome with "
                 "--remote-debugging-port and set SEARCHTS_LINKEDIN_CDP to that "
-                "address. The same LinkedIn session is never used by two "
-                "clients at once."
+                "address, or tick \"Allow remote debugging for this browser "
+                "instance\" at chrome://inspect/#remote-debugging and leave "
+                "SEARCHTS_LINKEDIN_ATTACH on auto. The same LinkedIn session "
+                "is never used by two clients at once."
             )
     return ""
 
@@ -898,17 +905,15 @@ def _cdp_page(browser: Any) -> Any:
 
     A fresh context would be a second client, with a different cookie jar
     from the window that is already signed in. If Chrome has no window,
-    attaching is refused.
+    attaching is refused. The tab rule lives in
+    :func:`searchts.linkedin_attach.new_tab`.
     """
-    contexts = list(getattr(browser, "contexts", []) or [])
-    if not contexts:
-        raise FeedUnavailable(
-            "Chrome is listening on the debugging port, but it has no open "
-            "window. Start it on the signed-in profile with "
-            "--remote-debugging-port and leave that window open. A new "
-            "browser context is not opened."
-        )
-    return contexts[0].new_page()
+    from searchts.linkedin_attach import AttachError, new_tab
+
+    try:
+        return new_tab(browser)
+    except AttachError as exc:
+        raise FeedUnavailable(str(exc)) from exc
 
 
 @contextmanager
@@ -967,6 +972,13 @@ def _browser_page(
     except FeedUnavailable:
         raise
     except Exception as exc:  # noqa: BLE001 - name the browser fault, not a stack
+        if cdp:
+            raise FeedUnavailable(
+                "could not attach to the browser over the DevTools port "
+                f"({type(exc).__name__}). If the browser asked to allow remote "
+                "debugging, accept that prompt and read again. Nothing was "
+                "requested from LinkedIn."
+            ) from exc
         raise FeedUnavailable(
             f"could not open the signed-in browser profile ({type(exc).__name__}). "
             "Close other windows using that profile, or set "
@@ -1209,39 +1221,67 @@ def read_feed(
     profile: Optional[str] = None,
     executable: Optional[str] = None,
     cdp: Optional[str] = None,
+    attach: Optional[str] = None,
     tick: Any = None,
 ) -> FeedRead:
     """Read the signed-in LinkedIn feed once, or say why it cannot.
 
-    Refuses before any browser starts when there is no kept login, no profile,
-    or the profile is already open in another client. A debugging port
-    (``SEARCHTS_LINKEDIN_CDP``) attaches to that Chrome instead of launching a
-    second one. A recorded guard stop refuses the same way, still before the
-    browser. ``resume_token`` is verified by :func:`resume_from_token` and
-    then only scrolled; an explicit ``resume`` hook wins over the token.
+    A recorded stop is named first, before any browser decision, and it does
+    not book a load. ``attach`` (or ``SEARCHTS_LINKEDIN_ATTACH``) then chooses
+    how the browser is used. Attaching joins the running browser over the
+    DevTools port written when remote debugging is allowed for that instance.
+    A running browser with that toggle off stops here, still before a load is
+    booked and before any page is requested. Launching is the existing path:
+    it refuses when there is no kept login, no profile, or the profile is
+    already open in another client. An explicit debugging port
+    (``SEARCHTS_LINKEDIN_CDP``) attaches even when the mode is off.
+    ``resume_token`` is verified by :func:`resume_from_token` and then only
+    scrolled; an explicit ``resume`` hook wins over the token.
     """
-    from searchts import login_store
+    from searchts import linkedin, linkedin_attach, login_store
 
     chosen = profile or profile_path()
-    endpoint = (cdp or os.environ.get("SEARCHTS_LINKEDIN_CDP", "")).strip()
-    # Pointing searchts at the signed-in browser (a profile or a debugging
-    # port) is the consent for this read: the feed runs in that browser and
-    # never copies its cookies. Without either, a kept login is required.
-    if not (chosen or endpoint) and not login_store.kept("linkedin.com"):
-        raise FeedUnavailable(
-            "the LinkedIn feed is read in the browser signed in to LinkedIn, "
-            "and searchts has no kept LinkedIn login. Keep one with "
-            "`searchts login keep linkedin.com` after a signed-in read, or "
-            "set SEARCHTS_LINKEDIN_PROFILE to that browser's user-data "
-            "directory. Until then, linkedin-scraper-mcp remains the fallback "
-            "for the feed."
+    raw_cdp = (cdp or os.environ.get("SEARCHTS_LINKEDIN_CDP", "")).strip()
+    # The 24 h stop and the restriction stop outrank the debugging toggle.
+    # Neither books a load and neither opens a browser.
+    stop = linkedin.current_stop()
+    if stop is not None:
+        raise FeedUnavailable(linkedin.stop_hint(stop))
+    try:
+        decision = linkedin_attach.decide(
+            mode=attach,
+            profile=chosen,
+            executable=executable if executable is not None else chrome_executable(),
+            endpoint=raw_cdp,
+            kept_browser_name=None if not raw_cdp else "",
         )
-    # A CDP attach is the expected answer to "that profile is already open":
-    # the lock is the user's own running Chrome, and we join it instead of
-    # starting a second client on the same session.
-    problem = "" if endpoint else profile_problem(chosen)
-    if problem:
-        raise FeedUnavailable(problem)
+    except ValueError as exc:
+        raise FeedUnavailable(str(exc)) from exc
+    if decision.action == "refuse":
+        raise FeedUnavailable(decision.message)
+
+    endpoint = ""
+    if decision.action == "attach":
+        # The caller's string is preserved when they named a port, so a
+        # host:port stays host:port. A discovered port is already a URL.
+        endpoint = raw_cdp or decision.endpoint
+    else:
+        # Pointing searchts at the signed-in browser (a profile or a debugging
+        # port) is the consent for this read: the feed runs in that browser and
+        # never copies its cookies. Without either, a kept login is required.
+        # A discovered default directory is not a profile we may launch.
+        if not chosen and not login_store.kept("linkedin.com"):
+            raise FeedUnavailable(
+                "the LinkedIn feed is read in the browser signed in to LinkedIn, "
+                "and searchts has no kept LinkedIn login. Keep one with "
+                "`searchts login keep linkedin.com` after a signed-in read, or "
+                "set SEARCHTS_LINKEDIN_PROFILE to that browser's user-data "
+                "directory. Until then, linkedin-scraper-mcp remains the fallback "
+                "for the feed."
+            )
+        problem = profile_problem(chosen)
+        if problem:
+            raise FeedUnavailable(problem)
     chosen = chosen or ""
 
     active_resume = resume

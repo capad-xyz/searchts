@@ -530,6 +530,10 @@ def test_read_feed_refuses_without_a_kept_login(monkeypatch):
     monkeypatch.setattr("searchts.login_store.kept", lambda _site: False)
     monkeypatch.delenv("SEARCHTS_LINKEDIN_PROFILE", raising=False)
     monkeypatch.delenv("SEARCHTS_LINKEDIN_CDP", raising=False)
+    monkeypatch.delenv("SEARCHTS_LINKEDIN_CHROME", raising=False)
+    # A running browser on the machine must not turn this into the toggle
+    # message. off is the launch path this test is about.
+    monkeypatch.setenv("SEARCHTS_LINKEDIN_ATTACH", "off")
     with pytest.raises(lf.FeedUnavailable) as ei:
         lf.read_feed()
     assert "no kept LinkedIn login" in str(ei.value)

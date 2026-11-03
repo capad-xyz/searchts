@@ -24,12 +24,13 @@ Climbs the same three rungs the MCP server uses: curl_cffi with a browser TLS fi
 - A direct http-429 stops the ladder for that host and cools it down (SEARCHTS_429_COOLDOWN, default 300 s, 1800 at most, 0 off). --ignore-cooldown reads during the cooldown. --wait-on-429 retries that rung, capped at 180 s; a kept login gets one wait. The Jina relay's own 429 is its quota and does not cool the host.
 - A kept login lowers --items to SEARCHTS_MAX_ITEMS_SIGNED_IN (default 50). The clamp note says signed-in items.
 - LinkedIn (linkedin.com and its subdomains) stops for 24 h after a 429, a 999, a too-many-pages page, a checkpoint, or a forced logout, and until a person clears an account restriction. It is not an expired login, and --wait-on-429 does not override the stop. `searchts login resume linkedin.com` clears it. A checkpoint or forced logout still needs a sign-in by hand, then `login keep`. Page loads are one at a time, at least 20 s apart, at most SEARCHTS_LINKEDIN_LOADS_PER_MINUTE (2), SEARCHTS_LINKEDIN_LOADS_PER_HOUR (20) and SEARCHTS_LINKEDIN_LOADS_PER_DAY (100; 0 turns the daily cap off).
-- The LinkedIn home feed (/feed/) is read natively in the Chrome profile that holds the kept login (SEARCHTS_LINKEDIN_PROFILE), or another Chromium browser's (Vivaldi, Edge, Brave) with SEARCHTS_LINKEDIN_CHROME set to its executable, headed, by capturing the page's own responses. One document load is booked, then one bounded scroll; a scroll step is not another page load. SEARCHTS_LINKEDIN_FEED_GAP_MINUTES (default 30) is the gap between those feed reads. Each post has its author, text, relative time and activity permalink. A 429, a 999, a checkpoint, an authwall or a forced logout stops the feed for 24 h with no retry; a restriction stops until a person clears it. --wait-on-429 does not apply. Without a kept login or that Chrome profile, the read names the reason and linkedin-scraper-mcp remains the fallback.
+- The LinkedIn home feed (/feed/) is read in the signed-in browser. When Chrome, Vivaldi, Edge, Brave or Chromium is already running with remote debugging on, the read attaches and opens one tab. Otherwise it uses the headed profile SEARCHTS_LINKEDIN_PROFILE (or SEARCHTS_LINKEDIN_CHROME for another Chromium executable) and captures the page's own responses. One document load is booked, then one bounded scroll; a scroll step is not another page load. SEARCHTS_LINKEDIN_FEED_GAP_MINUTES (default 30) is the gap between those feed reads. Each post has its author, text, relative time and activity permalink. A 429, a 999, a checkpoint, an authwall or a forced logout stops the feed for 24 h with no retry; a restriction stops until a person clears it. --wait-on-429 does not apply. Without a kept login or that browser, the read names the reason and linkedin-scraper-mcp remains the fallback.
+- A LinkedIn page that uses the browser can attach to a Chromium browser that is already open. Chrome 136+ blocks --remote-debugging-port on the default profile. Tick "Allow remote debugging for this browser instance" at chrome://inspect/#remote-debugging (vivaldi://inspect/#remote-debugging, edge://inspect/#remote-debugging, brave://inspect/#remote-debugging; Chromium uses the chrome:// page). searchts reads the port and websocket path from DevToolsActivePort in that browser's user-data directory and connects to 127.0.0.1. It opens one tab, reads, and closes only that tab. The browser and its other windows stay open. Nothing is requested before that connection succeeds. If the browser is running but the toggle is off, the read stops before any request and names that page. If the browser is not running, the existing launch path is used. SEARCHTS_LINKEDIN_ATTACH or searchts read --attach is auto (default), on (attach or stop, never launch) or off (never attach, unless SEARCHTS_LINKEDIN_CDP is set). Firefox-family browsers (zen, firefox, librewolf, waterfox, floorp, mullvad) stay on cookie copy; choosing one for attach says so. The page gap, the per-minute/hour/day caps, and the 24 h stop apply to an attached read too.
 - On failure `--json` prints `{"url", "error": {kind, message, exit_code, attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.
 - An `--items` read returns a signed `resume` token in `--json` and in a `[resume: ...]` note when it can name where to continue: the feed's own cursor, the rows it stopped after, or the next page in the URL. Pass it as `--resume TOKEN` (MCP `resume`) to read on after those rows instead of from the top. It says which method continued the read, and a tampered or 24 h old token is refused.
 
 ```bash
-searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages PAGES] [--items ITEMS] [--resume TOKEN] [--wait-on-429] [--ignore-cooldown] [--media MEDIA] [--expand] [--scrub] [--cookies-from-browser BROWSER] [--yes] [--cookies PATH] [--cdp-port PORT] [--proxy URL] [--proxy-trusted]
+searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages PAGES] [--items ITEMS] [--resume TOKEN] [--wait-on-429] [--ignore-cooldown] [--media MEDIA] [--expand] [--scrub] [--cookies-from-browser BROWSER] [--yes] [--cookies PATH] [--cdp-port PORT] [--attach {auto,on,off}] [--proxy URL] [--proxy-trusted]
 ```
 
 | Argument | Description |
@@ -54,6 +55,7 @@ searchts read <url> [--verbose] [--backend BACKEND] [--json] [--human] [--pages 
 | `--yes` | Approve copying cookies out of YOUR browser, this session only. Without it --cookies-from-browser is refused, because the copy is never silent. |
 | `--cookies` PATH | Read a searchts-owned cookie file for this site only (opt-in) |
 | `--cdp-port` PORT | Read this site's cookies from your localhost debugger port (opt-in) |
+| `--attach` {auto,on,off} | How a LinkedIn read uses a browser that is already open: auto (default) attaches to Chrome, Vivaldi, Edge, Brave or Chromium when remote debugging is on, on requires that attach, off launches instead. Tick "Allow remote debugging for this browser instance" at chrome://inspect/#remote-debugging (vivaldi://, edge:// or brave:// on those browsers). SEARCHTS_LINKEDIN_ATTACH sets the same. Choices: auto, on, off. |
 | `--proxy` URL | Route the read through a proxy (http/https/socks), e.g. socks5://127.0.0.1:7890. For blocks decided on your address, which no fingerprint can move. Falls back to the `proxy` config value. Omitted means your own IP, as before. |
 | `--proxy-trusted` | Accept that a remote proxy operator can see the Cookie header |
 
@@ -74,13 +76,14 @@ searchts read https://news.ycombinator.com/newest --resume TOKEN
 
 MCP: `read_url`.
 MCP-only parameters: `cursor`, `page_items`.
-CLI-only flags: `--human`, `--scrub`, `--backend`, `--json`.
+CLI-only flags: `--human`, `--scrub`, `--backend`, `--json`, `--attach`.
 - Same unlocker path as `searchts read`.
 - The JSON has no `next_url`: a page-authored URL is not a safe next request. Use the signed `next_cursor`, or `searchts read --json` when a human wants the URL.
 - `approve_cookie_copy` is CLI `--yes` for one call: set it only after the user said yes to a `cookies_from_browser` copy.
 - `resume` takes the signed token an `--items` read returned, so the next read starts after the rows it already gave back.
 - `wait_on_429` is CLI `--wait-on-429`: off by default, one wait when the read carried a login, and never a way past a LinkedIn stop.
 - `ignore_cooldown` is CLI `--ignore-cooldown`. It does not lift a LinkedIn stop; `searchts login resume linkedin.com` does.
+- `--attach` is CLI only. An MCP LinkedIn read follows SEARCHTS_LINKEDIN_ATTACH (auto, on or off; default auto).
 
 ### `search`
 

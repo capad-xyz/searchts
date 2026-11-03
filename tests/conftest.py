@@ -221,6 +221,22 @@ def linkedin_loads_do_not_sleep(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def linkedin_attach_does_not_join_a_live_browser(monkeypatch):
+    """Unit tests do not attach to a browser running on this machine.
+
+    ``auto`` looks at the real user-data directory. A live DevTools port
+    would open a tab in the user's browser and navigate it. Tests that
+    exercise attach pass ``mode=`` or ``attach=`` (or set the env
+    themselves). ``SEARCHTS_LINKEDIN_CDP`` is an explicit attach too, so
+    an ambient value is dropped for the same reason.
+    """
+    monkeypatch.setenv("SEARCHTS_LINKEDIN_ATTACH", "off")
+    monkeypatch.delenv("SEARCHTS_LINKEDIN_CDP", raising=False)
+    monkeypatch.delenv("SEARCHTS_LINKEDIN_PROFILE", raising=False)
+    monkeypatch.delenv("SEARCHTS_LINKEDIN_CHROME", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def isolate_whisper_models(monkeypatch, tmp_path):
     """No test sees, or downloads into, the real ~/.searchts/models (#439).
 
