@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -110,6 +112,10 @@ class FakePage:
     def on(self, event, handler):
         assert event == "response"
         self.handlers.append(handler)
+
+    def remove_listener(self, event, handler):
+        assert event == "response"
+        self.handlers.remove(handler)
 
     def goto(self, url, **kwargs):
         self.gotos.append(url)
@@ -467,7 +473,215 @@ def test_feed_guard_gap_zero_turns_the_feed_gap_off(monkeypatch):
     lf._remember_feed(now - 1)
     lf.FeedGuard(clock=lambda: now).before_load()
     assert loads == ["load"]
-    assert lf._last_feed() == now
+    assert lf._last_feed() == now - 1
+
+
+def test_feed_guard_stamps_only_after_content_returns(monkeypatch):
+    now = 1_700_000_000.0
+    remembered = []
+    monkeypatch.setattr(linkedin, "current_stop", lambda: None)
+    monkeypatch.setattr(linkedin, "feed_gap_minutes", lambda: 0)
+    monkeypatch.setattr(linkedin, "exclusive_load", lambda: _null_context())
+    monkeypatch.setattr(lf, "_remember_feed", remembered.append)
+    guard = lf.FeedGuard(clock=lambda: now)
+
+    guard.before_load()
+    assert remembered == []
+    guard.successful()
+    assert remembered == [now]
+
+
+def _null_context():
+    from contextlib import nullcontext
+
+    return nullcontext()
+
+
+def test_target_closed_navigation_is_clean_and_does_not_stamp_or_record(monkeypatch):
+    remembered = []
+    monkeypatch.setattr(lf, "_remember_feed", remembered.append)
+
+    class TargetClosedError(Exception):
+        pass
+
+    class ClosedPage(FakePage):
+        def goto(self, url, **kwargs):
+            self.gotos.append(url)
+            raise TargetClosedError("Target page, context or browser has been closed")
+
+    guard = FakeGuard()
+    page = ClosedPage([DOM_ONE])
+    with pytest.raises(lf.FeedUnavailable, match="browser closed the tab"):
+        lf.walk(page, guard=guard, limits=limits())
+    assert guard.calls == ["before"]
+    assert remembered == []
+    assert page.handlers == []
+
+
+def test_target_closed_navigation_still_spends_the_load_cap(monkeypatch):
+    from contextlib import nullcontext
+
+    loads = []
+    remembered = []
+    monkeypatch.setattr(linkedin, "current_stop", lambda: None)
+    monkeypatch.setattr(linkedin, "feed_gap_minutes", lambda: 0)
+    monkeypatch.setattr(
+        linkedin, "exclusive_load",
+        lambda: (loads.append("load"), nullcontext())[1],
+    )
+    monkeypatch.setattr(lf, "_remember_feed", remembered.append)
+
+    class TargetClosedError(Exception):
+        pass
+
+    class ClosedPage(FakePage):
+        def goto(self, url, **kwargs):
+            self.gotos.append(url)
+            raise TargetClosedError("Target page, context or browser has been closed")
+
+    with pytest.raises(lf.FeedUnavailable, match="browser closed the tab"):
+        lf.walk(ClosedPage([DOM_ONE]), guard=lf.FeedGuard(), limits=limits())
+    assert loads == ["load"]
+    assert remembered == []
+
+
+def test_target_closed_after_navigation_does_not_turn_partial_content_into_success(
+    monkeypatch,
+):
+    remembered = []
+    monkeypatch.setattr(lf, "_remember_feed", remembered.append)
+
+    class TargetClosedError(Exception):
+        pass
+
+    class ClosedDuringScroll(FakePage):
+        def evaluate(self, _script):
+            raise TargetClosedError("Target page, context or browser has been closed")
+
+    page = ClosedDuringScroll([DOM_ONE])
+    guard = FakeGuard()
+    with pytest.raises(lf.FeedUnavailable, match="browser closed the tab"):
+        lf.walk(page, guard=guard, limits=limits())
+    assert page.gotos == [lf.FEED_URL]
+    assert guard.calls == ["before"]
+    assert remembered == []
+    assert page.handlers == []
+
+
+def test_cdp_connection_waits_for_allow_and_only_closes_its_new_tab(monkeypatch):
+    events = []
+
+    class Loop:
+        handler = None
+
+        def get_exception_handler(self):
+            return self.handler
+
+        def set_exception_handler(self, handler):
+            self.handler = handler
+
+        def default_exception_handler(self, _context):
+            raise AssertionError("TargetClosedError should be retrieved quietly")
+
+    class Page:
+        def close(self):
+            events.append("tab.close")
+
+    class Context:
+        def new_page(self):
+            events.append("new_page")
+            return Page()
+
+    class Browser:
+        contexts = [Context()]
+
+        def close(self):
+            raise AssertionError("CDP teardown must not close the user's browser")
+
+    class Chromium:
+        def connect_over_cdp(self, endpoint, **kwargs):
+            events.append(("connect", endpoint, kwargs))
+            return Browser()
+
+    loop = Loop()
+
+    class Manager:
+        _loop = loop
+
+        def __enter__(self):
+            return SimpleNamespace(chromium=Chromium())
+
+        def __exit__(self, *_exc):
+            events.append("disconnect")
+
+    monkeypatch.setitem(
+        sys.modules, "patchright.sync_api",
+        SimpleNamespace(sync_playwright=lambda: Manager()),
+    )
+    monkeypatch.setenv("SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS", "75")
+    with lf._browser_page("", None, "127.0.0.1:9222", lf.FEED_URL) as page:
+        assert page is not None
+    assert events == [
+        ("connect", "http://127.0.0.1:9222", {"timeout": 75_000, "no_defaults": True}),
+        "new_page", "tab.close", "disconnect",
+    ]
+
+    class Future:
+        retrieved = False
+
+        def done(self):
+            return True
+
+        def exception(self):
+            self.retrieved = True
+            return type("TargetClosedError", (Exception,), {})()
+
+    future = Future()
+    loop.handler(loop, {"future": future})
+    assert future.retrieved
+
+
+def test_cdp_target_closed_is_one_named_failure_and_ctrl_c_stays_distinct(monkeypatch):
+    class TargetClosedError(Exception):
+        pass
+
+    class Chromium:
+        def connect_over_cdp(self, *_args, **_kwargs):
+            raise TargetClosedError("connection closed")
+
+    class Manager:
+        _loop = None
+
+        def __enter__(self):
+            return SimpleNamespace(chromium=Chromium())
+
+        def __exit__(self, *_exc):
+            return None
+
+    monkeypatch.setitem(
+        sys.modules, "patchright.sync_api",
+        SimpleNamespace(sync_playwright=lambda: Manager()),
+    )
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        with lf._browser_page("", None, "http://127.0.0.1:9222", lf.FEED_URL):
+            pass
+    assert str(ei.value) == lf._browser_closed_message()
+
+    class Interrupted(Chromium):
+        def connect_over_cdp(self, *_args, **_kwargs):
+            raise KeyboardInterrupt
+
+    class InterruptManager(Manager):
+        def __enter__(self):
+            return SimpleNamespace(chromium=Interrupted())
+
+    monkeypatch.setitem(
+        sys.modules, "patchright.sync_api",
+        SimpleNamespace(sync_playwright=lambda: InterruptManager()),
+    )
+    with pytest.raises(KeyboardInterrupt):
+        with lf._browser_page("", None, "http://127.0.0.1:9222", lf.FEED_URL):
+            pass
 
 
 def test_feed_guard_books_one_load_and_names_a_spent_budget(monkeypatch):

@@ -1539,7 +1539,7 @@ def _fetch_curl_cffi(url: str, timeout: int = 30,
     req_headers = {"Accept-Language": "en-US,en;q=0.9"}
     req_headers.update(extra_headers or {})
     # Passed only when set, so a proxy-free read calls curl exactly as before.
-    proxy_kwargs: Dict[str, object] = {"proxy": proxy} if proxy else {}
+    proxy_kwargs: Dict[str, Any] = {"proxy": proxy} if proxy else {}
     r = cr.get(url, impersonate="chrome", timeout=timeout,
                allow_redirects=curl_safe_redirects(),
                curl_options=curl_resolve_options(url),

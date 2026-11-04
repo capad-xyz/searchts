@@ -44,6 +44,7 @@ already-open page, which is what the offline tests drive with a fake.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import random
@@ -618,6 +619,9 @@ class Guard(Protocol):
     def record(self, signal: str) -> None:
         """Remember a stop signal so the next read refuses."""
 
+    def successful(self) -> None:
+        """Remember that feed content came back, if the guard tracks a gap."""
+
 
 class Resume(Protocol):
     def begin(self) -> Optional[str]:
@@ -722,6 +726,43 @@ def _remember_feed(now: float) -> None:
     os.replace(tmp, path)
 
 
+def _cdp_timeout_ms() -> int:
+    """Approval dialogs need time for a person to respond (default 60 s)."""
+    raw = os.environ.get("SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS", "60")
+    try:
+        seconds = float(raw)
+    except ValueError:
+        seconds = 60.0
+    if seconds <= 0:
+        seconds = 60.0
+    return int(max(1.0, min(seconds, 300.0)) * 1000)
+
+
+def _quiet_target_closed_futures(manager: Any) -> None:
+    """Retrieve CDP teardown exceptions that Patchright can leave unobserved."""
+    loop = getattr(manager, "_loop", None)
+    if loop is None or not hasattr(loop, "set_exception_handler"):
+        return
+    previous = loop.get_exception_handler()
+
+    def handle(loop: Any, context: Dict[str, Any]) -> None:
+        future = context.get("future")
+        exc = context.get("exception")
+        if exc is None and future is not None:
+            with contextlib.suppress(Exception):
+                exc = future.exception()
+        if exc is not None and _is_target_closed(exc):
+            if future is not None and not future.done():
+                future.cancel()
+            return
+        if previous is not None:
+            previous(loop, context)
+        else:
+            loop.default_exception_handler(context)
+
+    loop.set_exception_handler(handle)
+
+
 def _feed_gap_refusal(now: float, last_feed: float, gap_minutes: int) -> str:
     """The feed-gap sentence, or ``""`` when another feed read is allowed."""
     if not gap_minutes or not last_feed or now - last_feed >= gap_minutes * 60:
@@ -737,11 +778,11 @@ def _feed_gap_refusal(now: float, last_feed: float, gap_minutes: int) -> str:
 class FeedGuard:
     """One feed document load, booked through :mod:`searchts.linkedin`.
 
-    ``before_load`` refuses an active stop, keeps feed reads
-    :func:`searchts.linkedin.feed_gap_minutes` apart, then spends exactly
-    one :func:`searchts.linkedin.take_load` slot for ``/feed/`` itself.
-    A scroll step never calls it. ``record`` writes the reason with
-    :func:`searchts.linkedin.record_stop`.
+    ``check_read_allowed`` refuses an active stop or feed gap without spending
+    a load slot. ``before_load`` repeats that check and spends exactly one
+    :func:`searchts.linkedin.take_load` slot immediately before ``/feed/``.
+    ``successful`` starts the feed gap only after content returns. Scroll
+    steps never call these methods. ``record`` writes stop signals.
     """
 
     def __init__(self, *, clock: Any = None) -> None:
@@ -753,10 +794,7 @@ class FeedGuard:
         stop = linkedin.current_stop()
         if stop is not None:
             raise GuardRefused(linkedin.stop_hint(stop))
-        now = float(self.clock())
-        why = _feed_gap_refusal(now, _last_feed(), linkedin.feed_gap_minutes())
-        if why:
-            raise GuardRefused(why)
+        self.check_read_allowed()
         try:
             # The lock books the slot and is released before the scroll.
             # Entering it calls take_load once. A step is not another load.
@@ -764,6 +802,21 @@ class FeedGuard:
                 pass
         except linkedin.Paced as exc:
             raise GuardRefused(exc.hint or str(exc)) from exc
+
+    def check_read_allowed(self) -> None:
+        """Refuse active stops and feed gaps without spending a load slot."""
+        from searchts import linkedin
+
+        stop = linkedin.current_stop()
+        if stop is not None:
+            raise GuardRefused(linkedin.stop_hint(stop))
+        now = float(self.clock())
+        why = _feed_gap_refusal(now, _last_feed(), linkedin.feed_gap_minutes())
+        if why:
+            raise GuardRefused(why)
+
+    def successful(self) -> None:
+        """Start the feed gap only once usable content was read."""
         _remember_feed(float(self.clock()))
 
     def record(self, signal: str) -> None:
@@ -974,42 +1027,46 @@ def _browser_page(
             "searchts install --browser"
         ) from exc
 
+    manager = sync_playwright()
+    entered = False
     try:
-        with sync_playwright() as pw:
-            if cdp:
-                endpoint = cdp if "://" in cdp else f"http://{cdp}"
-                browser = pw.chromium.connect_over_cdp(endpoint)
-                page = _cdp_page(browser, browser_name)
-                try:
-                    yield page
-                finally:
-                    # The user's window stays open. Only the tab this read
-                    # opened is closed, and the browser process is left alone.
-                    try:
-                        page.close()
-                    except Exception:  # noqa: BLE001 - the user may have closed it
-                        pass
-                return
-            kwargs: Dict[str, Any] = {
-                "user_data_dir": profile,
-                "headless": False,
-                # No fixed viewport: a forced size changes client hints. None
-                # lets the real window supply them.
-                "viewport": None,
-            }
-            if executable:
-                kwargs["executable_path"] = executable
-            else:
-                kwargs["channel"] = "chrome"
-            context = pw.chromium.launch_persistent_context(**kwargs)
+        pw = manager.__enter__()
+        entered = True
+        _quiet_target_closed_futures(manager)
+        if cdp:
+            endpoint = cdp if "://" in cdp else f"http://{cdp}"
+            browser = pw.chromium.connect_over_cdp(
+                endpoint, timeout=_cdp_timeout_ms(), no_defaults=True,
+            )
+            page = _cdp_page(browser, browser_name)
             try:
-                page = context.pages[0] if context.pages else context.new_page()
                 yield page
             finally:
-                context.close()
+                # CDP teardown only disconnects this client. Close just the
+                # tab created by _cdp_page; leave the user's window intact.
+                with contextlib.suppress(Exception):
+                    page.close()
+            return
+        kwargs: Dict[str, Any] = {
+            "user_data_dir": profile,
+            "headless": False,
+            "viewport": None,
+        }
+        if executable:
+            kwargs["executable_path"] = executable
+        else:
+            kwargs["channel"] = "chrome"
+        context = pw.chromium.launch_persistent_context(**kwargs)
+        try:
+            page = context.pages[0] if context.pages else context.new_page()
+            yield page
+        finally:
+            context.close()
     except FeedUnavailable:
         raise
     except Exception as exc:  # noqa: BLE001 - name the browser fault, not a stack
+        if cdp and _is_target_closed(exc):
+            raise FeedUnavailable(_browser_closed_message()) from exc
         if cdp:
             raise FeedUnavailable(
                 "could not attach to the browser over the DevTools port "
@@ -1023,6 +1080,10 @@ def _browser_page(
             "to the browser's executable or name (Chrome, Vivaldi, Edge or "
             "Brave; SEARCHTS_LINKEDIN_CHROME is the legacy alias)."
         ) from exc
+    finally:
+        if entered:
+            with contextlib.suppress(Exception):
+                manager.__exit__(None, None, None)
 
 
 # ── the walk ────────────────────────────────────────────────────────────────
@@ -1046,7 +1107,9 @@ def _merge(into: Dict[str, Post], posts: List[Post]) -> int:
 def _page_text(page: Any) -> str:
     try:
         return str(page.content() or "")
-    except Exception:  # noqa: BLE001 - a page that will not answer has no words
+    except Exception as exc:  # noqa: BLE001 - a page that will not answer has no words
+        if _is_target_closed(exc):
+            raise FeedUnavailable(_browser_closed_message()) from exc
         return ""
 
 
@@ -1166,75 +1229,118 @@ def walk(
     except Exception:  # noqa: BLE001 - a page without events still has a DOM
         pass
 
-    if not load_checked:
-        # read_feed checks the guard before it starts a browser, so that a
-        # recorded stop refuses without opening anything. A direct call (the
-        # offline tests) checks here, at the same seam.
-        guard.before_load()
-    who = (browser_name or "").strip() or "browser"
-    say(f"  linkedin: opening the feed in the signed-in {who}")
-    page.goto(url, wait_until="domcontentloaded", timeout=limits.max_seconds * 1000)
-    _settle(page, limits.settle_ms)
-    accept(parse_html(_page_text(page)))
-    signal = signal or detect_signal(_page_text(page), url=str(getattr(page, "url", url)))
-
-    steps = 0
-    stop = ""
-    while True:
-        if signal:
-            break
-        if len(posts) >= limits.max_posts:
-            stop = f"reached the {limits.max_posts} posts asked for"
-            break
-        if steps >= limits.max_steps:
-            stop = f"the {limits.max_steps} scroll step limit"
-            break
-        if time.monotonic() - started >= limits.max_seconds:
-            stop = f"the {limits.max_seconds}s scroll budget"
-            break
-        say(f"  linkedin: scroll step {steps + 1} of {limits.max_steps}")
-        page.wait_for_timeout(random.randint(limits.step_min_ms, limits.step_max_ms))
+    try:
+        if not load_checked:
+            # read_feed checks the guard before it starts a browser, so that a
+            # recorded stop refuses without opening anything. A direct call (the
+            # offline tests) checks here, at the same seam.
+            guard.before_load()
+        who = (browser_name or "").strip() or "browser"
+        say(f"  linkedin: opening the feed in the signed-in {who}")
         try:
-            page.evaluate(_SCROLL_JS)
-        except Exception:  # noqa: BLE001 - a page that navigated away ends the walk
-            stop = "the page navigated away mid-scroll"
-            break
-        page.wait_for_timeout(limits.settle_ms)
-        steps += 1
+            page.goto(url, wait_until="domcontentloaded", timeout=limits.max_seconds * 1000)
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:
+            if _is_target_closed(exc):
+                raise FeedUnavailable(_browser_closed_message()) from exc
+            raise
+        _settle(page, limits.settle_ms)
         accept(parse_html(_page_text(page)))
-        if cursor:
-            resume.advance(cursor, list(posts.values()))
-        signal = signal or detect_signal(
-            _page_text(page), url=str(getattr(page, "url", url))
-        )
+        signal = signal or detect_signal(_page_text(page), url=str(getattr(page, "url", url)))
 
-    if signal:
-        guard.record(signal)
-        stop = (
-            "a person must clear the restriction before reading resumes"
-            if signal == STOP_UNTIL_CLEARED
-            else "stopped for 24 h, with no retry"
-        )
-    elif resumed and not posts:
-        stop = "scrolled for the resume cursor and the page showed nothing new"
-    elif not stop:
-        stop = "the feed stopped growing"
+        steps = 0
+        stop = ""
+        while True:
+            if signal:
+                break
+            if len(posts) >= limits.max_posts:
+                stop = f"reached the {limits.max_posts} posts asked for"
+                break
+            if steps >= limits.max_steps:
+                stop = f"the {limits.max_steps} scroll step limit"
+                break
+            if time.monotonic() - started >= limits.max_seconds:
+                stop = f"the {limits.max_seconds}s scroll budget"
+                break
+            say(f"  linkedin: scroll step {steps + 1} of {limits.max_steps}")
+            page.wait_for_timeout(random.randint(limits.step_min_ms, limits.step_max_ms))
+            try:
+                page.evaluate(_SCROLL_JS)
+            except Exception as exc:  # noqa: BLE001 - a page that navigated away ends the walk
+                if _is_target_closed(exc):
+                    raise FeedUnavailable(_browser_closed_message()) from exc
+                stop = "the page navigated away mid-scroll"
+                break
+            page.wait_for_timeout(limits.settle_ms)
+            steps += 1
+            accept(parse_html(_page_text(page)))
+            if cursor:
+                resume.advance(cursor, list(posts.values()))
+            signal = signal or detect_signal(
+                _page_text(page), url=str(getattr(page, "url", url))
+            )
 
-    ordered = list(posts.values())[: max(1, limits.max_posts)]
-    return FeedRead(
-        posts=ordered,
-        text=render(ordered, stop=stop, signal=signal),
-        cursor=cursor,
-        signal=signal,
-        stop=stop,
-        steps=steps,
+        if signal:
+            guard.record(signal)
+            stop = (
+                "a person must clear the restriction before reading resumes"
+                if signal == STOP_UNTIL_CLEARED
+                else "stopped for 24 h, with no retry"
+            )
+        elif resumed and not posts:
+            stop = "scrolled for the resume cursor and the page showed nothing new"
+        elif not stop:
+            stop = "the feed stopped growing"
+
+        ordered = list(posts.values())[: max(1, limits.max_posts)]
+        result = FeedRead(
+            posts=ordered,
+            text=render(ordered, stop=stop, signal=signal),
+            cursor=cursor,
+            signal=signal,
+            stop=stop,
+            steps=steps,
+        )
+        if ordered:
+            successful = getattr(guard, "successful", None)
+            if callable(successful):
+                successful()
+        return result
+
+    finally:
+        remove_listener = getattr(page, "remove_listener", None)
+        if callable(remove_listener):
+            with contextlib.suppress(Exception):
+                remove_listener("response", on_response)
+
+
+def _is_target_closed(exc: BaseException) -> bool:
+    name = type(exc).__name__.lower()
+    detail = str(exc).lower()
+    return (
+        "targetclosed" in name
+        or "browser closed" in detail
+        or "browser has been closed" in detail
+        or "target page, context or browser has been closed" in detail
+        or "connection closed" in detail
+        or "websocket" in detail and ("closed" in detail or "disconnect" in detail)
+    )
+
+
+def _browser_closed_message() -> str:
+    return (
+        "the browser closed the tab or remote-debugging connection. If it "
+        "showed an ‘Allow remote debugging?’ prompt, click Allow and retry."
     )
 
 
 def _settle(page: Any, ms: int) -> None:
     try:
         page.wait_for_timeout(ms)
-    except Exception:  # noqa: BLE001 - a page mid-navigation settles on its own
+    except Exception as exc:  # noqa: BLE001 - a page mid-navigation settles on its own
+        if _is_target_closed(exc):
+            raise FeedUnavailable(_browser_closed_message()) from exc
         pass
 
 
@@ -1330,16 +1436,35 @@ def read_feed(
         active_resume = resume_from_token(url, resume_token)
 
     active_guard = guard if guard is not None else FeedGuard()
-    try:
-        active_guard.before_load()
-    except GuardRefused as exc:
-        raise FeedUnavailable(str(exc)) from exc
+    check_read_allowed = getattr(active_guard, "check_read_allowed", None)
+    load_checked = False
+    if callable(check_read_allowed):
+        try:
+            check_read_allowed()
+        except GuardRefused as exc:
+            raise FeedUnavailable(str(exc)) from exc
+    else:
+        # Small third-party/test guards may only expose the original seam.
+        # Preserve their early refusal behavior; FeedGuard itself delays its
+        # load booking until immediately before navigation.
+        try:
+            active_guard.before_load()
+            load_checked = True
+        except GuardRefused as exc:
+            raise FeedUnavailable(str(exc)) from exc
 
     try:
         who = (
             linkedin_attach._display(decision.browser)
             if decision.browser else ""
         )
+        if endpoint:
+            from searchts.progress import narrate
+
+            narrate(
+                "  linkedin: connecting to the signed-in browser; if it asks "
+                '"Allow remote debugging?", click Allow'
+            )
         with _browser_page(
             chosen, executable or chrome_executable(), endpoint, url,
             browser_name=decision.browser,
@@ -1351,12 +1476,14 @@ def read_feed(
                 limits=limits,
                 url=url,
                 tick=tick,
-                load_checked=True,
+                load_checked=load_checked,
                 browser_name=who,
             )
     except FeedUnavailable:
         raise
     except Exception as exc:  # noqa: BLE001 - one named sentence for a browser fault
+        if _is_target_closed(exc):
+            raise FeedUnavailable(_browser_closed_message()) from exc
         raise FeedUnavailable(
             f"the LinkedIn feed could not be read ({type(exc).__name__}). "
             "No retry is made."
