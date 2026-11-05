@@ -923,98 +923,6 @@ def _startup_cookie_sweep(args) -> None:
         _report_cookie_action(args, action)
 
 
-def _cli_argv() -> List[str]:
-    return list(sys.argv[1:])
-
-
-def _cli_command(argv: List[str]) -> str:
-    for token in argv:
-        if not token.startswith("-"):
-            return token
-    return ""
-
-
-def _cli_read_url(argv: List[str]) -> str:
-    seen = False
-    for token in argv:
-        if token == "read":
-            seen = True
-            continue
-        if seen and not token.startswith("-"):
-            return token
-    return ""
-
-
-def _cli_verbose(argv: List[str]) -> bool:
-    return "-v" in argv or "--verbose" in argv
-
-
-def _expected_cli_errors() -> Tuple[type, ...]:
-    """Exception types a command raises to say "cannot", not "bug here".
-
-    Each is already handled next to the command it belongs to. This list is
-    the last resort for a path that re-raises one after the handler's own
-    cleanup, so the user still gets one sentence instead of a chained
-    traceback. Import lazily: these modules pull optional dependencies.
-    """
-    found: List[type] = []
-    for module_name, attr in (
-        ("searchts.unlocker", "UnlockerError"),
-        ("searchts.linkedin_feed", "FeedUnavailable"),
-        ("searchts.linkedin_attach", "AttachError"),
-        ("searchts.search", "SearchError"),
-        ("searchts.transcribe", "TranscribeError"),
-        ("searchts.assets", "AssetError"),
-        ("searchts.egress", "ProxyError"),
-        ("searchts.session_cookies", "CookieReadError"),
-        ("searchts.resume", "ResumeError"),
-    ):
-        try:
-            module = __import__(module_name, fromlist=[attr])
-            kind = getattr(module, attr)
-        except Exception:  # noqa: BLE001 - an optional module may not load
-            continue
-        if isinstance(kind, type) and issubclass(kind, Exception):
-            found.append(kind)
-    return tuple(found)
-
-
-def _report_expected_cli_error(exc: BaseException) -> int:
-    """Print one sentence for an expected failure, and return its exit code.
-
-    `read --json` keeps the object it already promises on stdout; every other
-    surface gets the same sentence on stderr. The exception's own chain is not
-    printed: it names the internals (TimeoutError, FeedUnavailable), not what
-    the person can do.
-    """
-    argv = _cli_argv()
-    command = _cli_command(argv)
-    attempts = list(getattr(exc, "attempts", ()) or ())
-    hint = str(getattr(exc, "hint", "") or "")
-    refusal = False
-    try:
-        from searchts import unlocker
-
-        refusal = isinstance(exc, unlocker.UnlockerError) and unlocker._is_refusal(exc)
-    except Exception:  # noqa: BLE001 - the message is still useful
-        pass
-    code = 2 if refusal else 1
-    if command == "read":
-        url = _cli_read_url(argv)
-        if url and "--json" in argv:
-            _print_read_json_error(
-                url,
-                "ssrf_refused" if refusal else "read_failed",
-                str(exc),
-                code,
-                attempts=attempts,
-                hint=hint,
-            )
-    label = f"searchts {command}" if command else "searchts"
-    print(f"{label}: {exc}", file=sys.stderr)
-    return code
-
-
 def main():
     """Console entry point.
 
@@ -1023,11 +931,6 @@ def main():
     and piping into `head`/`less`. Left unhandled, both surface as a raw
     traceback: KeyboardInterrupt, or an "Exception ignored ... BrokenPipeError"
     emitted during interpreter shutdown.
-
-    Expected failures (the ladder saying it could not read, the feed saying
-    why it did not start) also reach here when a command's own handler had
-    already raised one. They get one sentence and a non-zero exit, unless
-    ``--verbose`` asked for the stack.
     """
     try:
         _run()
@@ -1047,11 +950,6 @@ def main():
             # Captured or already-closed stdout (pytest, embedded use).
             pass
         sys.exit(141)  # 128 + SIGPIPE
-    except Exception as exc:  # noqa: BLE001 - only known failures are quieted
-        if not _cli_verbose(_cli_argv()) and isinstance(exc, _expected_cli_errors()):
-            sys.exit(_report_expected_cli_error(exc))
-        # Anything else is a bug: keep the traceback, which is the report.
-        raise
 
 
 # ── Command handlers ────────────────────────────────
