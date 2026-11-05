@@ -988,12 +988,12 @@ def _same_site(url: str) -> bool:
 
 
 def _cdp_page(browser: Any, browser_name: str = "") -> Any:
-    """A new tab in the window already open on the debugging port.
+    """A new tab in a normal window of the browser on the debugging port.
 
     A fresh context would be a second client, with a different cookie jar
-    from the window that is already signed in. If that browser has no window,
-    attaching is refused. The tab rule lives in
-    :func:`searchts.linkedin_attach.new_tab`.
+    from the window that is already signed in. If that browser has no normal
+    window, one is opened for this tab; an app/PWA window is never used. The
+    tab rule lives in :func:`searchts.linkedin_attach.new_tab`.
     """
     from searchts.linkedin_attach import AttachError, new_tab
 
@@ -1038,14 +1038,14 @@ def _browser_page(
             browser = pw.chromium.connect_over_cdp(
                 endpoint, timeout=_cdp_timeout_ms(), no_defaults=True,
             )
-            page = _cdp_page(browser, browser_name)
+            tab = _cdp_page(browser, browser_name)
             try:
-                yield page
+                yield tab.page
             finally:
                 # CDP teardown only disconnects this client. Close just the
-                # tab created by _cdp_page; leave the user's window intact.
+                # target created by _cdp_page; leave the user's window intact.
                 with contextlib.suppress(Exception):
-                    page.close()
+                    tab.close()
             return
         kwargs: Dict[str, Any] = {
             "user_data_dir": profile,

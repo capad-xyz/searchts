@@ -290,65 +290,306 @@ def test_decide_looks_only_at_the_profile_it_was_given(tmp_path):
     assert seen == [str(tmp_path)]
 
 
+class _Cdp:
+    """A browser-wide DevTools session over fixed targets.
+
+    ``windows`` maps a target id to a window id. A target missing from it is
+    one ``Browser.getWindowForTarget`` refuses, like a browser UI page.
+    """
+
+    def __init__(self, events, targets, windows=None, anchor="anchor-1"):
+        self.events = events
+        self.targets = targets
+        self.windows = windows or {}
+        self.anchor = anchor
+        self.detached = False
+
+    def send(self, method, params=None):
+        self.events.append((method, params))
+        if method == "Target.getTargets":
+            return {
+                "targetInfos": [
+                    dict(info, browserContextId="ctx-1") for info in self.targets
+                ]
+            }
+        if method == "Browser.getWindowForTarget":
+            window_id = self.windows.get(params["targetId"])
+            if window_id is None:
+                raise RuntimeError("Browser window not found")
+            return {"windowId": window_id, "bounds": {"windowState": "normal"}}
+        if method in ("Target.activateTarget", "Target.closeTarget"):
+            return {}
+        if method == "Target.createTarget":
+            return {"targetId": self.anchor}
+        raise AssertionError(method)
+
+    def detach(self):
+        self.detached = True
+
+
+class _PageCdp:
+    """The session behind one page, enough to read its target id."""
+
+    def __init__(self, events, target_id):
+        self.events = events
+        self.target_id = target_id
+        self.detached = False
+
+    def send(self, method, params=None):
+        assert method == "Target.getTargetInfo"
+        return {"targetInfo": {"targetId": self.target_id}}
+
+    def detach(self):
+        self.detached = True
+
+
+class _Page:
+    def __init__(self, display_mode=True):
+        self.display_mode = display_mode
+        self.closed = False
+
+    def evaluate(self, script):
+        assert script == la._DISPLAY_MODE_BROWSER
+        return self.display_mode
+
+    def close(self):
+        self.closed = True
+
+
+class _Context:
+    def __init__(self, pages, sessions, events):
+        self._pages = list(pages)
+        self._sessions = list(sessions)
+        self.events = events
+
+    def new_page(self):
+        self.events.append("new_page")
+        return self._pages.pop(0)
+
+    def new_cdp_session(self, _page):
+        return self._sessions.pop(0)
+
+    def new_context(self):
+        raise AssertionError("a CDP attach must not open a new context")
+
+
+class _Browser:
+    def __init__(self, context, cdp):
+        self.contexts = [context]
+        self.cdp = cdp
+
+    def new_browser_cdp_session(self):
+        return self.cdp
+
+    def close(self):
+        raise AssertionError("a CDP attach must not close the browser")
+
+
+def _normal_window_browser(events, *, page=None, target_id="tab-1", window_id=7):
+    page = page or _Page()
+    cdp = _Cdp(
+        events,
+        [{"targetId": "web", "type": "page", "url": "https://example.test/inbox"}],
+        {"web": window_id},
+    )
+    context = _Context([page], [_PageCdp(events, target_id)], events)
+    return _Browser(context, cdp), page
+
+
+def test_page_windows_keeps_normal_pages_and_skips_app_and_browser_ui():
+    targets = [
+        {"targetId": "app", "type": "app", "url": "https://app.example.test/"},
+        {"targetId": "ext", "type": "page", "url": "chrome-extension://mpognobbkildjkofajifpdfhcoklimli/panel.html"},
+        {"targetId": "vivaldi", "type": "page", "url": "vivaldi://settings/"},
+        {"targetId": "dev", "type": "page", "url": "devtools://devtools/bundled/inspector.html"},
+        {"targetId": "chrome", "type": "page", "url": "chrome://settings/"},
+        {"targetId": "edge", "type": "page", "url": "edge://settings/"},
+        {"targetId": "ui", "type": "browser_ui", "url": "chrome://omnibox-popup.top-chrome/"},
+        {"targetId": "sw", "type": "service_worker", "url": "chrome-extension://x/sw.js"},
+        {"targetId": "bg", "type": "background_page", "url": "chrome-extension://x/bg.html"},
+        {"targetId": "view", "type": "webview", "url": "https://example.test/embed"},
+        {"targetId": "frame", "type": "iframe", "url": "https://example.test/frame"},
+        {"targetId": "blank", "type": "page", "url": "about:blank"},
+        {"targetId": "web", "type": "page", "url": "https://example.test/page"},
+        {"targetId": "blank2", "type": "page", "url": "about:blank"},
+        {"targetId": "orphan", "type": "page", "url": "https://example.test/orphan"},
+    ]
+    cdp = _Cdp([], targets, {"blank": 7, "web": 7, "blank2": 8})
+
+    windows = la.page_windows(cdp)
+
+    assert [(window.window_id, window.target_id) for window in windows] == [
+        (7, "web"),
+        (8, "blank2"),
+    ]
+
+
+def test_new_tab_activates_a_normal_window_and_closes_only_its_target():
+    events = []
+    browser, page = _normal_window_browser(events)
+
+    tab = la.new_tab(browser, "vivaldi")
+
+    assert tab.page is page
+    assert tab.target_id == "tab-1"
+    assert [event for event in events if event[0] == "Target.activateTarget"] == [
+        ("Target.activateTarget", {"targetId": "web"})
+    ]
+    assert "Target.createTarget" not in [event[0] for event in events]
+    assert page.closed is False
+
+    tab.close()
+
+    assert [event for event in events if event[0] == "Target.closeTarget"] == [
+        ("Target.closeTarget", {"targetId": "tab-1"})
+    ]
+    assert page.closed is False
+
+
+def test_new_tab_skips_a_window_whose_tab_reports_an_app_display_mode():
+    events = []
+    pwa_page = _Page(display_mode=False)
+    normal_page = _Page()
+    cdp = _Cdp(
+        events,
+        [
+            {"targetId": "pwa", "type": "page", "url": "https://app.example.test/"},
+            {"targetId": "web", "type": "page", "url": "https://example.test/"},
+        ],
+        {"pwa": 1, "web": 2},
+    )
+    context = _Context(
+        [pwa_page, normal_page],
+        [_PageCdp(events, "web-tab")],
+        events,
+    )
+
+    tab = la.new_tab(_Browser(context, cdp))
+
+    assert tab.page is normal_page
+    assert pwa_page.closed is True
+    activated = [
+        event[1]["targetId"]
+        for event in events
+        if event[0] == "Target.activateTarget"
+    ]
+    assert activated == ["pwa", "web"]
+
+
+def test_new_tab_opens_a_normal_window_when_every_window_is_an_app():
+    events = []
+    page = _Page()
+    cdp = _Cdp(
+        events,
+        [
+            {"targetId": "app", "type": "app", "url": "https://app.example.test/home"},
+            {"targetId": "ui", "type": "page", "url": "chrome-extension://mpognobbkildjkofajifpdfhcoklimli/panel.html"},
+            {"targetId": "vivaldi", "type": "page", "url": "vivaldi://settings/"},
+        ],
+        {},
+    )
+    context = _Context([page], [_PageCdp(events, "tab-9")], events)
+
+    tab = la.new_tab(_Browser(context, cdp), "vivaldi")
+
+    assert tab.page is page
+    assert tab.target_id == "tab-9"
+    assert [event for event in events if event[0] == "Target.createTarget"] == [
+        (
+            "Target.createTarget",
+            {"url": "about:blank", "newWindow": True, "browserContextId": "ctx-1"},
+        )
+    ]
+    assert [event for event in events if event[0] == "Target.closeTarget"] == [
+        ("Target.closeTarget", {"targetId": "anchor-1"})
+    ]
+    assert page.closed is False
+
+    tab.close()
+
+    closed = [event[1]["targetId"] for event in events if event[0] == "Target.closeTarget"]
+    assert closed == ["anchor-1", "tab-9"]
+
+
+def test_new_tab_refuses_when_even_a_new_window_is_an_app_window():
+    events = []
+    first = _Page(display_mode=False)
+    second = _Page(display_mode=False)
+    cdp = _Cdp(
+        events,
+        [{"targetId": "pwa", "type": "page", "url": "https://app.example.test/"}],
+        {"pwa": 1},
+    )
+    context = _Context([first, second], [], events)
+
+    with pytest.raises(la.AttachError) as ei:
+        la.new_tab(_Browser(context, cdp), "vivaldi")
+
+    message = str(ei.value)
+    assert "Vivaldi did not give the read a tab in a normal window" in message
+    assert "installed app, PWA" in message
+    assert "left open" in message
+    assert "Nothing was requested from LinkedIn" in message
+    assert first.closed is True and second.closed is True
+    assert [event for event in events if event[0] == "Target.closeTarget"] == [
+        ("Target.closeTarget", {"targetId": "anchor-1"})
+    ]
+
+
+def test_new_tab_names_a_browser_that_cannot_list_windows():
+    class Browser:
+        contexts = [object()]
+
+        def new_browser_cdp_session(self):
+            raise OSError("no session")
+
+    with pytest.raises(la.AttachError) as ei:
+        la.new_tab(Browser(), "edge")
+
+    message = str(ei.value)
+    assert "Edge could not list its windows over the DevTools port" in message
+    assert "left alone" in message
+    assert "Nothing was requested from LinkedIn" in message
+
+
 def test_open_tab_closes_only_the_tab_it_opened():
     events = []
-
-    class Page:
-        def close(self):
-            events.append("page.close")
-
-    class Context:
-        def new_page(self):
-            events.append("new_page")
-            return Page()
-
-    class Browser:
-        contexts = []
-
-        def __init__(self):
-            self.contexts = [Context()]
-
-        def new_context(self):
-            raise AssertionError("a CDP attach must not open a new context")
-
-        def close(self):
-            raise AssertionError("a CDP attach must not close the browser")
-
-    browser = Browser()
+    browser, page = _normal_window_browser(events)
 
     def connect(endpoint):
         events.append(("connect", endpoint))
         return browser
 
-    with la.open_tab("ws://127.0.0.1:9222/devtools/browser/abc", connect=connect) as page:
+    with la.open_tab("ws://127.0.0.1:9222/devtools/browser/abc", connect=connect) as opened:
         events.append("body")
-        assert page is not None
-    assert events == [
-        ("connect", "ws://127.0.0.1:9222/devtools/browser/abc"),
-        "new_page",
-        "body",
-        "page.close",
+        assert opened is page
+
+    assert events[0] == ("connect", "ws://127.0.0.1:9222/devtools/browser/abc")
+    assert "new_page" in events
+    assert [event for event in events if event[0] == "Target.closeTarget"] == [
+        ("Target.closeTarget", {"targetId": "tab-1"})
     ]
+    assert events.index("body") < events.index(
+        ("Target.closeTarget", {"targetId": "tab-1"})
+    )
+    assert page.closed is False
+    assert browser.cdp.detached is True
 
 
 def test_open_tab_closes_the_tab_when_the_body_fails():
-    closed = []
-
-    class Page:
-        def close(self):
-            closed.append("page")
-
-    class Browser:
-        def __init__(self):
-            self.contexts = [type("C", (), {"new_page": lambda self: Page()})()]
-
-        def close(self):
-            raise AssertionError("a CDP attach must not close the browser")
+    events = []
+    browser, page = _normal_window_browser(events)
 
     with pytest.raises(RuntimeError, match="navigation failed"):
-        with la.open_tab("ws://127.0.0.1:9/devtools/browser/x", connect=lambda _e: Browser()):
+        with la.open_tab(
+            "ws://127.0.0.1:9/devtools/browser/x", connect=lambda _e: browser
+        ):
             raise RuntimeError("navigation failed")
-    assert closed == ["page"]
+
+    assert [event for event in events if event[0] == "Target.closeTarget"] == [
+        ("Target.closeTarget", {"targetId": "tab-1"})
+    ]
+    assert page.closed is False
 
 
 def test_open_tab_refuses_when_there_is_no_window_and_names_a_failed_connect():

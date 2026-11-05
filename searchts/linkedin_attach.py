@@ -17,9 +17,16 @@ endpoint is the WebSocket URL from that file, not a guessed port 9222.
 A missing or empty file means debugging is off. A file left behind after
 the browser exited is stale and is ignored.
 
-The read opens one tab in the existing window and closes only that tab.
-The browser process, its other tabs, and its windows stay as the user
-left them. Nothing in this module navigates anywhere.
+The read opens one tab in a normal browser window and closes only that tab.
+An installed app/PWA window, an extension popup, DevTools and background
+pages are never reused, and that tab is the only target closed. The browser
+process, its other tabs, and its windows stay as the user left them.
+Nothing in this module navigates anywhere.
+
+Chromium shows the "being controlled by automated test software" infobar
+for every window of a browser started with ``--enable-automation``, so the
+infobar can appear on an app window even when this read did not use it.
+That infobar is browser-wide and cannot be avoided by choosing a window.
 """
 
 from __future__ import annotations
@@ -29,7 +36,7 @@ import socket
 import sys
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Callable, Iterator, Optional, Tuple
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 from urllib.parse import urlparse
 
 from searchts.session_cookies import FIREFOX_FAMILY
@@ -40,6 +47,8 @@ __all__ = [
     "ActivePort",
     "AttachError",
     "Decision",
+    "OpenedTab",
+    "WindowTarget",
     "browser_is_running",
     "browser_of",
     "candidate_user_data_dirs",
@@ -49,6 +58,7 @@ __all__ = [
     "kept_browser",
     "new_tab",
     "open_tab",
+    "page_windows",
     "parse_active_port",
     "parse_mode",
     "probe_port",
@@ -625,19 +635,38 @@ def _no_window(browser: str) -> str:
     )
 
 
-def new_tab(browser: Any, browser_name: str = "") -> Any:
-    """One new tab in the window the debugging port already has.
+def new_tab(browser: Any, browser_name: str = "") -> "OpenedTab":
+    """One new tab in a normal browser window, or a named refusal.
 
     A fresh context would be a second client, with a different cookie jar
-    from the window that is already signed in. No window means attaching
-    is refused. This never calls ``new_context``. ``browser_name`` is the
-    browser that owns the port (``vivaldi``, ``edge``, ``brave``, …), so
-    the refusal names that browser and its inspect page.
+    from the window that is already signed in. This never calls
+    ``new_context``. ``browser_name`` is the browser that owns the port
+    (``vivaldi``, ``edge``, ``brave``, …), so a refusal names that browser
+    and its inspect page.
+
+    A tab is never opened by asking Chromium for "the last used window": an
+    installed app/PWA window, an extension popup, DevTools or a background
+    page can be that window. The browser-wide DevTools session lists the
+    targets, :func:`page_windows` keeps only pages in normal-looking windows,
+    and the tab this module made is checked with ``display-mode: browser``
+    before it is handed back. When no normal window exists, one is opened
+    with ``Target.createTarget(newWindow=True)``.
     """
     contexts = list(getattr(browser, "contexts", []) or [])
     if not contexts:
         raise AttachError(_no_window(browser_name))
-    return contexts[0].new_page()
+    context = contexts[0]
+    cdp = _browser_session(browser, browser_name)
+    try:
+        for window in page_windows(cdp)[:_WINDOW_ATTEMPTS]:
+            _activate(cdp, window.target_id)
+            tab = _tab_in_browser_window(context, cdp, browser_name)
+            if tab is not None:
+                return tab
+        return _tab_in_new_window(context, cdp, browser_name)
+    except BaseException:
+        _detach(cdp)
+        raise
 
 
 def _close_page(page: Any) -> None:
@@ -645,6 +674,336 @@ def _close_page(page: Any) -> None:
         page.close()
     except Exception:  # noqa: BLE001 - the user may already have closed the tab
         pass
+
+
+@dataclass(frozen=True)
+class WindowTarget:
+    """One page target that marks a browser window we may use.
+
+    ``Browser.getWindowForTarget`` is the only window identity Chromium puts
+    on the DevTools protocol: it returns a window id and bounds, not a window
+    type. The target behind it is kept so the window can be activated before
+    a tab is created in it.
+    """
+
+    window_id: int
+    target_id: str
+    url: str
+
+    @property
+    def rank(self) -> int:
+        """A web page is a stronger sign of a normal window than about:blank."""
+        return 0 if _scheme(self.url) in ("http", "https") else 1
+
+
+class OpenedTab:
+    """The one tab this module made, and the handle that closes only it.
+
+    ``target_id`` is the CDP target id of that tab. ``close`` asks the
+    browser to close that target and nothing else, then drops this process's
+    DevTools session. It never closes the browser, another tab or a window.
+    """
+
+    def __init__(self, page: Any, cdp: Any = None, target_id: str = "") -> None:
+        self.page = page
+        self.target_id = target_id
+        self._cdp = cdp
+
+    def close(self) -> None:
+        closed = False
+        if self._cdp is not None and self.target_id:
+            try:
+                self._cdp.send("Target.closeTarget", {"targetId": self.target_id})
+                closed = True
+            except Exception:  # noqa: BLE001 - fall back to the page handle
+                closed = False
+        if not closed:
+            _close_page(self.page)
+        _detach(self._cdp)
+
+
+#: Schemes that belong to browser UI, extension UI, DevTools or an installed
+#: app's own page. Vivaldi's UI is an extension page
+#: (``chrome-extension://mpognobbkildjkofajifpdfhcoklimli/...``) and its own
+#: pages are ``vivaldi://``, so both are skipped. So is every other browser's
+#: UI scheme, in case a page target points there.
+_BROWSER_UI_SCHEMES = frozenset(
+    {
+        "arc",
+        "brave",
+        "chrome",
+        "chrome-extension",
+        "chrome-search",
+        "chrome-untrusted",
+        "devtools",
+        "edge",
+        "filesystem",
+        "isolated-app",
+        "opera",
+        "view-source",
+        "vivaldi",
+    }
+)
+
+#: Schemes a normal tab can hold. ``about:blank`` is what Chromium opens in a
+#: new normal window, and a window that only has one is still a normal window.
+_PAGE_SCHEMES = frozenset({"about", "blob", "data", "file", "http", "https"})
+
+#: How many existing windows to try before opening one. The first is the
+#: common case; a second covers a window that only looked normal.
+_WINDOW_ATTEMPTS = 2
+
+#: The web-platform display mode of a tab. Chromium answers ``browser`` for a
+#: tab in a normal browser window and ``standalone``, ``minimal-ui``,
+#: ``fullscreen`` or ``window-controls-overlay`` for a page inside an installed
+#: web app window. It is evaluated on the blank tab this module made, never on
+#: the user's own page.
+_DISPLAY_MODE_BROWSER = "matchMedia('(display-mode: browser)').matches"
+
+
+def _scheme(url: Any) -> str:
+    try:
+        return (urlparse(str(url or "")).scheme or "").lower()
+    except ValueError:
+        return ""
+
+
+def _is_page_target(info: Any) -> bool:
+    """True for a ``page`` target whose URL a normal tab could hold.
+
+    Chromium's other target types are not a tab: ``app`` (a hosted, legacy
+    packaged or platform app, or an Isolated Web App), ``browser_ui``,
+    ``webview``, ``iframe``, ``other``, the worker types and
+    ``background_page``. Only ``page`` survives here, and the URL must be one
+    a normal tab can hold.
+    """
+    if not isinstance(info, dict):
+        return False
+    if str(info.get("type") or "") != "page":
+        return False
+    scheme = _scheme(info.get("url"))
+    return scheme in _PAGE_SCHEMES and scheme not in _BROWSER_UI_SCHEMES
+
+
+def page_windows(cdp: Any) -> List[WindowTarget]:
+    """Browser windows that hold a page we may put a tab in, best first.
+
+    Chromium's protocol has no window type, so the filter is made of what it
+    does expose: a target's ``type`` and ``url``, and the window id from
+    ``Browser.getWindowForTarget``. Installed apps are ``type: "app"``;
+    extension UI, DevTools and the browsers' own pages are non-web schemes or
+    ``browser_ui``; frames, workers and background pages are not tabs. Each
+    window appears once, with the target used to activate it before the tab
+    is created.
+
+    A PWA window that hosts an ordinary http(s) page still looks like a page
+    target here. :func:`new_tab` therefore checks the display mode of the tab
+    it made, and never hands back a tab inside an app window.
+    """
+    try:
+        reply = cdp.send("Target.getTargets") or {}
+    except Exception as exc:  # noqa: BLE001 - name the attach fault
+        raise AttachError(_windows_failure(exc)) from exc
+    infos = list(reply.get("targetInfos") or [])
+    windows: Dict[int, WindowTarget] = {}
+    for info in infos:
+        if not _is_page_target(info):
+            continue
+        target_id = str(info.get("targetId") or "")
+        if not target_id:
+            continue
+        try:
+            found = cdp.send("Browser.getWindowForTarget", {"targetId": target_id}) or {}
+        except Exception:  # noqa: BLE001 - browser UI targets have no window
+            continue
+        window_id = found.get("windowId")
+        if not isinstance(window_id, int):
+            continue
+        candidate = WindowTarget(window_id, target_id, str(info.get("url") or ""))
+        current = windows.get(window_id)
+        if current is None or (candidate.rank, candidate.target_id) < (
+            current.rank,
+            current.target_id,
+        ):
+            windows[window_id] = candidate
+    return sorted(windows.values(), key=lambda window: (window.rank, window.window_id))
+
+
+def _browser_session(browser: Any, browser_name: str) -> Any:
+    try:
+        return browser.new_browser_cdp_session()
+    except Exception as exc:  # noqa: BLE001 - the connection is the failure
+        raise AttachError(_windows_failure(exc, browser_name)) from exc
+
+
+def _activate(cdp: Any, target_id: str) -> None:
+    """Make this window the last active one, so Chromium puts the tab there."""
+    try:
+        cdp.send("Target.activateTarget", {"targetId": target_id})
+    except Exception:  # noqa: BLE001 - the display-mode check still decides
+        pass
+
+
+def _tab_in_browser_window(
+    context: Any, cdp: Any, browser_name: str
+) -> Optional["OpenedTab"]:
+    """One new tab, or None when it landed in an app/PWA window."""
+    try:
+        page = context.new_page()
+    except Exception as exc:  # noqa: BLE001 - name the refusal, not a stack
+        raise AttachError(_could_not_open(browser_name, exc)) from exc
+    if _page_is_in_browser_window(page) is False:
+        _close_page(page)
+        return None
+    return OpenedTab(page, cdp, _target_id_of(context, page))
+
+
+def _tab_in_new_window(context: Any, cdp: Any, browser_name: str) -> "OpenedTab":
+    """A normal window opened for this tab, then a tab next to its blank one."""
+    anchor = _create_window(cdp)
+    try:
+        tab = _tab_in_browser_window(context, cdp, browser_name)
+    finally:
+        _close_target(cdp, anchor)
+    if tab is None:
+        raise AttachError(_no_normal_window(browser_name))
+    return tab
+
+
+def _create_window(cdp: Any) -> str:
+    """Open a normal browser window; return the blank target inside it.
+
+    ``newWindow`` makes Chromium create a normal tabbed window, not an app
+    window. The blank target only holds that window open until the real tab
+    exists; it is closed by target id right after.
+    """
+    params: Dict[str, Any] = {"url": "about:blank", "newWindow": True}
+    context_id = _default_context_id(cdp)
+    if context_id:
+        params["browserContextId"] = context_id
+    try:
+        made = cdp.send("Target.createTarget", params) or {}
+    except Exception:  # noqa: BLE001 - the caller falls back to the display check
+        return ""
+    return str(made.get("targetId") or "")
+
+
+def _default_context_id(cdp: Any) -> str:
+    """The default browser context id, from a target that already exists.
+
+    Passing it keeps the tab in the profile that is already signed in. No id
+    is fine too: Chromium then uses the last used profile.
+    """
+    try:
+        reply = cdp.send("Target.getTargets") or {}
+    except Exception:  # noqa: BLE001 - an omitted id is the fallback
+        return ""
+    infos = list(reply.get("targetInfos") or [])
+    for info in infos:
+        if isinstance(info, dict) and _is_page_target(info):
+            context_id = str(info.get("browserContextId") or "")
+            if context_id:
+                return context_id
+    for info in infos:
+        if isinstance(info, dict):
+            context_id = str(info.get("browserContextId") or "")
+            if context_id:
+                return context_id
+    return ""
+
+
+def _page_is_in_browser_window(page: Any) -> Optional[bool]:
+    """True/False from the page's window, or None when it cannot be read.
+
+    ``display-mode: browser`` is the web-platform way to tell a tab in a
+    normal window from a page inside an installed web app. Chromium reports
+    the window's own display mode, so a tab created in a PWA window answers
+    False even though its target is ``type: "page"`` with an https URL.
+    """
+    try:
+        value = page.evaluate(_DISPLAY_MODE_BROWSER)
+    except Exception:  # noqa: BLE001 - an unreadable blank tab stays usable
+        return None
+    return value if isinstance(value, bool) else None
+
+
+def _target_id_of(context: Any, page: Any) -> str:
+    """The CDP target id behind ``page``, or "" when it cannot be read."""
+    session = None
+    try:
+        session = context.new_cdp_session(page)
+        info = session.send("Target.getTargetInfo") or {}
+        return str((info.get("targetInfo") or {}).get("targetId") or "")
+    except Exception:  # noqa: BLE001 - closing falls back to the page handle
+        return ""
+    finally:
+        _detach(session)
+
+
+def _close_target(cdp: Any, target_id: str) -> None:
+    if cdp is None or not target_id:
+        return
+    try:
+        cdp.send("Target.closeTarget", {"targetId": target_id})
+    except Exception:  # noqa: BLE001 - the window may already be gone
+        pass
+
+
+def _detach(session: Any) -> None:
+    if session is None:
+        return
+    try:
+        session.detach()
+    except Exception:  # noqa: BLE001 - detaching only drops this socket
+        pass
+
+
+def _windows_failure(exc: BaseException, browser: str = "") -> str:
+    known = (browser or "").strip().lower()
+    label = _display(known) if known else "The browser"
+    return (
+        f"{label} could not list its windows over the DevTools port "
+        f"({type(exc).__name__}). The browser and its tabs were left alone. "
+        "Nothing was requested from LinkedIn."
+    )
+
+
+def _could_not_open(browser: str, exc: BaseException) -> str:
+    known = (browser or "").strip().lower()
+    if known:
+        label = _display(known)
+        return (
+            f"{label} did not open a tab in a normal window "
+            f"({type(exc).__name__}). Open a normal {label} window (not an "
+            "installed app window) and read again. The browser and its other "
+            "tabs were left open. Nothing was requested from LinkedIn."
+        )
+    return (
+        "The browser did not open a tab in a normal window "
+        f"({type(exc).__name__}). Open a normal browser window (not an "
+        "installed app window) and read again. The browser and its other "
+        "tabs were left open. Nothing was requested from LinkedIn."
+    )
+
+
+def _no_normal_window(browser: str) -> str:
+    """A new window was opened, and even that tab was not a browser tab."""
+    known = (browser or "").strip().lower()
+    if known:
+        label = _display(known)
+        return (
+            f"{label} did not give the read a tab in a normal window. An "
+            "installed app, PWA, popup, DevTools or extension window is never "
+            f"used. Open a normal {label} window and read again. The browser "
+            "and its windows were left open. Nothing was requested from "
+            "LinkedIn."
+        )
+    return (
+        "The browser did not give the read a tab in a normal window. An "
+        "installed app, PWA, popup, DevTools or extension window is never "
+        "used. Open a normal browser window and read again. The browser and "
+        "its windows were left open. Nothing was requested from LinkedIn."
+    )
 
 
 def _connect_failure(exc: BaseException) -> str:
@@ -677,11 +1036,11 @@ def open_tab(
             raise
         except Exception as exc:  # noqa: BLE001 - the connection is the failure
             raise AttachError(_connect_failure(exc)) from exc
-        page = new_tab(browser, browser_name)
+        tab = new_tab(browser, browser_name)
         try:
-            yield page
+            yield tab.page
         finally:
-            _close_page(page)
+            tab.close()
         return
 
     try:
@@ -703,11 +1062,11 @@ def open_tab(
             raise
         except Exception as exc:  # noqa: BLE001 - name the attach fault, not a stack
             raise AttachError(_connect_failure(exc)) from exc
-        page = new_tab(browser, browser_name)
+        tab = new_tab(browser, browser_name)
         try:
-            yield page
+            yield tab.page
         finally:
-            _close_page(page)
+            tab.close()
     finally:
         if entered:
             try:

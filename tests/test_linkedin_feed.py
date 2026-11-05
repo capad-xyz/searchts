@@ -584,16 +584,57 @@ def test_cdp_connection_waits_for_allow_and_only_closes_its_new_tab(monkeypatch)
             raise AssertionError("TargetClosedError should be retrieved quietly")
 
     class Page:
+        def evaluate(self, _script):
+            return True
+
         def close(self):
             events.append("tab.close")
+
+    class PageSession:
+        def send(self, method, _params=None):
+            assert method == "Target.getTargetInfo"
+            return {"targetInfo": {"targetId": "tab-1"}}
+
+        def detach(self):
+            events.append("page.detach")
+
+    class Session:
+        def send(self, method, params=None):
+            if method == "Target.getTargets":
+                return {
+                    "targetInfos": [
+                        {
+                            "targetId": "web",
+                            "type": "page",
+                            "url": "https://www.linkedin.com/feed/",
+                            "browserContextId": "ctx-1",
+                        }
+                    ]
+                }
+            if method == "Browser.getWindowForTarget":
+                return {"windowId": 7}
+            if method in ("Target.activateTarget", "Target.closeTarget"):
+                events.append((method, params))
+                return {}
+            raise AssertionError(method)
+
+        def detach(self):
+            events.append("browser.detach")
 
     class Context:
         def new_page(self):
             events.append("new_page")
             return Page()
 
+        def new_cdp_session(self, _page):
+            return PageSession()
+
     class Browser:
-        contexts = [Context()]
+        def __init__(self):
+            self.contexts = [Context()]
+
+        def new_browser_cdp_session(self):
+            return Session()
 
         def close(self):
             raise AssertionError("CDP teardown must not close the user's browser")
@@ -621,10 +662,14 @@ def test_cdp_connection_waits_for_allow_and_only_closes_its_new_tab(monkeypatch)
     monkeypatch.setenv("SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS", "75")
     with lf._browser_page("", None, "127.0.0.1:9222", lf.FEED_URL) as page:
         assert page is not None
-    assert events == [
-        ("connect", "http://127.0.0.1:9222", {"timeout": 75_000, "no_defaults": True}),
-        "new_page", "tab.close", "disconnect",
-    ]
+    assert events[0] == (
+        "connect", "http://127.0.0.1:9222", {"timeout": 75_000, "no_defaults": True},
+    )
+    assert "new_page" in events
+    assert ("Target.activateTarget", {"targetId": "web"}) in events
+    assert ("Target.closeTarget", {"targetId": "tab-1"}) in events
+    assert "tab.close" not in events
+    assert events[-1] == "disconnect"
 
     class Future:
         retrieved = False
@@ -964,7 +1009,8 @@ def test_cdp_attach_opens_a_tab_in_the_existing_window():
     opened = []
 
     class Page:
-        pass
+        def evaluate(self, _script):
+            return True
 
     class Context:
         def new_page(self):
@@ -972,14 +1018,52 @@ def test_cdp_attach_opens_a_tab_in_the_existing_window():
             opened.append(page)
             return page
 
-    class Browser:
-        contexts = [Context()]
+        def new_cdp_session(self, _page):
+            return SimpleNamespace(
+                send=lambda method, _params=None: {"targetInfo": {"targetId": "tab-1"}},
+                detach=lambda: None,
+            )
 
         def new_context(self):
             raise AssertionError("a CDP attach must not open a new context")
 
-    page = lf._cdp_page(Browser())
-    assert page is opened[0]
+    class Browser:
+        def __init__(self):
+            self.contexts = [Context()]
+            self.closed_targets = []
+
+        def new_browser_cdp_session(self):
+            def send(method, params=None):
+                if method == "Target.getTargets":
+                    return {
+                        "targetInfos": [
+                            {
+                                "targetId": "web",
+                                "type": "page",
+                                "url": "https://www.linkedin.com/feed/",
+                                "browserContextId": "ctx-1",
+                            }
+                        ]
+                    }
+                if method == "Browser.getWindowForTarget":
+                    return {"windowId": 7}
+                if method == "Target.createTarget":
+                    raise AssertionError("a normal window is already open")
+                if method == "Target.closeTarget":
+                    self.closed_targets.append(params["targetId"])
+                return {}
+
+            return SimpleNamespace(send=send, detach=lambda: None)
+
+        def new_context(self):
+            raise AssertionError("a CDP attach must not open a new context")
+
+    browser = Browser()
+    tab = lf._cdp_page(browser)
+    assert tab.page is opened[0]
+    assert tab.target_id == "tab-1"
+    tab.close()
+    assert browser.closed_targets == ["tab-1"]
 
 
 def test_cdp_attach_refuses_when_the_browser_has_no_window():
