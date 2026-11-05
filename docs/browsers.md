@@ -43,6 +43,13 @@ its profile lock names a live process. A Chromium is marked
 something accepts a connection on that loopback port; a stale file left by a
 browser that has exited does not count.
 
+When `SEARCHTS_BROWSER_PROFILE` (or its legacy alias) names a user-data
+directory, that directory is listed too, marked `(configured)`, even when it is
+not one of the browser's default locations. It is checked with the same
+discovery the attach path uses, so it reports `running` and either
+`remote debugging on (port N)` or `remote debugging off`. The default
+directories stay listed.
+
 `searchts doctor --json` adds a `browsers` array with the same information.
 
 ## On a login wall

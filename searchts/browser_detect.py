@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from typing import Callable, List, Mapping, Optional, Sequence
 from urllib.parse import urlparse
 
+from searchts import browser_settings as bs
 from searchts import linkedin_attach as attach
 from searchts import session_cookies as sc
 
@@ -146,6 +147,7 @@ class Browser:
     running: bool = False
     debugging: bool = False
     debug_port: int = 0
+    configured: bool = False
 
     @property
     def display(self) -> str:
@@ -168,6 +170,7 @@ class Browser:
             "running": self.running,
             "debugging": self.debugging,
             "debug_port": self.debug_port,
+            "configured": self.configured,
             "profiles": [
                 {"path": p.path, "cookie_db": p.has_cookies}
                 for p in self.profiles
@@ -337,6 +340,53 @@ def _firefox_root_exists(name: str, platform: str, env: Optional[Mapping[str, st
     return bool(sc._firefox_profile_roots(name, platform=platform, env=env_map))
 
 
+def _configured_browser(
+    executable: str,
+    profile: str,
+    *,
+    exists: Callable[[str], bool],
+    is_running: Optional[Callable[[str], bool]],
+    probe: Callable[[int], bool],
+) -> Browser:
+    """The browser and user-data directory named by the settings.
+
+    This is the same directory the attach path joins, so it is reported with
+    the same checks: :func:`searchts.linkedin_attach.browser_is_running` for
+    the profile lock, and ``DevToolsActivePort`` plus
+    :func:`searchts.linkedin_attach.probe_port` for remote debugging.
+    """
+    name = attach.browser_of(executable or None, profile, None)[0]
+    family = "firefox" if name in FIREFOX_BROWSERS else "chromium"
+    if family == "firefox":
+        profiles: List[Profile] = []
+    else:
+        profiles = chromium_profiles(profile, exists=exists)
+    if is_running is not None:
+        running = bool(is_running(profile))
+    elif family == "firefox":
+        running = _firefox_running(profile)
+    else:
+        running = attach.browser_is_running(profile)
+    debugging = False
+    port = 0
+    if family == "chromium":
+        active = attach.read_active_port(profile)
+        if active is not None:
+            port = active.port
+            debugging = bool(probe(active.port))
+    return Browser(
+        name=name,
+        family=family,
+        executable=executable or "",
+        user_data=profile,
+        profiles=profiles,
+        running=running,
+        debugging=debugging,
+        debug_port=port if debugging else 0,
+        configured=True,
+    )
+
+
 def _detect_browsers(
     *,
     platform: Optional[str] = None,
@@ -345,12 +395,16 @@ def _detect_browsers(
     is_running: Optional[Callable[[str], bool]] = None,
     probe: Optional[Callable[[int], bool]] = None,
     executable_finder: Optional[Callable[[str], str]] = None,
+    configured_browser: Optional[str] = None,
+    configured_profile: Optional[str] = None,
 ) -> List[Browser]:
     """Discover installed browsers. Paths only; no cookie database is opened.
 
     ``env`` and ``platform`` build a fixture layout in tests. ``is_running``,
     ``probe`` and ``executable_finder`` are injection points so a test never
-    looks at this machine's processes or browsers.
+    looks at this machine's processes or browsers. ``configured_browser`` and
+    ``configured_profile`` name the settings' choice; when given, that
+    user-data directory is listed too, marked as configured.
     """
     plat = platform or _platform()
     environ = dict(env) if env is not None else None
@@ -414,6 +468,21 @@ def _detect_browsers(
             profiles=profiles,
             running=running,
         ))
+
+    if configured_profile:
+        existing = next(
+            (b for b in out if b.user_data == configured_profile), None
+        )
+        if existing is not None:
+            existing.configured = True
+        else:
+            out.append(_configured_browser(
+                configured_browser or "",
+                configured_profile,
+                exists=check,
+                is_running=running_check,
+                probe=port_check,
+            ))
     return out
 
 
@@ -434,6 +503,8 @@ def installed_browsers(
         is_running=is_running,
         probe=probe,
         executable_finder=executable_finder,
+        configured_browser=bs.browser_executable(),
+        configured_profile=bs.browser_profile(),
     )
 
 
@@ -451,11 +522,14 @@ def format_report(browsers: Sequence[Browser]) -> str:
         state = "running" if browser.running else "not running"
         if browser.debugging:
             state += f", remote debugging on (port {browser.debug_port})"
+        elif browser.configured and browser.family == "chromium" and browser.running:
+            state += ", remote debugging off"
         lines.append(f"  {browser.display} ({browser.family}): {state}")
         if browser.executable:
             lines.append(f"    executable: {browser.executable}")
         if browser.user_data:
-            lines.append(f"    user data: {browser.user_data}")
+            note = " (configured)" if browser.configured else ""
+            lines.append(f"    user data: {browser.user_data}{note}")
         for profile in browser.profiles:
             note = " (cookies)" if profile.has_cookies else " (no cookie DB)"
             lines.append(f"    profile: {profile.path}{note}")

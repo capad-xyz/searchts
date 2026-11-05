@@ -23,6 +23,10 @@ from searchts import cli
 from searchts import login_wall as lw
 from searchts.unlocker import UnlockerError
 
+#: Captured before the autouse fixture stubs the module attribute, so one test
+#: can prove the settings are passed into detection.
+_REAL_INSTALLED_BROWSERS = bd.installed_browsers
+
 # ── fixture profiles ────────────────────────────────────────────────────────
 
 
@@ -224,6 +228,113 @@ def test_a_stale_port_file_without_a_listener_is_not_debugging(tmp_path):
     vivaldi = browser_named(browsers, "vivaldi")
     assert vivaldi.running is True
     assert vivaldi.debugging is False
+
+
+# ── the configured profile is listed beside the default ones ───────────────
+
+
+def test_the_configured_profile_is_listed_and_marked(tmp_path):
+    home = tmp_path / "home"
+    default_root = home / ".config" / "google-chrome"
+    chromium_db(default_root / "Default" / "Network" / "Cookies", [".example.com"])
+    configured = tmp_path / "workspace" / "prof"
+    chromium_db(configured / "Default" / "Network" / "Cookies", [".example.org"])
+    (configured / "DevToolsActivePort").write_text(
+        "9444\n/devtools/browser/abc\n", encoding="utf-8"
+    )
+
+    browsers = bd._detect_browsers(
+        platform="linux",
+        env=linux_env(home),
+        executable_finder=lambda _name: "",
+        is_running=lambda profile: profile == str(configured),
+        probe=lambda port: port == 9444,
+        configured_browser="/usr/bin/google-chrome",
+        configured_profile=str(configured),
+    )
+
+    chrome_entries = [b for b in browsers if b.name == "chrome"]
+    assert len(chrome_entries) == 2
+    configured_entry = next(b for b in chrome_entries if b.configured)
+    assert configured_entry.user_data == str(configured)
+    assert configured_entry.running is True
+    assert configured_entry.debugging is True
+    assert configured_entry.debug_port == 9444
+
+    report = bd.format_report(browsers)
+    assert "Chrome (chromium): running, remote debugging on (port 9444)" in report
+    assert f"user data: {configured} (configured)" in report
+    assert f"user data: {default_root}" in report
+
+
+def test_the_configured_profile_reports_debugging_off(tmp_path):
+    home = tmp_path / "home"
+    configured = tmp_path / "workspace" / "prof"
+    chromium_db(configured / "Default" / "Network" / "Cookies", [".example.org"])
+
+    browsers = bd._detect_browsers(
+        platform="linux",
+        env=linux_env(home),
+        executable_finder=lambda _name: "",
+        is_running=lambda profile: profile == str(configured),
+        probe=lambda _port: False,
+        configured_browser="chrome",
+        configured_profile=str(configured),
+    )
+
+    report = bd.format_report(browsers)
+    assert "Chrome (chromium): running, remote debugging off" in report
+    assert f"user data: {configured} (configured)" in report
+
+
+def test_a_configured_default_dir_is_marked_once(tmp_path):
+    home = tmp_path / "home"
+    root = home / ".config" / "google-chrome"
+    chromium_db(root / "Default" / "Network" / "Cookies", [".example.com"])
+
+    browsers = bd._detect_browsers(
+        platform="linux",
+        env=linux_env(home),
+        executable_finder=lambda _name: "",
+        is_running=lambda _profile: False,
+        probe=lambda _port: False,
+        configured_browser="chrome",
+        configured_profile=str(root),
+    )
+
+    chrome_entries = [b for b in browsers if b.name == "chrome"]
+    assert len(chrome_entries) == 1
+    assert chrome_entries[0].configured is True
+    assert chrome_entries[0].as_dict()["configured"] is True
+
+
+@pytest.mark.parametrize(
+    "browser_env, profile_env",
+    [
+        (bs.BROWSER_ENV, bs.PROFILE_ENV),
+        (bs.LEGACY_BROWSER_ENV, bs.LEGACY_PROFILE_ENV),
+    ],
+)
+def test_installed_browsers_passes_the_configured_settings(
+    monkeypatch, tmp_path, browser_env, profile_env
+):
+    for name in (bs.BROWSER_ENV, bs.PROFILE_ENV,
+                 bs.LEGACY_BROWSER_ENV, bs.LEGACY_PROFILE_ENV):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv(browser_env, "/usr/bin/google-chrome")
+    monkeypatch.setenv(profile_env, str(tmp_path / "prof"))
+
+    seen = {}
+
+    def _fake_detect(**kwargs):
+        seen.update(kwargs)
+        return []
+
+    monkeypatch.setattr(bd, "_detect_browsers", _fake_detect)
+    _REAL_INSTALLED_BROWSERS()
+
+    assert seen["configured_browser"] == "/usr/bin/google-chrome"
+    assert seen["configured_profile"] == str(tmp_path / "prof")
 
 
 # ── presence: exists or not, never a value ─────────────────────────────────
