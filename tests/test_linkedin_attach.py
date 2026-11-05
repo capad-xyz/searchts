@@ -975,3 +975,36 @@ def test_an_attached_load_that_is_paced_is_the_pacing_refusal(monkeypatch, tmp_p
     assert "goto" not in [item[0] if isinstance(item, tuple) else item for item in order]
     assert "page.close" in order
     assert order[0] == "connect"
+
+
+def test_connect_failure_message_names_the_configured_wait(monkeypatch):
+    monkeypatch.setenv("SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS", "75")
+
+    msg = la.connect_failure_message(TimeoutError("Timeout 75000ms exceeded."))
+    assert "no Allow click within 75 s" in msg
+    assert "Click Allow in the browser, then read again" in msg
+    assert "Nothing was requested from LinkedIn" in msg
+    assert "SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS sets the wait" in msg
+
+    # A generic client type that carries the timeout wording is still the
+    # unanswered dialog, not an unspecified attach fault.
+    class ClientError(Exception):
+        pass
+
+    assert "no Allow click within 75 s" in la.connect_failure_message(
+        ClientError("Timeout 75000ms exceeded.")
+    )
+
+    refused = la.connect_failure_message(ConnectionRefusedError("refused"))
+    assert "no Allow click" not in refused
+    assert "accept that prompt and read again" in refused
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("75", 75.0), ("0", 60.0), ("-5", 60.0), ("9999", 300.0), ("nonsense", 60.0)],
+)
+def test_cdp_timeout_seconds_is_bounded(monkeypatch, raw, expected):
+    monkeypatch.setenv("SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS", raw)
+    assert la.cdp_timeout_seconds() == expected
+    assert la.cdp_timeout_ms() == int(expected * 1000)

@@ -52,6 +52,9 @@ __all__ = [
     "browser_is_running",
     "browser_of",
     "candidate_user_data_dirs",
+    "cdp_timeout_ms",
+    "cdp_timeout_seconds",
+    "connect_failure_message",
     "decide",
     "endpoint_for",
     "inspect_url",
@@ -1006,7 +1009,49 @@ def _no_normal_window(browser: str) -> str:
     )
 
 
-def _connect_failure(exc: BaseException) -> str:
+def cdp_timeout_seconds() -> float:
+    """How long to wait for the browser's Allow click, in seconds.
+
+    Chromium's approval dialog blocks the DevTools WebSocket until a person
+    answers, so this is a person's reaction time rather than a network
+    timeout. ``SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS`` sets it (1-300).
+    """
+    raw = os.environ.get("SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS", "60")
+    try:
+        seconds = float(raw)
+    except ValueError:
+        seconds = 60.0
+    if seconds <= 0:
+        seconds = 60.0
+    return max(1.0, min(seconds, 300.0))
+
+
+def cdp_timeout_ms() -> int:
+    return int(cdp_timeout_seconds() * 1000)
+
+
+def _is_timeout(exc: BaseException) -> bool:
+    # Playwright raises ``TimeoutError``, but an underlying client error can
+    # carry the same wording with a generic type name.
+    return "timeout" in type(exc).__name__.lower() or "timeout" in str(exc).lower()
+
+
+def connect_failure_message(exc: BaseException) -> str:
+    """One sentence for a failed DevTools handshake.
+
+    A timeout means the approval dialog was not answered: the WebSocket hangs
+    while Chromium waits for the click, so the wait is named with the exact
+    configured number. Any other client error keeps the generic prompt.
+    """
+    if _is_timeout(exc):
+        seconds = cdp_timeout_seconds()
+        return (
+            f"could not attach to the browser over the DevTools port: no Allow "
+            f"click within {seconds:g} s. The browser asked to allow remote "
+            f"debugging and the request timed out. Click Allow in the browser, "
+            f"then read again. Nothing was requested from LinkedIn. "
+            f"SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS sets the wait."
+        )
     return (
         "could not attach to the browser over the DevTools port "
         f"({type(exc).__name__}). If the browser asked to allow remote "
@@ -1035,7 +1080,7 @@ def open_tab(
         except AttachError:
             raise
         except Exception as exc:  # noqa: BLE001 - the connection is the failure
-            raise AttachError(_connect_failure(exc)) from exc
+            raise AttachError(connect_failure_message(exc)) from exc
         tab = new_tab(browser, browser_name)
         try:
             yield tab.page
@@ -1057,11 +1102,13 @@ def open_tab(
         try:
             pw = playwright.__enter__()
             entered = True
-            browser = pw.chromium.connect_over_cdp(endpoint)
+            browser = pw.chromium.connect_over_cdp(
+                endpoint, timeout=cdp_timeout_ms(),
+            )
         except AttachError:
             raise
         except Exception as exc:  # noqa: BLE001 - name the attach fault, not a stack
-            raise AttachError(_connect_failure(exc)) from exc
+            raise AttachError(connect_failure_message(exc)) from exc
         tab = new_tab(browser, browser_name)
         try:
             yield tab.page

@@ -728,14 +728,9 @@ def _remember_feed(now: float) -> None:
 
 def _cdp_timeout_ms() -> int:
     """Approval dialogs need time for a person to respond (default 60 s)."""
-    raw = os.environ.get("SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS", "60")
-    try:
-        seconds = float(raw)
-    except ValueError:
-        seconds = 60.0
-    if seconds <= 0:
-        seconds = 60.0
-    return int(max(1.0, min(seconds, 300.0)) * 1000)
+    from searchts.linkedin_attach import cdp_timeout_ms
+
+    return cdp_timeout_ms()
 
 
 def _quiet_target_closed_futures(manager: Any) -> None:
@@ -1068,12 +1063,11 @@ def _browser_page(
         if cdp and _is_target_closed(exc):
             raise FeedUnavailable(_browser_closed_message()) from exc
         if cdp:
-            raise FeedUnavailable(
-                "could not attach to the browser over the DevTools port "
-                f"({type(exc).__name__}). If the browser asked to allow remote "
-                "debugging, accept that prompt and read again. Nothing was "
-                "requested from LinkedIn."
-            ) from exc
+            # A timeout is the unanswered "Allow remote debugging?" dialog:
+            # name the configured wait and the one action that ends it.
+            from searchts.linkedin_attach import connect_failure_message
+
+            raise FeedUnavailable(connect_failure_message(exc)) from exc
         raise FeedUnavailable(
             f"could not open the signed-in browser profile ({type(exc).__name__}). "
             "Close other windows using that profile, or set SEARCHTS_BROWSER "

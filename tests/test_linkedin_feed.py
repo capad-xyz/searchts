@@ -729,6 +729,61 @@ def test_cdp_target_closed_is_one_named_failure_and_ctrl_c_stays_distinct(monkey
             pass
 
 
+def test_cdp_timeout_names_the_wait_and_writes_no_feed_state(monkeypatch):
+    """An unanswered Allow dialog is a named timeout, not a feed read.
+
+    The WebSocket hangs until someone clicks Allow. When that wait ends the
+    sentence must name the exact number of seconds and the one action, and
+    the failure must not start the feed gap or record a 24 h stop.
+    """
+    from contextlib import nullcontext
+
+    from searchts import linkedin_attach
+
+    class Chromium:
+        def connect_over_cdp(self, *_args, **_kwargs):
+            raise TimeoutError("Timeout 75000ms exceeded.")
+
+    class Manager:
+        _loop = None
+
+        def __enter__(self):
+            return SimpleNamespace(chromium=Chromium())
+
+        def __exit__(self, *_exc):
+            return None
+
+    monkeypatch.setitem(
+        sys.modules, "patchright.sync_api",
+        SimpleNamespace(sync_playwright=lambda: Manager()),
+    )
+    monkeypatch.setenv("SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS", "75")
+    monkeypatch.setattr(
+        linkedin_attach, "decide",
+        lambda **_kwargs: SimpleNamespace(
+            action="attach", endpoint="http://127.0.0.1:9222",
+            browser="vivaldi", message="",
+        ),
+    )
+    monkeypatch.setattr(linkedin, "current_stop", lambda: None)
+    monkeypatch.setattr(linkedin, "feed_gap_minutes", lambda: 0)
+    monkeypatch.setattr(linkedin, "exclusive_load", nullcontext)
+    remembered = []
+    stops = []
+    monkeypatch.setattr(lf, "_remember_feed", remembered.append)
+    monkeypatch.setattr(linkedin, "record_stop", stops.append)
+
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf.read_feed(profile="", executable="", attach="on")
+
+    message = str(ei.value)
+    assert "no Allow click within 75 s" in message
+    assert "Click Allow in the browser, then read again" in message
+    assert "Nothing was requested from LinkedIn" in message
+    assert remembered == []
+    assert stops == []
+
+
 def test_feed_guard_books_one_load_and_names_a_spent_budget(monkeypatch):
     loads = []
 
