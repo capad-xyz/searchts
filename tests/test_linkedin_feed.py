@@ -67,6 +67,10 @@ def payload(*, extra=None, cursor="TOKEN-NEXT"):
     return json.dumps(data)
 
 
+SDUI_CARDS = (
+    Path(__file__).resolve().parent / "fixtures" / "linkedin_sdui_cards.html"
+).read_text(encoding="utf-8")
+
 DOM_ONE = (
     '<div class="feed-shared-update-v2" data-urn="urn:li:activity:7001">'
     '<span class="update-components-actor__name">Ada Lovelace</span>'
@@ -247,6 +251,86 @@ def test_parse_html_reads_a_time_tag():
 def test_parse_html_is_empty_for_no_markup():
     assert lf.parse_html("") == []
     assert lf.parse_html("<p>No cards here</p>") == []
+
+
+# ── SDUI markup (the signed-in feed since #517) ─────────────────────────────
+
+
+def test_parse_html_reads_sdui_cards_and_skips_the_furniture():
+    posts = lf.parse_html(SDUI_CARDS)
+    assert [post.author for post in posts] == [
+        "Guillermo Rauch", "Apple", "Jordan Marlowe",
+    ]
+    assert [post.when for post in posts] == ["23h", "", "1d"]
+    assert posts[0].text.startswith("We will all be learning")
+    assert "▪️ Was really slow" in posts[0].text
+    assert "… more" not in posts[0].text
+    assert posts[1].promoted is True
+    assert posts[1].text == (
+        "Introducing MacBook Pro with PROLED XDR Display. A screen come true."
+    )
+    assert posts[2].text.startswith("Big steps!")
+    # A share box, a sorter, New posts, a Premium upsell and a recommendation
+    # rail are not posts.
+    assert all("Start a post" not in post.text for post in posts)
+    assert all("Recommended for you" not in post.text for post in posts)
+
+
+def test_sdui_cards_get_stable_synthetic_ids_without_a_permalink():
+    first = lf.parse_html(SDUI_CARDS)
+    second = lf.parse_html(SDUI_CARDS)
+    assert [post.activity for post in first] == [post.activity for post in second]
+    assert len({post.activity for post in first}) == 3
+    assert all(post.activity.startswith("sdui-") for post in first)
+    assert all(post.permalink == "" for post in first)
+
+
+def test_sdui_card_uses_a_real_activity_urn_when_the_dom_still_has_one():
+    html = (
+        '<div role="listitem" componentkey="update-card-abc">'
+        "<h2><span>Feed post</span></h2>"
+        '<a href="https://www.linkedin.com/in/ada/"><span>Ada Lovelace</span></a>'
+        "<p><span>2h</span></p>"
+        '<span data-testid="expandable-text-box">A real urn.</span>'
+        '<a href="https://www.linkedin.com/feed/update/urn:li:activity:4242/">'
+        "<span>open</span></a></div>"
+    )
+    post = lf.parse_html(html)[0]
+    assert post.activity == "4242"
+    assert post.permalink.endswith("urn:li:activity:4242/")
+
+
+def test_parse_capture_finds_activity_ids_in_an_rsc_stream():
+    body = (
+        '0:["$","div",null,{"entityUrn":"urn:li:activity:4242"}]\n'
+        '1:["$","div",null,{"entityUrn":"urn:li:activity:4243"}]\n'
+    )
+    got = lf.parse_capture(body)
+    assert [post.activity for post in got.posts] == ["4242", "4243"]
+
+
+def test_walk_reads_an_sdui_feed_and_an_rsc_response():
+    page = FakePage([SDUI_CARDS], [
+        FakeResponse(
+            "https://www.linkedin.com/rsc-action/feed/pagination?start=0",
+            '0:{"urn":"urn:li:activity:4242"}',
+            ctype="text/x-component",
+        ),
+    ])
+    read = lf.walk(page, guard=FakeGuard(), limits=limits(max_posts=10))
+    activities = [post.activity for post in read.posts]
+    assert "4242" in activities
+    assert [post.author for post in read.posts if post.activity != "4242"] == [
+        "Guillermo Rauch", "Apple", "Jordan Marlowe",
+    ]
+    assert len(read.posts) == 4
+
+
+def test_walk_dedupes_the_same_sdui_cards_across_scrolls():
+    page = FakePage([SDUI_CARDS, SDUI_CARDS])
+    read = lf.walk(page, guard=FakeGuard(), limits=limits(max_steps=1))
+    assert len(read.posts) == 3
+    assert read.posts[0].author == "Guillermo Rauch"
 
 
 def test_render_has_author_time_text_permalink_and_promoted():

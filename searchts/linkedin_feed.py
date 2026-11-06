@@ -45,6 +45,7 @@ already-open page, which is what the offline tests drive with a fake.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import random
@@ -122,9 +123,21 @@ def activity_id(value: str) -> str:
 
 
 def permalink(activity: str) -> str:
-    """The feed permalink for an activity id or urn."""
-    aid = activity_id(activity) or (activity or "").strip()
+    """The feed permalink for an activity id or urn.
+
+    An SDUI card without a real activity urn gets a synthetic id so the merge
+    can dedupe it, but there is no update URL to point at: that id yields ``""``.
+    """
+    raw = (activity or "").strip()
+    aid = activity_id(raw) or (raw if raw.isdigit() else "")
     return _UPDATE.format(activity=aid) if aid else ""
+
+
+def _synthetic_activity(*parts: str) -> str:
+    """A stable id for an SDUI card that no longer exposes ``urn:li:activity``."""
+    raw = "\x1f".join(part.strip() for part in parts if part and part.strip())
+    digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    return f"sdui-{digest}"
 
 
 @dataclass
@@ -395,7 +408,7 @@ def parse_capture(body: str, *, source: str = "") -> Captured:
     try:
         data = json.loads(text)
     except (ValueError, TypeError):
-        return Captured(signal=detect_signal(text, url=source))
+        return _capture_from_text(text, source=source)
     index: Dict[str, Any] = {}
     _index_entities(data, index)
     posts: Dict[str, Post] = {}
@@ -404,6 +417,25 @@ def parse_capture(body: str, *, source: str = "") -> Captured:
         posts=list(posts.values()),
         cursor=_cursor_in(data),
         signal=detect_signal(_messages_in(data), url=source),
+    )
+
+
+def _capture_from_text(text: str, *, source: str = "") -> Captured:
+    """Activity ids from a body that is not JSON, such as an RSC stream.
+
+    The SDUI feed now streams React Server Components, and those bodies are
+    not a single JSON document. The ids are still in there as
+    ``urn:li:activity`` text; the author, body and time come from the DOM
+    fallback once the card has rendered. An opaque body with no id is not a
+    read and yields no posts.
+    """
+    posts: Dict[str, Post] = {}
+    for match in _ACTIVITY.finditer(text):
+        aid = match.group(1)
+        posts.setdefault(aid, Post(activity=aid))
+    return Captured(
+        posts=list(posts.values()),
+        signal=detect_signal(text, url=source),
     )
 
 
@@ -435,8 +467,77 @@ _VOID = frozenset({
 })
 
 
+#: Header labels that belong to the SDUI furniture around the feed rather
+#: than to a post. A candidate that opens with one of these is not a read.
+_SDUI_SKIP = (
+    "sort by",
+    "new posts",
+    "recommended for you",
+    "start a post",
+    "share",
+    "try premium",
+    "premium for",
+)
+
+
+def _sdui_author(value: str) -> str:
+    """The author name from a link that also carries a relationship label."""
+    text = _clean_text(value)
+    text = re.sub(
+        r"\s*[•·]\s*(?:Following|1st|2nd|3rd\+?)(?:\s.*)?$",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return _clean_text(text)
+
+
+def _sdui_noise(lines: List[str]) -> bool:
+    """True for a share box, a sorter, or a Premium upsell card."""
+    checked = lines[:1]
+    if lines and lines[0].strip().lower() == "feed post":
+        checked = lines[:2]
+    for line in checked:
+        low = line.strip().lower()
+        for label in _SDUI_SKIP:
+            if low == label or low.startswith((label + " ", label + "·", label + ":")):
+                return True
+    return False
+
+
+def _sdui_author_from_lines(lines: List[str]) -> str:
+    start = 1 if lines and lines[0].strip().lower() == "feed post" else 0
+    for line in lines[start:start + 5]:
+        low = line.strip().lower()
+        if not low or low in ("promoted", "sponsored", "follow"):
+            continue
+        if _RELATIVE.search(line) or line.lstrip().startswith(("•", "·")):
+            continue
+        return _sdui_author(line)
+    return ""
+
+
+def _sdui_body_from_lines(lines: List[str]) -> str:
+    """Body text after the header when the card has no text container."""
+    for index, line in enumerate(lines):
+        if _RELATIVE.search(line):
+            rest = [
+                part for part in lines[index + 1:]
+                if part.strip().lower() not in ("follow", "promoted", "sponsored")
+            ]
+            return _clean_text("\n".join(rest))
+    return ""
+
+
 class _CardParser(HTMLParser):
-    """Collect the feed cards from a rendered page, by activity urn."""
+    """Collect feed cards from rendered markup, old DOM and SDUI alike.
+
+    The old card is a ``data-urn`` element with named ``feed-shared-*``
+    classes. The signed-in home feed now renders SDUI: ``role="listitem"``
+    cards with an ``update-card`` componentkey, hashed classes and no activity
+    urn in the DOM. Both shapes are read here; an SDUI card without an urn
+    gets a stable synthetic id so the merge still dedupes it.
+    """
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -448,6 +549,8 @@ class _CardParser(HTMLParser):
         self._targets: List[Tuple[int, Optional[str]]] = []
         self._target: Optional[str] = None
         self._promoted = False
+        self._sdui = False
+        self._componentkey = ""
 
     def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
         self._depth += 1
@@ -472,9 +575,27 @@ class _CardParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._card_depth is None:
             return
-        self._buffers["all"].append(data)
-        if self._target:
-            self._buffers[self._target].append(data)
+        self._buffers.setdefault("all", []).append(data)
+        if self._target == "sdui_body":
+            self._buffers.setdefault("sdui_body", []).append(data)
+        elif self._target == "sdui_more":
+            return
+        else:
+            self._buffers.setdefault("head", []).append(data)
+            if self._target:
+                self._buffers.setdefault(self._target, []).append(data)
+
+    def _start_card(self, activity: str, *, sdui: bool) -> None:
+        self._card_depth = self._depth
+        self._activity = activity
+        self._sdui = sdui
+        self._buffers = {
+            "author": [], "when": [], "text": [], "all": [], "head": [],
+            "sdui_body": [], "sdui_more": [],
+        }
+        self._promoted = False
+        self._componentkey = ""
+        self._target = None
 
     def _open(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
         attr = {key: (value or "") for key, value in attrs}
@@ -489,28 +610,53 @@ class _CardParser(HTMLParser):
             )
             aid = activity_id(urn)
             if aid:
-                self._card_depth = self._depth
-                self._activity = aid
-                self._buffers = {"author": [], "when": [], "text": [], "all": []}
-                self._promoted = False
-                self._target = None
+                self._start_card(aid, sdui=False)
+            elif attr.get("role", "").lower() == "listitem":
+                # SDUI card. The componentkey marks a real feed card; a
+                # listitem without one is judged from its text at finish.
+                self._start_card("", sdui=True)
+                self._componentkey = attr.get("componentkey", "")
         if self._card_depth is None:
             return
         classes = attr.get("class", "").lower()
         if "promoted" in classes or "sponsored" in classes:
             self._promoted = True
-        if "actor__name" in classes or "actor__title" in classes:
-            self._target = "author"
-        elif tag == "time" or "sub-description" in classes:
-            self._target = "when"
-        elif (
-            "update-components-text" in classes
-            or "commentary" in classes
-            or "feed-shared-text" in classes
-        ):
-            self._target = "text"
-        elif "header__text" in classes:
-            self._target = "text"
+        if self._sdui:
+            if attr.get("data-testid") == "expandable-text-box":
+                self._target = "sdui_body"
+            elif attr.get("data-testid") == "expandable-text-button":
+                self._target = "sdui_more"
+            elif tag == "br":
+                if self._target == "sdui_body":
+                    self._buffers.setdefault("sdui_body", []).append("\n")
+                elif self._target != "sdui_more":
+                    self._buffers.setdefault("head", []).append("\n")
+            if not self._activity:
+                for value in attr.values():
+                    aid = activity_id(value)
+                    if aid:
+                        self._activity = aid
+                        break
+            href = attr.get("href", "")
+            if (
+                tag == "a"
+                and ("/in/" in href or "/company/" in href)
+                and not "".join(self._buffers.get("author", [])).strip()
+            ):
+                self._target = "author"
+        if not self._sdui:
+            if "actor__name" in classes or "actor__title" in classes:
+                self._target = "author"
+            elif tag == "time" or "sub-description" in classes:
+                self._target = "when"
+            elif (
+                "update-components-text" in classes
+                or "commentary" in classes
+                or "feed-shared-text" in classes
+            ):
+                self._target = "text"
+            elif "header__text" in classes:
+                self._target = "text"
 
     def _close(self) -> None:
         if self._card_depth is None:
@@ -523,6 +669,22 @@ class _CardParser(HTMLParser):
             self._finish()
 
     def _finish(self) -> None:
+        if self._sdui:
+            post = self._sdui_post()
+            if post is not None:
+                self.posts.append(post)
+        else:
+            self.posts.append(self._legacy_post())
+        card_depth = self._card_depth
+        assert card_depth is not None
+        self._card_depth = None
+        self._activity = ""
+        self._buffers = {}
+        self._targets = [t for t in self._targets if t[0] < card_depth]
+        self._sdui = False
+        self._componentkey = ""
+
+    def _legacy_post(self) -> Post:
         author = " ".join(part.strip() for part in self._buffers["author"] if part.strip())
         when = " ".join(part.strip() for part in self._buffers["when"] if part.strip())
         text = _clean_text("".join(self._buffers["text"]))
@@ -539,19 +701,54 @@ class _CardParser(HTMLParser):
         match = _RELATIVE.search(when)
         if match:
             when = match.group(0).replace(" ", "")
-        self.posts.append(Post(
+        return Post(
             activity=self._activity,
             author=author,
             text=text,
             when=when,
             promoted=self._promoted,
-        ))
-        card_depth = self._card_depth
-        assert card_depth is not None
-        self._card_depth = None
-        self._activity = ""
-        self._buffers = {}
-        self._targets = [t for t in self._targets if t[0] < card_depth]
+        )
+
+    def _sdui_post(self) -> Optional[Post]:
+        head = _clean_text("".join(self._buffers.get("head", [])))
+        lines = [line.strip() for line in head.split("\n") if line.strip()]
+        if not lines:
+            return None
+        update_card = "update-card" in self._componentkey.lower()
+        if not update_card and lines[0].lower() != "feed post":
+            return None
+        if _sdui_noise(lines):
+            return None
+        author = _sdui_author(" ".join(self._buffers.get("author", [])))
+        if not author:
+            author = _sdui_author_from_lines(lines)
+        when = ""
+        match = _RELATIVE.search(head)
+        if match:
+            when = match.group(0).replace(" ", "")
+        text = _clean_text("".join(self._buffers.get("sdui_body", [])))
+        text = re.sub(r"\s*(?:…|\.\.\.)\s*more\s*$", "", text, flags=re.IGNORECASE)
+        if not text:
+            text = _sdui_body_from_lines(lines)
+        promoted = self._promoted or any(
+            line.lower().startswith(("promoted", "sponsored"))
+            for line in lines[:4]
+        )
+        if promoted:
+            text = re.sub(
+                r"^(?:promoted|sponsored)\s*[·:\-]?\s*", "", text, flags=re.I
+            )
+        text = text.strip()
+        activity = self._activity or _synthetic_activity(
+            self._componentkey, author, text
+        )
+        return Post(
+            activity=activity,
+            author=author,
+            text=text,
+            when=when,
+            promoted=promoted,
+        )
 
 
 def parse_html(html_text: str) -> List[Post]:
@@ -582,7 +779,9 @@ def render(posts: List[Post], *, stop: str = "", signal: str = "") -> str:
         block = [head]
         if post.text:
             block.append(post.text)
-        block.append(post.permalink)
+        link = post.permalink
+        if link:
+            block.append(link)
         blocks.append("\n".join(block))
     body = "\n\n".join(blocks)
     if not body:
@@ -1207,9 +1406,22 @@ def walk(
             return
         headers = getattr(response, "headers", None) or {}
         ctype = str(headers.get("content-type", "") if hasattr(headers, "get") else "")
-        if ctype and not any(word in ctype for word in ("json", "javascript")):
+        # The SDUI feed streams React Server Components. Those responses are
+        # not always JSON, but they are the page's own feed data: read them too.
+        streamed = any(
+            word in source.lower() for word in ("rsc-action", "pagination", "sdui")
+        )
+        if (
+            ctype
+            and not streamed
+            and not any(word in ctype for word in ("json", "javascript"))
+        ):
             return
-        if not ctype and not any(word in source for word in ("graphql", "/feed")):
+        if (
+            not ctype
+            and not streamed
+            and not any(word in source for word in ("graphql", "/feed"))
+        ):
             return
         try:
             body = response.text()
