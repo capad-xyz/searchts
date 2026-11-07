@@ -19,11 +19,19 @@ touches or copies the cookie store. Everything below is passive.
 
 What comes back is a post list:
 
-* **permalink** from ``urn:li:activity:<id>`` (a response body or the DOM),
-  rendered as ``https://www.linkedin.com/feed/update/urn:li:activity:<id>/``;
-* **author**, **text** and **relative time as shown** (``2h``, ``1d``), from
-  the same passive capture, with the DOM as a fallback and a merge;
-* **promoted** when the payload or the card says so.
+* **permalink** only when the payload or the DOM carries a real
+  ``urn:li:activity``, ``urn:li:ugcPost`` or ``urn:li:share`` (or a
+  ``/feed/update/`` href). A card with no urn keeps a synthetic id for the
+  merge and renders no permalink;
+* **author** and **headline** from the actor link and the line under it, with
+  ``• Following`` / ``• 3rd+`` stripped;
+* **text** with paragraph breaks kept and adjacent nodes spaced;
+* **relative time as shown** (``2h``, ``1d • Edited``), from the same passive
+  capture, with the DOM as a fallback and a merge;
+* **links** inside the post, with ``linkedin.com/safety/go`` redirects
+  unwrapped, and **engagement/media** only when the card states them;
+* **promoted** when the payload or the card says so. A capture that holds only
+  an activity id is dropped rather than emitted as a permalink-only stub.
 
 ## Pacing and resume
 
@@ -55,7 +63,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Any, Dict, Iterator, List, Optional, Protocol, Tuple
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 __all__ = [
     "FEED_URL",
@@ -101,9 +109,15 @@ STEP_MAX_MS = 5000
 #: Time for the next batch to render after a step, before the DOM is copied.
 SETTLE_MS = 1500
 
-_UPDATE = "https://www.linkedin.com/feed/update/urn:li:activity:{activity}/"
-_ACTIVITY = re.compile(r"urn:li:activity:(\d+)")
+_UPDATE = "https://www.linkedin.com/feed/update/{urn}/"
+_ACTIVITY = re.compile(r"urn:li:(?:activity|ugcPost|share):(\d+)", re.IGNORECASE)
+_FEED_URN = re.compile(r"urn:li:(?:activity|ugcPost|share):\d+", re.IGNORECASE)
 _RELATIVE = re.compile(r"\b\d+\s*(?:s|m|h|d|w|mo|y)\b", re.IGNORECASE)
+_WHEN = re.compile(
+    r"\b(\d+)\s*(s|m|h|d|w|mo|y)\b(?:\s*[•·]\s*(Edited))?", re.IGNORECASE
+)
+_FOLLOWERS = re.compile(r"\b[\d,.]+\s+followers?\b", re.IGNORECASE)
+_COUNT = re.compile(r"\d[\d,]*")
 
 #: ``record_stop`` reason that waits for a person rather than 24 h.
 STOP_UNTIL_CLEARED = "restriction"
@@ -117,7 +131,7 @@ _FEED_STAMP = "linkedin_feed_at"
 
 
 def activity_id(value: str) -> str:
-    """The numeric id inside ``urn:li:activity:<id>``, or ``""``."""
+    """The numeric id inside an activity, ugcPost or share urn, or ``""``."""
     match = _ACTIVITY.search(value or "")
     return match.group(1) if match else ""
 
@@ -127,10 +141,17 @@ def permalink(activity: str) -> str:
 
     An SDUI card without a real activity urn gets a synthetic id so the merge
     can dedupe it, but there is no update URL to point at: that id yields ``""``.
+    A real ``urn:li:activity``, ``urn:li:ugcPost`` or ``urn:li:share`` keeps its
+    own type in the URL; nothing is invented for a card that has no urn.
     """
     raw = (activity or "").strip()
+    match = _FEED_URN.search(raw)
+    if match:
+        return _UPDATE.format(urn=match.group(0))
     aid = activity_id(raw) or (raw if raw.isdigit() else "")
-    return _UPDATE.format(activity=aid) if aid else ""
+    if not aid:
+        return ""
+    return _UPDATE.format(urn=f"urn:li:activity:{aid}")
 
 
 def _synthetic_activity(*parts: str) -> str:
@@ -149,20 +170,44 @@ class Post:
     text: str = ""
     when: str = ""
     promoted: bool = False
+    headline: str = ""
+    links: List[Tuple[str, str]] = field(default_factory=list)
+    reactions: Optional[int] = None
+    comments: Optional[int] = None
+    reposts: Optional[int] = None
+    media: str = ""
+    urn: str = ""
 
     @property
     def permalink(self) -> str:
-        return permalink(self.activity)
+        return permalink(self.urn or self.activity)
 
     def absorb(self, other: "Post") -> None:
         """Fill only what this copy is missing, keeping the first wording."""
         if not self.author and other.author:
             self.author = other.author
+        if not self.headline and other.headline:
+            self.headline = other.headline
         if not self.when and other.when:
             self.when = other.when
         if len(other.text) > len(self.text):
             self.text = other.text
         self.promoted = self.promoted or other.promoted
+        if not self.urn and other.urn:
+            self.urn = other.urn
+        if not self.media and other.media:
+            self.media = other.media
+        if self.reactions is None:
+            self.reactions = other.reactions
+        if self.comments is None:
+            self.comments = other.comments
+        if self.reposts is None:
+            self.reposts = other.reposts
+        seen = {url for _label, url in self.links}
+        for label, url in other.links:
+            if url and url not in seen:
+                self.links.append((label, url))
+                seen.add(url)
 
 
 @dataclass
@@ -241,6 +286,19 @@ def _index_entities(node: Any, index: Dict[str, Any]) -> None:
     elif isinstance(node, list):
         for value in node:
             _index_entities(value, index)
+
+
+def _node_urn(node: Dict[str, Any]) -> str:
+    for key in (
+        "entityUrn", "urn", "updateUrn", "activityUrn", "dataUrn",
+        "permalink", "url",
+    ):
+        value = node.get(key)
+        if isinstance(value, str):
+            match = _FEED_URN.search(value)
+            if match:
+                return match.group(0)
+    return ""
 
 
 def _node_activity(node: Dict[str, Any]) -> str:
@@ -382,6 +440,7 @@ def _collect_posts(node: Any, index: Dict[str, Any], out: Dict[str, Post]) -> No
                 text=_post_text(node),
                 when=_when(node),
                 promoted=_promoted(node),
+                urn=_node_urn(node),
             )
             if aid in out:
                 out[aid].absorb(post)
@@ -473,6 +532,8 @@ _SDUI_SKIP = (
     "sort by",
     "new posts",
     "recommended for you",
+    "based on your profile",
+    "people you may know",
     "start a post",
     "share",
     "try premium",
@@ -505,16 +566,17 @@ def _sdui_noise(lines: List[str]) -> bool:
     return False
 
 
-def _sdui_author_from_lines(lines: List[str]) -> str:
-    start = 1 if lines and lines[0].strip().lower() == "feed post" else 0
-    for line in lines[start:start + 5]:
-        low = line.strip().lower()
-        if not low or low in ("promoted", "sponsored", "follow"):
-            continue
-        if _RELATIVE.search(line) or line.lstrip().startswith(("•", "·")):
-            continue
-        return _sdui_author(line)
-    return ""
+def _sdui_author_from_header(header: str) -> str:
+    """The first name in the header, for a card with no actor link."""
+    text = re.sub(r"^\s*feed post\s*", "", header, flags=re.IGNORECASE)
+    text = re.split(
+        r"\s*(?:[•·]|\b\d+\s*(?:s|m|h|d|w|mo|y)\b)", text, maxsplit=1
+    )[0]
+    text = _FOLLOWERS.sub(" ", text)
+    text = re.sub(
+        r"\b(?:promoted|sponsored|follow)\b", " ", text, flags=re.IGNORECASE
+    )
+    return _sdui_author(text)
 
 
 def _sdui_body_from_lines(lines: List[str]) -> str:
@@ -529,14 +591,313 @@ def _sdui_body_from_lines(lines: List[str]) -> str:
     return ""
 
 
+# ── a tiny DOM for SDUI cards ────────────────────────────────────────────────
+#
+# SDUI cards carry their fields in sibling nodes and in link text, not in the
+# named classes the old feed used. A flat text buffer cannot tell a headline
+# from a follower count, or a paragraph break from two glued spans. The tree
+# below is only built for an SDUI card; the legacy path keeps its buffers.
+
+_BLOCK_TAGS = frozenset({
+    "address", "article", "aside", "blockquote", "div", "dl", "dd", "dt",
+    "fieldset", "figcaption", "figure", "footer", "form", "h1", "h2", "h3",
+    "h4", "h5", "h6", "header", "hr", "li", "main", "nav", "ol", "p", "pre",
+    "section", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
+})
+_SKIP_TAGS = frozenset({"script", "style", "svg", "noscript", "template"})
+_NAV_PATHS = frozenset({
+    "", "/", "/feed/", "/mynetwork/", "/jobs/", "/messaging/",
+    "/notifications/", "/search/", "/my-items/",
+})
+
+
+class _Node:
+    """One element in a card, with its text and child elements in order."""
+
+    __slots__ = ("tag", "attrs", "children")
+
+    def __init__(self, tag: str, attrs: Dict[str, str]) -> None:
+        self.tag = tag
+        self.attrs = attrs
+        self.children: List[Any] = []
+
+
+def _iter_nodes(node: Any) -> Iterator[_Node]:
+    if isinstance(node, _Node):
+        yield node
+        for child in node.children:
+            yield from _iter_nodes(child)
+
+
+def _find_node(node: Any, *, attr: str, value: str) -> Optional[_Node]:
+    for found in _iter_nodes(node):
+        if found.attrs.get(attr) == value:
+            return found
+    return None
+
+
+def _needs_space(previous: str, following: str) -> bool:
+    """True when two adjacent text nodes would otherwise glue words together."""
+    if not previous or not following:
+        return False
+    before = previous[-1]
+    after = following[0]
+    if before.isspace() or after.isspace():
+        return False
+    if after in ".,;:!?)]}%”’'\"/":
+        return False
+    if before in "([{“‘/":
+        return False
+    return True
+
+
+def _normalise_text(raw: str) -> str:
+    text = (raw or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\u200b", "").replace("\xa0", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    lines = [line.strip() for line in text.split("\n")]
+    text = "\n".join(lines)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def _rich_text(node: Any) -> str:
+    """Card text with real paragraph breaks, never glued adjacent nodes."""
+    parts: List[str] = []
+
+    def add(value: str) -> None:
+        if not value:
+            return
+        if parts and _needs_space(parts[-1], value):
+            parts.append(" ")
+        parts.append(value)
+
+    def walk(current: Any) -> None:
+        if isinstance(current, str):
+            add(current)
+            return
+        if current.tag in _SKIP_TAGS or current.tag == "button":
+            return
+        if current.tag == "br":
+            parts.append("\n")
+            return
+        block = current.tag in _BLOCK_TAGS
+        if block:
+            parts.append("\n")
+        for child in current.children:
+            walk(child)
+        if block:
+            parts.append("\n")
+
+    walk(node)
+    return _normalise_text("".join(parts))
+
+
+def _plain_text(node: Any) -> str:
+    """All text under a node as one line, with a space between pieces."""
+    pieces: List[str] = []
+    for current in _iter_nodes(node):
+        if current.tag in _SKIP_TAGS:
+            continue
+        for child in current.children:
+            if isinstance(child, str) and child.strip():
+                pieces.append(child.strip())
+    return _clean_text(" ".join(pieces))
+
+
+def _text_before(root: _Node, stop: Optional[_Node]) -> str:
+    """Text in document order before ``stop`` (the card's body node)."""
+    pieces: List[str] = []
+
+    def walk(node: _Node) -> bool:
+        for child in node.children:
+            if child is stop:
+                return True
+            if isinstance(child, str):
+                if child.strip():
+                    pieces.append(child.strip())
+                continue
+            if walk(child):
+                return True
+        return False
+
+    walk(root)
+    return _clean_text(" ".join(pieces))
+
+
+def _sdui_when(header: str) -> str:
+    match = _WHEN.search(header)
+    if not match:
+        return ""
+    when = f"{match.group(1)}{match.group(2)}"
+    if match.group(3):
+        when += " • Edited"
+    return when
+
+
+def _sdui_headline(
+    header: str, author: str, author_raw: str, when: str
+) -> str:
+    """The line under the author, with every other header field removed."""
+    text = re.sub(r"^\s*feed post\s*", "", header, flags=re.IGNORECASE)
+    for value in (author_raw, author):
+        if value:
+            text = text.replace(value, " ", 1)
+    text = re.sub(
+        r"[•·]\s*(?:Following|1st|2nd|3rd\+?)\b", " ", text, flags=re.IGNORECASE
+    )
+    if when:
+        base = when.split(" • ")[0]
+        text = re.sub(
+            re.escape(base) + r"(?:\s*[•·]\s*Edited)?",
+            " ",
+            text,
+            flags=re.IGNORECASE,
+        )
+    text = _FOLLOWERS.sub(" ", text)
+    text = re.sub(
+        r"\b(?:promoted|sponsored|follow|visit my website)\b", " ", text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"(?:…|\.\.\.)\s*more|see more", " ", text, flags=re.IGNORECASE)
+    text = _clean_text(text)
+    return text.strip(" •·-:|,;\n\t")
+
+
+def _unwrap_redirect(href: str) -> str:
+    """The real destination behind a LinkedIn safety/redirect link."""
+    try:
+        parsed = urlparse(href)
+    except ValueError:
+        return href
+    host = (parsed.hostname or "").lower()
+    if not (host == "linkedin.com" or host.endswith(".linkedin.com")):
+        return href
+    if not parsed.path.startswith(("/safety/go", "/redir/redirect", "/away")):
+        return href
+    query = parse_qs(parsed.query)
+    target = (query.get("url") or query.get("u") or [""])[0]
+    return unquote(target) if target else href
+
+
+def _nav_link(href: str) -> bool:
+    """True for feed chrome, not for something a reader would follow."""
+    try:
+        parsed = urlparse(href)
+    except ValueError:
+        return True
+    if parsed.scheme and parsed.scheme not in ("http", "https"):
+        return True
+    host = (parsed.hostname or "").lower()
+    if not (host == "linkedin.com" or host.endswith(".linkedin.com")):
+        return False
+    path = parsed.path or "/"
+    if path in _NAV_PATHS:
+        return True
+    # The update URL is rendered as the permalink line, not as a body link.
+    if path.startswith("/feed/"):
+        return True
+    return False
+
+
+def _sdui_links(root: _Node, author_href: str) -> List[Tuple[str, str]]:
+    """Important links in a card, unwrapped and without feed chrome."""
+    links: List[Tuple[str, str]] = []
+    seen: set[str] = set()
+    for node in _iter_nodes(root):
+        if node.tag != "a":
+            continue
+        href = (node.attrs.get("href") or "").strip()
+        if not href or href.startswith(("#", "javascript:")):
+            continue
+        destination = _unwrap_redirect(href)
+        if not destination or _nav_link(destination):
+            continue
+        label = _plain_text(node) or node.attrs.get("aria-label", "").strip()
+        if author_href and href == author_href:
+            # Every actor link is the author line, not a body link.
+            continue
+        if destination in seen:
+            continue
+        links.append((label or destination, destination))
+        seen.add(destination)
+    return links
+
+
+def _count_in(node: Optional[_Node]) -> Optional[int]:
+    if node is None:
+        return None
+    match = _COUNT.search(_plain_text(node))
+    if not match:
+        return None
+    try:
+        return int(match.group(0).replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _sdui_engagement(root: _Node) -> Tuple[Optional[int], Optional[int], Optional[int]]:
+    """Reaction, comment and repost counts, only when the card states them."""
+    reactions = comments = reposts = None
+    for node in _iter_nodes(root):
+        label = (node.attrs.get("aria-label") or "").lower()
+        if node.tag != "button":
+            continue
+        if reactions is None and label.startswith(("reaction", "remove reaction")):
+            reactions = _count_in(node)
+        elif comments is None and label.startswith("comment"):
+            comments = _count_in(node)
+        elif reposts is None and label.startswith("repost"):
+            reposts = _count_in(node)
+    if reactions is None:
+        for node in _iter_nodes(root):
+            if node.tag != "a":
+                continue
+            match = re.match(
+                r"^\s*([\d,]+)\s+reactions?\s*$", _plain_text(node), re.IGNORECASE
+            )
+            if match:
+                reactions = int(match.group(1).replace(",", ""))
+                break
+    return reactions, comments, reposts
+
+
+def _sdui_media(root: _Node) -> str:
+    """The media kind, when the card clearly carries one; otherwise ``""``."""
+    for node in _iter_nodes(root):
+        if node.tag == "video":
+            return "video"
+    for node in _iter_nodes(root):
+        marker = (
+            (node.attrs.get("data-testid") or "")
+            + " " + (node.attrs.get("class") or "")
+        ).lower()
+        if "document" in marker:
+            return "document"
+    for node in _iter_nodes(root):
+        if node.tag != "img":
+            continue
+        if node.tag != "img":
+            continue
+        marker = (
+            (node.attrs.get("src") or "") + " " + (node.attrs.get("class") or "")
+        ).lower()
+        if "feedshare" in marker or "article" in marker:
+            return "image"
+    return ""
+
+
 class _CardParser(HTMLParser):
     """Collect feed cards from rendered markup, old DOM and SDUI alike.
 
     The old card is a ``data-urn`` element with named ``feed-shared-*``
     classes. The signed-in home feed now renders SDUI: ``role="listitem"``
-    cards with an ``update-card`` componentkey, hashed classes and no activity
-    urn in the DOM. Both shapes are read here; an SDUI card without an urn
-    gets a stable synthetic id so the merge still dedupes it.
+    cards with an ``update-card`` componentkey, hashed classes and usually no
+    activity urn in the DOM. The legacy path keeps its text buffers; an SDUI
+    card is collected as a small node tree so the actor, headline, time, body,
+    links and engagement can be told apart. A card without an urn gets a
+    stable synthetic id so the merge still dedupes it.
     """
 
     def __init__(self) -> None:
@@ -551,6 +912,9 @@ class _CardParser(HTMLParser):
         self._promoted = False
         self._sdui = False
         self._componentkey = ""
+        self._urn = ""
+        self._root: Optional[_Node] = None
+        self._nodes: List[_Node] = []
 
     def handle_starttag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
         self._depth += 1
@@ -564,10 +928,20 @@ class _CardParser(HTMLParser):
     def handle_startendtag(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
         self._depth += 1
         self._open(tag, attrs)
+        if self._sdui and self._nodes and tag not in _VOID:
+            self._nodes.pop()
         self._close()
         self._depth -= 1
 
     def handle_endtag(self, tag: str) -> None:
+        if self._sdui and self._nodes:
+            if self._nodes[-1].tag == tag:
+                self._nodes.pop()
+            else:
+                for index in range(len(self._nodes) - 1, -1, -1):
+                    if self._nodes[index].tag == tag:
+                        del self._nodes[index:]
+                        break
         self._close()
         if self._depth:
             self._depth -= 1
@@ -575,6 +949,8 @@ class _CardParser(HTMLParser):
     def handle_data(self, data: str) -> None:
         if self._card_depth is None:
             return
+        if self._sdui and self._nodes:
+            self._nodes[-1].children.append(data)
         self._buffers.setdefault("all", []).append(data)
         if self._target == "sdui_body":
             self._buffers.setdefault("sdui_body", []).append(data)
@@ -595,6 +971,9 @@ class _CardParser(HTMLParser):
         }
         self._promoted = False
         self._componentkey = ""
+        self._urn = ""
+        self._root = None
+        self._nodes = []
         self._target = None
 
     def _open(self, tag: str, attrs: List[Tuple[str, Optional[str]]]) -> None:
@@ -618,6 +997,14 @@ class _CardParser(HTMLParser):
                 self._componentkey = attr.get("componentkey", "")
         if self._card_depth is None:
             return
+        if self._sdui:
+            node = _Node(tag, attr)
+            if self._nodes:
+                self._nodes[-1].children.append(node)
+            else:
+                self._root = node
+            if tag not in _VOID:
+                self._nodes.append(node)
         classes = attr.get("class", "").lower()
         if "promoted" in classes or "sponsored" in classes:
             self._promoted = True
@@ -633,9 +1020,10 @@ class _CardParser(HTMLParser):
                     self._buffers.setdefault("head", []).append("\n")
             if not self._activity:
                 for value in attr.values():
-                    aid = activity_id(value)
-                    if aid:
-                        self._activity = aid
+                    found = _FEED_URN.search(value)
+                    if found:
+                        self._urn = found.group(0)
+                        self._activity = activity_id(found.group(0))
                         break
             href = attr.get("href", "")
             if (
@@ -683,6 +1071,9 @@ class _CardParser(HTMLParser):
         self._targets = [t for t in self._targets if t[0] < card_depth]
         self._sdui = False
         self._componentkey = ""
+        self._urn = ""
+        self._root = None
+        self._nodes = []
 
     def _legacy_post(self) -> Post:
         author = " ".join(part.strip() for part in self._buffers["author"] if part.strip())
@@ -710,35 +1101,81 @@ class _CardParser(HTMLParser):
         )
 
     def _sdui_post(self) -> Optional[Post]:
-        head = _clean_text("".join(self._buffers.get("head", [])))
-        lines = [line.strip() for line in head.split("\n") if line.strip()]
-        if not lines:
+        root = self._root
+        if root is None:
             return None
-        update_card = "update-card" in self._componentkey.lower()
-        if not update_card and lines[0].lower() != "feed post":
-            return None
-        if _sdui_noise(lines):
-            return None
-        author = _sdui_author(" ".join(self._buffers.get("author", [])))
-        if not author:
-            author = _sdui_author_from_lines(lines)
-        when = ""
-        match = _RELATIVE.search(head)
-        if match:
-            when = match.group(0).replace(" ", "")
-        text = _clean_text("".join(self._buffers.get("sdui_body", [])))
-        text = re.sub(r"\s*(?:…|\.\.\.)\s*more\s*$", "", text, flags=re.IGNORECASE)
-        if not text:
-            text = _sdui_body_from_lines(lines)
-        promoted = self._promoted or any(
-            line.lower().startswith(("promoted", "sponsored"))
-            for line in lines[:4]
+        body_node = _find_node(
+            root, attr="data-testid", value="expandable-text-box"
         )
-        if promoted:
-            text = re.sub(
-                r"^(?:promoted|sponsored)\s*[·:\-]?\s*", "", text, flags=re.I
+        header = _text_before(root, body_node) if body_node is not None else _plain_text(root)
+        low_header = header.lower()
+        update_card = "update-card" in self._componentkey.lower()
+        first = re.sub(r"^\s*feed post\s*", "", header, flags=re.IGNORECASE).strip()
+        if not update_card and not first:
+            return None
+        if _sdui_noise([header]) or any(
+            marker in low_header
+            for marker in (
+                "recommended for you",
+                "based on your profile",
+                "people you may know",
             )
+        ):
+            return None
+
+        author_href, author_raw = "", ""
+        for node in _iter_nodes(root):
+            if node is body_node:
+                break
+            if node.tag != "a":
+                continue
+            href = node.attrs.get("href") or ""
+            if "/in/" not in href and "/company/" not in href:
+                continue
+            label = _plain_text(node)
+            if label and _sdui_author(label):
+                author_href, author_raw = href, label
+                break
+        author = _sdui_author(author_raw)
+        if not author:
+            author = _sdui_author_from_header(header)
+        when = _sdui_when(header)
+        promoted = (
+            self._promoted
+            or bool(re.search(r"\b(?:promoted|sponsored)\b", header, re.I))
+            or bool(_FOLLOWERS.search(header))
+        )
+        headline = _sdui_headline(header, author, author_raw, when)
+
+        if body_node is not None:
+            text = _rich_text(body_node)
+        else:
+            text = _sdui_body_from_lines(header.split("\n"))
+        text = re.sub(
+            r"\s*(?:…|\.\.\.)\s*more\s*$|^see more\s*|see more\s*$", "", text,
+            flags=re.IGNORECASE,
+        )
+        text = re.sub(
+            r"^(?:feed post|promoted|sponsored)\b[\s:·-]*", "", text,
+            flags=re.IGNORECASE,
+        )
         text = text.strip()
+
+        links = _sdui_links(root, author_href)
+        reactions, comments, reposts = _sdui_engagement(root)
+        media = _sdui_media(root)
+
+        # A follow suggestion is not a post: no body, and the card says why.
+        if not text and (
+            "follow" in low_header
+            or "based on your profile" in low_header
+            or "recommended for you" in low_header
+            or not media
+        ):
+            return None
+        if not text and not author:
+            return None
+
         activity = self._activity or _synthetic_activity(
             self._componentkey, author, text
         )
@@ -748,6 +1185,13 @@ class _CardParser(HTMLParser):
             text=text,
             when=when,
             promoted=promoted,
+            headline=headline,
+            links=links,
+            reactions=reactions,
+            comments=comments,
+            reposts=reposts,
+            media=media,
+            urn=self._urn,
         )
 
 
@@ -767,18 +1211,61 @@ def parse_html(html_text: str) -> List[Post]:
 # ── rendering ───────────────────────────────────────────────────────────────
 
 
+def _is_stub(post: Post) -> bool:
+    """True for a capture that carried a permalink and nothing else."""
+    return not post.author and not post.text
+
+
+def _count_label(count: int, word: str) -> str:
+    return f"{count} {word}" if count == 1 else f"{count} {word}s"
+
+
+def _engagement_line(post: Post) -> str:
+    parts: List[str] = []
+    if post.reactions is not None:
+        parts.append(_count_label(post.reactions, "reaction"))
+    if post.comments is not None:
+        parts.append(_count_label(post.comments, "comment"))
+    if post.reposts is not None:
+        parts.append(_count_label(post.reposts, "repost"))
+    if post.media:
+        parts.append(post.media)
+    return " · ".join(parts)
+
+
+def _link_line(post: Post) -> str:
+    rendered: List[str] = []
+    seen: set[str] = set()
+    for label, url in post.links:
+        if not url or url in seen:
+            continue
+        text = (label or url).replace("[", "(").replace("]", ")")
+        rendered.append(f"[{text}]({url})")
+        seen.add(url)
+    return " · ".join(rendered)
+
+
 def render(posts: List[Post], *, stop: str = "", signal: str = "") -> str:
-    """One block per post: author, relative time, text, permalink."""
+    """One compact block per post: author line, text, links, extras, permalink."""
     blocks: List[str] = []
-    for post in posts:
+    kept = [post for post in posts if not _is_stub(post)]
+    for post in kept:
         head = post.author or "(author not captured)"
+        if post.headline:
+            head = f"{head} ({post.headline})"
         if post.when:
             head = f"{head} · {post.when}"
         if post.promoted:
-            head = f"[promoted] {head}"
+            head = f"{head} (promoted)"
         block = [head]
         if post.text:
             block.append(post.text)
+        links = _link_line(post)
+        if links:
+            block.append(links)
+        extras = _engagement_line(post)
+        if extras:
+            block.append(extras)
         link = post.permalink
         if link:
             block.append(link)
@@ -786,7 +1273,7 @@ def render(posts: List[Post], *, stop: str = "", signal: str = "") -> str:
     body = "\n\n".join(blocks)
     if not body:
         body = "[linkedin-feed: no posts were read]"
-    note = f"[linkedin-feed: {len(posts)} post(s)"
+    note = f"[linkedin-feed: {len(kept)} post(s)"
     if stop:
         note += f"; stopped: {stop}"
     if signal:
@@ -1287,7 +1774,9 @@ _SCROLL_JS = "() => window.scrollTo(0, document.body.scrollHeight)"
 def _merge(into: Dict[str, Post], posts: List[Post]) -> int:
     added = 0
     for post in posts:
-        if not post.activity:
+        if not post.activity or _is_stub(post):
+            # A capture with only an activity id is a permalink stub, not a
+            # post. A DOM card with the same activity still merges in later.
             continue
         if post.activity in into:
             into[post.activity].absorb(post)
@@ -1499,7 +1988,9 @@ def walk(
         elif not stop:
             stop = "the feed stopped growing"
 
-        ordered = list(posts.values())[: max(1, limits.max_posts)]
+        ordered = [
+            post for post in posts.values() if not _is_stub(post)
+        ][: max(1, limits.max_posts)]
         result = FeedRead(
             posts=ordered,
             text=render(ordered, stop=stop, signal=signal),

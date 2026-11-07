@@ -70,6 +70,17 @@ def payload(*, extra=None, cursor="TOKEN-NEXT"):
 SDUI_CARDS = (
     Path(__file__).resolve().parent / "fixtures" / "linkedin_sdui_cards.html"
 ).read_text(encoding="utf-8")
+SDUI_EXPECTED = (
+    Path(__file__).resolve().parent / "fixtures" / "linkedin_sdui_cards.expected.txt"
+).read_text(encoding="utf-8")
+SDUI_AUTHORS = [
+    "Guillermo Rauch",
+    "Apple",
+    "Trevor Spires",
+    "Scaler",
+    "We The Flywheel",
+    "Ada Lovelace",
+]
 
 DOM_ONE = (
     '<div class="feed-shared-update-v2" data-urn="urn:li:activity:7001">'
@@ -258,31 +269,46 @@ def test_parse_html_is_empty_for_no_markup():
 
 def test_parse_html_reads_sdui_cards_and_skips_the_furniture():
     posts = lf.parse_html(SDUI_CARDS)
-    assert [post.author for post in posts] == [
-        "Guillermo Rauch", "Apple", "Jordan Marlowe",
+    assert [post.author for post in posts] == SDUI_AUTHORS
+    assert [post.when for post in posts] == [
+        "23h", "", "1d • Edited", "", "1d", "4h",
     ]
-    assert [post.when for post in posts] == ["23h", "", "1d"]
+    assert [post.promoted for post in posts] == [
+        False, True, False, True, False, False,
+    ]
+    assert [post.headline for post in posts] == [
+        "CEO at Vercel", "", "Applied AI @ Anthropic", "", "", "Staff Engineer",
+    ]
     assert posts[0].text.startswith("We will all be learning")
     assert "▪️ Was really slow" in posts[0].text
     assert "… more" not in posts[0].text
-    assert posts[1].promoted is True
     assert posts[1].text == (
         "Introducing MacBook Pro with PROLED XDR Display. A screen come true."
     )
     assert posts[2].text.startswith("Big steps!")
-    # A share box, a sorter, New posts, a Premium upsell and a recommendation
-    # rail are not posts.
+    # A share box, a sorter, New posts, a Premium upsell, a recommendation rail
+    # and a follow suggestion are not posts.
     assert all("Start a post" not in post.text for post in posts)
     assert all("Recommended for you" not in post.text for post in posts)
+    assert all("Based on your profile" not in post.text for post in posts)
+    assert "Riley Chen" not in [post.author for post in posts]
 
 
 def test_sdui_cards_get_stable_synthetic_ids_without_a_permalink():
     first = lf.parse_html(SDUI_CARDS)
     second = lf.parse_html(SDUI_CARDS)
     assert [post.activity for post in first] == [post.activity for post in second]
-    assert len({post.activity for post in first}) == 3
-    assert all(post.activity.startswith("sdui-") for post in first)
-    assert all(post.permalink == "" for post in first)
+    assert len({post.activity for post in first}) == len(first)
+    assert all(
+        post.activity.startswith("sdui-")
+        for post in first
+        if post.author != "Ada Lovelace"
+    )
+    assert [post.permalink for post in first[:5]] == [""] * 5
+    assert first[5].permalink == (
+        "https://www.linkedin.com/feed/update/"
+        "urn:li:ugcPost:7524349425150889985/"
+    )
 
 
 def test_sdui_card_uses_a_real_activity_urn_when_the_dom_still_has_one():
@@ -297,7 +323,93 @@ def test_sdui_card_uses_a_real_activity_urn_when_the_dom_still_has_one():
     )
     post = lf.parse_html(html)[0]
     assert post.activity == "4242"
+    assert post.urn == "urn:li:activity:4242"
     assert post.permalink.endswith("urn:li:activity:4242/")
+
+
+def test_sdui_card_keeps_the_urn_type_for_a_ugcpost():
+    html = (
+        '<div role="listitem" componentkey="update-card-abc">'
+        "<h2><span>Feed post</span></h2>"
+        '<a href="https://www.linkedin.com/in/ada/"><span>Ada Lovelace</span></a>'
+        "<p><span>2h</span></p>"
+        '<span data-testid="expandable-text-box">A share.</span>'
+        '<a href="https://www.linkedin.com/feed/update/urn:li:share:777/">open</a>'
+        "</div>"
+    )
+    post = lf.parse_html(html)[0]
+    assert post.permalink == (
+        "https://www.linkedin.com/feed/update/urn:li:share:777/"
+    )
+
+
+def test_sdui_relative_time_keeps_the_edited_marker():
+    posts = lf.parse_html(SDUI_CARDS)
+    assert posts[0].when == "23h"
+    assert posts[2].when == "1d • Edited"
+
+
+def test_sdui_headline_is_a_separate_field_not_part_of_the_body():
+    posts = lf.parse_html(SDUI_CARDS)
+    guillermo = posts[0]
+    assert guillermo.headline == "CEO at Vercel"
+    assert "CEO at Vercel" not in guillermo.text
+    assert posts[2].headline == "Applied AI @ Anthropic"
+    assert "Applied AI @ Anthropic" not in posts[2].text
+
+
+def test_sdui_promoted_card_does_not_leak_the_header_into_the_body():
+    scaler = lf.parse_html(SDUI_CARDS)[3]
+    assert scaler.promoted is True
+    assert scaler.text.startswith("Break Into Forward Deployed Engineering Roles")
+    assert "Feed post" not in scaler.text
+    assert "316,827 followers" not in scaler.text
+    assert "Promoted" not in scaler.text
+    assert "Scaler316,827" not in scaler.text
+
+
+def test_sdui_follow_suggestion_is_not_a_post():
+    authors = [post.author for post in lf.parse_html(SDUI_CARDS)]
+    assert "Riley Chen" not in authors
+    assert not any("Based on your profile" in post.text for post in lf.parse_html(SDUI_CARDS))
+
+
+def test_sdui_joins_adjacent_text_nodes_with_a_space():
+    ada = lf.parse_html(SDUI_CARDS)[5]
+    assert "understand. AI has made" in ada.text
+    assert "understand.AI" not in ada.text
+
+
+def test_sdui_keeps_important_links_and_unwraps_redirects():
+    posts = lf.parse_html(SDUI_CARDS)
+    trevor = posts[2]
+    assert ("Visit my website", "https://www.youtube.com/@trevspires") in trevor.links
+    ada = posts[5]
+    assert (
+        "@Grace Hopper",
+        "https://www.linkedin.com/in/gracehopper/",
+    ) in ada.links
+    assert ("our notes", "https://lnkd.in/gAdaNotes") in ada.links
+    apple = posts[1]
+    assert any(url == "https://www.apple.com/macbook-pro/" for _label, url in apple.links)
+    for post in posts:
+        for _label, url in post.links:
+            assert "/feed/" not in url
+            assert url != "https://www.linkedin.com/in/rauchg/"
+            assert url != "https://www.linkedin.com/company/apple/"
+
+
+def test_sdui_captures_engagement_and_media_only_when_present():
+    posts = lf.parse_html(SDUI_CARDS)
+    guillermo = posts[0]
+    assert (guillermo.reactions, guillermo.comments, guillermo.reposts) == (918, 68, 62)
+    assert guillermo.media == ""
+    assert posts[1].media == "video"
+    assert (posts[1].reactions, posts[1].comments, posts[1].reposts) == (1095, 13, 18)
+    ada = posts[5]
+    assert ada.media == "image"
+    assert ada.reactions == 42
+    assert ada.comments is None and ada.reposts is None
 
 
 def test_parse_capture_finds_activity_ids_in_an_rsc_stream():
@@ -309,7 +421,7 @@ def test_parse_capture_finds_activity_ids_in_an_rsc_stream():
     assert [post.activity for post in got.posts] == ["4242", "4243"]
 
 
-def test_walk_reads_an_sdui_feed_and_an_rsc_response():
+def test_walk_reads_an_sdui_feed_and_drops_a_permalink_only_rsc_stub():
     page = FakePage([SDUI_CARDS], [
         FakeResponse(
             "https://www.linkedin.com/rsc-action/feed/pagination?start=0",
@@ -318,31 +430,80 @@ def test_walk_reads_an_sdui_feed_and_an_rsc_response():
         ),
     ])
     read = lf.walk(page, guard=FakeGuard(), limits=limits(max_posts=10))
-    activities = [post.activity for post in read.posts]
-    assert "4242" in activities
-    assert [post.author for post in read.posts if post.activity != "4242"] == [
-        "Guillermo Rauch", "Apple", "Jordan Marlowe",
-    ]
-    assert len(read.posts) == 4
+    assert [post.author for post in read.posts] == SDUI_AUTHORS
+    assert "4242" not in [post.activity for post in read.posts]
+    assert len(read.posts) == 6
+
+
+def test_walk_merges_a_permalink_stub_into_a_matching_dom_card():
+    card = (
+        '<div role="listitem" componentkey="update-card-abc">'
+        "<h2><span>Feed post</span></h2>"
+        '<a href="https://www.linkedin.com/in/ada/"><span>Ada Lovelace</span></a>'
+        "<p><span>2h</span></p>"
+        '<span data-testid="expandable-text-box">The real words.</span>'
+        '<a href="https://www.linkedin.com/feed/update/urn:li:activity:4242/">open</a>'
+        "</div>"
+    )
+    page = FakePage([card], [
+        FakeResponse(
+            "https://www.linkedin.com/rsc-action/feed/pagination?start=0",
+            '0:{"urn":"urn:li:activity:4242"}',
+            ctype="text/x-component",
+        ),
+    ])
+    read = lf.walk(page, guard=FakeGuard(), limits=limits(max_posts=10))
+    assert len(read.posts) == 1
+    assert read.posts[0].author == "Ada Lovelace"
+    assert read.posts[0].text == "The real words."
+    assert read.posts[0].permalink.endswith("urn:li:activity:4242/")
 
 
 def test_walk_dedupes_the_same_sdui_cards_across_scrolls():
     page = FakePage([SDUI_CARDS, SDUI_CARDS])
     read = lf.walk(page, guard=FakeGuard(), limits=limits(max_steps=1))
-    assert len(read.posts) == 3
+    assert len(read.posts) == 6
     assert read.posts[0].author == "Guillermo Rauch"
 
 
-def test_render_has_author_time_text_permalink_and_promoted():
+def test_render_has_author_headline_time_text_permalink_and_promoted():
     text = lf.render([
-        lf.Post("7001", "Ada Lovelace", "Built a tiny engine.", "3h"),
+        lf.Post("7001", "Ada Lovelace", "Built a tiny engine.", "3h",
+                headline="Analyst"),
         lf.Post("7002", "Grace Hopper", "We are hiring.", "1d", promoted=True),
     ], stop="reached the 2 posts asked for")
-    assert "Ada Lovelace · 3h" in text
+    assert "Ada Lovelace (Analyst) · 3h" in text
     assert "Built a tiny engine." in text
     assert "urn:li:activity:7001" in text
-    assert "[promoted] Grace Hopper · 1d" in text
+    assert "Grace Hopper · 1d (promoted)" in text
     assert "reached the 2 posts asked for" in text
+
+
+def test_render_drops_permalink_only_stubs():
+    text = lf.render([
+        lf.Post("7001"),
+        lf.Post("7002", "Grace Hopper", "We are hiring.", "1d"),
+    ])
+    assert "author not captured" not in text
+    assert "urn:li:activity:7001" not in text
+    assert "Grace Hopper" in text
+    assert "[linkedin-feed: 1 post(s)]" in text
+
+
+def test_render_keeps_links_engagement_and_media_compact():
+    text = lf.render([
+        lf.Post(
+            "7001", "Ada Lovelace", "Built a tiny engine.", "3h",
+            links=[("notes", "https://example.com/notes")],
+            reactions=1, comments=2, reposts=3, media="video",
+        ),
+    ])
+    assert "[notes](https://example.com/notes)" in text
+    assert "1 reaction · 2 comments · 3 reposts · video" in text
+
+
+def test_fixture_renders_the_expected_compact_output():
+    assert lf.render(lf.parse_html(SDUI_CARDS)) == SDUI_EXPECTED.rstrip("\n")
 
 
 # ── the walk ────────────────────────────────────────────────────────────────
