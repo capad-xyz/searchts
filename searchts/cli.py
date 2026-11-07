@@ -342,6 +342,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="Read this site's cookies from your localhost debugger port (opt-in)",
     )
     p_read.add_argument(
+        "--attach",
+        choices=["auto", "on", "off"],
+        default=None,
+        help="How a LinkedIn read uses a browser that is already open: auto "
+             "(default) attaches to Chrome, Vivaldi, Edge, Brave or Chromium "
+             "when remote debugging is on, on requires that attach, off "
+             "launches instead. Tick \"Allow remote debugging for this browser "
+             "instance\" at chrome://inspect/#remote-debugging (vivaldi://, "
+             "edge:// or brave:// on those browsers). "
+             "SEARCHTS_LINKEDIN_ATTACH sets the same.",
+    )
+    p_read.add_argument(
         "--proxy",
         metavar="URL",
         help="Route the read through a proxy (http/https/socks), e.g. "
@@ -3118,6 +3130,7 @@ def _cmd_read(args):
                         proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
                         wait_on_429=getattr(args, "wait_on_429", False),
                         ignore_cooldown=getattr(args, "ignore_cooldown", False),
+                        linkedin_attach=getattr(args, "attach", None),
                         **_media_kw(args),
                     )
                     if resume:
@@ -3131,6 +3144,7 @@ def _cmd_read(args):
                         proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
                         wait_on_429=getattr(args, "wait_on_429", False),
                         ignore_cooldown=getattr(args, "ignore_cooldown", False),
+                        linkedin_attach=getattr(args, "attach", None),
                         **_media_kw(args),
                     )
                 else:
@@ -3141,6 +3155,7 @@ def _cmd_read(args):
                         proxy=proxy, proxy_trusted=getattr(args, "proxy_trusted", False),
                         wait_on_429=getattr(args, "wait_on_429", False),
                         ignore_cooldown=getattr(args, "ignore_cooldown", False),
+                        linkedin_attach=getattr(args, "attach", None),
                         **_media_kw(args),
                     )]
                 result = pages[0]
@@ -3174,9 +3189,32 @@ def _cmd_read(args):
             # answer: the page exists, it is just behind a login. Naming the
             # commands here is what turns a wall into something an agent can
             # act on, and it costs one row on a path that has already failed.
+            #
+            # A wall for a site that is not already kept also asks the local
+            # browsers one yes/no question: does a cookie for this site exist?
+            # A yes becomes a choice of browser on a terminal, or the exact
+            # `login keep ... --yes` command when there is no terminal. A
+            # kept login keeps the stale-login advice, which is the useful one.
+            login_text = ""
+            login_json = ""
+            login_commands: Tuple[str, ...] = ()
             if wall:
+                from searchts.login_store import kept as _kept_login
+
+                offer = None
+                if not _kept_login(args.url):
+                    from searchts.login_wall import offer_login_copy
+
+                    offer = offer_login_copy(args.url, json_mode=bool(args.json))
+                if offer is not None and offer.text:
+                    login_text = offer.text
+                    login_json = offer.full_text
+                    login_commands = offer.commands
+                else:
+                    login_text = _login_wall_hint_text(args.url)
+                    login_json = login_text
                 rows.append(
-                    receipts.Row(progress.ROW_WARN, "login", _login_wall_hint_text(args.url))
+                    receipts.Row(progress.ROW_WARN, "login", login_text)
                 )
             text = receipts.block(
                 tracker.color,
@@ -3189,6 +3227,11 @@ def _cmd_read(args):
                 width=78,
             )
             print(text, file=sys.stderr)
+            # A command is only useful if it can be copied whole. The receipt
+            # folds its detail to the frame's width, which would split the
+            # ~70-character `login keep ...` line; print those unwrapped.
+            for command in login_commands:
+                print(command, file=sys.stderr)
             # The SSRF guard refusing is "a URL that cannot be read" (exit 2 in
             # the catalog); a page that failed on every rung is exit 1.
             code = 2 if unlocker._is_refusal(e) else 1
@@ -3198,7 +3241,7 @@ def _cmd_read(args):
                 )
                 _print_read_json_error(
                     args.url, kind, str(e), code, attempts=e.attempts, hint=e.hint,
-                    login=_login_wall_hint_text(args.url) if wall else "",
+                    login=login_json if wall else "",
                 )
             sys.exit(code)
 
@@ -4538,12 +4581,16 @@ def _cmd_search(args):
 
 
 def _cmd_doctor(args=None):
+    from searchts import browser_detect
     from searchts.config import Config
     from searchts.doctor import check_all, format_report
 
     config = Config()
     # Progress ticks go to stderr only, so --json stdout stays machine-clean.
     results = check_all(config, progress=not getattr(args, "json", False))
+    # Paths only: which browsers exist, their profiles, and a Chromium's
+    # DevToolsActivePort state. No cookie database is opened here.
+    browsers = browser_detect.installed_browsers()
 
     if args is not None and getattr(args, "json", False):
         # Same rule as read/grab --json: present only when the cached release
@@ -4554,7 +4601,8 @@ def _cmd_doctor(args=None):
         # TODO(remove-after-window): temporary agent notice on doctor JSON.
         from searchts.fw_migration import add_agent_note
 
-        payload = {**results, "update_available": update} if update else results
+        payload: dict = {**results, "update_available": update} if update else dict(results)
+        payload = {**payload, "browsers": [b.as_dict() for b in browsers]}
         payload = add_agent_note(payload)
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         from searchts.doctor import format_lock_note, windows_searchts_pids
@@ -4566,6 +4614,9 @@ def _cmd_doctor(args=None):
     # The report owns its wrapping and colour, so it prints as plain text;
     # Rich would re-fold the 71-column lines at the terminal width.
     print(format_report(results))
+    browser_report = browser_detect.format_report(browsers)
+    if browser_report:
+        print(browser_report)
 
     from searchts.integrations.agent_wiring import format_wiring_report
     print(format_wiring_report())

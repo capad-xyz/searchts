@@ -47,6 +47,7 @@ except ImportError:  # pragma: no cover - this tree's CI is Linux, which has flo
 __all__ = [
     "matches",
     "is_profile",
+    "is_feed",
     "browser_first",
     "detail_urls",
     "strip_chrome",
@@ -93,8 +94,8 @@ LOADS_PER_MINUTE = 2
 LOADS_PER_HOUR = 20
 LOADS_PER_DAY = 100
 
-#: How long a feed is left alone between reads. Defined here for #511, which
-#: enforces it; this change only records the policy in one place.
+#: How long the home feed is left alone between document loads. The feed
+#: reader enforces it. A scroll step, and any other LinkedIn page, does not.
 FEED_GAP_MINUTES = 30
 
 #: Where the stop and the load timestamps live. One small JSON, next to the
@@ -189,6 +190,20 @@ def is_profile(url: str) -> bool:
     """True when `url` is a person's main profile page."""
     path = urlparse(url if "://" in url else "https://" + url).path or ""
     return bool(_PROFILE_PATH.fullmatch(path))
+
+
+#: The signed-in home feed, and only it. ``/feed/update/...`` is one post and
+#: keeps the ordinary ladder; ``/feed/`` is the list that only the browser
+#: signed in to it can grow (#511).
+_FEED_PATH = re.compile(r"^/feed/?$")
+
+
+def is_feed(url: str) -> bool:
+    """True when `url` is the LinkedIn home feed."""
+    if not matches(url):
+        return False
+    path = urlparse(url if "://" in url else "https://" + url).path or ""
+    return bool(_FEED_PATH.fullmatch(path))
 
 
 def browser_first(url: str) -> bool:
@@ -542,10 +557,10 @@ def load_limits() -> Tuple[int, int, int]:
 
 
 def feed_gap_minutes() -> int:
-    """How long between reads of a LinkedIn feed (#511 enforces it).
+    """Minutes between LinkedIn home-feed document loads (default 30).
 
-    Written down here so the policy has one home and a user can set it before
-    #511 lands: ``SEARCHTS_LINKEDIN_FEED_GAP_MINUTES``, 30 minutes by default.
+    ``SEARCHTS_LINKEDIN_FEED_GAP_MINUTES``. The feed reader enforces this.
+    It is not a gap on every LinkedIn page, and a scroll step is not a load.
     """
     return _env_int("SEARCHTS_LINKEDIN_FEED_GAP_MINUTES", FEED_GAP_MINUTES)
 
