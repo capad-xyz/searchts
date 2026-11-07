@@ -27,7 +27,6 @@ For collaboration I need a workbench, but for delegation I need more of a “com
 My workflow is basically 1/ tell claude to do something 2/ have claude explain what it did 3/ have it draw a picture or write a doc about what it did if I need to understand the nuance. I stay in the Claude App or Slack mostly. Sometimes I open a chrome tab.
 
 Nowhere in that flow is it useful for me to open up the code and read it. Claude is better at reading code than me anyways. And there's bigger fish to fry. 🐟
-[Visit my website](https://www.youtube.com/@trevspires)
 151 reactions · 32 comments · 1 repost · video
 
 Scaler (promoted)

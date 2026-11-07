@@ -113,8 +113,13 @@ _UPDATE = "https://www.linkedin.com/feed/update/{urn}/"
 _ACTIVITY = re.compile(r"urn:li:(?:activity|ugcPost|share):(\d+)", re.IGNORECASE)
 _FEED_URN = re.compile(r"urn:li:(?:activity|ugcPost|share):\d+", re.IGNORECASE)
 _RELATIVE = re.compile(r"\b\d+\s*(?:s|m|h|d|w|mo|y)\b", re.IGNORECASE)
-_WHEN = re.compile(
-    r"\b(\d+)\s*(s|m|h|d|w|mo|y)\b(?:\s*[•·]\s*(Edited))?", re.IGNORECASE
+#: A relative time in its own slot. The token must stand alone: ``14M+`` in a
+#: headline is a follower count, not a time, and ``14M`` is not ``14m``.
+_TIME_SLOT = re.compile(
+    r"^(\d+)\s*(s|m|h|d|w|mo|y)(?:\s*[•·]\s*(Edited))?$", re.IGNORECASE
+)
+_TIME_INLINE = re.compile(
+    r"(?<![\w+])(\d+)\s*(s|m|h|d|w|mo|y)(?![\w+])", re.IGNORECASE
 )
 _FOLLOWERS = re.compile(r"\b[\d,.]+\s+followers?\b", re.IGNORECASE)
 _COUNT = re.compile(r"\d[\d,]*")
@@ -170,7 +175,9 @@ class Post:
     text: str = ""
     when: str = ""
     promoted: bool = False
+    promoted_by: str = ""
     headline: str = ""
+    context: str = ""
     links: List[Tuple[str, str]] = field(default_factory=list)
     reactions: Optional[int] = None
     comments: Optional[int] = None
@@ -193,6 +200,10 @@ class Post:
         if len(other.text) > len(self.text):
             self.text = other.text
         self.promoted = self.promoted or other.promoted
+        if not self.promoted_by and other.promoted_by:
+            self.promoted_by = other.promoted_by
+        if not self.context and other.context:
+            self.context = other.context
         if not self.urn and other.urn:
             self.urn = other.urn
         if not self.media and other.media:
@@ -706,41 +717,150 @@ def _plain_text(node: Any) -> str:
     return _clean_text(" ".join(pieces))
 
 
-def _text_before(root: _Node, stop: Optional[_Node]) -> str:
-    """Text in document order before ``stop`` (the card's body node)."""
-    pieces: List[str] = []
+def _profile_link(href: str) -> bool:
+    """True for an actor, company or school profile link, not a CTA."""
+    return bool(re.search(r"/(?:in|company|school)/", href or "", re.IGNORECASE))
 
-    def walk(node: _Node) -> bool:
+
+@dataclass
+class _SduiHeader:
+    """The header split into the social context and the real actor block."""
+
+    context: str = ""
+    actor: str = ""
+    author_href: str = ""
+    author_raw: str = ""
+    promoted_by: str = ""
+
+
+def _sdui_promoted_by(root: _Node, body: Optional[_Node]) -> str:
+    """The company named by ``Promoted by <company>``, or ``""``."""
+    for node in _iter_nodes(root):
+        if node is body:
+            break
+        if node.tag in _SKIP_TAGS or node.tag == "button":
+            continue
+        text = _plain_text(node)
+        if not text.lower().startswith("promoted by"):
+            continue
+        for sub in _iter_nodes(node):
+            if sub.tag == "a":
+                label = _plain_text(sub)
+                if label:
+                    return label
+        return text[len("Promoted by"):].strip(" :•·-")
+    return ""
+
+
+def _sdui_context_line(text: str) -> str:
+    """A social-context header as one ``via:`` line, never as the author."""
+    text = re.sub(r"^\s*feed post\s*", "", _clean_text(text), flags=re.IGNORECASE)
+    text = _clean_text(text)
+    if not text:
+        return ""
+    if text.lower().startswith("followed by "):
+        who = text[len("Followed by "):].strip()
+        return f"{who} follows" if who else ""
+    return text
+
+
+def _sdui_header(root: _Node, body: Optional[_Node]) -> _SduiHeader:
+    """Split the card header at its ``hr`` into context and actor.
+
+    A social-context card opens with "Followed by X" or "X likes this", then
+    an ``hr``, then the actor block that carries the degree, headline and
+    time. The actor block is the only place the author is read from; the
+    context becomes a separate ``via:`` line. Header CTA links ("Visit my
+    website", "View my newsletter") are skipped entirely so they cannot leak
+    into the headline or the links list.
+    """
+    context: List[str] = []
+    actor: List[str] = []
+    actor_links: List[Tuple[str, str]] = []
+
+    has_hr = False
+    for node in _iter_nodes(root):
+        if node is body:
+            break
+        if node.tag == "hr":
+            has_hr = True
+            break
+
+    def walk(node: _Node, in_actor: bool) -> bool:
         for child in node.children:
-            if child is stop:
+            if child is body:
                 return True
             if isinstance(child, str):
                 if child.strip():
-                    pieces.append(child.strip())
+                    (actor if in_actor else context).append(child.strip())
                 continue
-            if walk(child):
+            if child.tag in _SKIP_TAGS or child.tag == "button":
+                continue
+            if child.tag == "hr":
+                in_actor = True
+                continue
+            if in_actor and child.tag == "a":
+                href = child.attrs.get("href") or ""
+                if not _profile_link(href):
+                    continue
+                # "Promoted by <company>" is an advertiser credit, not the author.
+                if _plain_text(node).lower().startswith("promoted by"):
+                    continue
+                label = _plain_text(child)
+                if label:
+                    actor_links.append((href, label))
+            if walk(child, in_actor):
                 return True
         return False
 
-    walk(root)
-    return _clean_text(" ".join(pieces))
+    walk(root, not has_hr)
+    author_href = author_raw = ""
+    for href, label in actor_links:
+        if label:
+            author_href, author_raw = href, label
+    return _SduiHeader(
+        context=_sdui_context_line(" ".join(context)),
+        actor=_clean_text(" ".join(actor)),
+        author_href=author_href,
+        author_raw=author_raw,
+        promoted_by=_sdui_promoted_by(root, body),
+    )
 
 
 def _sdui_when(header: str) -> str:
-    match = _WHEN.search(header)
+    """A relative time only from a token that stands alone in the header."""
+    match = _TIME_INLINE.search(header)
     if not match:
         return ""
-    when = f"{match.group(1)}{match.group(2)}"
-    if match.group(3):
-        when += " • Edited"
-    return when
+    return f"{match.group(1)}{match.group(2).lower()}"
+
+
+def _sdui_when_node(root: _Node, body: Optional[_Node]) -> str:
+    """The real time slot: a header node whose whole text is the time."""
+    for node in _iter_nodes(root):
+        if node is body:
+            break
+        if node.tag in _SKIP_TAGS or node.tag == "button":
+            continue
+        match = _TIME_SLOT.match(_plain_text(node))
+        if match:
+            when = f"{match.group(1)}{match.group(2).lower()}"
+            if match.group(3):
+                when += " • Edited"
+            return when
+    return ""
 
 
 def _sdui_headline(
-    header: str, author: str, author_raw: str, when: str
+    header: str, author: str, author_raw: str, when: str, promoted_by: str = ""
 ) -> str:
     """The line under the author, with every other header field removed."""
     text = re.sub(r"^\s*feed post\s*", "", header, flags=re.IGNORECASE)
+    if promoted_by:
+        text = re.sub(
+            r"\bpromoted by\s+" + re.escape(promoted_by), " ", text,
+            flags=re.IGNORECASE,
+        )
     for value in (author_raw, author):
         if value:
             text = text.replace(value, " ", 1)
@@ -757,7 +877,10 @@ def _sdui_headline(
         )
     text = _FOLLOWERS.sub(" ", text)
     text = re.sub(
-        r"\b(?:promoted|sponsored|follow|visit my website)\b", " ", text,
+        r"\b(?:promoted by|promoted|sponsored|follow|visit my website|"
+        r"view my newsletter)\b",
+        " ",
+        text,
         flags=re.IGNORECASE,
     )
     text = re.sub(r"(?:…|\.\.\.)\s*more|see more", " ", text, flags=re.IGNORECASE)
@@ -795,34 +918,125 @@ def _nav_link(href: str) -> bool:
     path = parsed.path or "/"
     if path in _NAV_PATHS:
         return True
+    # A hashtag is already in the body; its search link is noise.
+    if path.startswith("/search/results"):
+        return True
     # The update URL is rendered as the permalink line, not as a body link.
     if path.startswith("/feed/"):
         return True
     return False
 
 
-def _sdui_links(root: _Node, author_href: str) -> List[Tuple[str, str]]:
-    """Important links in a card, unwrapped and without feed chrome."""
-    links: List[Tuple[str, str]] = []
-    seen: set[str] = set()
-    for node in _iter_nodes(root):
-        if node.tag != "a":
-            continue
+def _dedupe_repeat(text: str) -> str:
+    """Collapse a preview title the DOM repeated inside one link."""
+    words = text.split()
+    half = len(words) // 2
+    if half and words[:half] == words[half:half * 2]:
+        return " ".join(words[:half])
+    cut = len(text) // 2
+    if cut and text[:cut].strip() == text[cut:].strip():
+        return text[:cut].strip()
+    return text
+
+
+def _sdui_link_label(raw: str, destination: str, *, preview: bool) -> str:
+    """A link label, never a raw URL when the DOM offers a title.
+
+    An article preview often repeats its title and appends the site name.
+    That becomes ``Title (site.com)`` once; the site name is only added when
+    the DOM actually showed it.
+    """
+    text = _clean_text(raw)
+    if not text:
+        return ""
+    if text.startswith(("http://", "https://")) or text == destination:
+        return text
+    if not preview:
+        return text
+    host = (urlparse(destination).hostname or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    if not host:
+        return text
+    domain = re.compile(r"\b(?:www\.)?" + re.escape(host) + r"\b", re.IGNORECASE)
+    if not domain.search(text):
+        return text
+    text = domain.sub(" ", text)
+    text = re.sub(
+        r"\s+(?:Register|Learn more|Apply now|Sign up|Join now)\s*$", "", text,
+        flags=re.IGNORECASE,
+    )
+    text = _dedupe_repeat(_clean_text(text))
+    text = _clean_text(text)
+    return f"{text} ({host})" if text else ""
+
+
+def _sdui_links(
+    root: _Node, body: Optional[_Node]
+) -> List[Tuple[str, str]]:
+    """Links from the commentary and the article preview only.
+
+    Everything in the header is furniture: the actor and social-context
+    profile links, the promoted-by company link, a newsletter-follow and the
+    author's own company or school page. Those are not things the post is
+    about. A hashtag search link is dropped too; the hashtags are already in
+    the body.
+    """
+    candidates: List[Tuple[str, str, bool]] = []
+
+    def add(node: _Node, *, preview: bool) -> None:
         href = (node.attrs.get("href") or "").strip()
         if not href or href.startswith(("#", "javascript:")):
-            continue
+            return
         destination = _unwrap_redirect(href)
         if not destination or _nav_link(destination):
+            return
+        raw = _plain_text(node) or node.attrs.get("aria-label", "").strip()
+        label = _sdui_link_label(raw, destination, preview=preview)
+        candidates.append((label, destination, preview))
+
+    after_body = body is None
+
+    def walk(node: _Node) -> None:
+        nonlocal after_body
+        for child in node.children:
+            if child is body:
+                if isinstance(child, _Node):
+                    for sub in _iter_nodes(child):
+                        if sub.tag == "a":
+                            add(sub, preview=False)
+                after_body = True
+                continue
+            if isinstance(child, str):
+                continue
+            if after_body and child.tag == "a":
+                add(child, preview=body is not None)
+            walk(child)
+
+    walk(root)
+
+    order: List[str] = []
+    labels: Dict[str, str] = {}
+
+    def score(label: str) -> Tuple[int, int]:
+        if not label:
+            return (0, 0)
+        if label.startswith(("http://", "https://")):
+            return (1, 0)
+        return (2, len(label))
+
+    for label, destination, _preview in candidates:
+        if destination not in labels:
+            order.append(destination)
+            labels[destination] = label
             continue
-        label = _plain_text(node) or node.attrs.get("aria-label", "").strip()
-        if author_href and href == author_href:
-            # Every actor link is the author line, not a body link.
-            continue
-        if destination in seen:
-            continue
-        links.append((label or destination, destination))
-        seen.add(destination)
-    return links
+        if score(label) > score(labels[destination]):
+            labels[destination] = label
+
+    return [
+        (labels[destination] or destination, destination)
+        for destination in order
+    ]
 
 
 def _count_in(node: Optional[_Node]) -> Optional[int]:
@@ -1107,13 +1321,15 @@ class _CardParser(HTMLParser):
         body_node = _find_node(
             root, attr="data-testid", value="expandable-text-box"
         )
-        header = _text_before(root, body_node) if body_node is not None else _plain_text(root)
-        low_header = header.lower()
+        header = _sdui_header(root, body_node)
+        low_header = header.actor.lower()
         update_card = "update-card" in self._componentkey.lower()
-        first = re.sub(r"^\s*feed post\s*", "", header, flags=re.IGNORECASE).strip()
+        first = re.sub(
+            r"^\s*feed post\s*", "", header.actor, flags=re.IGNORECASE
+        ).strip()
         if not update_card and not first:
             return None
-        if _sdui_noise([header]) or any(
+        if _sdui_noise([header.actor]) or any(
             marker in low_header
             for marker in (
                 "recommended for you",
@@ -1123,34 +1339,24 @@ class _CardParser(HTMLParser):
         ):
             return None
 
-        author_href, author_raw = "", ""
-        for node in _iter_nodes(root):
-            if node is body_node:
-                break
-            if node.tag != "a":
-                continue
-            href = node.attrs.get("href") or ""
-            if "/in/" not in href and "/company/" not in href:
-                continue
-            label = _plain_text(node)
-            if label and _sdui_author(label):
-                author_href, author_raw = href, label
-                break
-        author = _sdui_author(author_raw)
+        author = _sdui_author(header.author_raw)
         if not author:
-            author = _sdui_author_from_header(header)
-        when = _sdui_when(header)
+            author = _sdui_author_from_header(header.actor)
+        when = _sdui_when_node(root, body_node) or _sdui_when(header.actor)
         promoted = (
             self._promoted
-            or bool(re.search(r"\b(?:promoted|sponsored)\b", header, re.I))
-            or bool(_FOLLOWERS.search(header))
+            or bool(header.promoted_by)
+            or bool(re.search(r"\b(?:promoted|sponsored)\b", header.actor, re.I))
+            or bool(_FOLLOWERS.search(header.actor))
         )
-        headline = _sdui_headline(header, author, author_raw, when)
+        headline = _sdui_headline(
+            header.actor, author, header.author_raw, when, header.promoted_by
+        )
 
         if body_node is not None:
             text = _rich_text(body_node)
         else:
-            text = _sdui_body_from_lines(header.split("\n"))
+            text = _sdui_body_from_lines(header.actor.split("\n"))
         text = re.sub(
             r"\s*(?:…|\.\.\.)\s*more\s*$|^see more\s*|see more\s*$", "", text,
             flags=re.IGNORECASE,
@@ -1161,7 +1367,7 @@ class _CardParser(HTMLParser):
         )
         text = text.strip()
 
-        links = _sdui_links(root, author_href)
+        links = _sdui_links(root, body_node)
         reactions, comments, reposts = _sdui_engagement(root)
         media = _sdui_media(root)
 
@@ -1185,7 +1391,9 @@ class _CardParser(HTMLParser):
             text=text,
             when=when,
             promoted=promoted,
+            promoted_by=header.promoted_by,
             headline=headline,
+            context=header.context,
             links=links,
             reactions=reactions,
             comments=comments,
@@ -1256,8 +1464,13 @@ def render(posts: List[Post], *, stop: str = "", signal: str = "") -> str:
         if post.when:
             head = f"{head} · {post.when}"
         if post.promoted:
-            head = f"{head} (promoted)"
+            if post.promoted_by:
+                head = f"{head} (promoted by {post.promoted_by})"
+            else:
+                head = f"{head} (promoted)"
         block = [head]
+        if post.context:
+            block.append(f"via: {post.context}")
         if post.text:
             block.append(post.text)
         links = _link_line(post)

@@ -82,6 +82,25 @@ SDUI_AUTHORS = [
     "Ada Lovelace",
 ]
 
+LIVE3_CARDS = (
+    Path(__file__).resolve().parent / "fixtures" / "linkedin_sdui_live3.html"
+).read_text(encoding="utf-8")
+LIVE3_EXPECTED = (
+    Path(__file__).resolve().parent / "fixtures" / "linkedin_sdui_live3.expected.txt"
+).read_text(encoding="utf-8")
+LIVE3_AUTHORS = [
+    "Shreyansh Shah",
+    "Steve Nouri",
+    "We The Flywheel",
+    "Scaler",
+    "Shantanu Ladhwe",
+    "Jane Doe",
+]
+LIVE3_HEADLINE = (
+    "Head of AI ML | 150k+ Linkedin & Substack | AI Agents, RAG, NLP, "
+    "Recommenders, Search & MLOps | Germany 🇩🇪"
+)
+
 DOM_ONE = (
     '<div class="feed-shared-update-v2" data-urn="urn:li:activity:7001">'
     '<span class="update-components-actor__name">Ada Lovelace</span>'
@@ -383,7 +402,9 @@ def test_sdui_joins_adjacent_text_nodes_with_a_space():
 def test_sdui_keeps_important_links_and_unwraps_redirects():
     posts = lf.parse_html(SDUI_CARDS)
     trevor = posts[2]
-    assert ("Visit my website", "https://www.youtube.com/@trevspires") in trevor.links
+    # A header CTA is furniture, not a body link.
+    assert ("Visit my website", "https://www.youtube.com/@trevspires") not in trevor.links
+    assert trevor.links == []
     ada = posts[5]
     assert (
         "@Grace Hopper",
@@ -504,6 +525,179 @@ def test_render_keeps_links_engagement_and_media_compact():
 
 def test_fixture_renders_the_expected_compact_output():
     assert lf.render(lf.parse_html(SDUI_CARDS)) == SDUI_EXPECTED.rstrip("\n")
+
+
+# ── the live SDUI cards (#517) ──────────────────────────────────────────────
+
+
+def live3() -> list[lf.Post]:
+    return lf.parse_html(LIVE3_CARDS)
+
+
+def live3_by_author() -> dict:
+    return {post.author: post for post in live3()}
+
+
+def test_live3_fixture_renders_the_expected_output():
+    assert lf.render(live3()) == LIVE3_EXPECTED.rstrip("\n")
+
+
+def test_live3_follows_the_actor_block_not_the_social_context():
+    posts = live3_by_author()
+    assert list(posts) == LIVE3_AUTHORS
+    shantanu = posts["Shantanu Ladhwe"]
+    assert shantanu.when == "1d"
+    assert shantanu.headline == LIVE3_HEADLINE
+    assert shantanu.context == "Jane Roe follows"
+    assert "Followed by" not in shantanu.headline
+    assert "Jane Roe" not in shantanu.headline
+    jane = posts["Jane Doe"]
+    assert jane.when == "1w"
+    assert jane.headline == "Student at High School"
+    assert jane.context == "John Doe likes this"
+    assert "likes this" not in jane.headline
+    assert "John Doe" not in jane.headline
+
+
+@pytest.mark.parametrize("tail", [
+    "commented on this",
+    "reposted this",
+    "celebrates this",
+    "supports this",
+    "loves this",
+    "finds this insightful",
+    "finds this funny",
+    "and 3 others commented on this",
+])
+def test_live3_every_social_context_stays_out_of_author_and_headline(tail):
+    card = (
+        '<div role="listitem" componentkey="update-card-context">'
+        "<div><h2><span>Feed post</span></h2>"
+        f"<p><span>Jane Roe</span> <span>{tail}</span></p>"
+        '<hr role="presentation">'
+        '<div><a href="https://www.linkedin.com/in/john-doe-123/">'
+        "<span>John Doe</span><span> • 3rd+</span></a>"
+        "<p><span>Engineer</span></p><p><span>2h</span></p></div>"
+        '<p><span data-testid="expandable-text-box">Words.</span></p>'
+        "</div></div>"
+    )
+    post = lf.parse_html(card)[0]
+    assert post.author == "John Doe"
+    assert post.headline == "Engineer"
+    assert post.when == "2h"
+    assert tail in post.context
+    assert tail not in post.headline
+    assert "Jane Roe" not in post.headline
+
+
+def test_live3_header_cta_never_reaches_headline_or_links():
+    posts = live3_by_author()
+    shreyansh = posts["Shreyansh Shah"]
+    assert "View my newsletter" not in shreyansh.headline
+    assert shreyansh.links == []
+    shantanu = posts["Shantanu Ladhwe"]
+    assert "Visit my website" not in shantanu.headline
+    assert all("jamwithai" not in url for _label, url in shantanu.links)
+    for post in posts.values():
+        assert "View my newsletter" not in post.headline
+        assert "Visit my website" not in post.headline
+
+
+def test_live3_promoted_by_keeps_the_headline_and_rejects_a_follower_count():
+    steve = live3_by_author()["Steve Nouri"]
+    assert steve.when == ""
+    assert steve.promoted is True
+    assert steve.promoted_by == "GenAI Works"
+    assert steve.headline == (
+        "AI Scientist & GTM Advisor @ Fortune 500 | Largest AI Community 14M+ | "
+        "Keynote Speaker"
+    )
+    assert "14M" in steve.headline
+    assert "Promoted by" not in steve.headline
+    rendered = lf.render([steve])
+    assert "(promoted by GenAI Works)" in rendered
+    assert "· 14M" not in rendered
+
+
+def test_live3_header_and_context_profiles_are_not_body_links():
+    posts = live3_by_author()
+    links = [
+        (label, url)
+        for post in posts.values()
+        for label, url in post.links
+    ]
+    urls = [url for _label, url in links]
+    for forbidden in (
+        "/in/shantanuladhwe/",
+        "/in/jane-roe-123/",
+        "/in/john-doe-123/",
+        "/in/jane-doe-123/",
+        "/in/shreyanshshah22/",
+        "/company/genai-works/",
+        "/school/scalerofficial/",
+        "newsletter-follow",
+    ):
+        assert all(forbidden not in url for url in urls)
+    assert ("HubSpot", "https://www.linkedin.com/company/hubspot/") in posts[
+        "Steve Nouri"
+    ].links
+    scaler_urls = [url for _label, url in posts["Scaler"].links]
+    assert len(scaler_urls) == 1
+    assert scaler_urls[0].startswith("https://www.scaler.com/event/")
+
+
+def test_live3_article_preview_labels_use_the_title_once():
+    posts = live3_by_author()
+    wtf = posts["We The Flywheel"]
+    labels = [label for label, url in wtf.links if "wetheflywheel.com" in url]
+    assert labels == [
+        "Building AI-Native Engineering Teams: Structure Guide "
+        "(wetheflywheel.com)"
+    ]
+    assert sum("wetheflywheel.com" in url for _label, url in wtf.links) == 1
+    scaler = posts["Scaler"]
+    labels = [label for label, url in scaler.links if "scaler.com" in url]
+    assert labels == [
+        "Break Into Forward Deployed Engineering Roles - Free Live "
+        "Masterclass! (scaler.com)"
+    ]
+    assert sum("scaler.com" in url for _label, url in scaler.links) == 1
+    for label, url in wtf.links + scaler.links:
+        if "wetheflywheel.com" in url or "scaler.com" in url:
+            assert not label.startswith(("http://", "https://"))
+
+
+def test_live3_hashtag_search_links_stay_out_of_the_links_line():
+    for post in live3():
+        for label, url in post.links:
+            assert "/search/results" not in url
+            assert not label.startswith("#")
+
+
+def test_live3_follow_suggestion_is_not_a_post():
+    posts = live3()
+    assert len(posts) == 6
+    assert "Liam McGarrigle" not in [post.author for post in posts]
+    assert all("Based on your profile" not in post.text for post in posts)
+
+
+def test_live3_keeps_the_real_activity_permalink_and_engagement():
+    posts = live3_by_author()
+    shantanu = posts["Shantanu Ladhwe"]
+    assert shantanu.urn == "urn:li:activity:7524457429653286912"
+    assert shantanu.permalink == (
+        "https://www.linkedin.com/feed/update/"
+        "urn:li:activity:7524457429653286912/"
+    )
+    steve = posts["Steve Nouri"]
+    assert (steve.reactions, steve.comments, steve.reposts) == (121, 21, 9)
+    assert steve.media == "video"
+    wtf = posts["We The Flywheel"]
+    assert (wtf.reactions, wtf.comments, wtf.reposts) == (2, None, 1)
+    assert wtf.media == "image"
+    scaler = posts["Scaler"]
+    assert scaler.promoted is True
+    assert (scaler.reactions, scaler.comments, scaler.reposts) == (110, None, None)
 
 
 # ── the walk ────────────────────────────────────────────────────────────────
