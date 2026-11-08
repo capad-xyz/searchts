@@ -2,21 +2,21 @@
 
 Every finding Hare posted here, what became of it, and what the owner said. Built by `scripts/hare_ledger.py` from the notes, the Since lines, resolved threads, `/hare score` and `/hare fate` comments; a PR closed unmerged drops its open findings. PLAN R2b.
 
-Built 2026-11-01. 243 PRs, 472 notes, 83 real and 291 skip findings, 35 notes cut at the budget, 26 runs where no hop answered.
+Built 2026-11-08. 242 PRs, 479 notes, 84 real and 285 skip findings, 35 notes cut at the budget, 17 runs where no hop answered.
 
-**Hit rate:** 20 of 83 real findings fixed or resolved (24%); 37 judged, 6 wrong, 2 wontfix, 3 dropped with a closed PR.
+**Hit rate:** 20 of 84 real findings fixed or resolved (23%); 36 judged, 6 wrong, 2 wontfix, 2 dropped with a closed PR.
 **Owner scores:** 46 given, average 3.67 of 5.
 
 | Hop | Notes |
 | --- | --- |
-| `nous:reflection/beam-1.0-501b-a23b:free` | 163 |
+| `nous:reflection/beam-1.0-501b-a23b:free` | 181 |
 | `nous:poolside/laguna-s-2.1:free` | 148 |
-| `nous:meituan/longcat-2.5-preview:free` | 55 |
-| `openrouter:qwen/qwen3.8-27b:free` | 55 |
-| `groq:openai/gpt-oss-120b` | 15 |
+| `nous:meituan/longcat-2.5-preview:free` | 54 |
+| `openrouter:qwen/qwen3.8-27b:free` | 51 |
+| `groq:openai/gpt-oss-120b` | 12 |
 | `openrouter:nvidia/nemotron-3.5-lightning:free` | 8 |
-| `openrouter:stealth/space-bunny-alpha` | 7 |
-| `gemini:gemini-3.1-flash-lite` | 4 |
+| `openrouter:stealth/space-bunny-alpha` | 6 |
+| `gemini:gemini-3.1-flash-lite` | 3 |
 | `openrouter:qwen/qwen3.8-27b:free · deep` | 3 |
 | `openrouter:nvidia/nemotron-3-super-120b-a12b:free` | 2 |
 | `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free` | 2 |
@@ -27,12 +27,11 @@ Built 2026-11-01. 243 PRs, 472 notes, 83 real and 291 skip findings, 35 notes cu
 | `nous:inclusionai/ling-3.0-flash-sante:free` | 1 |
 | `nous:meituan/longcat-2.5-preview:free · deep` | 1 |
 | `gemini:gemini-3.1-flash-lite · deep` | 1 |
-| `gemini:gemini-3.5-flash` | 1 |
 
 ## Caps
 
-- caps that fired: 31 across 472 notes (reasoning retry 29, rate limit 2)
-- median reasoning tokens per note: 715
+- caps that fired: 31 across 479 notes (reasoning retry 29, rate limit 2)
+- median reasoning tokens per note: 835
 
 Sources for each default are in `docs/hare-next.md`. `0` is uncapped for the reasoning
 budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
@@ -41,6 +40,20 @@ budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
 
 | PR | Notes | Real | Skip | Fates of real | Scores |
 | --- | --- | --- | --- | --- | --- |
+| #528 | 1 | 0 | 1 |  |  |
+| #527 | 1 | 0 | 0 |  |  |
+| #526 | 1 | 0 | 0 |  |  |
+| #525 | 2 | 0 | 2 |  |  |
+| #524 | 1 | 0 | 1 |  |  |
+| #516 | 1 | 0 | 0 |  |  |
+| #514 | 1 | 1 | 0 | open 1 |  |
+| #513 | 3 | 0 | 1 |  |  |
+| #512 | 1 | 0 | 1 |  |  |
+| #508 | 1 | 0 | 0 |  |  |
+| #507 | 2 | 0 | 1 |  |  |
+| #506 | 1 | 0 | 1 |  |  |
+| #505 | 1 | 1 | 0 | open 1 |  |
+| #503 | 1 | 0 | 0 |  |  |
 | #502 | 0 | 0 | 0 |  |  |
 | #501 | 0 | 0 | 0 |  |  |
 | #500 | 0 | 0 | 0 |  |  |
@@ -267,23 +280,8 @@ budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
 | #244 | 2 | 0 | 2 |  |  |
 | #240 | 1 | 0 | 1 |  |  |
 | #239 | 1 | 0 | 1 |  |  |
-| #238 | 1 | 0 | 1 |  |  |
-| #237 | 1 | 1 | 2 | dropped 1 |  |
-| #236 | 3 | 0 | 3 |  |  |
-| #235 | 2 | 0 | 4 |  |  |
-| #234 | 1 | 0 | 2 |  |  |
 | #233 | 1 | 1 | 0 | wontfix 1 |  |
 | #232 | 30 | 0 | 6 |  |  |
-| #231 | 0 | 0 | 0 |  |  |
-| #230 | 1 | 0 | 2 |  |  |
-| #229 | 0 | 0 | 0 |  |  |
-| #228 | 0 | 0 | 0 |  |  |
-| #227 | 0 | 0 | 0 |  |  |
-| #226 | 0 | 0 | 0 |  |  |
-| #225 | 0 | 0 | 0 |  |  |
-| #224 | 1 | 0 | 0 |  |  |
-| #223 | 1 | 0 | 0 |  |  |
-| #210 | 0 | 0 | 0 |  |  |
 | #126 | 1 | 0 | 0 |  |  |
 | #125 | 1 | 0 | 0 |  |  |
 | #124 | 1 | 0 | 0 |  |  |
