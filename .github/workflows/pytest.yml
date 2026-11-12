@@ -159,7 +159,11 @@ jobs:
       - name: Verify wheel has no duplicate entries and ships data files
         run: |
           python - <<'PY'
-          import glob, zipfile, collections
+          import collections
+          import glob
+          import zipfile
+          from pathlib import Path
+
           whl = glob.glob("dist/*.whl")[0]
           names = zipfile.ZipFile(whl).namelist()
           dupes = [n for n, c in collections.Counter(names).items() if c > 1]
@@ -167,6 +171,18 @@ jobs:
           assert "searchts/skill/SKILL.md" in names, "SKILL.md missing from wheel"
           for prefix in ("searchts/guides/", "searchts/skill/references/"):
               assert any(n.startswith(prefix) for n in names), f"{prefix} missing from wheel"
+          missing_init = sorted(
+              {
+                  (py.parent / "__init__.py").as_posix()
+                  for py in Path("searchts").rglob("*.py")
+                  if "__pycache__" not in py.parts
+                  and (py.parent / "__init__.py").as_posix() not in names
+              }
+          )
+          assert not missing_init, (
+              "package dirs missing __init__.py in the wheel "
+              f"(zipimport cannot load them): {missing_init}"
+          )
           print(f"wheel OK: {len(names)} entries, no duplicates, data files present")
           PY
 
@@ -175,7 +191,7 @@ jobs:
           python -m venv /tmp/smoke
           /tmp/smoke/bin/pip install --quiet dist/*.whl
           /tmp/smoke/bin/searchts version
-          cd /tmp && /tmp/smoke/bin/python -c "import searchts; from importlib.resources import files; assert (files('searchts')/'skill'/'SKILL.md').is_file(); print('SKILL.md ships in site-packages OK')"
+          cd /tmp && /tmp/smoke/bin/python -c "import searchts; from importlib.resources import files; assert (files('searchts')/'skill'/'SKILL.md').is_file(); from searchts.utils.ffmpeg import ytdlp_ffmpeg_args, ffmpeg_exe; print('SKILL.md ships in site-packages OK'); print('utils.ffmpeg OK', ytdlp_ffmpeg_args, ffmpeg_exe)"
 
   # The release version lives in three files; a mismatch ships a wrong version
   # (or a stale MCP-registry listing). This gate fails the build if they drift.
