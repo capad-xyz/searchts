@@ -332,7 +332,7 @@ def items() -> List[SetupItem]:
             id="linkedin",
             title="linkedin-scraper-mcp (LinkedIn fallback)",
             what_it_unlocks=(
-                "the LinkedIn feed and write/inbox tools; profiles, companies, "
+                "LinkedIn write and inbox tools; the feed, profiles, companies, "
                 "posts and people search already read natively"
             ),
             size_bytes=214 * _MB, size_is_estimate=True,

@@ -247,8 +247,8 @@ class TestDoctor:
         assert "searchts install --only linkedin" in report
         assert "X posts, threads, search and timelines" in report
         assert "Reddit posts, comments and search" in report
-        assert "the LinkedIn feed and write/inbox" in report
-        assert "tools. Install: searchts install --only linkedin" in report
+        assert "linkedin-scraper-mcp (LinkedIn) adds write/inbox tools." in report
+        assert "the LinkedIn feed and write/inbox" not in report
 
     def test_plain_report_uses_the_same_optional_tool_wording(self):
         """The MCP `get_status` path must not keep the old alarming sentence."""
