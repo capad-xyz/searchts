@@ -2,6 +2,13 @@
 
 All notable changes to searchts are documented here. This project follows semantic versioning.
 
+## [0.27.2](https://github.com/capad-xyz/searchts/compare/v0.27.1...v0.27.2) (2026-11-12)
+
+
+### Fixed
+
+* **packaging:** ship searchts.utils as a regular package ([b06fe7b](https://github.com/capad-xyz/searchts/commit/b06fe7bfd594226c33dcab0dadee6e1b3ad46506))
+
 ## [0.27.1](https://github.com/capad-xyz/searchts/compare/v0.27.0...v0.27.1) (2026-11-03)
 
 
