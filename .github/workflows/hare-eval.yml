@@ -116,7 +116,7 @@ jobs:
           cp "docs/hare-eval-$day.json" "/tmp/hare-eval-$day.json"
       - name: Upload the raw answers
         if: always() && inputs.raw_dir != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hare-eval-raw-${{ github.run_id }}
           path: ${{ inputs.raw_dir }}
