@@ -1,11 +1,11 @@
 {
- "built": "2026-11-08",
+ "built": "2026-11-15",
  "repo": "capad-xyz/searchts",
  "summary": {
-  "prs": 242,
-  "notes": 479,
+  "prs": 243,
+  "notes": 480,
   "real": 84,
-  "skip": 285,
+  "skip": 287,
   "real_fates": {
    "open": 48,
    "still applies": 5,
@@ -18,13 +18,13 @@
   },
   "real_fixed_or_resolved": 20,
   "hops": {
-   "nous:reflection/beam-1.0-501b-a23b:free": 181,
+   "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free": 4,
+   "nous:reflection/beam-1.0-501b-a23b:free": 182,
    "nous:poolside/laguna-s-2.1:free": 148,
    "openrouter:nvidia/nemotron-3-super-120b-a12b:free": 2,
    "nous:meituan/longcat-2.5-preview:free": 54,
-   "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free": 2,
    "nous:poolside/laguna-s-2.1:free · deep": 1,
-   "groq:openai/gpt-oss-120b": 12,
+   "groq:openai/gpt-oss-120b": 10,
    "groq:openai/gpt-oss-120b · deep": 1,
    "openrouter:qwen/qwen3.8-27b:free": 51,
    "openrouter:nvidia/nemotron-3.5-lightning:free": 8,
@@ -46,9 +46,108 @@
    "rate limit": 2
   },
   "caps_fired_total": 31,
-  "reasoning_tokens_median": 835
+  "reasoning_tokens_median": 834.0
  },
  "entries": [
+  {
+   "pr": 531,
+   "title": "chore(main): release 0.27.2",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-11-12T17:53:02Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/531#pullrequestreview-5879386230",
+     "hop": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+     "effort": "low",
+     "cost": "12,835 prompt + 999 answer + 600 reasoning tokens on `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free`, 18 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 1,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nRelease-please cut 0.27.2. Version bumps across six files, changelog entry added. No code changes.\n1. **version bump** pyproject.toml, searchts/__init__.py, server.json (two fields), .release-please-manifest.json, docs/cli.md, CHANGELOG.md\n\nCI on `43b18f8`: green.\n\nIntent: Ship version 0.27.2 with the packaging fix from b06fe7b (searchts.utils as a regular package).\n\n**Verdict:** Ship (CI green, no real findings). All version strings agree at 0.27.2. The changelog entry matches the commit cited. This is a mechanical release PR; the only observable issue is the recurring double-blank-line spacing in the new changelog section, which is a known nit from release-please output.\n\n### Findings\n\n<details>\n<summary>🟡 1 skip finding</summary>\n\n#### 🟡 skip · `CHANGELOG.md:8`\n\n**Issue:** The new 0.27.2 heading is followed by two blank lines before ### Fixed, the same spacing nit release-please keeps emitting and Hare keeps flagging on every release.\n\n**Fix:** later. Remove one blank line so there is exactly one blank line between the version heading and the first section heading. One-click fix in the bubble.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `43b18f8`\n- tests on `43b18f8`: not run (no affected test file in this diff)\n- CI test (ubuntu-latest) / test (macos-latest) / mcp2-compat / version-sync / lint / test (windows-latest) / typecheck → green\n- CI read again when it finished (17:55 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 12,835 prompt + 999 answer + 600 reasoning tokens on `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free`, 18 s\n- graph: 7 files from the repo, 13,173 characters\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 6 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free` | low |\n"
+    }
+   ],
+   "findings": [
+    {
+     "loc": "CHANGELOG.md:8",
+     "sev": "skip",
+     "issue": "The new 0.27.2 heading is followed by two blank lines before ### Fixed, the same spacing nit release-please keeps emitting and Hare keeps flagging on every release.",
+     "fate": "open",
+     "first": "2026-11-12T17:53:02Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 530,
+   "title": "fix(packaging): ship searchts.utils as a regular package",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-11-12T17:49:16Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/530#pullrequestreview-5879336717",
+     "hop": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+     "effort": "low",
+     "cost": "9,113 prompt + 4,204 answer + 3,082 reasoning tokens on `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free`, 81 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 3,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nPackaging armor: utils becomes a real package, wheel-gate grows teeth, and a layout test stands watch.\n\n1. **Packaging** `searchts.utils` gets `__init__.py` so zipimport stops choking.\n2. **Wheel-gate** now asserts every package dir in the wheel ships `__init__.py` and smoke-imports `utils.ffmpeg`.\n3. **Test** `test_every_package_dir_has_init` guards the source tree against the same regression.\n\nCI on `022906d`: green.\n\nIntent: Make `searchts.utils` a regular package so the 0.27.1 wheel crash (ModuleNotFoundError under zipimport) cannot recur, and gate the invariant in CI.\n\n**Verdict:** Ship (CI green, no real findings). The diff directly fixes the reported crash cause and adds two independent guards (wheel-gate + source-tree test). No behavior change, no version bump. The only open question is whether the source-tree test duplicates the wheel-gate check - defense in depth is fine, but the test reads source text rather than exercising an import, which the ledger flags as a pattern to watch. CI evidence is not available (pip install failed on the head), so the test outcomes are unverified.\n\n### Findings\n\n<details>\n<summary>🟡 3 skip findings</summary>\n\n#### 🟡 skip · `searchts/utils/__init__.py:1`\n\n**Issue:** The new `__init__.py` only carries a docstring; it could re-export the public ffmpeg helpers for ergonomics, but that is a style choice, not a defect.\n\n**Fix:** later. Consider adding `from .ffmpeg import ytdlp_ffmpeg_args, ffmpeg_exe` if the public API should be reachable as `searchts.utils.ytdlp_ffmpeg_args`. One-click fix in the bubble.\n\n#### 🟡 skip · `tests/test_package_layout.py:10`\n\n**Issue:** The test walks the source tree and checks for `__init__.py` files rather than attempting an import. The ledger notes that tests reading source text instead of running code should be real findings; here the invariant is structural so inspection is appropriate, but the error message lists directory paths (e.g. `searchts/utils`) not the missing `__init__.py` files, which is slightly confusing.\n\n**Fix:** later. Adjust the comprehension to collect the missing `__init__.py` paths for a clearer error message.\n\n#### 🟡 skip · `.github/workflows/pytest.yml:175`\n\n**Issue:** The smoke test imports `ytdlp_ffmpeg_args` and `ffmpeg_exe` but does not call them; a call would exercise the lazy import path that originally crashed. The import alone may not trigger the zipimport failure mode.\n\n**Fix:** later. Add a trivial call (e.g. `ytdlp_ffmpeg_args()`) to ensure the lazy import executes.\n\n</details>\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `022906d`\n- tests on `022906d`: not run (pip install failed: ERROR: .hare-head/capad-xyz-searchts-022906d[dev] is not a valid editable requirement. It should either be a path to a local project or a VCS URL (beginning wit)\n- CI test (ubuntu-latest) / mcp2-compat / test (macos-latest) / test (windows-latest) / version-sync / lint / typecheck → green\n- CI read again when it finished (17:51 UTC); the note above was updated, the model's words were not\n- test-full / wheel-gate skipped by design\n- cost: 9,113 prompt + 4,204 answer + 3,082 reasoning tokens on `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free`, 81 s\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 6 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free` | low |\n"
+    }
+   ],
+   "findings": [
+    {
+     "loc": "searchts/utils/__init__.py:1",
+     "sev": "skip",
+     "issue": "The new `__init__.py` only carries a docstring; it could re-export the public ffmpeg helpers for ergonomics, but that is a style choice, not a defect.",
+     "fate": "open",
+     "first": "2026-11-12T17:49:16Z"
+    },
+    {
+     "loc": "tests/test_package_layout.py:10",
+     "sev": "skip",
+     "issue": "The test walks the source tree and checks for `__init__.py` files rather than attempting an import. The ledger notes that tests reading source text instead of running code should be real findings; here the invariant is structural so inspection is appropriate, but the error message lists directory paths (e.g. `searchts/utils`) not the missing `__init__.py` files, which is slightly confusing.",
+     "fate": "open",
+     "first": "2026-11-12T17:49:16Z"
+    },
+    {
+     "loc": ".github/workflows/pytest.yml:175",
+     "sev": "skip",
+     "issue": "The smoke test imports `ytdlp_ffmpeg_args` and `ffmpeg_exe` but does not call them; a call would exercise the lazy import path that originally crashed. The import alone may not trigger the zipimport failure mode.",
+     "fate": "open",
+     "first": "2026-11-12T17:49:16Z"
+    }
+   ],
+   "scores": [],
+   "needed": 0
+  },
+  {
+   "pr": 529,
+   "title": "chore(hare): ledger 2026-11-08",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-11-08T09:55:58Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/529#pullrequestreview-5817442657",
+     "hop": "nous:reflection/beam-1.0-501b-a23b:free",
+     "effort": "low",
+     "cost": "37,107 prompt + 717 answer + 625 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 14 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nWeekly ledger rebuild. Only generated ledger data changed; no package code.\n\nCI on `12a6256`: green.\n\nIntent: Rebuild docs/hare-ledger.json (and the ledger rules block) from Hare notes, scores, fates and resolved threads.\n\n**Verdict:** Ship (CI green, no real findings). This is the deterministic weekly ledger job: it only rewrites generated ledger artifacts and does not touch package code, so there is nothing to hold on code grounds.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `12a6256`\n- tests on `12a6256`: not run (no affected test file in this diff)\n- CI → green\n- test-full / wheel-gate skipped by design\n- cost: 37,107 prompt + 717 answer + 625 reasoning tokens on `nous:reflection/beam-1.0-501b-a23b:free`, 14 s\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 1 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `nous:reflection/beam-1.0-501b-a23b:free` | low |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
   {
    "pr": 528,
    "title": "feat(browser): detect installed browsers and offer a kept login",
@@ -11479,68 +11578,6 @@
      "issue": "The `LAST_USAGE` update logic for the continuation call assumes `prompt_tokens` is always present in the tail usage.",
      "fate": "open",
      "first": "2026-10-03T22:20:13Z"
-    }
-   ],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 240,
-   "title": "ci(hare): /hare deep turns thinking on, one notch",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T21:03:59Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/240#pullrequestreview-5402735598",
-     "hop": "groq:openai/gpt-oss-120b",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 1,
-     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nDeep thinking toggle added. 1. **feature** new `/hare deep` flag and related logic. 2. **test** coverage for deep mode.\n\nCI on `443d891`: green.\n\nIntent: Allow a one‑notch reasoning boost when a comment includes `/hare deep` or `@hare deep`.\n\n### Findings\n\n#### 🟡 skip · `scripts/hare_r1.py:53`\n\n**Issue:** Added comment lines exceed typical 80‑character line length limits.\n\n**Fix:** yes. Wrap the added comment lines to stay within 80 characters.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `443d891`\n- CI test / mcp2-compat / typecheck / version-sync / lint → green\n- test-full / wheel-gate skipped by design\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `groq:openai/gpt-oss-120b` | low |\n"
-    }
-   ],
-   "findings": [
-    {
-     "loc": "scripts/hare_r1.py:53",
-     "sev": "skip",
-     "issue": "Added comment lines exceed typical 80‑character line length limits.",
-     "fate": "open",
-     "first": "2026-10-03T21:03:59Z"
-    }
-   ],
-   "scores": [],
-   "needed": 0
-  },
-  {
-   "pr": 239,
-   "title": "docs: AI use is fine if the Models section names the slug",
-   "state": "merged",
-   "files": [],
-   "notes": [
-    {
-     "at": "2026-10-03T20:46:25Z",
-     "url": "https://github.com/capad-xyz/searchts/pull/239#pullrequestreview-5402654046",
-     "hop": "groq:openai/gpt-oss-120b",
-     "effort": "low",
-     "cost": "",
-     "cut": "",
-     "caps": "",
-     "caps_fired": "",
-     "findings": 1,
-     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nDocs spruced up with an AI assistance guide.\n1. **Docs** added a new \"AI assistance\" section to CONTRIBUTING.md.\n\nCI on `3f44ad5`: green.\n\nIntent: Introduce clear guidelines on how AI contributions should be documented and credited.\n\n### Findings\n\n#### 🟡 skip · `CONTRIBUTING.md`\n\n**Issue:** The example Models table inside the new section shows a \"medium\" effort for a \"wrote\" role, while the PR’s own Models table uses \"low\"; the inconsistency could confuse contributors.\n\n**Fix:** later. Align the effort level in the example table with the one used in the PR’s Models section.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `3f44ad5`\n- CI lint / mcp2-compat / typecheck / test / version-sync → green\n- test-full / wheel-gate skipped by design\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `groq:openai/gpt-oss-120b` | low |\n"
-    }
-   ],
-   "findings": [
-    {
-     "loc": "CONTRIBUTING.md",
-     "sev": "skip",
-     "issue": "The example Models table inside the new section shows a \"medium\" effort for a \"wrote\" role, while the PR’s own Models table uses \"low\"; the inconsistency could confuse contributors.",
-     "fate": "open",
-     "first": "2026-10-03T20:46:25Z"
     }
    ],
    "scores": [],
