@@ -148,9 +148,54 @@ _add(Command(
         "Page loads are one at a time, at least 20 s apart, at most "
         "SEARCHTS_LINKEDIN_LOADS_PER_MINUTE (2), "
         "SEARCHTS_LINKEDIN_LOADS_PER_HOUR (20) and "
-        "SEARCHTS_LINKEDIN_LOADS_PER_DAY (100; 0 turns the daily cap off). "
+        "SEARCHTS_LINKEDIN_LOADS_PER_DAY (100; 0 turns the daily cap off).",
+        "The LinkedIn home feed (/feed/) is read in the signed-in browser. "
+        "When Chrome, Vivaldi, Edge, Brave or Chromium is already running "
+        "with remote debugging on, the read attaches and opens one tab. "
+        "Otherwise it uses the headed profile SEARCHTS_BROWSER_PROFILE (or "
+        "the legacy SEARCHTS_LINKEDIN_PROFILE alias) and SEARCHTS_BROWSER "
+        "(or the legacy SEARCHTS_LINKEDIN_CHROME alias) for another "
+        "executable, and captures the page's own responses. One document "
+        "load is booked, "
+        "then one bounded scroll; a scroll step is not another page load. "
         "SEARCHTS_LINKEDIN_FEED_GAP_MINUTES (default 30) is the gap between "
-        "LinkedIn feed reads; a later change enforces it.",
+        "those feed reads. Each post has its author, text, relative time "
+        "and activity permalink. A 429, a 999, a checkpoint, an authwall "
+        "or a forced logout stops the feed for 24 h with no retry; a "
+        "restriction stops until a person clears it. --wait-on-429 does "
+        "not apply. Without a kept login or that browser, the read names "
+        "the reason and linkedin-scraper-mcp remains the fallback.",
+        "A LinkedIn page that uses the browser can attach to a Chromium "
+        "browser that is already open. Chrome 136+ blocks "
+        "--remote-debugging-port on the default profile. Tick \"Allow "
+        "remote debugging for this browser instance\" at "
+        "chrome://inspect/#remote-debugging (vivaldi://inspect/#remote-debugging, "
+        "edge://inspect/#remote-debugging, brave://inspect/#remote-debugging; "
+        "Chromium uses the chrome:// page). Current Chromium approval mode "
+        "shows an \"Allow remote debugging?\" dialog for each incoming DevTools "
+        "connection. searchts prints a prompt and waits up to 60 seconds; "
+        "SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS sets that wait (1-300 seconds). "
+        "It reads the port and "
+        "websocket path from DevToolsActivePort in that browser's user-data "
+        "directory and connects to 127.0.0.1. It opens one tab in a normal "
+        "browser window, reads, and closes only that tab. An installed "
+        "app/PWA window, an extension popup, DevTools and background pages "
+        "are never reused; when no normal window is open, one is opened for "
+        "the tab. Chromium can still show its \"being controlled by "
+        "automated test software\" infobar on every window while the "
+        "DevTools connection is attached, including an app window. That "
+        "infobar is browser-wide and is not a tab this read used. The "
+        "browser and its other windows stay open. "
+        "Nothing is requested before that connection succeeds. If the "
+        "browser is running but the toggle is off, the read stops before "
+        "any request and names that page. If the browser is not running, "
+        "the existing launch path is used. SEARCHTS_LINKEDIN_ATTACH or "
+        "searchts read --attach is auto (default), on (attach or stop, "
+        "never launch) or off (never attach, unless SEARCHTS_LINKEDIN_CDP "
+        "is set). Firefox-family browsers (zen, firefox, librewolf, "
+        "waterfox, floorp, mullvad) stay on cookie copy; choosing one for "
+        "attach says so. The page gap, the per-minute/hour/day caps, and "
+        "the 24 h stop apply to an attached read too.",
         "On failure `--json` prints `{\"url\", \"error\": {kind, message, exit_code, "
         "attempts}}` on stdout; kind is bad_url, ssrf_refused, login_wall or read_failed.",
         "An `--items` read returns a signed `resume` token in `--json` and in a "
@@ -338,8 +383,8 @@ _add(Command(
         "terminal asks once; uncheck by id. Without a terminal nothing on the",
         "list is installed unless --yes is passed. --skip ids unchecks items.",
         "--only ids installs just those items and what they need; it reaches",
-        "the optional LinkedIn fallback (linkedin-scraper-mcp, for the feed and",
-        "write/inbox tools) that native reads no longer require. --dry-run",
+        "the optional LinkedIn fallback (linkedin-scraper-mcp, now for",
+        "write/inbox tools) that native reads and the feed no longer require. --dry-run",
         "--json prints the list as searchts.setup.v1.",
         "Site logins are not part of this approval. It also writes the agent",
         "skill files (~/.agents/skills/searchts, or each OpenClaw/Claude Code",
@@ -698,9 +743,11 @@ MCP_TOOLS: Dict[str, McpTool] = {
             "the read carried a login, and never a way past a LinkedIn stop.",
             "`ignore_cooldown` is CLI `--ignore-cooldown`. It does not lift a "
             "LinkedIn stop; `searchts login resume linkedin.com` does.",
+            "`--attach` is CLI only. An MCP LinkedIn read follows "
+            "SEARCHTS_LINKEDIN_ATTACH (auto, on or off; default auto).",
         ),
         mcp_only_params=("cursor", "page_items"),
-        cli_only_flags=("--human", "--scrub", "--backend", "--json"),
+        cli_only_flags=("--human", "--scrub", "--backend", "--json", "--attach"),
         param_flags=(("max_pages", "--pages"), ("max_items", "--items"),
                      ("max_media", "--media"), ("approve_cookie_copy", "--yes")),
     ),

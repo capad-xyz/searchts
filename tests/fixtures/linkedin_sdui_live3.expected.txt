@@ -1,0 +1,97 @@
+Shreyansh Shah (Driving Innovation and Excellence | I talk about IT, Sales, Startup, Business, Marketing |Linkedin Growth | Personal Branding | Influencer| Content Creator |DM for collab) · 1d
+AI can write the code. But when production breaks at 2 AM, everyone suddenly remembers the senior developer.
+
+AI: 100% confident. Bugs: 100% real.
+
+#AI #SoftwareDevelopment #Developers #TechHumour #Coding
+261 reactions · 29 comments · 4 reposts · image
+
+Steve Nouri (AI Scientist & GTM Advisor @ Fortune 500 | Largest AI Community 14M+ | Keynote Speaker) (promoted by GenAI Works)
+Most AI is only as useful as the context you give it.
+
+I tested what changes when Claude can work with the customer context already inside your HubSpot and then help turn that insight into action.
+
+That feels less like prompting, and more like working.
+
+https://lnkd.in/ge8H83zP
+
+HubSpot #HubSpotMediaPartner #ad #ai #marketing
+[HubSpot](https://www.linkedin.com/company/hubspot/) · [https://lnkd.in/ge8H83zP](https://lnkd.in/ge8H83zP)
+121 reactions · 21 comments · 9 reposts · video
+
+We The Flywheel · 2d
+What does a software team look like when AI does part of the building? Smaller.
+
+Gartner's July 2026 forecast: 60% of organizations will adopt smaller engineering teams by 2029, up from about 15% in 2026. A typical "tiny team" is 4 to 5 people, and some get by with 2 or 3.
+
+Who's on one? Gartner names a product manager, a UX or agent-experience designer, and at least one AI-native software engineer.
+
+Our guide covers how the roles change: https://lnkd.in/gByqw4v6
+
+How many people are on the team that ships your product, and has that changed since AI tools showed up?
+
+#WeTheFlywheel #AITrends #SoftwareEngineering
+[https://lnkd.in/gByqw4v6](https://lnkd.in/gByqw4v6) · [Building AI-Native Engineering Teams: Structure Guide (wetheflywheel.com)](https://wetheflywheel.com/en/guides/ai-native-engineering-team/?utm_source=linkedin&utm_medium=social&utm_campaign=wtf-thu-2026-11-05)
+2 reactions · 1 repost · image
+
+Scaler (promoted)
+Learn how Forward Deploying Engineer operates at the intersection of engineering, client problem-solving, and real-world deployment & understand what a FDE actually does.
+📅 12th Nov | 🕢 7:30 PM | 💻 Online
+👉 Claim your free seat now!
+[Break Into Forward Deployed Engineering Roles - Free Live Masterclass! (scaler.com)](https://www.scaler.com/event/roadmap-to-forward-deployed-engineer-12b/?utm_source=ads&utm_medium=linkedin&utm_campaign=perf_scaler_livemasterclass_ads_linkedin_job-titles-pred_india_age25-54-v4&utm_content=job-titles-pred&utm_term=fde_livemasterclass-20261112-e4696-c3_static_white-blue_forward-deploying-engineer_adaptify-new_without-instructor_bdec2026&li_fat_id=ab721f17-1119-469d-bb53-0535e21b6f28)
+110 reactions
+
+Shantanu Ladhwe (Head of AI ML | 150k+ Linkedin & Substack | AI Agents, RAG, NLP, Recommenders, Search & MLOps | Germany 🇩🇪) · 1d
+via: Jane Roe follows
+A practical Python stack for taking an AI agent to production:
+
+(Simple and reliable)
+
+- FastAPI for the API layer. Fast, asynchronous, and production-ready.
+- Pydantic for contracts. It validates requests and enforces structured LLM outputs.
+- LangGraph for agent workflows, including nodes, edges, state, and human-in-the-loop steps.
+- PostgreSQL with pgvector for both relational data and vector search.
+- Redis for caching, rate limiting, and short-term session state.
+- LiteLLM as a gateway across model providers, with retries and fallbacks when a provider goes down.
+- Opik/langfuse for tracing, observability, and LLMOps.
+- uv for fast, reproducible dependency management.
+- Ruff for linting and formatting.
+- Pytest for unit and integration testing.
+- Docker for containerization, with deployment on AWS ECS Fargate or GCP Cloud Run.
+- GitHub Actions for CI/CD.
+
+The model is only one part of an AI agent. The tools around the model are what make an AI agent ready for production.
+
+Note: there could be more things, but keeping it core and simple.
+
+♻️ Repost if you found it helpful!
+➕ We often discuss real-world AI/ML here 👇
+➕ Join 59,000+ AI/ML builders here: https://lnkd.in/ds_SzEUH
+[https://lnkd.in/ds_SzEUH](https://lnkd.in/ds_SzEUH)
+448 reactions · 37 comments · 50 reposts · image
+https://www.linkedin.com/feed/update/urn:li:activity:7524457429653286912/
+
+Jane Doe (Student at High School) · 1w
+via: John Doe likes this
+𝐀 𝐭𝐨𝐝𝐝𝐥𝐞𝐫. 𝐀 𝐃𝐞𝐥𝐡𝐢 𝐌𝐞𝐭𝐫𝐨 𝐫𝐢𝐝𝐞. 𝐀 𝐯𝐨𝐢𝐜𝐞 𝐡𝐞 𝐤𝐧𝐞𝐰.
+
+Shammi Narang, the voice behind the Delhi Metro announcements, took his grandson on his first Metro ride. When the familiar announcement played, the little one recognised his grandfather's voice.
+
+No keynote. No campaign. Just a moment that made a whole internet smile.
+
+What stays with me:
+
+1. Your work reaches further than you think. Millions hear this voice every day, yet it's also the voice a child hears at home.
+
+2. Consistency builds trust. A voice heard daily, calmly and clearly, becomes part of a city's rhythm.
+
+3. The best career moments are often personal. Not the promotion or the award, but the day your family sees what you do.
+
+Whatever your role, someone is quietly relying on your work. And someone at home is proud of it.
+
+When did your work last connect with your family in an unexpected way?
+
+#Leadership #Purpose #DelhiMetro #Family #WorkLifeBalance #Inspiration
+290 reactions · 16 comments · 4 reposts · image
+
+[linkedin-feed: 6 post(s)]

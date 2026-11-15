@@ -65,7 +65,7 @@ covers the need.
 
 | Command | Flags |
 |---|---|
-| `searchts read` | `--backend`, `--json`, `--human`, `--pages`, `--items`, `--resume`, `--wait-on-429`, `--ignore-cooldown`, `--media`, `--expand`, `--scrub`, `--cookies-from-browser`, `--yes`, `--cookies`, `--cdp-port`, `--proxy`, `--proxy-trusted` |
+| `searchts read` | `--backend`, `--json`, `--human`, `--pages`, `--items`, `--resume`, `--wait-on-429`, `--ignore-cooldown`, `--media`, `--expand`, `--scrub`, `--cookies-from-browser`, `--yes`, `--cookies`, `--cdp-port`, `--attach`, `--proxy`, `--proxy-trusted` |
 | `searchts grab` | `--out`, `--kinds`, `--scripts`, `--read`, `--max`, `--tokens`, `--json` |
 | `searchts search` | `-n`, `--json`, `--provider` |
 | `searchts transcribe` | `--provider`, `--model`, `--hint`, `--translate`, `--yes`, `--fresh`, `--json`, `--cleanup`, `--list-models`, `--remove-model`, `--dry-run`, `--no-subtitles`, `-o`, `--cookies-from-browser` |

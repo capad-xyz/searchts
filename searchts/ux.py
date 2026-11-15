@@ -24,9 +24,9 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from typing import Optional, Sequence
 from urllib.parse import urlsplit
-from urllib.request import pathname2url
 
 #: Playwright appends a "Call log:" block with the navigation step. Useful in a
 #: bug report, noise in an error message.
@@ -186,18 +186,19 @@ def file_uri(path: str) -> str:
     """A ``file://`` URI for ``path``. A directory URI opens the directory.
 
     The path is made absolute first, then percent-encoded, so a space cannot
-    end an OSC 8 sequence early. Windows ``pathname2url`` already returns
-    ``///C:/...``, and the scheme there is ``file:`` plus that. Everywhere
-    else it returns ``/tmp/...`` and the scheme is ``file://``. Both come
-    out as ``file:///...``, which Explorer, Finder, and a terminal's
-    Ctrl+click open.
+    end an OSC 8 sequence early. On Windows, ``nturl2path.pathname2url``
+    already returns ``///C:/...`` and the scheme is ``file:`` plus that.
+    Elsewhere ``Path.as_uri`` is used. Python 3.14's ``pathname2url`` returns
+    ``///tmp/...``, and prefixing ``file://`` would make ``file://///tmp``,
+    which a terminal does not open. Both forms come out as ``file:///...``,
+    which Explorer, Finder, and a terminal's Ctrl+click open.
     """
     absolute = os.path.abspath(path)
     if os.name == "nt":
         import nturl2path
 
         return "file:" + nturl2path.pathname2url(absolute)
-    return "file://" + pathname2url(absolute)
+    return Path(absolute).as_uri()
 
 
 def clickable_path(path: str, *, link: bool) -> str:

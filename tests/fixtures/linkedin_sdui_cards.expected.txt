@@ -1,0 +1,61 @@
+Guillermo Rauch (CEO at Vercel) · 23h
+We will all be learning in coming weeks & months, that most human-made software:
+
+▪️ Was really slow
+▪️ Had many security vulnerabilities
+▪️ Was under-specified and incorrect
+
+AI will rewrite it all. Many times. It will make it fast, cost-efficient, and secure. It will think about failure modes we couldn't wrap our heads around.
+
+It will prove, formally verify, load test, harden. It will turn memory-unsafe foundations into robust, optimized ones. If you ask, it'll thoroughly document it, teach you about it, make diagrams, animations, and slide decks.
+
+In many ways, we are witnessing the true birth of software engineering.
+918 reactions · 68 comments · 62 reposts
+
+Apple (promoted)
+Introducing MacBook Pro with PROLED XDR Display. A screen come true.
+[The world's best laptop display. Learn more](https://www.apple.com/macbook-pro/)
+1095 reactions · 13 comments · 18 reposts · video
+
+Trevor Spires (Applied AI @ Anthropic) · 1d • Edited
+Big steps! I removed my code editor from my Dock today. Happy to reclaim that valuable real-estate from my desktop. 🖥️
+
+No more IDE for me. I just kind of naturally stopped using the IDE/CLI. CLI/IDEs feel like a workbench, but these days writing code feels more like delegation than a collaborative act.
+
+For collaboration I need a workbench, but for delegation I need more of a “command center”
+
+My workflow is basically 1/ tell claude to do something 2/ have claude explain what it did 3/ have it draw a picture or write a doc about what it did if I need to understand the nuance. I stay in the Claude App or Slack mostly. Sometimes I open a chrome tab.
+
+Nowhere in that flow is it useful for me to open up the code and read it. Claude is better at reading code than me anyways. And there's bigger fish to fry. 🐟
+151 reactions · 32 comments · 1 repost · video
+
+Scaler (promoted)
+Break Into Forward Deployed Engineering Roles - Free Live Masterclass!
+
+Learn how Forward Deploying Engineer operates at the intersection of engineering, client problem-solving, and real-world deployment & understand what a FDE actually does.
+
+📅 12th Nov | 🕢 7:30 PM | 💻 Online
+
+👉 Claim your free seat now!
+[Register](https://www.scaler.com/events/fde-masterclass)
+31131 reactions
+
+We The Flywheel · 1d
+What does a software team look like when AI does part of the building? Smaller.
+
+Gartner's July 2026 forecast: 60% of organizations will adopt smaller engineering teams by 2029, up from about 15% in 2026.
+
+Our guide covers how the roles change: https://lnkd.in/gByqw4v6
+
+#WeTheFlywheel #AITrends #SoftwareEngineering
+[https://lnkd.in/gByqw4v6](https://lnkd.in/gByqw4v6)
+
+Ada Lovelace (Staff Engineer) · 4h
+You can use AI to know and understand. AI has made both knowing and understanding optional.
+
+Thanks @Grace Hopper for the pointer. More at our notes.
+[@Grace Hopper](https://www.linkedin.com/in/gracehopper/) · [our notes](https://lnkd.in/gAdaNotes)
+42 reactions · image
+https://www.linkedin.com/feed/update/urn:li:ugcPost:7524349425150889985/
+
+[linkedin-feed: 6 post(s)]

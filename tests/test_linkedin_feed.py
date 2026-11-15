@@ -1,0 +1,1671 @@
+# -*- coding: utf-8 -*-
+"""#511: the native LinkedIn feed, proven offline.
+
+Every fixture here is synthetic: a captured response body shaped like
+LinkedIn's own feed envelope (``included[]`` entities with an
+``urn:li:activity`` and a ``paginationToken``), and rendered feed HTML. No test
+opens a socket or a browser. The driver is exercised through :func:`walk` with
+a fake page, and the ladder through :func:`unlocker.fetch` with the feed reader
+replaced.
+
+What is proven:
+
+* the permalink, author, text, relative time and promoted marker come out of
+  passive capture and the DOM, deduped by activity id;
+* the walk is bounded (posts, steps, seconds) and paces its scroll steps;
+* every stop signal is handed to the guard exactly once, with no retry, and
+  posts read before the signal are still returned;
+* the module contains no direct LinkedIn API call and no in-page fetch.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from searchts import linkedin, unlocker
+from searchts import linkedin_feed as lf
+from searchts.unlocker import UnlockerError
+
+# ── synthetic captures ───────────────────────────────────────────────────────
+
+PAYLOAD = {
+    "data": {"metadata": {"paginationToken": "TOKEN-NEXT"}},
+    "included": [
+        {
+            "entityUrn": "urn:li:activity:7001",
+            "actor": {
+                "name": {"text": "Ada Lovelace"},
+                "subDescription": {"text": "3h"},
+            },
+            "commentary": {"text": "  Built a tiny engine.  \n"},
+        },
+        {
+            "entityUrn": "urn:li:activity:7002",
+            "actor": "urn:li:person:42",
+            "commentary": {"text": "We are hiring."},
+            "header": {"text": "Promoted"},
+        },
+        {
+            "entityUrn": "urn:li:person:42",
+            "name": {"text": "Grace Hopper"},
+        },
+    ],
+}
+
+
+def payload(*, extra=None, cursor="TOKEN-NEXT"):
+    data = json.loads(json.dumps(PAYLOAD))
+    if extra:
+        data["included"].extend(extra)
+    data["data"]["metadata"]["paginationToken"] = cursor
+    return json.dumps(data)
+
+
+SDUI_CARDS = (
+    Path(__file__).resolve().parent / "fixtures" / "linkedin_sdui_cards.html"
+).read_text(encoding="utf-8")
+SDUI_EXPECTED = (
+    Path(__file__).resolve().parent / "fixtures" / "linkedin_sdui_cards.expected.txt"
+).read_text(encoding="utf-8")
+SDUI_AUTHORS = [
+    "Guillermo Rauch",
+    "Apple",
+    "Trevor Spires",
+    "Scaler",
+    "We The Flywheel",
+    "Ada Lovelace",
+]
+
+LIVE3_CARDS = (
+    Path(__file__).resolve().parent / "fixtures" / "linkedin_sdui_live3.html"
+).read_text(encoding="utf-8")
+LIVE3_EXPECTED = (
+    Path(__file__).resolve().parent / "fixtures" / "linkedin_sdui_live3.expected.txt"
+).read_text(encoding="utf-8")
+LIVE3_AUTHORS = [
+    "Shreyansh Shah",
+    "Steve Nouri",
+    "We The Flywheel",
+    "Scaler",
+    "Shantanu Ladhwe",
+    "Jane Doe",
+]
+LIVE3_HEADLINE = (
+    "Head of AI ML | 150k+ Linkedin & Substack | AI Agents, RAG, NLP, "
+    "Recommenders, Search & MLOps | Germany 🇩🇪"
+)
+
+DOM_ONE = (
+    '<div class="feed-shared-update-v2" data-urn="urn:li:activity:7001">'
+    '<span class="update-components-actor__name">Ada Lovelace</span>'
+    '<span class="update-components-actor__sub-description">3h</span>'
+    '<div class="update-components-text"><span>Built a tiny engine.</span></div>'
+    "</div>"
+)
+DOM_THREE = (
+    '<div class="feed-shared-update-v2" data-urn="urn:li:activity:7003">'
+    '<span class="update-components-actor__name">Katherine Johnson</span>'
+    '<span class="update-components-actor__sub-description">1d</span>'
+    '<span class="update-components-header__text">Promoted</span>'
+    '<div class="update-components-text"><span>A promoted post.</span></div>'
+    "</div>"
+)
+
+
+class FakeResponse:
+    def __init__(self, url, body="", status=200, ctype="application/json"):
+        self.url = url
+        self.status = status
+        self.headers = {"content-type": ctype}
+        self._body = body
+
+    def text(self):
+        return self._body
+
+
+class FakePage:
+    """A live page as :func:`walk` uses it: one goto, a listener, scrolls."""
+
+    def __init__(self, frames, responses=(), scroll_responses=()):
+        self.frames = list(frames) or [""]
+        self.responses = list(responses)
+        self.scroll_responses = [list(batch) for batch in scroll_responses]
+        self.handlers = []
+        self.waits = []
+        self.scrolls = 0
+        self.gotos = []
+        self.url = lf.FEED_URL
+        self._frame = 0
+
+    def on(self, event, handler):
+        assert event == "response"
+        self.handlers.append(handler)
+
+    def remove_listener(self, event, handler):
+        assert event == "response"
+        self.handlers.remove(handler)
+
+    def goto(self, url, **kwargs):
+        self.gotos.append(url)
+        self._frame = 0
+        for response in self.responses:
+            for handler in self.handlers:
+                handler(response)
+
+    def wait_for_timeout(self, ms):
+        self.waits.append(ms)
+
+    def evaluate(self, script):
+        low = script.lower()
+        assert "fetch" not in low and "http" not in low
+        self.scrolls += 1
+        self._frame = min(self._frame + 1, len(self.frames) - 1)
+        if self.scroll_responses:
+            batch = self.scroll_responses.pop(0)
+            for response in batch:
+                for handler in self.handlers:
+                    handler(response)
+
+    def content(self):
+        return self.frames[self._frame]
+
+
+class FakeGuard:
+    def __init__(self):
+        self.calls = []
+
+    def before_load(self):
+        self.calls.append("before")
+
+    def record(self, signal):
+        self.calls.append(signal)
+
+
+class FakeResume:
+    def __init__(self):
+        self.begun = 0
+        self.cursors = []
+
+    def begin(self):
+        self.begun += 1
+        return None
+
+    def advance(self, cursor, posts):
+        self.cursors.append((cursor, len(posts)))
+
+
+# ── parsing and permalinks ─────────────────────────────────────────────────
+
+
+def test_permalink_is_the_activity_update_url():
+    assert lf.permalink("urn:li:activity:7001") == (
+        "https://www.linkedin.com/feed/update/urn:li:activity:7001/"
+    )
+    assert lf.permalink("7001") == lf.permalink("urn:li:activity:7001")
+
+
+def test_parse_capture_reads_author_text_time_and_cursor():
+    got = lf.parse_capture(payload())
+    assert [p.activity for p in got.posts] == ["7001", "7002"]
+    first = got.posts[0]
+    assert first.author == "Ada Lovelace"
+    assert first.text == "Built a tiny engine."
+    assert first.when == "3h"
+    assert first.permalink.endswith("urn:li:activity:7001/")
+    assert got.cursor == "TOKEN-NEXT"
+
+
+def test_parse_capture_resolves_an_actor_urn_from_included():
+    got = lf.parse_capture(payload())
+    second = got.posts[1]
+    assert second.author == "Grace Hopper"
+    assert second.text == "We are hiring."
+    assert second.promoted is True
+
+
+def test_parse_capture_ignores_a_post_that_says_too_many_pages():
+    body = json.dumps({
+        "included": [{
+            "entityUrn": "urn:li:activity:1",
+            "commentary": {"text": "LinkedIn says too many pages, so here I am."},
+        }],
+    })
+    assert lf.parse_capture(body).signal == ""
+
+
+def test_parse_capture_reads_a_rate_limit_message_from_the_envelope():
+    body = json.dumps({
+        "message": "It looks like you are visiting a very high number of pages",
+    })
+    assert lf.parse_capture(body).signal == "rate-limit"
+
+
+def test_parse_capture_on_a_non_json_body_names_a_stop_signal():
+    body = "<h1>Your account is temporarily restricted</h1>"
+    assert lf.parse_capture(body).signal == "restriction"
+
+
+def test_parse_html_reads_cards_and_promoted():
+    posts = lf.parse_html(DOM_ONE + DOM_THREE)
+    assert [p.activity for p in posts] == ["7001", "7003"]
+    assert posts[0].author == "Ada Lovelace"
+    assert posts[0].text == "Built a tiny engine."
+    assert posts[0].when == "3h"
+    assert posts[1].promoted is True
+    assert posts[1].text == "A promoted post."
+
+
+def test_parse_html_keeps_text_inside_a_nested_element():
+    html = (
+        '<div data-urn="urn:li:activity:9">'
+        '<div class="update-components-text"><span>Nested <b>words</b>.</span></div>'
+        "</div>"
+    )
+    assert lf.parse_html(html)[0].text == "Nested words."
+
+
+def test_parse_html_reads_a_time_tag():
+    html = (
+        '<div data-urn="urn:li:activity:5"><time>4h</time>'
+        '<div class="update-components-text">Words.</div></div>'
+    )
+    assert lf.parse_html(html)[0].when == "4h"
+
+
+def test_parse_html_is_empty_for_no_markup():
+    assert lf.parse_html("") == []
+    assert lf.parse_html("<p>No cards here</p>") == []
+
+
+# ── SDUI markup (the signed-in feed since #517) ─────────────────────────────
+
+
+def test_parse_html_reads_sdui_cards_and_skips_the_furniture():
+    posts = lf.parse_html(SDUI_CARDS)
+    assert [post.author for post in posts] == SDUI_AUTHORS
+    assert [post.when for post in posts] == [
+        "23h", "", "1d • Edited", "", "1d", "4h",
+    ]
+    assert [post.promoted for post in posts] == [
+        False, True, False, True, False, False,
+    ]
+    assert [post.headline for post in posts] == [
+        "CEO at Vercel", "", "Applied AI @ Anthropic", "", "", "Staff Engineer",
+    ]
+    assert posts[0].text.startswith("We will all be learning")
+    assert "▪️ Was really slow" in posts[0].text
+    assert "… more" not in posts[0].text
+    assert posts[1].text == (
+        "Introducing MacBook Pro with PROLED XDR Display. A screen come true."
+    )
+    assert posts[2].text.startswith("Big steps!")
+    # A share box, a sorter, New posts, a Premium upsell, a recommendation rail
+    # and a follow suggestion are not posts.
+    assert all("Start a post" not in post.text for post in posts)
+    assert all("Recommended for you" not in post.text for post in posts)
+    assert all("Based on your profile" not in post.text for post in posts)
+    assert "Riley Chen" not in [post.author for post in posts]
+
+
+def test_sdui_cards_get_stable_synthetic_ids_without_a_permalink():
+    first = lf.parse_html(SDUI_CARDS)
+    second = lf.parse_html(SDUI_CARDS)
+    assert [post.activity for post in first] == [post.activity for post in second]
+    assert len({post.activity for post in first}) == len(first)
+    assert all(
+        post.activity.startswith("sdui-")
+        for post in first
+        if post.author != "Ada Lovelace"
+    )
+    assert [post.permalink for post in first[:5]] == [""] * 5
+    assert first[5].permalink == (
+        "https://www.linkedin.com/feed/update/"
+        "urn:li:ugcPost:7524349425150889985/"
+    )
+
+
+def test_sdui_card_uses_a_real_activity_urn_when_the_dom_still_has_one():
+    html = (
+        '<div role="listitem" componentkey="update-card-abc">'
+        "<h2><span>Feed post</span></h2>"
+        '<a href="https://www.linkedin.com/in/ada/"><span>Ada Lovelace</span></a>'
+        "<p><span>2h</span></p>"
+        '<span data-testid="expandable-text-box">A real urn.</span>'
+        '<a href="https://www.linkedin.com/feed/update/urn:li:activity:4242/">'
+        "<span>open</span></a></div>"
+    )
+    post = lf.parse_html(html)[0]
+    assert post.activity == "4242"
+    assert post.urn == "urn:li:activity:4242"
+    assert post.permalink.endswith("urn:li:activity:4242/")
+
+
+def test_sdui_card_keeps_the_urn_type_for_a_ugcpost():
+    html = (
+        '<div role="listitem" componentkey="update-card-abc">'
+        "<h2><span>Feed post</span></h2>"
+        '<a href="https://www.linkedin.com/in/ada/"><span>Ada Lovelace</span></a>'
+        "<p><span>2h</span></p>"
+        '<span data-testid="expandable-text-box">A share.</span>'
+        '<a href="https://www.linkedin.com/feed/update/urn:li:share:777/">open</a>'
+        "</div>"
+    )
+    post = lf.parse_html(html)[0]
+    assert post.permalink == (
+        "https://www.linkedin.com/feed/update/urn:li:share:777/"
+    )
+
+
+def test_sdui_relative_time_keeps_the_edited_marker():
+    posts = lf.parse_html(SDUI_CARDS)
+    assert posts[0].when == "23h"
+    assert posts[2].when == "1d • Edited"
+
+
+def test_sdui_headline_is_a_separate_field_not_part_of_the_body():
+    posts = lf.parse_html(SDUI_CARDS)
+    guillermo = posts[0]
+    assert guillermo.headline == "CEO at Vercel"
+    assert "CEO at Vercel" not in guillermo.text
+    assert posts[2].headline == "Applied AI @ Anthropic"
+    assert "Applied AI @ Anthropic" not in posts[2].text
+
+
+def test_sdui_promoted_card_does_not_leak_the_header_into_the_body():
+    scaler = lf.parse_html(SDUI_CARDS)[3]
+    assert scaler.promoted is True
+    assert scaler.text.startswith("Break Into Forward Deployed Engineering Roles")
+    assert "Feed post" not in scaler.text
+    assert "316,827 followers" not in scaler.text
+    assert "Promoted" not in scaler.text
+    assert "Scaler316,827" not in scaler.text
+
+
+def test_sdui_follow_suggestion_is_not_a_post():
+    authors = [post.author for post in lf.parse_html(SDUI_CARDS)]
+    assert "Riley Chen" not in authors
+    assert not any("Based on your profile" in post.text for post in lf.parse_html(SDUI_CARDS))
+
+
+def test_sdui_joins_adjacent_text_nodes_with_a_space():
+    ada = lf.parse_html(SDUI_CARDS)[5]
+    assert "understand. AI has made" in ada.text
+    assert "understand.AI" not in ada.text
+
+
+def test_sdui_keeps_important_links_and_unwraps_redirects():
+    posts = lf.parse_html(SDUI_CARDS)
+    trevor = posts[2]
+    # A header CTA is furniture, not a body link.
+    assert ("Visit my website", "https://www.youtube.com/@trevspires") not in trevor.links
+    assert trevor.links == []
+    ada = posts[5]
+    assert (
+        "@Grace Hopper",
+        "https://www.linkedin.com/in/gracehopper/",
+    ) in ada.links
+    assert ("our notes", "https://lnkd.in/gAdaNotes") in ada.links
+    apple = posts[1]
+    assert any(url == "https://www.apple.com/macbook-pro/" for _label, url in apple.links)
+    for post in posts:
+        for _label, url in post.links:
+            assert "/feed/" not in url
+            assert url != "https://www.linkedin.com/in/rauchg/"
+            assert url != "https://www.linkedin.com/company/apple/"
+
+
+def test_sdui_captures_engagement_and_media_only_when_present():
+    posts = lf.parse_html(SDUI_CARDS)
+    guillermo = posts[0]
+    assert (guillermo.reactions, guillermo.comments, guillermo.reposts) == (918, 68, 62)
+    assert guillermo.media == ""
+    assert posts[1].media == "video"
+    assert (posts[1].reactions, posts[1].comments, posts[1].reposts) == (1095, 13, 18)
+    ada = posts[5]
+    assert ada.media == "image"
+    assert ada.reactions == 42
+    assert ada.comments is None and ada.reposts is None
+
+
+def test_parse_capture_finds_activity_ids_in_an_rsc_stream():
+    body = (
+        '0:["$","div",null,{"entityUrn":"urn:li:activity:4242"}]\n'
+        '1:["$","div",null,{"entityUrn":"urn:li:activity:4243"}]\n'
+    )
+    got = lf.parse_capture(body)
+    assert [post.activity for post in got.posts] == ["4242", "4243"]
+
+
+def test_walk_reads_an_sdui_feed_and_drops_a_permalink_only_rsc_stub():
+    page = FakePage([SDUI_CARDS], [
+        FakeResponse(
+            "https://www.linkedin.com/rsc-action/feed/pagination?start=0",
+            '0:{"urn":"urn:li:activity:4242"}',
+            ctype="text/x-component",
+        ),
+    ])
+    read = lf.walk(page, guard=FakeGuard(), limits=limits(max_posts=10))
+    assert [post.author for post in read.posts] == SDUI_AUTHORS
+    assert "4242" not in [post.activity for post in read.posts]
+    assert len(read.posts) == 6
+
+
+def test_walk_merges_a_permalink_stub_into_a_matching_dom_card():
+    card = (
+        '<div role="listitem" componentkey="update-card-abc">'
+        "<h2><span>Feed post</span></h2>"
+        '<a href="https://www.linkedin.com/in/ada/"><span>Ada Lovelace</span></a>'
+        "<p><span>2h</span></p>"
+        '<span data-testid="expandable-text-box">The real words.</span>'
+        '<a href="https://www.linkedin.com/feed/update/urn:li:activity:4242/">open</a>'
+        "</div>"
+    )
+    page = FakePage([card], [
+        FakeResponse(
+            "https://www.linkedin.com/rsc-action/feed/pagination?start=0",
+            '0:{"urn":"urn:li:activity:4242"}',
+            ctype="text/x-component",
+        ),
+    ])
+    read = lf.walk(page, guard=FakeGuard(), limits=limits(max_posts=10))
+    assert len(read.posts) == 1
+    assert read.posts[0].author == "Ada Lovelace"
+    assert read.posts[0].text == "The real words."
+    assert read.posts[0].permalink.endswith("urn:li:activity:4242/")
+
+
+def test_walk_dedupes_the_same_sdui_cards_across_scrolls():
+    page = FakePage([SDUI_CARDS, SDUI_CARDS])
+    read = lf.walk(page, guard=FakeGuard(), limits=limits(max_steps=1))
+    assert len(read.posts) == 6
+    assert read.posts[0].author == "Guillermo Rauch"
+
+
+def test_render_has_author_headline_time_text_permalink_and_promoted():
+    text = lf.render([
+        lf.Post("7001", "Ada Lovelace", "Built a tiny engine.", "3h",
+                headline="Analyst"),
+        lf.Post("7002", "Grace Hopper", "We are hiring.", "1d", promoted=True),
+    ], stop="reached the 2 posts asked for")
+    assert "Ada Lovelace (Analyst) · 3h" in text
+    assert "Built a tiny engine." in text
+    assert "urn:li:activity:7001" in text
+    assert "Grace Hopper · 1d (promoted)" in text
+    assert "reached the 2 posts asked for" in text
+
+
+def test_render_drops_permalink_only_stubs():
+    text = lf.render([
+        lf.Post("7001"),
+        lf.Post("7002", "Grace Hopper", "We are hiring.", "1d"),
+    ])
+    assert "author not captured" not in text
+    assert "urn:li:activity:7001" not in text
+    assert "Grace Hopper" in text
+    assert "[linkedin-feed: 1 post(s)]" in text
+
+
+def test_render_keeps_links_engagement_and_media_compact():
+    text = lf.render([
+        lf.Post(
+            "7001", "Ada Lovelace", "Built a tiny engine.", "3h",
+            links=[("notes", "https://example.com/notes")],
+            reactions=1, comments=2, reposts=3, media="video",
+        ),
+    ])
+    assert "[notes](https://example.com/notes)" in text
+    assert "1 reaction · 2 comments · 3 reposts · video" in text
+
+
+def test_fixture_renders_the_expected_compact_output():
+    assert lf.render(lf.parse_html(SDUI_CARDS)) == SDUI_EXPECTED.rstrip("\n")
+
+
+# ── the live SDUI cards (#517) ──────────────────────────────────────────────
+
+
+def live3() -> list[lf.Post]:
+    return lf.parse_html(LIVE3_CARDS)
+
+
+def live3_by_author() -> dict:
+    return {post.author: post for post in live3()}
+
+
+def test_live3_fixture_renders_the_expected_output():
+    assert lf.render(live3()) == LIVE3_EXPECTED.rstrip("\n")
+
+
+def test_live3_follows_the_actor_block_not_the_social_context():
+    posts = live3_by_author()
+    assert list(posts) == LIVE3_AUTHORS
+    shantanu = posts["Shantanu Ladhwe"]
+    assert shantanu.when == "1d"
+    assert shantanu.headline == LIVE3_HEADLINE
+    assert shantanu.context == "Jane Roe follows"
+    assert "Followed by" not in shantanu.headline
+    assert "Jane Roe" not in shantanu.headline
+    jane = posts["Jane Doe"]
+    assert jane.when == "1w"
+    assert jane.headline == "Student at High School"
+    assert jane.context == "John Doe likes this"
+    assert "likes this" not in jane.headline
+    assert "John Doe" not in jane.headline
+
+
+@pytest.mark.parametrize("tail", [
+    "commented on this",
+    "reposted this",
+    "celebrates this",
+    "supports this",
+    "loves this",
+    "finds this insightful",
+    "finds this funny",
+    "and 3 others commented on this",
+])
+def test_live3_every_social_context_stays_out_of_author_and_headline(tail):
+    card = (
+        '<div role="listitem" componentkey="update-card-context">'
+        "<div><h2><span>Feed post</span></h2>"
+        f"<p><span>Jane Roe</span> <span>{tail}</span></p>"
+        '<hr role="presentation">'
+        '<div><a href="https://www.linkedin.com/in/john-doe-123/">'
+        "<span>John Doe</span><span> • 3rd+</span></a>"
+        "<p><span>Engineer</span></p><p><span>2h</span></p></div>"
+        '<p><span data-testid="expandable-text-box">Words.</span></p>'
+        "</div></div>"
+    )
+    post = lf.parse_html(card)[0]
+    assert post.author == "John Doe"
+    assert post.headline == "Engineer"
+    assert post.when == "2h"
+    assert tail in post.context
+    assert tail not in post.headline
+    assert "Jane Roe" not in post.headline
+
+
+def test_live3_header_cta_never_reaches_headline_or_links():
+    posts = live3_by_author()
+    shreyansh = posts["Shreyansh Shah"]
+    assert "View my newsletter" not in shreyansh.headline
+    assert shreyansh.links == []
+    shantanu = posts["Shantanu Ladhwe"]
+    assert "Visit my website" not in shantanu.headline
+    assert all("jamwithai" not in url for _label, url in shantanu.links)
+    for post in posts.values():
+        assert "View my newsletter" not in post.headline
+        assert "Visit my website" not in post.headline
+
+
+def test_live3_promoted_by_keeps_the_headline_and_rejects_a_follower_count():
+    steve = live3_by_author()["Steve Nouri"]
+    assert steve.when == ""
+    assert steve.promoted is True
+    assert steve.promoted_by == "GenAI Works"
+    assert steve.headline == (
+        "AI Scientist & GTM Advisor @ Fortune 500 | Largest AI Community 14M+ | "
+        "Keynote Speaker"
+    )
+    assert "14M" in steve.headline
+    assert "Promoted by" not in steve.headline
+    rendered = lf.render([steve])
+    assert "(promoted by GenAI Works)" in rendered
+    assert "· 14M" not in rendered
+
+
+def test_live3_header_and_context_profiles_are_not_body_links():
+    posts = live3_by_author()
+    links = [
+        (label, url)
+        for post in posts.values()
+        for label, url in post.links
+    ]
+    urls = [url for _label, url in links]
+    for forbidden in (
+        "/in/shantanuladhwe/",
+        "/in/jane-roe-123/",
+        "/in/john-doe-123/",
+        "/in/jane-doe-123/",
+        "/in/shreyanshshah22/",
+        "/company/genai-works/",
+        "/school/scalerofficial/",
+        "newsletter-follow",
+    ):
+        assert all(forbidden not in url for url in urls)
+    assert ("HubSpot", "https://www.linkedin.com/company/hubspot/") in posts[
+        "Steve Nouri"
+    ].links
+    scaler_urls = [url for _label, url in posts["Scaler"].links]
+    assert len(scaler_urls) == 1
+    assert scaler_urls[0].startswith("https://www.scaler.com/event/")
+
+
+def test_live3_article_preview_labels_use_the_title_once():
+    posts = live3_by_author()
+    wtf = posts["We The Flywheel"]
+    labels = [label for label, url in wtf.links if "wetheflywheel.com" in url]
+    assert labels == [
+        "Building AI-Native Engineering Teams: Structure Guide "
+        "(wetheflywheel.com)"
+    ]
+    assert sum("wetheflywheel.com" in url for _label, url in wtf.links) == 1
+    scaler = posts["Scaler"]
+    labels = [label for label, url in scaler.links if "scaler.com" in url]
+    assert labels == [
+        "Break Into Forward Deployed Engineering Roles - Free Live "
+        "Masterclass! (scaler.com)"
+    ]
+    assert sum("scaler.com" in url for _label, url in scaler.links) == 1
+    for label, url in wtf.links + scaler.links:
+        if "wetheflywheel.com" in url or "scaler.com" in url:
+            assert not label.startswith(("http://", "https://"))
+
+
+def test_live3_hashtag_search_links_stay_out_of_the_links_line():
+    for post in live3():
+        for label, url in post.links:
+            assert "/search/results" not in url
+            assert not label.startswith("#")
+
+
+def test_live3_follow_suggestion_is_not_a_post():
+    posts = live3()
+    assert len(posts) == 6
+    assert "Liam McGarrigle" not in [post.author for post in posts]
+    assert all("Based on your profile" not in post.text for post in posts)
+
+
+def test_live3_keeps_the_real_activity_permalink_and_engagement():
+    posts = live3_by_author()
+    shantanu = posts["Shantanu Ladhwe"]
+    assert shantanu.urn == "urn:li:activity:7524457429653286912"
+    assert shantanu.permalink == (
+        "https://www.linkedin.com/feed/update/"
+        "urn:li:activity:7524457429653286912/"
+    )
+    steve = posts["Steve Nouri"]
+    assert (steve.reactions, steve.comments, steve.reposts) == (121, 21, 9)
+    assert steve.media == "video"
+    wtf = posts["We The Flywheel"]
+    assert (wtf.reactions, wtf.comments, wtf.reposts) == (2, None, 1)
+    assert wtf.media == "image"
+    scaler = posts["Scaler"]
+    assert scaler.promoted is True
+    assert (scaler.reactions, scaler.comments, scaler.reposts) == (110, None, None)
+
+
+# ── the walk ────────────────────────────────────────────────────────────────
+
+
+def limits(**kwargs):
+    base = dict(
+        max_posts=25, max_steps=3, max_seconds=90,
+        step_min_ms=2000, step_max_ms=5000, settle_ms=0,
+    )
+    base.update(kwargs)
+    return lf.Limits(**base)
+
+
+def test_walk_merges_capture_and_dom_and_dedupes_by_activity():
+    page = FakePage([DOM_ONE, DOM_THREE], [
+        FakeResponse("https://www.linkedin.com/graphql/feed", payload()),
+    ])
+    guard = FakeGuard()
+    resume = FakeResume()
+    read = lf.walk(page, guard=guard, resume=resume,
+                    limits=limits(max_posts=10, max_steps=2))
+    assert [p.activity for p in read.posts] == ["7001", "7002", "7003"]
+    assert read.steps == 2
+    assert read.cursor == "TOKEN-NEXT"
+    assert resume.begun == 1
+    assert resume.cursors and resume.cursors[-1][0] == "TOKEN-NEXT"
+    assert guard.calls == ["before"]
+
+
+def test_walk_stops_at_the_post_limit_without_scrolling():
+    extra = [
+        {
+            "entityUrn": f"urn:li:activity:{8000 + i}",
+            "commentary": {"text": f"Post {i}"},
+        }
+        for i in range(30)
+    ]
+    page = FakePage([DOM_ONE], [
+        FakeResponse("https://www.linkedin.com/graphql/feed", payload(extra=extra)),
+    ])
+    read = lf.walk(page, guard=FakeGuard(), limits=limits(max_posts=25))
+    assert len(read.posts) == 25
+    assert read.steps == 0
+    assert "25 posts asked for" in read.stop
+    assert page.scrolls == 0
+
+
+def test_walk_stops_at_the_step_limit():
+    page = FakePage([DOM_ONE])
+    read = lf.walk(page, guard=FakeGuard(), limits=limits(max_steps=2))
+    assert read.steps == 2
+    assert page.scrolls == 2
+    assert "2 scroll step limit" in read.stop
+
+
+def test_walk_paces_its_scroll_steps_between_two_and_five_seconds():
+    page = FakePage([DOM_ONE])
+    lf.walk(page, guard=FakeGuard(), limits=limits(max_steps=3))
+    # settle_ms is 0 here, so the non-zero waits are the step gaps.
+    gaps = [ms for ms in page.waits if ms]
+    assert len(gaps) == 3
+    assert all(2000 <= ms <= 5000 for ms in gaps)
+
+
+def test_walk_stops_on_a_429_and_never_scrolls():
+    page = FakePage([""], [
+        FakeResponse("https://www.linkedin.com/graphql/feed", "", status=429),
+    ])
+    guard = FakeGuard()
+    read = lf.walk(page, guard=guard, limits=limits())
+    assert read.signal == "rate-limit"
+    assert read.posts == []
+    assert guard.calls == ["before", "rate-limit"]
+    assert "24 h" in read.text
+    assert page.scrolls == 0
+
+
+def test_walk_stops_on_999():
+    page = FakePage([DOM_ONE], [
+        FakeResponse("https://www.linkedin.com/graphql/feed", "", status=999),
+    ])
+    guard = FakeGuard()
+    read = lf.walk(page, guard=guard, limits=limits())
+    assert read.signal == "rate-limit"
+    assert guard.calls == ["before", "rate-limit"]
+
+
+def test_walk_returns_posts_read_before_a_stop_signal():
+    page = FakePage([DOM_ONE, DOM_ONE + "<p>It looks like you are visiting a "
+                    "very high number of pages on LinkedIn</p>"])
+    guard = FakeGuard()
+    read = lf.walk(page, guard=guard, limits=limits())
+    assert [p.activity for p in read.posts] == ["7001"]
+    assert read.steps == 1
+    assert read.signal == "rate-limit"
+    assert guard.calls == ["before", "rate-limit"]
+    assert "Built a tiny engine." in read.text
+
+
+@pytest.mark.parametrize("words,signal", [
+    ("Your account is temporarily restricted", "restriction"),
+    ("Let's do a quick security check", "checkpoint"),
+    ("Sign in to LinkedIn", "logout"),
+    ("You have been signed out", "logout"),
+])
+def test_walk_names_each_stop_page(words, signal):
+    page = FakePage([f"<p>{words}</p>"])
+    guard = FakeGuard()
+    read = lf.walk(page, guard=guard, limits=limits())
+    assert read.signal == signal
+    assert guard.calls == ["before", signal]
+
+
+def test_walk_records_a_restriction_as_stop_until_cleared():
+    page = FakePage(["<p>Your account is temporarily restricted</p>"])
+    read = lf.walk(page, guard=FakeGuard(), limits=limits())
+    assert "person must clear" in read.stop
+
+
+def test_walk_resumes_by_scrolling_past_the_cursor_already_read():
+    nxt = payload(
+        extra=[{
+            "entityUrn": "urn:li:activity:7004",
+            "actor": {"name": {"text": "Margaret Hamilton"}},
+            "commentary": {"text": "The next page."},
+        }],
+        cursor="TOKEN-2",
+    )
+    page = FakePage(
+        [DOM_ONE, DOM_ONE],
+        [FakeResponse("https://www.linkedin.com/graphql/feed", payload())],
+        scroll_responses=[[
+            FakeResponse("https://www.linkedin.com/graphql/feed", nxt),
+        ]],
+    )
+    resume = lf.TokenResume(cursor="TOKEN-NEXT", seen=["7001", "7002"])
+    read = lf.walk(
+        page, guard=FakeGuard(), resume=resume,
+        limits=limits(max_posts=10, max_steps=2),
+    )
+    assert [p.activity for p in read.posts] == ["7004"]
+    assert read.posts[0].author == "Margaret Hamilton"
+    assert resume.latest == "TOKEN-2"
+    assert page.gotos == [lf.FEED_URL]
+    assert page.scrolls >= 1
+
+
+def test_walk_says_when_the_resume_cursor_never_moves():
+    page = FakePage([DOM_ONE], [
+        FakeResponse("https://www.linkedin.com/graphql/feed", payload()),
+    ])
+    read = lf.walk(
+        page, guard=FakeGuard(), resume=lf.TokenResume(cursor="TOKEN-NEXT"),
+        limits=limits(max_steps=1),
+    )
+    assert read.posts == []
+    assert "nothing new" in read.stop
+    assert page.scrolls == 1
+
+
+def test_walk_never_retries_a_signal():
+    page = FakePage([DOM_ONE], [
+        FakeResponse("https://www.linkedin.com/graphql/feed", "", status=429),
+    ])
+    lf.walk(page, guard=FakeGuard(), limits=limits())
+    assert page.gotos == [lf.FEED_URL]
+    assert page.scrolls == 0
+
+
+# ── the guard seam ──────────────────────────────────────────────────────────
+
+
+def test_feed_guard_records_a_stop_through_the_linkedin_guard():
+    guard = lf.FeedGuard()
+    guard.record("rate-limit")
+    stop = linkedin.current_stop()
+    assert stop is not None and stop.reason == "rate-limit"
+    with pytest.raises(lf.GuardRefused) as ei:
+        guard.before_load()
+    assert "24" in str(ei.value)
+    assert "rate limit" in str(ei.value).lower()
+
+
+def test_feed_guard_refuses_until_a_restriction_is_cleared():
+    guard = lf.FeedGuard()
+    guard.record("restriction")
+    stop = linkedin.current_stop()
+    assert stop is not None and stop.until is None
+    with pytest.raises(lf.GuardRefused) as ei:
+        guard.before_load()
+    assert "person" in str(ei.value)
+
+
+def test_feed_guard_enforces_the_feed_gap(monkeypatch):
+    loads = []
+    monkeypatch.setattr(linkedin, "take_load", lambda **_k: loads.append("load"))
+    now = 1_700_000_000.0
+    lf._remember_feed(now - 60)
+    guard = lf.FeedGuard(clock=lambda: now)
+    with pytest.raises(lf.GuardRefused) as ei:
+        guard.before_load()
+    assert "at least 30 min apart" in str(ei.value)
+    assert loads == []
+
+
+def test_feed_guard_gap_zero_turns_the_feed_gap_off(monkeypatch):
+    monkeypatch.setenv("SEARCHTS_LINKEDIN_FEED_GAP_MINUTES", "0")
+    loads = []
+    monkeypatch.setattr(linkedin, "take_load", lambda **_k: loads.append("load"))
+    now = 1_700_000_000.0
+    lf._remember_feed(now - 1)
+    lf.FeedGuard(clock=lambda: now).before_load()
+    assert loads == ["load"]
+    assert lf._last_feed() == now - 1
+
+
+def test_feed_guard_stamps_only_after_content_returns(monkeypatch):
+    now = 1_700_000_000.0
+    remembered = []
+    monkeypatch.setattr(linkedin, "current_stop", lambda: None)
+    monkeypatch.setattr(linkedin, "feed_gap_minutes", lambda: 0)
+    monkeypatch.setattr(linkedin, "exclusive_load", lambda: _null_context())
+    monkeypatch.setattr(lf, "_remember_feed", remembered.append)
+    guard = lf.FeedGuard(clock=lambda: now)
+
+    guard.before_load()
+    assert remembered == []
+    guard.successful()
+    assert remembered == [now]
+
+
+def _null_context():
+    from contextlib import nullcontext
+
+    return nullcontext()
+
+
+def test_target_closed_navigation_is_clean_and_does_not_stamp_or_record(monkeypatch):
+    remembered = []
+    monkeypatch.setattr(lf, "_remember_feed", remembered.append)
+
+    class TargetClosedError(Exception):
+        pass
+
+    class ClosedPage(FakePage):
+        def goto(self, url, **kwargs):
+            self.gotos.append(url)
+            raise TargetClosedError("Target page, context or browser has been closed")
+
+    guard = FakeGuard()
+    page = ClosedPage([DOM_ONE])
+    with pytest.raises(lf.FeedUnavailable, match="browser closed the tab"):
+        lf.walk(page, guard=guard, limits=limits())
+    assert guard.calls == ["before"]
+    assert remembered == []
+    assert page.handlers == []
+
+
+def test_target_closed_navigation_still_spends_the_load_cap(monkeypatch):
+    from contextlib import nullcontext
+
+    loads = []
+    remembered = []
+    monkeypatch.setattr(linkedin, "current_stop", lambda: None)
+    monkeypatch.setattr(linkedin, "feed_gap_minutes", lambda: 0)
+    monkeypatch.setattr(
+        linkedin, "exclusive_load",
+        lambda: (loads.append("load"), nullcontext())[1],
+    )
+    monkeypatch.setattr(lf, "_remember_feed", remembered.append)
+
+    class TargetClosedError(Exception):
+        pass
+
+    class ClosedPage(FakePage):
+        def goto(self, url, **kwargs):
+            self.gotos.append(url)
+            raise TargetClosedError("Target page, context or browser has been closed")
+
+    with pytest.raises(lf.FeedUnavailable, match="browser closed the tab"):
+        lf.walk(ClosedPage([DOM_ONE]), guard=lf.FeedGuard(), limits=limits())
+    assert loads == ["load"]
+    assert remembered == []
+
+
+def test_target_closed_after_navigation_does_not_turn_partial_content_into_success(
+    monkeypatch,
+):
+    remembered = []
+    monkeypatch.setattr(lf, "_remember_feed", remembered.append)
+
+    class TargetClosedError(Exception):
+        pass
+
+    class ClosedDuringScroll(FakePage):
+        def evaluate(self, _script):
+            raise TargetClosedError("Target page, context or browser has been closed")
+
+    page = ClosedDuringScroll([DOM_ONE])
+    guard = FakeGuard()
+    with pytest.raises(lf.FeedUnavailable, match="browser closed the tab"):
+        lf.walk(page, guard=guard, limits=limits())
+    assert page.gotos == [lf.FEED_URL]
+    assert guard.calls == ["before"]
+    assert remembered == []
+    assert page.handlers == []
+
+
+def test_cdp_connection_waits_for_allow_and_only_closes_its_new_tab(monkeypatch):
+    events = []
+
+    class Loop:
+        handler = None
+
+        def get_exception_handler(self):
+            return self.handler
+
+        def set_exception_handler(self, handler):
+            self.handler = handler
+
+        def default_exception_handler(self, _context):
+            raise AssertionError("TargetClosedError should be retrieved quietly")
+
+    class Page:
+        def evaluate(self, _script):
+            return True
+
+        def close(self):
+            events.append("tab.close")
+
+    class PageSession:
+        def send(self, method, _params=None):
+            assert method == "Target.getTargetInfo"
+            return {"targetInfo": {"targetId": "tab-1"}}
+
+        def detach(self):
+            events.append("page.detach")
+
+    class Session:
+        def send(self, method, params=None):
+            if method == "Target.getTargets":
+                return {
+                    "targetInfos": [
+                        {
+                            "targetId": "web",
+                            "type": "page",
+                            "url": "https://www.linkedin.com/feed/",
+                            "browserContextId": "ctx-1",
+                        }
+                    ]
+                }
+            if method == "Browser.getWindowForTarget":
+                return {"windowId": 7}
+            if method in ("Target.activateTarget", "Target.closeTarget"):
+                events.append((method, params))
+                return {}
+            raise AssertionError(method)
+
+        def detach(self):
+            events.append("browser.detach")
+
+    class Context:
+        def new_page(self):
+            events.append("new_page")
+            return Page()
+
+        def new_cdp_session(self, _page):
+            return PageSession()
+
+    class Browser:
+        def __init__(self):
+            self.contexts = [Context()]
+
+        def new_browser_cdp_session(self):
+            return Session()
+
+        def close(self):
+            raise AssertionError("CDP teardown must not close the user's browser")
+
+    class Chromium:
+        def connect_over_cdp(self, endpoint, **kwargs):
+            events.append(("connect", endpoint, kwargs))
+            return Browser()
+
+    loop = Loop()
+
+    class Manager:
+        _loop = loop
+
+        def __enter__(self):
+            return SimpleNamespace(chromium=Chromium())
+
+        def __exit__(self, *_exc):
+            events.append("disconnect")
+
+    monkeypatch.setitem(
+        sys.modules, "patchright.sync_api",
+        SimpleNamespace(sync_playwright=lambda: Manager()),
+    )
+    monkeypatch.setenv("SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS", "75")
+    with lf._browser_page("", None, "127.0.0.1:9222", lf.FEED_URL) as page:
+        assert page is not None
+    assert events[0] == (
+        "connect", "http://127.0.0.1:9222", {"timeout": 75_000, "no_defaults": True},
+    )
+    assert "new_page" in events
+    assert ("Target.activateTarget", {"targetId": "web"}) in events
+    assert ("Target.closeTarget", {"targetId": "tab-1"}) in events
+    assert "tab.close" not in events
+    assert events[-1] == "disconnect"
+
+    class Future:
+        retrieved = False
+
+        def done(self):
+            return True
+
+        def exception(self):
+            self.retrieved = True
+            return type("TargetClosedError", (Exception,), {})()
+
+    future = Future()
+    loop.handler(loop, {"future": future})
+    assert future.retrieved
+
+
+def test_cdp_target_closed_is_one_named_failure_and_ctrl_c_stays_distinct(monkeypatch):
+    class TargetClosedError(Exception):
+        pass
+
+    class Chromium:
+        def connect_over_cdp(self, *_args, **_kwargs):
+            raise TargetClosedError("connection closed")
+
+    class Manager:
+        _loop = None
+
+        def __enter__(self):
+            return SimpleNamespace(chromium=Chromium())
+
+        def __exit__(self, *_exc):
+            return None
+
+    monkeypatch.setitem(
+        sys.modules, "patchright.sync_api",
+        SimpleNamespace(sync_playwright=lambda: Manager()),
+    )
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        with lf._browser_page("", None, "http://127.0.0.1:9222", lf.FEED_URL):
+            pass
+    assert str(ei.value) == lf._browser_closed_message()
+
+    class Interrupted(Chromium):
+        def connect_over_cdp(self, *_args, **_kwargs):
+            raise KeyboardInterrupt
+
+    class InterruptManager(Manager):
+        def __enter__(self):
+            return SimpleNamespace(chromium=Interrupted())
+
+    monkeypatch.setitem(
+        sys.modules, "patchright.sync_api",
+        SimpleNamespace(sync_playwright=lambda: InterruptManager()),
+    )
+    with pytest.raises(KeyboardInterrupt):
+        with lf._browser_page("", None, "http://127.0.0.1:9222", lf.FEED_URL):
+            pass
+
+
+def test_cdp_timeout_names_the_wait_and_writes_no_feed_state(monkeypatch):
+    """An unanswered Allow dialog is a named timeout, not a feed read.
+
+    The WebSocket hangs until someone clicks Allow. When that wait ends the
+    sentence must name the exact number of seconds and the one action, and
+    the failure must not start the feed gap or record a 24 h stop.
+    """
+    from contextlib import nullcontext
+
+    from searchts import linkedin_attach
+
+    class Chromium:
+        def connect_over_cdp(self, *_args, **_kwargs):
+            raise TimeoutError("Timeout 75000ms exceeded.")
+
+    class Manager:
+        _loop = None
+
+        def __enter__(self):
+            return SimpleNamespace(chromium=Chromium())
+
+        def __exit__(self, *_exc):
+            return None
+
+    monkeypatch.setitem(
+        sys.modules, "patchright.sync_api",
+        SimpleNamespace(sync_playwright=lambda: Manager()),
+    )
+    monkeypatch.setenv("SEARCHTS_LINKEDIN_CDP_TIMEOUT_SECONDS", "75")
+    monkeypatch.setattr(
+        linkedin_attach, "decide",
+        lambda **_kwargs: SimpleNamespace(
+            action="attach", endpoint="http://127.0.0.1:9222",
+            browser="vivaldi", message="",
+        ),
+    )
+    monkeypatch.setattr(linkedin, "current_stop", lambda: None)
+    monkeypatch.setattr(linkedin, "feed_gap_minutes", lambda: 0)
+    monkeypatch.setattr(linkedin, "exclusive_load", nullcontext)
+    remembered = []
+    stops = []
+    monkeypatch.setattr(lf, "_remember_feed", remembered.append)
+    monkeypatch.setattr(linkedin, "record_stop", stops.append)
+
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf.read_feed(profile="", executable="", attach="on")
+
+    message = str(ei.value)
+    assert "no Allow click within 75 s" in message
+    assert "Click Allow in the browser, then read again" in message
+    assert "Nothing was requested from LinkedIn" in message
+    assert remembered == []
+    assert stops == []
+
+
+def test_feed_guard_books_one_load_and_names_a_spent_budget(monkeypatch):
+    loads = []
+
+    def counted(**_kwargs):
+        loads.append("load")
+
+    monkeypatch.setattr(linkedin, "take_load", counted)
+    lf.FeedGuard(clock=lambda: 1_700_000_000.0).before_load()
+    assert loads == ["load"]
+
+    def spent(**_kwargs):
+        raise linkedin.Paced("budget spent", "wait for SEARCHTS_LINKEDIN_LOADS_PER_HOUR")
+
+    monkeypatch.setattr(linkedin, "take_load", spent)
+    lf._remember_feed(0)
+    with pytest.raises(lf.GuardRefused) as ei:
+        lf.FeedGuard(clock=lambda: 1_700_000_000.0).before_load()
+    assert "SEARCHTS_LINKEDIN_LOADS_PER_HOUR" in str(ei.value)
+
+
+# ── profile and wiring ──────────────────────────────────────────────────────
+
+
+def test_feed_urls_are_the_home_feed_only():
+    assert linkedin.is_feed("https://www.linkedin.com/feed/")
+    assert linkedin.is_feed("https://linkedin.com/feed")
+    assert not linkedin.is_feed("https://www.linkedin.com/feed/update/urn:li:activity:1/")
+    assert not linkedin.is_feed("https://www.linkedin.com/in/someone/")
+    assert not linkedin.is_feed("https://example.com/feed/")
+
+
+def test_profile_problem_names_the_env_var():
+    problem = lf.profile_problem("")
+    assert "SEARCHTS_LINKEDIN_PROFILE" in problem
+
+
+def test_profile_problem_rejects_a_missing_directory(tmp_path):
+    assert "not a directory" in lf.profile_problem(str(tmp_path / "nope"))
+
+
+def test_profile_problem_refuses_a_profile_open_in_another_browser(tmp_path):
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    os.symlink(f"box-{os.getpid()}", profile / "SingletonLock")
+    problem = lf.profile_problem(str(profile))
+    assert "already open" in problem
+    assert "SEARCHTS_LINKEDIN_CDP" in problem
+    assert "--remote-debugging-port" not in problem
+
+
+def test_profile_problem_allows_a_stale_lock(tmp_path):
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    os.symlink("box-999999", profile / "SingletonLock")
+    assert lf.profile_problem(str(profile)) == ""
+
+
+def test_read_feed_refuses_without_a_kept_login(monkeypatch):
+    monkeypatch.setattr("searchts.login_store.kept", lambda _site: False)
+    monkeypatch.delenv("SEARCHTS_LINKEDIN_PROFILE", raising=False)
+    monkeypatch.delenv("SEARCHTS_LINKEDIN_CDP", raising=False)
+    monkeypatch.delenv("SEARCHTS_LINKEDIN_CHROME", raising=False)
+    # A running browser on the machine must not turn this into the toggle
+    # message. off is the launch path this test is about.
+    monkeypatch.setenv("SEARCHTS_LINKEDIN_ATTACH", "off")
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf.read_feed()
+    assert "no kept LinkedIn login" in str(ei.value)
+    assert "linkedin-scraper-mcp" in str(ei.value)
+
+
+def test_read_feed_refuses_before_opening_a_browser_when_the_guard_says_no(
+    monkeypatch, tmp_path,
+):
+    monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "")
+    opened = []
+    monkeypatch.setattr(lf, "_browser_page", lambda *a, **k: opened.append(a))
+
+    class No:
+        def before_load(self):
+            raise lf.GuardRefused("still stopped")
+
+        def record(self, signal):
+            raise AssertionError("record must not run")
+
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf.read_feed(guard=No(), profile=str(tmp_path))
+    assert "still stopped" in str(ei.value)
+    assert opened == []
+
+
+def test_read_feed_walks_with_a_fake_page_and_checks_the_guard_once(
+    monkeypatch, tmp_path,
+):
+    monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "")
+    page = FakePage([DOM_ONE], [
+        FakeResponse("https://www.linkedin.com/graphql/feed", payload()),
+    ])
+
+    class Opened:
+        def __enter__(self):
+            return page
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(lf, "_browser_page", lambda *a, **k: Opened())
+    guard = FakeGuard()
+    read = lf.read_feed(guard=guard, limits=limits(), profile=str(tmp_path))
+    assert [p.activity for p in read.posts] == ["7001", "7002"]
+    assert guard.calls == ["before"]
+    assert page.gotos == [lf.FEED_URL]
+
+
+def test_read_feed_attaches_over_cdp_when_the_profile_is_already_open(
+    monkeypatch, tmp_path,
+):
+    monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
+    monkeypatch.setattr(
+        lf, "profile_problem",
+        lambda *_a, **_k: (_ for _ in ()).throw(
+            AssertionError("a CDP attach is the allowed open-profile path")
+        ),
+    )
+    seen = {}
+    page = FakePage([DOM_ONE])
+
+    class Opened:
+        def __enter__(self):
+            return page
+
+        def __exit__(self, *exc):
+            return False
+
+    def open_page(profile, executable, cdp, url, browser_name=""):
+        seen.update(profile=profile, cdp=cdp)
+        return Opened()
+
+    monkeypatch.setattr(lf, "_browser_page", open_page)
+    lf.read_feed(
+        guard=FakeGuard(), limits=limits(), profile=str(tmp_path),
+        cdp="127.0.0.1:9222",
+    )
+    assert seen["cdp"] == "127.0.0.1:9222"
+
+
+def test_read_feed_is_fail_loud_when_nothing_was_read(monkeypatch, tmp_path):
+    monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "")
+    page = FakePage(["<p>nothing here</p>"])
+
+    class Opened:
+        def __enter__(self):
+            return page
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(lf, "_browser_page", lambda *a, **k: Opened())
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf.read_feed(guard=FakeGuard(), limits=limits(), profile=str(tmp_path))
+    assert "no posts" in str(ei.value)
+
+
+def test_read_routes_the_linkedin_feed_to_the_native_path(monkeypatch):
+    read = lf.FeedRead(
+        posts=[lf.Post("7001", "Ada Lovelace", "Built a tiny engine.", "3h")],
+        text="Ada Lovelace · 3h\nBuilt a tiny engine.\n"
+             "https://www.linkedin.com/feed/update/urn:li:activity:7001/",
+        stop="reached the 1 posts asked for",
+    )
+    monkeypatch.setattr(
+        lf, "read_feed", lambda url, tick=None, resume_token="": read,
+    )
+    result = unlocker.fetch("https://www.linkedin.com/feed/", use_memory=False)
+    assert result.backend == "linkedin-feed"
+    assert result.authenticated is True
+    assert "Built a tiny engine." in result.text
+    from searchts import resume
+    state = resume.read("https://www.linkedin.com/feed/", result.resume or "")
+    assert state.keys == ("urn:li:activity:7001",)
+    assert state.cursor == ""
+    assert state.replay is None
+
+
+def test_read_a_feed_that_cannot_start_is_a_named_failure(monkeypatch):
+    def no(url, tick=None, resume_token=""):
+        raise lf.FeedUnavailable("SEARCHTS_LINKEDIN_PROFILE is not set")
+
+    monkeypatch.setattr(lf, "read_feed", no)
+    with pytest.raises(UnlockerError) as ei:
+        unlocker.fetch("https://www.linkedin.com/feed/", use_memory=False)
+    assert ei.value.attempts == [
+        ("linkedin-feed", "SEARCHTS_LINKEDIN_PROFILE is not set")
+    ]
+
+
+def test_scroll_steps_do_not_book_a_page_load(monkeypatch):
+    calls = []
+    monkeypatch.setattr(linkedin, "take_load", lambda **_k: calls.append("load"))
+    page = FakePage([DOM_ONE])
+    lf.walk(page, guard=FakeGuard(), limits=limits(max_steps=3))
+    assert page.scrolls == 3
+    assert calls == []
+
+
+def test_a_feed_read_books_one_load_and_a_second_read_waits(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(linkedin, "take_load", lambda **_k: calls.append("load"))
+    monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "")
+    page = FakePage([DOM_ONE, DOM_ONE, DOM_ONE], [
+        FakeResponse("https://www.linkedin.com/graphql/feed", payload()),
+    ])
+
+    class Opened:
+        def __enter__(self):
+            return page
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(lf, "_browser_page", lambda *a, **k: Opened())
+    read = lf.read_feed(limits=limits(max_steps=3), profile=str(tmp_path))
+    assert page.scrolls == 3
+    assert [post.activity for post in read.posts] == ["7001", "7002"]
+    assert calls == ["load"]
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf.read_feed(limits=limits(max_steps=3), profile=str(tmp_path))
+    assert "at least 30 min apart" in str(ei.value)
+    assert calls == ["load"]
+
+
+def test_resume_from_token_is_an_in_page_hook():
+    class State:
+        cursor = "TOKEN-NEXT"
+        keys = ["urn:li:activity:7001", "7002"]
+
+    class Mod:
+        def read(self, url, token):
+            assert url == lf.FEED_URL
+            assert token == "signed"
+            return State()
+
+    hook = lf.resume_from_token(lf.FEED_URL, "signed", module=Mod())
+    assert isinstance(hook, lf.TokenResume)
+    assert hook.begin() == "TOKEN-NEXT"
+    assert hook.seen() == ["urn:li:activity:7001", "7002"]
+    assert lf.resume_from_token(lf.FEED_URL, "  ").begin() is None
+
+
+def test_resume_from_token_refuses_before_a_browser(monkeypatch, tmp_path):
+    monkeypatch.setattr("searchts.login_store.kept", lambda _site: True)
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "")
+    opened = []
+    monkeypatch.setattr(lf, "_browser_page", lambda *a, **k: opened.append(a))
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf.read_feed(
+            guard=FakeGuard(), profile=str(tmp_path), resume_token="signed",
+        )
+    assert opened == []
+    assert "resume token" in str(ei.value).lower()
+
+
+def test_resume_from_token_names_a_rejected_token():
+    class Mod:
+        def read(self, url, token):
+            raise type("ResumeError", (Exception,), {})("token expired")
+
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf.resume_from_token(lf.FEED_URL, "signed", module=Mod())
+    assert "token expired" in str(ei.value)
+
+
+def test_cdp_attach_opens_a_tab_in_the_existing_window():
+    opened = []
+
+    class Page:
+        def evaluate(self, _script):
+            return True
+
+    class Context:
+        def new_page(self):
+            page = Page()
+            opened.append(page)
+            return page
+
+        def new_cdp_session(self, _page):
+            return SimpleNamespace(
+                send=lambda method, _params=None: {"targetInfo": {"targetId": "tab-1"}},
+                detach=lambda: None,
+            )
+
+        def new_context(self):
+            raise AssertionError("a CDP attach must not open a new context")
+
+    class Browser:
+        def __init__(self):
+            self.contexts = [Context()]
+            self.closed_targets = []
+
+        def new_browser_cdp_session(self):
+            def send(method, params=None):
+                if method == "Target.getTargets":
+                    return {
+                        "targetInfos": [
+                            {
+                                "targetId": "web",
+                                "type": "page",
+                                "url": "https://www.linkedin.com/feed/",
+                                "browserContextId": "ctx-1",
+                            }
+                        ]
+                    }
+                if method == "Browser.getWindowForTarget":
+                    return {"windowId": 7}
+                if method == "Target.createTarget":
+                    raise AssertionError("a normal window is already open")
+                if method == "Target.closeTarget":
+                    self.closed_targets.append(params["targetId"])
+                return {}
+
+            return SimpleNamespace(send=send, detach=lambda: None)
+
+        def new_context(self):
+            raise AssertionError("a CDP attach must not open a new context")
+
+    browser = Browser()
+    tab = lf._cdp_page(browser)
+    assert tab.page is opened[0]
+    assert tab.target_id == "tab-1"
+    tab.close()
+    assert browser.closed_targets == ["tab-1"]
+
+
+def test_cdp_attach_refuses_when_the_browser_has_no_window():
+    class Browser:
+        contexts = []
+
+        def new_context(self):
+            raise AssertionError("a CDP attach must not open a new context")
+
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf._cdp_page(Browser(), "edge")
+    message = str(ei.value)
+    assert "no open window" in message
+    assert "new browser context is not opened" in message
+    assert "Open a window in Edge" in message
+    assert "edge://inspect/#remote-debugging" in message
+    assert "the toggle at" in message and "is already on" in message
+    assert "Chrome" not in message
+    assert "--remote-debugging-port" not in message
+
+
+def test_a_resumed_feed_read_scrolls_and_does_not_replay(monkeypatch):
+    from searchts import resume
+
+    seen = {}
+
+    def fake(url, tick=None, resume_token=""):
+        seen["token"] = resume_token
+        return lf.FeedRead(
+            posts=[lf.Post("7004", "Margaret Hamilton", "The next page.", "1h")],
+            text="Margaret Hamilton · 1h\nThe next page.",
+            cursor="TOKEN-2",
+        )
+
+    monkeypatch.setattr(lf, "read_feed", fake)
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("the generic scroll must not run for this feed")
+
+    monkeypatch.setattr(unlocker, "_scroll_feed", boom)
+    token = resume.mint(
+        "https://www.linkedin.com/feed/",
+        keys=["urn:li:activity:7001"],
+        cursor="TOKEN-NEXT",
+    )
+    pages = unlocker.read_items(
+        "https://www.linkedin.com/feed/", 10, resume=token, use_memory=False,
+    )
+    assert seen["token"] == token
+    assert pages[0].backend == "linkedin-feed"
+    state = resume.read("https://www.linkedin.com/feed/", pages[0].resume or "")
+    assert state.cursor == "TOKEN-2"
+    assert state.replay is None
+    assert "captured cursor" in pages[0].text
+
+
+def test_the_driver_never_calls_linkedin_or_fetches_in_page():
+    source = (
+        Path(__file__).resolve().parents[1] / "searchts" / "linkedin_feed.py"
+    ).read_text(encoding="utf-8").lower()
+    for banned in (
+        "fetch(",
+        "xmlhttprequest",
+        "page.request",
+        "api.linkedin.com",
+        "/voyager",
+        "requests.get",
+    ):
+        assert banned not in source, banned
+
+
+def test_profile_problem_refuses_a_windows_profile_held_open(tmp_path, monkeypatch):
+    profile = tmp_path / "User Data"
+    profile.mkdir()
+    (profile / "lockfile").write_text("", encoding="utf-8")
+    monkeypatch.setattr(lf.os, "name", "nt")
+    real_open = open
+
+    def held(path, *args, **kwargs):
+        if str(path).endswith("lockfile"):
+            raise PermissionError(13, "in use")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", held)
+    plain = lf.profile_problem(str(profile))
+    assert "already open" in plain
+    assert "--remote-debugging-port" not in plain
+    named = lf.profile_problem(str(profile), "vivaldi")
+    assert "the Vivaldi profile" in named
+    assert "vivaldi://inspect/#remote-debugging" in named
+    assert "Allow remote debugging for this browser instance" in named
+    assert "Chrome" not in named
+    assert "--remote-debugging-port" not in named
+
+
+def test_profile_problem_allows_a_released_windows_lockfile(tmp_path, monkeypatch):
+    profile = tmp_path / "User Data"
+    profile.mkdir()
+    (profile / "lockfile").write_text("", encoding="utf-8")
+    monkeypatch.setattr(lf.os, "name", "nt")
+    assert lf.profile_problem(str(profile)) == ""
+
+
+def test_read_feed_takes_an_explicit_profile_as_the_signed_in_browser(
+    monkeypatch, tmp_path,
+):
+    monkeypatch.setattr("searchts.login_store.kept", lambda _site: False)
+    monkeypatch.setattr(lf, "profile_problem", lambda *_a, **_k: "held")
+    with pytest.raises(lf.FeedUnavailable) as ei:
+        lf.read_feed(profile=str(tmp_path))
+    assert str(ei.value) == "held"
