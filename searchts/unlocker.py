@@ -1539,7 +1539,7 @@ def _fetch_curl_cffi(url: str, timeout: int = 30,
     req_headers = {"Accept-Language": "en-US,en;q=0.9"}
     req_headers.update(extra_headers or {})
     # Passed only when set, so a proxy-free read calls curl exactly as before.
-    proxy_kwargs: Dict[str, object] = {"proxy": proxy} if proxy else {}
+    proxy_kwargs: Dict[str, Any] = {"proxy": proxy} if proxy else {}
     r = cr.get(url, impersonate="chrome", timeout=timeout,
                allow_redirects=curl_safe_redirects(),
                curl_options=curl_resolve_options(url),
@@ -1964,6 +1964,86 @@ def _fetch_stealth(
     # No proxy: delegate exactly as before. An impl stub may take only the
     # original three arguments, and an extra positional is a TypeError.
     return _call_sync_browser(_fetch_stealth_impl, url, timeout, progress)
+
+
+def _fetch_linkedin_attached(
+    url: str,
+    endpoint: str,
+    timeout: int = 60,
+    progress: Optional[bool] = None,
+    expand: bool = False,
+    expand_sink: Optional["_ExpandSink"] = None,
+    browser_name: str = "",
+) -> Tuple[Optional[int], str, str, Dict[str, str]]:
+    """Read one LinkedIn page in a new tab of a browser that is already open.
+
+    The DevTools connection is made before a load slot is booked, and the
+    slot is booked before the tab navigates, so a connection failure never
+    becomes a request and never spends a slot. The tab this read opened is
+    closed afterwards. The browser and its other tabs are left alone.
+    """
+    return _call_sync_browser(
+        lambda: _fetch_linkedin_attached_impl(
+            url, endpoint, timeout, progress, expand, expand_sink, browser_name,
+        )
+    )
+
+
+def _fetch_linkedin_attached_impl(
+    url: str,
+    endpoint: str,
+    timeout: int = 60,
+    progress: Optional[bool] = None,
+    expand: bool = False,
+    expand_sink: Optional["_ExpandSink"] = None,
+    browser_name: str = "",
+) -> Tuple[Optional[int], str, str, Dict[str, str]]:
+    from searchts import linkedin as _linkedin
+    from searchts.linkedin_attach import AttachError, open_tab
+
+    ms = int(timeout * 1000)
+    want_tick = _progress_wanted(progress)
+    try:
+        with open_tab(endpoint, browser_name=browser_name) as page:
+            with _linkedin.exclusive_load():
+                from searchts.ssrf import guard_browser_page
+
+                guard_browser_page(page, url)
+                _stderr_tick("opening the page…", want_tick)
+                resp = page.goto(url, wait_until="domcontentloaded", timeout=ms)
+                init_status = resp.status if resp else None
+                headers = _normalize_headers(resp.all_headers()) if resp else {}
+                _wait_settled_load(
+                    page, timeout_ms=min(_SETTLE_LOAD_MS, ms), progress=want_tick
+                )
+                html = _page_content(page, progress=want_tick)
+                html = _await_hydration(page, html, progress=want_tick)
+                if expand:
+                    from searchts import expand as _expand_mod
+
+                    _stderr_tick("opening the rest of the page…", want_tick)
+                    opened = _expand_mod.open_details_in_page(page)
+                    if opened:
+                        html = _page_content(page, progress=want_tick)
+                    clicks = _expand_clicks(expand_sink)
+                    report = _expand_mod.click_in_page(page, clicks)
+                    report.details = opened
+                    report.pin_paywall(_page_content(page, progress=False))
+                    if expand_sink is not None:
+                        expand_sink.add(report)
+                    html = _expand_known_host(
+                        page, url, html, clicks,
+                        lambda msg: _stderr_tick(msg, want_tick),
+                    )
+                status = 200 if (
+                    looks_blocked(200, html) is None
+                    and not _is_refused_render(html, init_status)
+                ) else init_status
+                final = page.url or url
+                headers = _drop_stale_challenge_headers(headers, html)
+                return status, html, final, headers
+    except AttachError as exc:
+        raise RuntimeError(str(exc)) from exc
 
 
 #: A Chromium that was never downloaded. Patchright's own text for it is a
@@ -2590,6 +2670,7 @@ def _linkedin_finish(
     proxy_trusted: bool,
     details: bool,
     tick: Optional[Callable[[str], None]] = None,
+    linkedin_attach: Optional[str] = None,
 ) -> "FetchResult":
     """Strip LinkedIn's page furniture, and assemble a logged-in profile.
 
@@ -2630,6 +2711,7 @@ def _linkedin_finish(
             progress=False,
             echo_attempts=False,
             details=False,
+            linkedin_attach=linkedin_attach,
         )
 
     sections: List[Tuple[str, Optional[str], str]] = []
@@ -2684,7 +2766,10 @@ def fetch(url: str, backends: Optional[List[str]] = None,
           media: Optional[int] = None,
           details: bool = True,
           wait_on_429: bool = False,
-          ignore_cooldown: bool = False) -> FetchResult:
+          ignore_cooldown: bool = False,
+          *,
+          resume: str = "",
+          linkedin_attach: Optional[str] = None) -> FetchResult:
     """Fetch `url` as agent-readable text, escalating through `backends`.
 
     Returns the first FetchResult that yields real content; raises UnlockerError
@@ -2940,6 +3025,53 @@ def fetch(url: str, backends: Optional[List[str]] = None,
 
     media_limit, media_clamp = _more_mod.resolve_media_limit(media)
 
+    # #511: the LinkedIn home feed is not a page the ladder can fetch. It is
+    # read by the browser already signed in to it, from the profile that minted
+    # the session, and only passively (the page's own responses plus the DOM).
+    # This is still the one read path: `searchts read` and MCP read_url both
+    # arrive here. A feed read that cannot start says why instead of spending
+    # the ladder's requests on a page that would answer 429 or a login wall.
+    if _linkedin.is_feed(url):
+        from searchts import linkedin_feed as _linkedin_feed
+
+        try:
+            # The signed token is scrolled on this page. The captured
+            # request is not replayed.
+            feed_kwargs: Dict[str, Any] = {}
+            if linkedin_attach is not None:
+                # ``None`` means "read SEARCHTS_LINKEDIN_ATTACH". Passing it
+                # would be the same result, but callers that stub ``read_feed``
+                # with the original arguments keep working.
+                feed_kwargs["attach"] = linkedin_attach
+            feed = _linkedin_feed.read_feed(
+                url, tick=_tick, resume_token=resume or "", **feed_kwargs,
+            )
+        except _linkedin_feed.FeedUnavailable as e:
+            raise UnlockerError(url, [("linkedin-feed", str(e))]) from e
+        result = FetchResult("linkedin-feed", feed.text, 200, final_url=url)
+        result.authenticated = True
+        if feed.posts:
+            from searchts import resume as _resume_mod
+
+            method = ""
+            if resume:
+                try:
+                    prior = _resume_mod.read(url, resume)
+                except _resume_mod.ResumeError:
+                    prior = None
+                if prior is not None:
+                    method = "cursor" if prior.cursor else "fast-skip"
+            result.text = (result.text or "").rstrip() + _resume_note(
+                result, url,
+                keys=[f"urn:li:activity:{post.activity}" for post in feed.posts],
+                cursor=feed.cursor or "",
+                method=method,
+            )
+        return _finalize(
+            result, scrub, tick=_tick,
+            media_limit=media_limit, media_clamp=media_clamp,
+        )
+
     def _with_auth(result: FetchResult) -> FetchResult:
         result.authenticated = bool(scoped_cookies) and result.backend in cookie_backends
         result = _linkedin_finish(
@@ -2951,6 +3083,7 @@ def fetch(url: str, backends: Optional[List[str]] = None,
             proxy_trusted=proxy_trusted,
             details=details,
             tick=_tick,
+            linkedin_attach=linkedin_attach,
         )
         note = expand_sink.note()
         if note:
@@ -3123,6 +3256,26 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                     f"{e}; the www retry also failed: {again}"
                 ) from again
 
+    # A browser-backed LinkedIn read joins the user's already-open Chromium
+    # when remote debugging is on. The decision is local (a profile file and
+    # a loopback probe). Curl and the relay are not asked first: either would
+    # be a request before the attach exists. A refusal here books no load.
+    attach_endpoint = ""
+    attach_browser = ""
+    if _linkedin.matches(url) and not _linkedin.is_feed(url):
+        from searchts import linkedin_attach as _lia
+
+        try:
+            _attach = _lia.decide(mode=linkedin_attach)
+        except ValueError as exc:
+            raise UnlockerError(url, [("linkedin-attach", str(exc))]) from exc
+        if _attach.action == "refuse":
+            raise UnlockerError(url, [("linkedin-attach", _attach.message)])
+        if _attach.action == "attach":
+            order = ["stealth-browser"]
+            attach_endpoint = _attach.endpoint
+            attach_browser = _attach.browser
+
     attempts: List[Tuple[str, str]] = []
     # Curl refused a shell. A later rung wins only when its text has the
     # rows: the widget table, or the ranking above the related block.
@@ -3192,9 +3345,12 @@ def fetch(url: str, backends: Optional[List[str]] = None,
         # r.jina.ai's, not this address's, so it is not a LinkedIn load. A
         # profile's section reads run nested on this same thread. They book
         # their own slot without locking a second time, which would deadlock
-        # on the lock this thread already holds.
+        # on the lock this thread already holds. An attached read books its
+        # one slot inside the tab, after the DevTools connection and before
+        # the navigation, so it is not booked twice.
+        use_attach = bool(attach_endpoint) and backend == "stealth-browser"
         _load_slot = None
-        if _linkedin.matches(url) and backend != "Jina Reader":
+        if _linkedin.matches(url) and backend != "Jina Reader" and not use_attach:
             try:
                 _load_slot = _linkedin.exclusive_load()
                 _load_slot.__enter__()
@@ -3240,7 +3396,17 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                             # page subrequests cannot carry them to an unrelated host.
                             # Jina never receives them. The browser may also carry the
                             # proxy, because it changes the address the challenge sees.
-                            status, body, final_url, headers = _stealth_with_bare_host_retry(url)
+                            # An attach is a different browser: the user's own window,
+                            # one new tab, no cookie copy and no second process.
+                            # The launch path keeps the bare-host www retry.
+                            if use_attach:
+                                status, body, final_url, headers = _fetch_linkedin_attached(
+                                    url, attach_endpoint, progress=progress,
+                                    expand=expand, expand_sink=expand_sink,
+                                    browser_name=attach_browser,
+                                )
+                            else:
+                                status, body, final_url, headers = _stealth_with_bare_host_retry(url)
 
                         # #509: a 429 from a rung that talks to the host is the
                         # host's answer, not a fingerprint accident. Jina is the
@@ -3597,6 +3763,14 @@ def fetch(url: str, backends: Optional[List[str]] = None,
                             headers=headers,
                             page_html=None if backend == "Jina Reader" else body,
                         )
+                except _linkedin.Paced as e:
+                    # The attached driver books its slot after connecting. A
+                    # budget refusal is the same answer as the outer lock's,
+                    # not a failed browser launch.
+                    attempts.append(("linkedin-loads", e.why))
+                    _tick(f"  {backend}: {e.why}")
+                    paced_hint = e.hint
+                    break
                 except Exception as e:  # noqa: BLE001 — any backend failure escalates
                     why = f"{type(e).__name__}: {e}"
                     attempts.append((backend, why))
@@ -4447,6 +4621,16 @@ def read_items(url: str, items: int = _MAX_ITEMS, **kwargs) -> List[FetchResult]
                 hint="Read the URL again without the resume token to start a "
                      "fresh scroll.",
             ) from e
+
+    from searchts import linkedin as _linkedin_mod
+    if _linkedin_mod.is_feed(url):
+        # The home feed is one document load plus an in-page scroll. The
+        # generic scroll below would replay a captured request, which this
+        # feed does not do. Scroll steps are not extra page loads.
+        call = dict(kwargs)
+        if resume_token:
+            call["resume"] = resume_token
+        return [fetch(url, **call)]
 
     # #510 resume order, and it is an order: (a) replay the captured cursor
     # in the page, (b) fast-skip to the last row the token saw, (c) bump the

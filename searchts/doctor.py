@@ -162,7 +162,7 @@ _OPTIONAL_TOOLS: Dict[str, tuple] = {
     ),
     "linkedin": (
         "linkedin-scraper-mcp", "LinkedIn",
-        "the LinkedIn feed and write/inbox tools",
+        "write/inbox tools",
         "searchts install --only linkedin",
     ),
 }

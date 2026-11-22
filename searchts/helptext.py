@@ -75,7 +75,7 @@ OPTION_GROUPS: Dict[str, List[Tuple[str, List[str]]]] = {
                            "--expand", "--scrub"]),
         ("OUTPUT", ["--json", "--human"]),
         ("SITE ACCESS", ["--cookies-from-browser", "--yes", "--cookies",
-                          "--cdp-port"]),
+                          "--cdp-port", "--attach"]),
         ("NETWORK", ["--proxy", "--proxy-trusted"]),
         ("ALSO", ["--verbose"]),
     ],

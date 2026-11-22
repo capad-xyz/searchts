@@ -21,6 +21,7 @@ from __future__ import annotations
 import glob
 import os
 import sqlite3
+import sys
 import time
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -56,16 +57,39 @@ def family_of(browser: str) -> str:
 
 
 # Where each Firefox-derived browser keeps its profiles on this machine.
-def _firefox_profile_roots(browser: str) -> List[str]:
-    home = os.path.expanduser("~")
-    appdata = os.environ.get("APPDATA", "")
-    if os.name == "nt":
+def _firefox_profile_roots(
+    browser: str,
+    *,
+    platform: Optional[str] = None,
+    env: Optional[dict] = None,
+) -> List[str]:
+    """Profile roots for ``browser``, this platform's layout first.
+
+    ``platform`` and ``env`` are injection points for tests that build a
+    fixture home instead of reading this machine's. By default the running
+    platform and environment are used, exactly as before.
+    """
+    environ = os.environ if env is None else env
+    home = (
+        environ.get("HOME")
+        or environ.get("USERPROFILE")
+        or os.path.expanduser("~")
+    )
+    appdata = environ.get("APPDATA", "")
+    chosen = platform
+    if chosen is None:
+        chosen = (
+            "windows" if os.name == "nt"
+            else "macos" if sys.platform == "darwin"
+            else "linux"
+        )
+    if chosen == "windows":
         roots = {
             "zen": [os.path.join(appdata, "zen", "Profiles")],
             "firefox": [os.path.join(appdata, "Mozilla", "Firefox", "Profiles")],
             "librewolf": [os.path.join(appdata, "librewolf", "Profiles")],
             "waterfox": [os.path.join(appdata, "Waterfox", "Profiles")],
-            "floorp": [os.path.join(appdata, "floorp", "Profiles")],
+            "floorp": [os.path.join(appdata, "Floorp", "Profiles")],
             "mullvad": [os.path.join(appdata, "Mullvad", "Profiles")],
         }
     else:
@@ -74,10 +98,14 @@ def _firefox_profile_roots(browser: str) -> List[str]:
             "zen": [os.path.join(mac, "zen", "Profiles"), os.path.join(home, ".zen")],
             "firefox": [os.path.join(mac, "Firefox", "Profiles"),
                         os.path.join(home, ".mozilla", "firefox")],
-            "librewolf": [os.path.join(home, ".librewolf")],
-            "waterfox": [os.path.join(home, ".waterfox")],
-            "floorp": [os.path.join(home, ".floorp")],
-            "mullvad": [os.path.join(home, ".mullvad")],
+            "librewolf": [os.path.join(mac, "LibreWolf", "Profiles"),
+                          os.path.join(home, ".librewolf")],
+            "waterfox": [os.path.join(mac, "Waterfox", "Profiles"),
+                         os.path.join(home, ".waterfox")],
+            "floorp": [os.path.join(mac, "Floorp", "Profiles"),
+                       os.path.join(home, ".floorp")],
+            "mullvad": [os.path.join(mac, "Mullvad", "Profiles"),
+                        os.path.join(home, ".mullvad")],
         }
     out = [r for r in roots.get(browser, []) if os.path.isdir(r)]
     if browser == "firefox":
@@ -435,9 +463,14 @@ def _open_ro(db: str) -> sqlite3.Connection:
     return sqlite3.connect(uri + "?mode=ro", uri=True, timeout=2)
 
 
-def _firefox_profiles(browser: str) -> List[Tuple[str, str]]:
+def _firefox_profiles(
+    browser: str,
+    *,
+    platform: Optional[str] = None,
+    env: Optional[dict] = None,
+) -> List[Tuple[str, str]]:
     found: List[Tuple[str, str]] = []
-    for root in _firefox_profile_roots(browser):
+    for root in _firefox_profile_roots(browser, platform=platform, env=env):
         for prof in sorted(glob.glob(os.path.join(root, "*"))):
             db = os.path.join(prof, "cookies.sqlite")
             if os.path.isfile(db):
