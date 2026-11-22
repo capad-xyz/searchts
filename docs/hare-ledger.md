@@ -2,7 +2,7 @@
 
 Every finding Hare posted here, what became of it, and what the owner said. Built by `scripts/hare_ledger.py` from the notes, the Since lines, resolved threads, `/hare score` and `/hare fate` comments; a PR closed unmerged drops its open findings. PLAN R2b.
 
-Built 2026-11-15. 243 PRs, 480 notes, 84 real and 287 skip findings, 35 notes cut at the budget, 17 runs where no hop answered.
+Built 2026-11-22. 244 PRs, 481 notes, 84 real and 287 skip findings, 35 notes cut at the budget, 17 runs where no hop answered.
 
 **Hit rate:** 20 of 84 real findings fixed or resolved (23%); 36 judged, 6 wrong, 2 wontfix, 2 dropped with a closed PR.
 **Owner scores:** 46 given, average 3.67 of 5.
@@ -16,7 +16,7 @@ Built 2026-11-15. 243 PRs, 480 notes, 84 real and 287 skip findings, 35 notes cu
 | `groq:openai/gpt-oss-120b` | 10 |
 | `openrouter:nvidia/nemotron-3.5-lightning:free` | 8 |
 | `openrouter:stealth/space-bunny-alpha` | 6 |
-| `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free` | 4 |
+| `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free` | 5 |
 | `gemini:gemini-3.1-flash-lite` | 3 |
 | `openrouter:qwen/qwen3.8-27b:free · deep` | 3 |
 | `openrouter:nvidia/nemotron-3-super-120b-a12b:free` | 2 |
@@ -30,8 +30,8 @@ Built 2026-11-15. 243 PRs, 480 notes, 84 real and 287 skip findings, 35 notes cu
 
 ## Caps
 
-- caps that fired: 31 across 480 notes (reasoning retry 29, rate limit 2)
-- median reasoning tokens per note: 834.0
+- caps that fired: 31 across 481 notes (reasoning retry 29, rate limit 2)
+- median reasoning tokens per note: 833
 
 Sources for each default are in `docs/hare-next.md`. `0` is uncapped for the reasoning
 budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
@@ -40,6 +40,7 @@ budget, the wall clock and the attempt cap; the rate-limit backoff has no `0`.
 
 | PR | Notes | Real | Skip | Fates of real | Scores |
 | --- | --- | --- | --- | --- | --- |
+| #532 | 1 | 0 | 0 |  |  |
 | #531 | 1 | 0 | 1 |  |  |
 | #530 | 1 | 0 | 3 |  |  |
 | #529 | 1 | 0 | 0 |  |  |
