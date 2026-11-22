@@ -15,7 +15,7 @@ yt-dlp-ejs==0.8.0
 # Unlocker / search runtime. These were missing from the file, so CI
 # floated to whatever PyPI served. Pins are the current releases as of
 # 2026-08-20 (satisfy curl_cffi>=0.7, trafilatura>=1.8, ddgs>=9.0).
-curl_cffi==0.16.0
+curl_cffi==0.17.0
 trafilatura==2.2.0
 ddgs==9.15.0
 # Real Public Suffix List for login reuse (co.uk, github.io, vercel.app).
