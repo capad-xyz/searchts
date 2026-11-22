@@ -1,9 +1,9 @@
 {
- "built": "2026-11-15",
+ "built": "2026-11-22",
  "repo": "capad-xyz/searchts",
  "summary": {
-  "prs": 243,
-  "notes": 480,
+  "prs": 244,
+  "notes": 481,
   "real": 84,
   "skip": 287,
   "real_fates": {
@@ -18,7 +18,7 @@
   },
   "real_fixed_or_resolved": 20,
   "hops": {
-   "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free": 4,
+   "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free": 5,
    "nous:reflection/beam-1.0-501b-a23b:free": 182,
    "nous:poolside/laguna-s-2.1:free": 148,
    "openrouter:nvidia/nemotron-3-super-120b-a12b:free": 2,
@@ -46,9 +46,32 @@
    "rate limit": 2
   },
   "caps_fired_total": 31,
-  "reasoning_tokens_median": 834.0
+  "reasoning_tokens_median": 833
  },
  "entries": [
+  {
+   "pr": 532,
+   "title": "chore(hare): ledger 2026-11-15",
+   "state": "merged",
+   "files": [],
+   "notes": [
+    {
+     "at": "2026-11-15T10:26:35Z",
+     "url": "https://github.com/capad-xyz/searchts/pull/532#pullrequestreview-5910241520",
+     "hop": "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free",
+     "effort": "low",
+     "cost": "15,610 prompt + 699 answer + 505 reasoning tokens on `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free`, 17 s",
+     "cut": "",
+     "caps": "",
+     "caps_fired": "",
+     "findings": 0,
+     "body": "<!-- searchts-r1-review -->\n\n## Summary\n\nWeekly ledger rebuild. Only generated ledger data changed; no package code.\n1. **ledger** docs/hare-ledger.json and docs/hare-ledger.md regenerated from Hare notes, scores, fates and resolved threads.\n\nCI on `342daa8`: green.\n\nIntent: Rebuild the weekly findings ledger and the rules block in HARE.md from the past week of Hare activity.\n\n**Verdict:** Ship (CI green, no real findings). This is the deterministic weekly job (scripts/hare_ledger.py on cron). It only rewrites generated artifacts - the JSON ledger, the markdown ledger, and the rules block in HARE.md - and does not touch package code. The diff matches what the script produces: new PRs #531, #530, #529 added, counts updated, two old entries dropped. No behavior change, no version bump. Safe to ship.\n\n### Findings\n\nNo line findings.\n\n<details>\n<summary>🐰 checks & computer run</summary>\n\n- head `342daa8`\n- tests on `342daa8`: not run (no affected test file in this diff)\n- CI → green\n- test-full / wheel-gate skipped by design\n- cost: 15,610 prompt + 699 answer + 505 reasoning tokens on `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free`, 17 s\n- caps: 12,000 reasoning tokens, 3,600s wall clock, 6 attempts, 6 used; none fired\n\n</details>\n\n<details>\n<summary>🐰 how to answer Hare</summary>\n\n- **Verdict:** the word is the Action's: Hold for a real finding or red CI, Wait while CI is still running, Ship otherwise. The sentence after it is the model's case.\n- **One-click fix:** a bubble with a suggestion has a Commit suggestion button. Add several to a batch and commit once, so Hare runs once.\n- **Tell Hare how it did:** comment `/hare score 1..5 <why>` on this note, or `/hare fate <path:line> fixed|wrong|wontfix <why>` on one finding. Hare records both and posts nothing.\n- **Ask again:** `/hare` reviews again, `/hare think` (or `/hare deep`) with thinking on. Hare answers at once with 🐇, or 🐢 when thinking, and removes it when the note lands. Re-run on Hare's check reviews again too. A push reviews again too, and the Since section says what became of each finding.\n- **What Hare remembers:** every finding goes into [the ledger](https://github.com/capad-xyz/searchts/blob/main/docs/hare-ledger.md); a score of 2 or less with a reason becomes a rule in [HARE.md](https://github.com/capad-xyz/searchts/blob/main/HARE.md). Both are rebuilt every Sunday.\n\n</details>\n\n## Models\n\n| Role | Model | Effort |\n| --- | --- | --- |\n| reviewer | Hare (GitHub App) · purpose: review and report · `openrouter:nvidia/nemotron-3-ultra-550b-a55b:free` | low |\n"
+    }
+   ],
+   "findings": [],
+   "scores": [],
+   "needed": 0
+  },
   {
    "pr": 531,
    "title": "chore(main): release 0.27.2",
